@@ -17,6 +17,34 @@ public class VoxelIngestService {
     private static final org.slf4j.Logger LOGGER = LoggerFactory.getLogger("Voxy");
     private static final ILightingSupplier NO_LIGHTING = (x, y, z) -> (byte) 0;
 
+    public record IngestStats(int convertedSections, int nonAirSections, int nonAirVoxels, int worldUpdates, int storageWrites) {
+        public static final IngestStats EMPTY = new IngestStats(0, 0, 0, 0, 0);
+
+        public boolean updated() {
+            return this.worldUpdates > 0;
+        }
+
+        public IngestStats withStorageWrites(int storageWrites) {
+            return new IngestStats(
+                    this.convertedSections,
+                    this.nonAirSections,
+                    this.nonAirVoxels,
+                    this.worldUpdates,
+                    storageWrites
+            );
+        }
+
+        private IngestStats add(IngestStats other) {
+            return new IngestStats(
+                    this.convertedSections + other.convertedSections,
+                    this.nonAirSections + other.nonAirSections,
+                    this.nonAirVoxels + other.nonAirVoxels,
+                    this.worldUpdates + other.worldUpdates,
+                    this.storageWrites + other.storageWrites
+            );
+        }
+    }
+
     public VoxelIngestService() {
     }
 
@@ -25,22 +53,26 @@ public class VoxelIngestService {
     }
 
     public static boolean ingestChunk(WorldEngine engine, LevelChunk chunk) {
+        return ingestChunkWithStats(engine, chunk).updated();
+    }
+
+    public static IngestStats ingestChunkWithStats(WorldEngine engine, LevelChunk chunk) {
         if (engine == null || chunk == null) {
-            return false;
+            return IngestStats.EMPTY;
         }
         if (!engine.isLive()) {
             throw new IllegalStateException("Tried inserting chunk into WorldEngine that was not alive");
         }
 
-        boolean ingestedAny = false;
+        IngestStats stats = IngestStats.EMPTY;
         int sectionY = chunk.getMinSection();
         for (var section : chunk.getSections()) {
             if (section != null && shouldIngestSection(section, chunk.getPos().x, sectionY, chunk.getPos().z)) {
-                ingestedAny |= rawIngest(engine, section, chunk.getPos().x, sectionY, chunk.getPos().z, createLevelLightingSupplier(chunk, sectionY));
+                stats = stats.add(rawIngestWithStats(engine, section, chunk.getPos().x, sectionY, chunk.getPos().z, createLevelLightingSupplier(chunk, sectionY)));
             }
             sectionY++;
         }
-        return ingestedAny;
+        return stats;
     }
 
     private static boolean shouldIngestSection(LevelChunkSection section, int cx, int cy, int cz) {
@@ -72,20 +104,34 @@ public class VoxelIngestService {
     }
 
     public static boolean rawIngest(WorldEngine engine, LevelChunkSection section, int x, int y, int z, DataLayer blockLight, DataLayer skyLight) {
-        return rawIngest(engine, section, x, y, z, getLightingSupplier(blockLight, skyLight));
+        return rawIngestWithStats(engine, section, x, y, z, blockLight, skyLight).updated();
+    }
+
+    public static IngestStats rawIngestWithStats(WorldEngine engine, LevelChunkSection section, int x, int y, int z, DataLayer blockLight, DataLayer skyLight) {
+        return rawIngestWithStats(engine, section, x, y, z, getLightingSupplier(blockLight, skyLight));
     }
 
     public static boolean rawIngest(WorldEngine engine, LevelChunkSection section, int x, int y, int z, ILightingSupplier lightingSupplier) {
+        return rawIngestWithStats(engine, section, x, y, z, lightingSupplier).updated();
+    }
+
+    public static IngestStats rawIngestWithStats(WorldEngine engine, LevelChunkSection section, int x, int y, int z, ILightingSupplier lightingSupplier) {
         if (!shouldIngestSection(section, x, y, z)) {
-            return false;
+            return IngestStats.EMPTY;
         }
         var voxelized = convertSection(engine, section, x, y, z, lightingSupplier);
         if (voxelized == null) {
-            return false;
+            return IngestStats.EMPTY;
         }
         engine.markActive();
         WorldUpdater.insertUpdate(engine, voxelized);
-        return true;
+        return new IngestStats(
+                1,
+                voxelized.lvl0NonAirCount > 0 ? 1 : 0,
+                voxelized.lvl0NonAirCount,
+                1,
+                0
+        );
     }
 
     public static boolean tryAutoIngestChunk(LevelChunk chunk) {
