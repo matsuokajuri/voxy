@@ -7,6 +7,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.level.chunk.ChunkStatus;
 import net.minecraft.world.level.chunk.LevelChunk;
 
 public final class ForgeVoxyCommands {
@@ -17,6 +18,8 @@ public final class ForgeVoxyCommands {
         dispatcher.register(Commands.literal("voxy")
                 .then(Commands.literal("ingest_current_chunk")
                         .executes(ctx -> ingestCurrentChunk(ctx.getSource())))
+                .then(Commands.literal("build_current_chunk_mesh")
+                        .executes(ctx -> buildCurrentChunkMesh(ctx.getSource())))
                 .then(Commands.literal("ingest_status")
                         .executes(ctx -> ingestStatus(ctx.getSource())))
                 .then(Commands.literal("ingest_clear_cache")
@@ -75,6 +78,63 @@ public final class ForgeVoxyCommands {
         } catch (Exception e) {
             VoxyForge.LOGGER.error("Failed to ingest current chunk", e);
             source.sendFailure(Component.literal("Voxy: chunk ingest failed: " + e.getMessage()));
+            return 0;
+        }
+    }
+
+    private static int buildCurrentChunkMesh(CommandSourceStack source) {
+        var minecraft = Minecraft.getInstance();
+        var player = minecraft.player;
+        var level = minecraft.level;
+        if (player == null || level == null) {
+            source.sendFailure(Component.literal("Voxy: no client world is active."));
+            return 0;
+        }
+
+        var engine = ForgeVoxyInstance.INSTANCE.getCurrentEngineOptional();
+        if (engine.isEmpty()) {
+            String reason = ForgeVoxyConfig.ENABLE_WORLD_ENGINE_SKELETON.get()
+                    ? "no WorldEngine is active for the current world"
+                    : "enableWorldEngineSkeleton is false";
+            source.sendFailure(Component.literal("Voxy: cannot build current chunk mesh; " + reason + "."));
+            return 0;
+        }
+
+        try {
+            int chunkX = player.chunkPosition().x;
+            int chunkZ = player.chunkPosition().z;
+            LevelChunk chunk = level.getChunkSource().getChunk(chunkX, chunkZ, ChunkStatus.FULL, false);
+            if (chunk == null) {
+                source.sendFailure(Component.literal("Voxy: current chunk is not loaded."));
+                return 0;
+            }
+
+            String dimension = level.dimension().location().toString();
+            var stats = ForgeOffscreenMeshBuildValidator.buildCurrentChunk(engine.get(), chunk, dimension);
+            if (stats.sectionsFound() == 0) {
+                source.sendFailure(Component.literal("Voxy: no ingested Voxy section found for current chunk; run /voxy ingest_current_chunk first."));
+                return 0;
+            }
+
+            String message = String.format(
+                    "Voxy mesh: %s chunk %d,%d sectionsFound=%d sectionsBuilt=%d nonAirVoxels=%d quads=%d vertices=%d bytes=%d elapsed=%.2fms",
+                    stats.dimension(),
+                    stats.chunkX(),
+                    stats.chunkZ(),
+                    stats.sectionsFound(),
+                    stats.sectionsBuilt(),
+                    stats.nonAirVoxels(),
+                    stats.quads(),
+                    stats.vertices(),
+                    stats.estimatedBytes(),
+                    stats.elapsedMs()
+            );
+            VoxyForge.LOGGER.info(message);
+            source.sendSuccess(() -> Component.literal(message), false);
+            return stats.sectionsBuilt();
+        } catch (Exception e) {
+            VoxyForge.LOGGER.error("Failed to build current chunk mesh stats", e);
+            source.sendFailure(Component.literal("Voxy: mesh build failed: " + e.getMessage()));
             return 0;
         }
     }
