@@ -34,6 +34,8 @@ sourceSets {
             include 'me/cortex/voxy/common/voxelization/VoxelizedSection.java'
             include 'me/cortex/voxy/common/voxelization/ILightingSupplier.java'
             include 'me/cortex/voxy/common/world/WorldSection.java'
+            include 'me/cortex/voxy/common/world/ActiveSectionTracker.java'
+            include 'me/cortex/voxy/common/world/WorldEngine.java'
             include 'me/cortex/voxy/common/world/SaveLoadSystem3.java'
             include 'me/cortex/voxy/common/world/other/Mapper.java'
             include 'me/cortex/voxy/common/config/IMappingStorage.java'

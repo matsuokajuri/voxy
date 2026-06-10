@@ -1,17 +1,17 @@
 package me.cortex.voxy.common.world;
 
-import me.cortex.voxy.common.Logger;
 import me.cortex.voxy.common.config.section.SectionStorage;
 import me.cortex.voxy.common.util.TrackedObject;
 import me.cortex.voxy.common.world.other.Mapper;
-import me.cortex.voxy.commonImpl.VoxyInstance;
-import org.jetbrains.annotations.Nullable;
+import org.slf4j.LoggerFactory;
 
 import java.lang.invoke.VarHandle;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class WorldEngine {
+    private static final org.slf4j.Logger LOGGER = LoggerFactory.getLogger("Voxy");
+
     public static final int MAX_LOD_LAYER = 4;
 
     public static final int UPDATE_TYPE_BLOCK_BIT = 1;
@@ -42,7 +42,7 @@ public class WorldEngine {
     public Mapper getMapper() {return this.mapper;}
     public boolean isLive() {return this.isLive;}
 
-    public final @Nullable VoxyInstance instanceIn;
+    public final Object instanceIn;
     private final AtomicInteger refCount = new AtomicInteger();
     volatile long lastActiveTime = System.currentTimeMillis();//Time in millis the world was last "active" i.e. had a total ref count or active section count of != 0
 
@@ -50,7 +50,7 @@ public class WorldEngine {
         this(storage, null);
     }
 
-    public WorldEngine(SectionStorage storage, @Nullable VoxyInstance instance) {
+    public WorldEngine(SectionStorage storage, Object instance) {
         this.instanceIn = instance;
 
         int cacheSize = 1024;
@@ -147,10 +147,10 @@ public class WorldEngine {
         }
 
         this.thisTracker.free();
-        try {this.mapper.close();} catch (Exception e) {Logger.error(e);}
-        try {this.storage.flush();} catch (Exception e) {Logger.error(e);}
+        try {this.mapper.close();} catch (Exception e) {LOGGER.error("Failed to close mapper", e);}
+        try {this.storage.flush();} catch (Exception e) {LOGGER.error("Failed to flush section storage", e);}
         //Shutdown in this order to preserve as much data as possible
-        try {this.storage.close();} catch (Exception e) {Logger.error(e);}
+        try {this.storage.close();} catch (Exception e) {LOGGER.error("Failed to close section storage", e);}
     }
 
     private static final long TIMEOUT_MILLIS = 10_000;//10 second timeout (is to long? or to short??)

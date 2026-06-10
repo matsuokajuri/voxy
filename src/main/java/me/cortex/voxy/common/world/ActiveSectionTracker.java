@@ -2,9 +2,8 @@ package me.cortex.voxy.common.world;
 
 import it.unimi.dsi.fastutil.longs.Long2ObjectLinkedOpenHashMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
-import me.cortex.voxy.common.Logger;
 import me.cortex.voxy.common.world.other.Mapper;
-import org.jetbrains.annotations.Nullable;
+import org.slf4j.LoggerFactory;
 
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
@@ -12,7 +11,8 @@ import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.StampedLock;
 
-public class ActiveSectionTracker {
+public class ActiveSectionTracker implements WorldSection.ReleaseTracker {
+    private static final org.slf4j.Logger LOGGER = LoggerFactory.getLogger("Voxy");
 
     //Deserialize into the supplied section, returns true on success, false on failure
     public interface SectionLoader {int load(WorldSection section);}
@@ -43,7 +43,6 @@ public class ActiveSectionTracker {
     private final StampedLock lruLock = new StampedLock();
     private final Long2ObjectLinkedOpenHashMap<WorldSection> lruSecondaryCache;//TODO: THIS NEEDS TO BECOME A GLOBAL STATIC CACHE
 
-    @Nullable
     public final WorldEngine engine;
 
     public ActiveSectionTracker(int numSlicesBits, SectionLoader loader, int cacheSize) {
@@ -149,7 +148,7 @@ public class ActiveSectionTracker {
                 if (status < 0) {
                     //TODO: Instead if throwing an exception do something better, like attempting to regen
                     //throw new IllegalStateException("Unable to load section: ");
-                    Logger.error("Unable to load section " + section.key + " setting to air");
+                    LOGGER.error("Unable to load section {} setting to air", section.key);
                     status = 1;
                 }
 
@@ -204,7 +203,7 @@ public class ActiveSectionTracker {
         }
     }
 
-    void tryUnload(WorldSection section, int hints) {
+    public void tryUnload(WorldSection section, int hints) {
         if (this.engine != null) this.engine.lastActiveTime = System.currentTimeMillis();
         if (section.shouldSave()&&this.engine!=null) {
             if (section.tryAcquire()) {

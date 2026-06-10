@@ -30,6 +30,7 @@ public final class VoxyForge {
     }
 
     private void onClientSetup(FMLClientSetupEvent event) {
+        ForgeVoxyInstance.INSTANCE.register();
         LOGGER.info("Voxy Forge client skeleton ready. Game dir: {}", PLATFORM.getGameDir());
     }
 }
