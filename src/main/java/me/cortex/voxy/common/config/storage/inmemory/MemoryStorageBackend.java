@@ -4,14 +4,9 @@ import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
-import it.unimi.dsi.fastutil.objects.ObjectCollection;
-import me.cortex.voxy.common.config.ConfigBuildCtx;
 import me.cortex.voxy.common.config.storage.StorageBackend;
-import me.cortex.voxy.common.config.storage.StorageConfig;
 import me.cortex.voxy.common.util.MemoryBuffer;
-import me.cortex.voxy.common.world.WorldEngine;
-import net.minecraft.world.level.levelgen.RandomSupport;
-import org.apache.commons.lang3.stream.Streams;
+import me.cortex.voxy.common.world.WorldSection;
 import org.lwjgl.system.MemoryUtil;
 
 import java.nio.ByteBuffer;
@@ -27,7 +22,13 @@ public class MemoryStorageBackend extends StorageBackend {
     }
 
     private Long2ObjectMap<MemoryBuffer> getMap(long key) {
-        return this.maps[(int) (RandomSupport.mixStafford13(RandomSupport.mixStafford13(key)^key)&(this.maps.length-1))];
+        return this.maps[(int) (mixStafford13(mixStafford13(key)^key)&(this.maps.length-1))];
+    }
+
+    private static long mixStafford13(long value) {
+        value = (value ^ (value >>> 30)) * 0xbf58476d1ce4e5b9L;
+        value = (value ^ (value >>> 27)) * 0x94d049bb133111ebL;
+        return value ^ (value >>> 31);
     }
 
     @Override
@@ -35,7 +36,7 @@ public class MemoryStorageBackend extends StorageBackend {
         LongConsumer filtered = consumer;
         if (level != -1) {
             filtered = (key) -> {
-                if (WorldEngine.getLevel(key) == level) {
+                if (WorldSection.getLevel(key) == level) {
                     consumer.accept(key);
                 }
             };
@@ -124,18 +125,9 @@ public class MemoryStorageBackend extends StorageBackend {
 
     @Override
     public void close() {
-        Streams.of(this.maps).map(Long2ObjectMap::values).flatMap(ObjectCollection::stream).forEach(MemoryBuffer::free);
+        for (var map : this.maps) {
+            map.values().forEach(MemoryBuffer::free);
+        }
         this.idMappings.values().forEach(MemoryUtil::memFree);
-    }
-
-    public static class Config extends StorageConfig {
-        @Override
-        public StorageBackend build(ConfigBuildCtx ctx) {
-            return new MemoryStorageBackend();
-        }
-
-        public static String getConfigTypeName() {
-            return "Memory";
-        }
     }
 }

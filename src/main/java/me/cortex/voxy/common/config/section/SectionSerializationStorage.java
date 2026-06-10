@@ -1,20 +1,19 @@
 package me.cortex.voxy.common.config.section;
 
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
-import me.cortex.voxy.common.Logger;
-import me.cortex.voxy.common.config.ConfigBuildCtx;
 import me.cortex.voxy.common.config.storage.StorageBackend;
-import me.cortex.voxy.common.config.storage.StorageConfig;
 import me.cortex.voxy.common.util.ThreadLocalMemoryBuffer;
 import me.cortex.voxy.common.world.SaveLoadSystem3;
 import me.cortex.voxy.common.world.WorldSection;
-import me.cortex.voxy.common.world.other.Mapper;
+import org.slf4j.LoggerFactory;
 
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.function.LongConsumer;
 
 public class SectionSerializationStorage extends SectionStorage {
+    private static final org.slf4j.Logger LOGGER = LoggerFactory.getLogger("Voxy");
+    private static final long AIR = 0;
     public static final int BIGGEST_SERIALIZED_SECTION_SIZE = 32 * 32 * 32 * 8 * 2 + 8;
 
     private final StorageBackend backend;
@@ -30,8 +29,8 @@ public class SectionSerializationStorage extends SectionStorage {
             if (!SaveLoadSystem3.deserialize(into, data)) {
                 this.backend.deleteSectionData(into.key);
                 //TODO: regenerate the section from children
-                Arrays.fill(into._unsafeGetRawDataArray(), Mapper.AIR);
-                Logger.error("Section " + into.lvl + ", " + into.x + ", " + into.y + ", " + into.z + " was unable to load, removing");
+                Arrays.fill(into._unsafeGetRawDataArray(), AIR);
+                LOGGER.error("Section {}, {}, {}, {} was unable to load, removing", into.lvl, into.x, into.y, into.z);
                 return -1;
             } else {
                 return 0;
@@ -75,18 +74,5 @@ public class SectionSerializationStorage extends SectionStorage {
     @Override
     public void iteratePositions(int level, LongConsumer consumer) {
         this.backend.iteratePositions(level, consumer);
-    }
-
-    public static class Config extends SectionStorageConfig {
-        public StorageConfig storage;
-
-        @Override
-        public SectionStorage build(ConfigBuildCtx ctx) {
-            return new SectionSerializationStorage(this.storage.build(ctx));
-        }
-
-        public static String getConfigTypeName() {
-            return "Serializer";
-        }
     }
 }

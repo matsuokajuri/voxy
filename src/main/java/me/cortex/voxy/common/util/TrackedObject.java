@@ -1,7 +1,6 @@
 package me.cortex.voxy.common.util;
 
-import me.cortex.voxy.common.Logger;
-import me.cortex.voxy.commonImpl.VoxyCommon;
+import org.slf4j.LoggerFactory;
 
 import java.lang.ref.Cleaner;
 
@@ -9,8 +8,9 @@ import static me.cortex.voxy.common.util.GlobalCleaner.CLEANER;
 
 public abstract class TrackedObject {
     //TODO: maybe make this false? for performance overhead?
-    public static final boolean TRACK_OBJECT_ALLOCATIONS = VoxyCommon.isVerificationFlagOn("ensureTrackedObjectsAreFreed", true);
-    public static final boolean TRACK_OBJECT_ALLOCATION_STACKS = VoxyCommon.isVerificationFlagOn("trackObjectAllocationStacks");
+    private static final org.slf4j.Logger LOGGER = LoggerFactory.getLogger("Voxy");
+    public static final boolean TRACK_OBJECT_ALLOCATIONS = !Boolean.getBoolean("voxy.disableTrackedObjectAllocations");
+    public static final boolean TRACK_OBJECT_ALLOCATION_STACKS = Boolean.getBoolean("voxy.trackObjectAllocationStacks");
 
     private final Ref ref;
     protected TrackedObject() {
@@ -65,7 +65,11 @@ public abstract class TrackedObject {
             }
             cleanable = CLEANER.register(obj, () -> {
                 if (!freed[0]) {
-                    Logger.error("Object named: " + clazz + " was not freed, location at:\n", trace==null?"Enable allocation stack tracing":trace);
+                    if (trace == null) {
+                        LOGGER.error("Object named: {} was not freed. Enable allocation stack tracing for allocation location.", clazz);
+                    } else {
+                        LOGGER.error("Object named: {} was not freed, location at:", clazz, trace);
+                    }
                 }
             });
         }

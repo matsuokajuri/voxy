@@ -1,6 +1,5 @@
 package me.cortex.voxy.common.util;
 
-import me.cortex.voxy.commonImpl.VoxyCommon;
 import org.lwjgl.system.MemoryUtil;
 
 import java.nio.ByteBuffer;
@@ -8,7 +7,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class MemoryBuffer extends TrackedObject {
-    private static final boolean TRACK_MEMORY_BUFFERS = VoxyCommon.isVerificationFlagOn("trackBuffers");
+    private static final boolean TRACK_MEMORY_BUFFERS = Boolean.getBoolean("voxy.trackBuffers");
 
     public final long address;
     public final long size;

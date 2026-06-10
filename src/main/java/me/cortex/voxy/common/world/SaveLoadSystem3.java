@@ -1,13 +1,13 @@
 package me.cortex.voxy.common.world;
 
 import it.unimi.dsi.fastutil.longs.Long2ShortOpenHashMap;
-import me.cortex.voxy.common.Logger;
 import me.cortex.voxy.common.util.MemoryBuffer;
 import me.cortex.voxy.common.util.ThreadLocalMemoryBuffer;
-import me.cortex.voxy.common.world.other.Mapper;
 import org.lwjgl.system.MemoryUtil;
+import org.slf4j.LoggerFactory;
 
 public class SaveLoadSystem3 {
+    private static final org.slf4j.Logger LOGGER = LoggerFactory.getLogger("Voxy");
     public static final int STORAGE_VERSION = 0;
 
     private record SerializationCache(Long2ShortOpenHashMap lutMapCache, MemoryBuffer memoryBuffer) {
@@ -20,16 +20,36 @@ public class SaveLoadSystem3 {
         int x = i&0x1F;
         int y = (i>>10)&0x1F;
         int z = (i>>5)&0x1F;
-        return Integer.expand(x,0b1001001001001)|Integer.expand(y,0b10010010010010)|Integer.expand(z,0b100100100100100);
+        return expand3(x, 0)|expand3(y, 1)|expand3(z, 2);
 
         //zyxzyxzyxzyxzyx
     }
 
     public static int z2lin(int i) {
-        int x = Integer.compress(i, 0b1001001001001);
-        int y = Integer.compress(i, 0b10010010010010);
-        int z = Integer.compress(i, 0b100100100100100);
+        int x = compact3(i, 0);
+        int y = compact3(i, 1);
+        int z = compact3(i, 2);
         return x|(y<<10)|(z<<5);
+    }
+
+    private static int expand3(int value, int offset) {
+        int result = 0;
+        for (int bit = 0; bit < 5; bit++) {
+            result |= ((value >> bit) & 1) << (bit * 3 + offset);
+        }
+        return result;
+    }
+
+    private static int compact3(int value, int offset) {
+        int result = 0;
+        for (int bit = 0; bit < 5; bit++) {
+            result |= ((value >> (bit * 3 + offset)) & 1) << bit;
+        }
+        return result;
+    }
+
+    private static boolean isAir(long id) {
+        return (id&(((1L<<20)-1)<<27)) == 0;
     }
 
     private static final ThreadLocal<SerializationCache> CACHE = ThreadLocal.withInitial(SerializationCache::new);
@@ -83,7 +103,7 @@ public class SaveLoadSystem3 {
 
         if (section.key != key) {
             //throw new IllegalStateException("Decompressed section not the same as requested. got: " + key + " expected: " + section.key);
-            Logger.error("Decompressed section not the same as requested. got: " + key + " expected: " + section.key);
+            LOGGER.error("Decompressed section not the same as requested. got: {} expected: {}", key, section.key);
             return false;
         }
 
@@ -99,7 +119,7 @@ public class SaveLoadSystem3 {
         if (section.lvl == 0) {
             int emptyBlockCount = 0;
             for (long block : blockData) {
-                emptyBlockCount += Mapper.isAir(block) ? 1 : 0;
+                emptyBlockCount += isAir(block) ? 1 : 0;
             }
             section.nonEmptyBlockCount = WorldSection.SECTION_VOLUME-emptyBlockCount;
         }
