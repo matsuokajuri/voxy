@@ -16,7 +16,11 @@ public final class ForgeVoxyCommands {
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal("voxy")
                 .then(Commands.literal("ingest_current_chunk")
-                        .executes(ctx -> ingestCurrentChunk(ctx.getSource()))));
+                        .executes(ctx -> ingestCurrentChunk(ctx.getSource())))
+                .then(Commands.literal("ingest_status")
+                        .executes(ctx -> ingestStatus(ctx.getSource())))
+                .then(Commands.literal("ingest_clear_cache")
+                        .executes(ctx -> clearIngestCache(ctx.getSource()))));
     }
 
     private static int ingestCurrentChunk(CommandSourceStack source) {
@@ -73,5 +77,29 @@ public final class ForgeVoxyCommands {
             source.sendFailure(Component.literal("Voxy: chunk ingest failed: " + e.getMessage()));
             return 0;
         }
+    }
+
+    private static int ingestStatus(CommandSourceStack source) {
+        var status = ForgeVoxyInstance.INSTANCE.getChunkIngestManager().createStatusSnapshot();
+        String dimension = status.dimension() == null ? "none" : status.dimension();
+        String message = String.format(
+                "Voxy ingest: engine=%s auto=%s dimension=%s queued=%d ingested=%d radius=%d maxPerTick=%d cooldown=%d",
+                status.enginePresent(),
+                status.autoEnabled(),
+                dimension,
+                status.queuedChunks(),
+                status.ingestedChunks(),
+                status.radius(),
+                status.maxChunksPerTick(),
+                status.cooldownTicks()
+        );
+        source.sendSuccess(() -> Component.literal(message), false);
+        return 1;
+    }
+
+    private static int clearIngestCache(CommandSourceStack source) {
+        ForgeVoxyInstance.INSTANCE.getChunkIngestManager().clear();
+        source.sendSuccess(() -> Component.literal("Voxy: cleared auto ingest queue and cache."), false);
+        return 1;
     }
 }
