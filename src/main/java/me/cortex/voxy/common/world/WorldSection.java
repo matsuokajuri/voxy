@@ -1,8 +1,6 @@
 package me.cortex.voxy.common.world;
 
 
-import me.cortex.voxy.commonImpl.VoxyCommon;
-
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
 import java.util.Arrays;
@@ -13,7 +11,13 @@ import java.util.concurrent.atomic.AtomicInteger;
 // holds a 32x32x32 region of detail
 public final class WorldSection {
     public static final int SECTION_VOLUME = 32*32*32;
-    public static final boolean VERIFY_WORLD_SECTION_EXECUTION = VoxyCommon.isVerificationFlagOn("verifyWorldSectionExecution");
+    public static final int POS_FORMAT_VERSION = 1;
+    public static final boolean VERIFY_WORLD_SECTION_EXECUTION = Boolean.getBoolean("voxy.verifyWorldSectionExecution");
+
+    @FunctionalInterface
+    interface ReleaseTracker {
+        void tryUnload(WorldSection section, int hints);
+    }
 
 
     static final VarHandle ATOMIC_STATE_HANDLE;
@@ -55,7 +59,7 @@ public final class WorldSection {
     volatile int nonEmptyBlockCount = 0;//Note: only needed for level 0 sections
     volatile byte nonEmptyChildren;
 
-    final ActiveSectionTracker tracker;
+    final ReleaseTracker tracker;
     volatile boolean inSaveQueue;
     volatile boolean isDirty;
 
@@ -63,12 +67,12 @@ public final class WorldSection {
     @SuppressWarnings("all")
     private volatile int atomicState = 1;
 
-    WorldSection(int lvl, int x, int y, int z, ActiveSectionTracker tracker) {
+    WorldSection(int lvl, int x, int y, int z, ReleaseTracker tracker) {
         this.lvl = lvl;
         this.x = x;
         this.y = y;
         this.z = z;
-        this.key = WorldEngine.getWorldSectionId(lvl, x, y, z);
+        this.key = getWorldSectionId(lvl, x, y, z);
         this.tracker = tracker;
 
         this.data = ARRAY_REUSE_CACHE.poll();
@@ -122,7 +126,7 @@ public final class WorldSection {
     public int acquire(int count) {
         int state = ((int)  ATOMIC_STATE_HANDLE.getAndAdd(this, count<<1)) + (count<<1);
         if ((state & 1) == 0) {
-            throw new IllegalStateException("Tried to acquire unloaded section: " + WorldEngine.pprintPos(this.key) + " obj: " + System.identityHashCode(this));
+            throw new IllegalStateException("Tried to acquire unloaded section: " + pprintPos(this.key) + " obj: " + System.identityHashCode(this));
         }
         return state>>1;
     }
@@ -269,7 +273,7 @@ public final class WorldSection {
     public boolean updateLvl0State() {
         if (VERIFY_WORLD_SECTION_EXECUTION) {
             if (this.lvl != 0) {
-                throw new IllegalStateException("Tried updating a level 0 lod when its not level 0: " + WorldEngine.pprintPos(this.key));
+                throw new IllegalStateException("Tried updating a level 0 lod when its not level 0: " + pprintPos(this.key));
             }
         }
         byte prev, next;
@@ -308,5 +312,29 @@ public final class WorldSection {
 
     public boolean isFreed() {
         return (((int)ATOMIC_STATE_HANDLE.get(this))&1)==0;
+    }
+
+    public static long getWorldSectionId(int lvl, int x, int y, int z) {
+        return ((long)lvl<<60)|((long)(y&0xFF)<<52)|((long)(z&((1<<24)-1))<<28)|((long)(x&((1<<24)-1))<<4);
+    }
+
+    public static int getLevel(long id) {
+        return (int) ((id>>60)&0xf);
+    }
+
+    public static int getX(long id) {
+        return (int) ((id<<36)>>40);
+    }
+
+    public static int getY(long id) {
+        return (int) ((id<<4)>>56);
+    }
+
+    public static int getZ(long id) {
+        return (int) ((id<<12)>>40);
+    }
+
+    public static String pprintPos(long pos) {
+        return getLevel(pos)+"@["+getX(pos)+", "+getY(pos)+", " + getZ(pos)+"]";
     }
 }
