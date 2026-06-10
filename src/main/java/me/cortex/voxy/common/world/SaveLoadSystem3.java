@@ -3,6 +3,7 @@ package me.cortex.voxy.common.world;
 import it.unimi.dsi.fastutil.longs.Long2ShortOpenHashMap;
 import me.cortex.voxy.common.util.MemoryBuffer;
 import me.cortex.voxy.common.util.ThreadLocalMemoryBuffer;
+import me.cortex.voxy.common.world.other.Mapper;
 import org.lwjgl.system.MemoryUtil;
 import org.slf4j.LoggerFactory;
 
@@ -46,10 +47,6 @@ public class SaveLoadSystem3 {
             result |= ((value >> (bit * 3 + offset)) & 1) << bit;
         }
         return result;
-    }
-
-    private static boolean isAir(long id) {
-        return (id&(((1L<<20)-1)<<27)) == 0;
     }
 
     private static final ThreadLocal<SerializationCache> CACHE = ThreadLocal.withInitial(SerializationCache::new);
@@ -119,7 +116,7 @@ public class SaveLoadSystem3 {
         if (section.lvl == 0) {
             int emptyBlockCount = 0;
             for (long block : blockData) {
-                emptyBlockCount += isAir(block) ? 1 : 0;
+                emptyBlockCount += Mapper.isAir(block) ? 1 : 0;
             }
             section.nonEmptyBlockCount = WorldSection.SECTION_VOLUME-emptyBlockCount;
         }

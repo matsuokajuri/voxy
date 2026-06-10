@@ -35,6 +35,7 @@ sourceSets {
             include 'me/cortex/voxy/common/voxelization/ILightingSupplier.java'
             include 'me/cortex/voxy/common/world/WorldSection.java'
             include 'me/cortex/voxy/common/world/SaveLoadSystem3.java'
+            include 'me/cortex/voxy/common/world/other/Mapper.java'
             include 'me/cortex/voxy/common/config/IMappingStorage.java'
             include 'me/cortex/voxy/common/config/IStoredSectionPositionIterator.java'
             include 'me/cortex/voxy/common/config/section/SectionStorage.java'
