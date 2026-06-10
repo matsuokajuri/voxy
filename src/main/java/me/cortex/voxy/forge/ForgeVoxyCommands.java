@@ -20,6 +20,8 @@ public final class ForgeVoxyCommands {
                         .executes(ctx -> ingestCurrentChunk(ctx.getSource())))
                 .then(Commands.literal("build_current_chunk_mesh")
                         .executes(ctx -> buildCurrentChunkMesh(ctx.getSource())))
+                .then(Commands.literal("build_current_chunk_model_mesh")
+                        .executes(ctx -> buildCurrentChunkModelMesh(ctx.getSource())))
                 .then(Commands.literal("ingest_status")
                         .executes(ctx -> ingestStatus(ctx.getSource())))
                 .then(Commands.literal("ingest_clear_cache")
@@ -135,6 +137,71 @@ public final class ForgeVoxyCommands {
         } catch (Exception e) {
             VoxyForge.LOGGER.error("Failed to build current chunk mesh stats", e);
             source.sendFailure(Component.literal("Voxy: mesh build failed: " + e.getMessage()));
+            return 0;
+        }
+    }
+
+    private static int buildCurrentChunkModelMesh(CommandSourceStack source) {
+        var minecraft = Minecraft.getInstance();
+        var player = minecraft.player;
+        var level = minecraft.level;
+        if (player == null || level == null) {
+            source.sendFailure(Component.literal("Voxy: no client world is active."));
+            return 0;
+        }
+
+        var engine = ForgeVoxyInstance.INSTANCE.getCurrentEngineOptional();
+        if (engine.isEmpty()) {
+            String reason = ForgeVoxyConfig.ENABLE_WORLD_ENGINE_SKELETON.get()
+                    ? "no WorldEngine is active for the current world"
+                    : "enableWorldEngineSkeleton is false";
+            source.sendFailure(Component.literal("Voxy: cannot build current chunk model mesh; " + reason + "."));
+            return 0;
+        }
+
+        try {
+            int chunkX = player.chunkPosition().x;
+            int chunkZ = player.chunkPosition().z;
+            LevelChunk chunk = level.getChunkSource().getChunk(chunkX, chunkZ, ChunkStatus.FULL, false);
+            if (chunk == null) {
+                source.sendFailure(Component.literal("Voxy: current chunk is not loaded."));
+                return 0;
+            }
+
+            String dimension = level.dimension().location().toString();
+            var stats = ForgeModelAwareMeshBuildValidator.buildCurrentChunk(engine.get(), chunk, level, dimension);
+            if (stats.sectionsFound() == 0) {
+                source.sendFailure(Component.literal("Voxy: no ingested Voxy section found for current chunk; run /voxy ingest_current_chunk first."));
+                return 0;
+            }
+
+            String message = String.format(
+                    "Voxy model mesh: %s chunk %d,%d sectionsFound=%d sectionsBuilt=%d blocksSampled=%d bakedModels=%d quads=%d vertices=%d tinted=%d tintLookups=%d solid=%d cutout=%d translucent=%d other=%d unsupported=%d bytes=%d elapsed=%.2fms",
+                    stats.dimension(),
+                    stats.chunkX(),
+                    stats.chunkZ(),
+                    stats.sectionsFound(),
+                    stats.sectionsBuilt(),
+                    stats.blocksSampled(),
+                    stats.bakedModelCount(),
+                    stats.quads(),
+                    stats.vertices(),
+                    stats.tintedQuads(),
+                    stats.tintLookups(),
+                    stats.solidQuads(),
+                    stats.cutoutQuads(),
+                    stats.translucentQuads(),
+                    stats.otherLayerQuads(),
+                    stats.unsupportedBlocks(),
+                    stats.estimatedBytes(),
+                    stats.elapsedMs()
+            );
+            VoxyForge.LOGGER.info(message);
+            source.sendSuccess(() -> Component.literal(message), false);
+            return stats.sectionsBuilt();
+        } catch (Exception e) {
+            VoxyForge.LOGGER.error("Failed to build current chunk model mesh stats", e);
+            source.sendFailure(Component.literal("Voxy: model mesh build failed: " + e.getMessage()));
             return 0;
         }
     }
