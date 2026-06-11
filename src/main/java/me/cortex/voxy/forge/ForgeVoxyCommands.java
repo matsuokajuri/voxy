@@ -30,6 +30,8 @@ public final class ForgeVoxyCommands {
                         .executes(ctx -> builtSectionCacheStatus(ctx.getSource())))
                 .then(Commands.literal("built_section_cache_clear")
                         .executes(ctx -> clearBuiltSectionCache(ctx.getSource())))
+                .then(Commands.literal("built_section_build_clear")
+                        .executes(ctx -> clearBuiltSectionBuildState(ctx.getSource())))
                 .then(Commands.literal("mesh_cache_status")
                         .executes(ctx -> meshCacheStatus(ctx.getSource())))
                 .then(Commands.literal("mesh_cache_clear")
@@ -428,8 +430,21 @@ public final class ForgeVoxyCommands {
 
     private static int builtSectionCacheStatus(CommandSourceStack source) {
         var status = ForgeVoxyInstance.INSTANCE.getVoxyGeometryCache().createStatusSnapshot();
+        var buildStatus = ForgeVoxyInstance.INSTANCE.getBuiltSectionBuildManager().createStatusSnapshot();
+        String buildDimension = buildStatus.dimension() == null ? "none" : buildStatus.dimension();
         String message = String.format(
-                "Voxy BuiltSection cache: entries=%d/%d totalSections=%d totalNaiveQuads=%d totalMergedQuads=%d totalAverageQuadArea=%.2f totalSkippedTranslucent=%d totalSkippedNonMergeable=%d totalQuads=%d totalGeometryBytes=%d totalOccupancyBytes=%d finalFormatCount=%d partialFormatCount=%d partialOriginalBitLayoutCount=%d uniqueModelIds=%d missingModelRecords=%d runtimeModelMapperSize=%d uniqueBiomeIds=%d missingBiomeRecords=%d geometryFormat=%s closed=%d evicted=%d replaced=%d firstPosition=%s firstAabb=%s firstOffsets=%s firstNamedOffsets=%s offsetsSemantic=%s sampleRecord=%s decoded=\"%s\"",
+                "Voxy BuiltSection cache: auto=%s engine=%s buildDim=%s queue=%d builtRecords=%d failedRecords=%d radius=%d maxPerTick=%d cooldown=%d lastBuildMs=%.2f avgBuildMs=%.2f entries=%d/%d totalSections=%d totalNaiveQuads=%d totalMergedQuads=%d totalAverageQuadArea=%.2f totalSkippedTranslucent=%d totalSkippedNonMergeable=%d totalQuads=%d totalGeometryBytes=%d totalOccupancyBytes=%d finalFormatCount=%d partialFormatCount=%d partialOriginalBitLayoutCount=%d uniqueModelIds=%d missingModelRecords=%d runtimeModelMapperSize=%d uniqueBiomeIds=%d missingBiomeRecords=%d geometryFormat=%s closed=%d evicted=%d replaced=%d firstPosition=%s firstAabb=%s firstOffsets=%s firstNamedOffsets=%s offsetsSemantic=%s sampleRecord=%s decoded=\"%s\"",
+                buildStatus.autoEnabled(),
+                buildStatus.enginePresent(),
+                buildDimension,
+                buildStatus.queuedChunks(),
+                buildStatus.builtChunks(),
+                buildStatus.failedChunks(),
+                buildStatus.radius(),
+                buildStatus.maxChunksPerTick(),
+                buildStatus.cooldownTicks(),
+                buildStatus.lastBuildMs(),
+                buildStatus.averageMs(),
                 status.entries(),
                 status.maxEntries(),
                 status.entries(),
@@ -466,8 +481,15 @@ public final class ForgeVoxyCommands {
     }
 
     private static int clearBuiltSectionCache(CommandSourceStack source) {
+        ForgeVoxyInstance.INSTANCE.getBuiltSectionBuildManager().clear();
         ForgeVoxyInstance.INSTANCE.getVoxyGeometryCache().clear();
-        source.sendSuccess(() -> Component.literal("Voxy: cleared CPU-only BuiltSection cache and closed all partial geometry buffers."), false);
+        source.sendSuccess(() -> Component.literal("Voxy: cleared CPU-only BuiltSection cache, closed all partial geometry buffers, and cleared auto BuiltSection build records."), false);
+        return 1;
+    }
+
+    private static int clearBuiltSectionBuildState(CommandSourceStack source) {
+        ForgeVoxyInstance.INSTANCE.getBuiltSectionBuildManager().clear();
+        source.sendSuccess(() -> Component.literal("Voxy: cleared auto BuiltSection build queue and built-record. The BuiltSection cache was left intact."), false);
         return 1;
     }
 
@@ -1033,6 +1055,7 @@ public final class ForgeVoxyCommands {
     private static void clearRuntimePipeline() {
         ForgeVoxyInstance.INSTANCE.getChunkIngestManager().clear();
         ForgeVoxyInstance.INSTANCE.getCpuMeshBuildManager().clear();
+        ForgeVoxyInstance.INSTANCE.getBuiltSectionBuildManager().clear();
         ForgeVoxyInstance.INSTANCE.getCpuMeshCache().clear();
         ForgeVoxyInstance.INSTANCE.getVoxyGeometryCache().clear();
         ForgeVoxyInstance.INSTANCE.getGpuMeshUploadManager().clear();
@@ -1043,8 +1066,9 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getCpuMeshCache().clear();
         ForgeVoxyInstance.INSTANCE.getVoxyGeometryCache().clear();
         ForgeVoxyInstance.INSTANCE.getCpuMeshBuildManager().clear();
+        ForgeVoxyInstance.INSTANCE.getBuiltSectionBuildManager().clear();
         ForgeVoxyInstance.INSTANCE.getGpuMeshUploadManager().clear();
-        source.sendSuccess(() -> Component.literal("Voxy: cleared CPU mesh cache, CPU-only BuiltSection cache, GPU mesh cache, and auto mesh build record."), false);
+        source.sendSuccess(() -> Component.literal("Voxy: cleared CPU mesh cache, CPU-only BuiltSection cache, GPU mesh cache, auto mesh build record, and auto BuiltSection build record."), false);
         return 1;
     }
 
@@ -1063,10 +1087,11 @@ public final class ForgeVoxyCommands {
     private static int clearDebugPipeline(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getChunkIngestManager().clear();
         ForgeVoxyInstance.INSTANCE.getCpuMeshBuildManager().clear();
+        ForgeVoxyInstance.INSTANCE.getBuiltSectionBuildManager().clear();
         ForgeVoxyInstance.INSTANCE.getCpuMeshCache().clear();
         ForgeVoxyInstance.INSTANCE.getVoxyGeometryCache().clear();
         ForgeVoxyInstance.INSTANCE.getGpuMeshUploadManager().clear();
-        source.sendSuccess(() -> Component.literal("Voxy: cleared debug pipeline ingest records, mesh build records, CPU mesh cache, CPU-only BuiltSection cache, and GPU mesh cache."), false);
+        source.sendSuccess(() -> Component.literal("Voxy: cleared debug pipeline ingest records, mesh build records, BuiltSection build records, CPU mesh cache, CPU-only BuiltSection cache, and GPU mesh cache."), false);
         return 1;
     }
 
@@ -1092,7 +1117,8 @@ public final class ForgeVoxyCommands {
     private static int clearIngestCache(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getChunkIngestManager().clear();
         ForgeVoxyInstance.INSTANCE.getCpuMeshBuildManager().clear();
-        source.sendSuccess(() -> Component.literal("Voxy: cleared auto ingest queue/cache and auto CPU mesh build queue/records."), false);
+        ForgeVoxyInstance.INSTANCE.getBuiltSectionBuildManager().clear();
+        source.sendSuccess(() -> Component.literal("Voxy: cleared auto ingest queue/cache, auto CPU mesh build queue/records, and auto BuiltSection build queue/records."), false);
         return 1;
     }
 }

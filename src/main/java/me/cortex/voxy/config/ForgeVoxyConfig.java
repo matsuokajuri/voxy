@@ -14,6 +14,10 @@ public final class ForgeVoxyConfig {
     public static final ForgeConfigSpec.IntValue AUTO_MESH_BUILD_RADIUS;
     public static final ForgeConfigSpec.IntValue AUTO_MESH_BUILD_MAX_CHUNKS_PER_TICK;
     public static final ForgeConfigSpec.IntValue AUTO_MESH_BUILD_COOLDOWN_TICKS;
+    public static final ForgeConfigSpec.BooleanValue ENABLE_AUTO_BUILT_SECTION_BUILD;
+    public static final ForgeConfigSpec.IntValue AUTO_BUILT_SECTION_BUILD_RADIUS;
+    public static final ForgeConfigSpec.IntValue AUTO_BUILT_SECTION_MAX_CHUNKS_PER_TICK;
+    public static final ForgeConfigSpec.IntValue AUTO_BUILT_SECTION_COOLDOWN_TICKS;
     public static final ForgeConfigSpec.IntValue CPU_MESH_CACHE_MAX_ENTRIES;
     public static final ForgeConfigSpec.IntValue BUILT_SECTION_CACHE_MAX_ENTRIES;
     public static final ForgeConfigSpec.BooleanValue ENABLE_DEBUG_MESH_RENDERER;
@@ -69,11 +73,23 @@ public final class ForgeVoxyConfig {
         AUTO_MESH_BUILD_COOLDOWN_TICKS = builder
                 .comment("Ticks between nearby chunk scans for auto CPU mesh build. Queued chunks may still be processed every tick.")
                 .defineInRange("autoMeshBuildCooldownTicks", 20, 0, 200);
+        ENABLE_AUTO_BUILT_SECTION_BUILD = builder
+                .comment("Automatically builds CPU-only Voxy BuiltSection-format data for already-ingested nearby chunks. This is renderer migration validation only and does not render by itself.")
+                .define("enableAutoBuiltSectionBuild", false);
+        AUTO_BUILT_SECTION_BUILD_RADIUS = builder
+                .comment("Chunk radius around the player to scan for already-ingested chunks when auto BuiltSection build is enabled.")
+                .defineInRange("autoBuiltSectionBuildRadius", 2, 0, 8);
+        AUTO_BUILT_SECTION_MAX_CHUNKS_PER_TICK = builder
+                .comment("Maximum chunks to build into CPU-only BuiltSection data per client tick when auto BuiltSection build is enabled.")
+                .defineInRange("autoBuiltSectionMaxChunksPerTick", 1, 1, 8);
+        AUTO_BUILT_SECTION_COOLDOWN_TICKS = builder
+                .comment("Ticks between nearby chunk scans for auto BuiltSection build. Queued chunks may still be processed every tick.")
+                .defineInRange("autoBuiltSectionCooldownTicks", 20, 0, 200);
         CPU_MESH_CACHE_MAX_ENTRIES = builder
                 .comment("Maximum cached CPU mesh section/layer entries kept by the debug pipeline. Old entries are closed and evicted with LRU ordering.")
                 .defineInRange("cpuMeshCacheMaxEntries", 2048, 1, 8192);
         BUILT_SECTION_CACHE_MAX_ENTRIES = builder
-                .comment("Maximum CPU-only Voxy BuiltSection-format entries kept for renderer migration validation. This cache is used only by manual debug commands.")
+                .comment("Maximum CPU-only Voxy BuiltSection-format entries kept for renderer migration validation. Old entries are closed and evicted with LRU ordering.")
                 .defineInRange("builtSectionCacheMaxEntries", 2048, 1, 8192);
         ENABLE_DEBUG_MESH_RENDERER = builder
                 .comment("Draws cached CPU mesh sections with a temporary vanilla debug renderer. Requires enableWorldEngineSkeleton and does not use the final Voxy renderer.")

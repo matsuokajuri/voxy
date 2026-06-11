@@ -59,6 +59,18 @@ public final class ForgeVoxyGeometryCache {
         this.entries.clear();
     }
 
+    public synchronized boolean hasChunkEntries(String dimension, int chunkX, int chunkZ) {
+        for (ForgeVoxyBuiltSection section : this.entries.values()) {
+            if (!section.dimension().equals(dimension) || section.chunkX() != chunkX || section.chunkZ() != chunkZ) {
+                continue;
+            }
+            if (!section.isClosed() && !section.isEmpty()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public synchronized StatusSnapshot createStatusSnapshot() {
         this.trimToLimit();
         long totalQuads = 0;

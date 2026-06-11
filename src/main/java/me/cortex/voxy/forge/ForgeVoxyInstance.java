@@ -19,6 +19,7 @@ public final class ForgeVoxyInstance {
     private final ForgeChunkIngestManager chunkIngestManager = new ForgeChunkIngestManager(this);
     private final ForgeCpuMeshBuildManager cpuMeshBuildManager = new ForgeCpuMeshBuildManager(this);
     private final ForgeCpuMeshCache cpuMeshCache = new ForgeCpuMeshCache();
+    private final ForgeVoxyBuiltSectionBuildManager builtSectionBuildManager = new ForgeVoxyBuiltSectionBuildManager(this);
     private final ForgeVoxyGeometryCache voxyGeometryCache = new ForgeVoxyGeometryCache();
     private final ForgeDebugMeshRenderer debugMeshRenderer = new ForgeDebugMeshRenderer(this);
     private final ForgeGpuMeshCache gpuMeshCache = new ForgeGpuMeshCache();
@@ -37,6 +38,7 @@ public final class ForgeVoxyInstance {
         MinecraftForge.EVENT_BUS.addListener(this::onRegisterClientCommands);
         this.chunkIngestManager.register();
         this.cpuMeshBuildManager.register();
+        this.builtSectionBuildManager.register();
         this.debugMeshRenderer.register();
         this.gpuMeshUploadManager.register();
         this.simpleGpuMeshRenderer.register();
@@ -66,6 +68,10 @@ public final class ForgeVoxyInstance {
 
     public ForgeCpuMeshCache getCpuMeshCache() {
         return this.cpuMeshCache;
+    }
+
+    public ForgeVoxyBuiltSectionBuildManager getBuiltSectionBuildManager() {
+        return this.builtSectionBuildManager;
     }
 
     public ForgeVoxyGeometryCache getVoxyGeometryCache() {
@@ -114,6 +120,7 @@ public final class ForgeVoxyInstance {
         this.activeClientDimension = dimension;
         this.chunkIngestManager.clear();
         this.cpuMeshBuildManager.clear();
+        this.builtSectionBuildManager.clear();
         this.cpuMeshCache.setActiveDimension(dimension);
         this.voxyGeometryCache.setActiveDimension(dimension);
         this.gpuMeshUploadManager.clear();
@@ -174,6 +181,7 @@ public final class ForgeVoxyInstance {
     private void onClientLogout(ClientPlayerNetworkEvent.LoggingOut event) {
         this.chunkIngestManager.clear();
         this.cpuMeshBuildManager.clear();
+        this.builtSectionBuildManager.clear();
         this.cpuMeshCache.clear();
         this.voxyGeometryCache.clear();
         this.gpuMeshUploadManager.clear();
