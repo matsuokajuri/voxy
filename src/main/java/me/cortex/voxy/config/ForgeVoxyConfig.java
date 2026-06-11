@@ -68,7 +68,7 @@ public final class ForgeVoxyConfig {
                 .defineInRange("autoMeshBuildCooldownTicks", 20, 0, 200);
         CPU_MESH_CACHE_MAX_ENTRIES = builder
                 .comment("Maximum cached CPU mesh section/layer entries kept by the debug pipeline. Old entries are closed and evicted with LRU ordering.")
-                .defineInRange("cpuMeshCacheMaxEntries", 512, 1, 8192);
+                .defineInRange("cpuMeshCacheMaxEntries", 2048, 1, 8192);
         ENABLE_DEBUG_MESH_RENDERER = builder
                 .comment("Draws cached CPU mesh sections with a temporary vanilla debug renderer. Requires enableWorldEngineSkeleton and does not use the final Voxy renderer.")
                 .define("enableDebugMeshRenderer", false);
@@ -98,10 +98,10 @@ public final class ForgeVoxyConfig {
                 .defineInRange("simpleGpuMeshMaxUploadsPerTick", 1, 1, 16);
         SIMPLE_GPU_MESH_MAX_BUFFERS = builder
                 .comment("Maximum cached vanilla VertexBuffer mesh entries. Old GPU buffers are closed and evicted with LRU ordering.")
-                .defineInRange("simpleGpuMeshMaxBuffers", 512, 1, 8192);
+                .defineInRange("simpleGpuMeshMaxBuffers", 2048, 1, 8192);
         SIMPLE_GPU_MESH_RENDER_DISTANCE_CHUNKS = builder
                 .comment("Chunk radius around the player used by the simple vanilla GPU mesh renderer.")
-                .defineInRange("simpleGpuMeshRenderDistanceChunks", 16, 0, 32);
+                .defineInRange("simpleGpuMeshRenderDistanceChunks", 64, 0, 128);
         SIMPLE_GPU_MESH_MIN_RENDER_DISTANCE_CHUNKS = builder
                 .comment("Minimum chunk distance before cached GPU mesh is rendered. This avoids drawing over nearby vanilla terrain.")
                 .defineInRange("simpleGpuMeshMinRenderDistanceChunks", 4, 0, 64);

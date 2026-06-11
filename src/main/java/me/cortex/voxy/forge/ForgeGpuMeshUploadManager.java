@@ -193,7 +193,7 @@ public final class ForgeGpuMeshUploadManager {
     }
 
     public static int getConfiguredRenderDistanceChunks() {
-        return Math.min(32, Math.max(0, ForgeVoxyConfig.SIMPLE_GPU_MESH_RENDER_DISTANCE_CHUNKS.get()));
+        return Math.min(128, Math.max(0, ForgeVoxyConfig.SIMPLE_GPU_MESH_RENDER_DISTANCE_CHUNKS.get()));
     }
 
     public static boolean useOriginalColors() {

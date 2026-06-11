@@ -4,6 +4,7 @@ import me.cortex.voxy.config.ForgeVoxyConfig;
 
 import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -11,7 +12,7 @@ import java.util.Map;
 import java.util.Set;
 
 public final class ForgeGpuMeshCache {
-    private static final int DEFAULT_MAX_BUFFERS = 512;
+    private static final int DEFAULT_MAX_BUFFERS = 2048;
 
     private final int fallbackMaxBuffers;
     private final LinkedHashMap<ForgeCpuMeshCache.Key, ForgeGpuMeshBuffer> buffers;
@@ -103,6 +104,99 @@ public final class ForgeGpuMeshCache {
         return new RenderSnapshot(snapshot, skippedByDimension, skippedByDistance, skippedReleased, limitedBuffers);
     }
 
+    public synchronized VisibilitySnapshot createVisibilitySnapshot(
+            String dimension,
+            int centerChunkX,
+            int centerChunkZ,
+            int minDistanceChunks,
+            int maxDistanceChunks,
+            boolean renderLoadedChunks,
+            ChunkLoadChecker chunkLoadChecker
+    ) {
+        this.trimToLimit();
+        int minDistance = Math.max(0, Math.min(minDistanceChunks, maxDistanceChunks));
+        int maxDistance = Math.max(0, maxDistanceChunks);
+        var cachedChunks = new HashSet<Long>();
+        var windowChunks = new HashSet<Long>();
+        var skippedLoadedChunks = new HashSet<Long>();
+        var renderableChunks = new HashSet<Long>();
+        int cachedBuffers = 0;
+        int candidateBuffers = 0;
+        int renderableBuffers = 0;
+        int skippedByDimension = 0;
+        int skippedNear = 0;
+        int skippedFar = 0;
+        int skippedLoaded = 0;
+        int skippedReleased = 0;
+        int skippedTranslucent = 0;
+        int nearestRenderableDistance = Integer.MAX_VALUE;
+        int farthestRenderableDistance = -1;
+
+        for (ForgeGpuMeshBuffer buffer : this.buffers.values()) {
+            if (!buffer.dimension().equals(dimension)) {
+                skippedByDimension++;
+                continue;
+            }
+            if (buffer.isClosed() || buffer.vertexBuffer() == null) {
+                skippedReleased++;
+                continue;
+            }
+
+            long chunkKey = chunkKey(buffer.chunkX(), buffer.chunkZ());
+            cachedBuffers++;
+            cachedChunks.add(chunkKey);
+
+            int distance = Math.max(Math.abs(buffer.chunkX() - centerChunkX), Math.abs(buffer.chunkZ() - centerChunkZ));
+            if (distance < minDistance) {
+                skippedNear++;
+                continue;
+            }
+            if (distance > maxDistance) {
+                skippedFar++;
+                continue;
+            }
+
+            candidateBuffers++;
+            windowChunks.add(chunkKey);
+            if (!renderLoadedChunks && isLoaded(chunkLoadChecker, buffer.chunkX(), buffer.chunkZ())) {
+                skippedLoaded++;
+                skippedLoadedChunks.add(chunkKey);
+                continue;
+            }
+            if (buffer.layer() == ForgeCpuMeshLayer.TRANSLUCENT) {
+                skippedTranslucent++;
+                continue;
+            }
+
+            renderableBuffers++;
+            renderableChunks.add(chunkKey);
+            nearestRenderableDistance = Math.min(nearestRenderableDistance, distance);
+            farthestRenderableDistance = Math.max(farthestRenderableDistance, distance);
+        }
+
+        if (renderableChunks.isEmpty()) {
+            nearestRenderableDistance = -1;
+        }
+
+        return new VisibilitySnapshot(
+                cachedBuffers,
+                cachedChunks.size(),
+                candidateBuffers,
+                windowChunks.size(),
+                renderableBuffers,
+                renderableChunks.size(),
+                skippedByDimension,
+                skippedNear,
+                skippedFar,
+                skippedLoaded,
+                skippedLoadedChunks.size(),
+                skippedReleased,
+                skippedTranslucent,
+                nearestRenderableDistance,
+                farthestRenderableDistance
+        );
+    }
+
     public synchronized StatusSnapshot createStatusSnapshot() {
         this.trimToLimit();
         long vertices = 0;
@@ -182,6 +276,26 @@ public final class ForgeGpuMeshCache {
         return builder.toString();
     }
 
+    private static boolean isLoaded(ChunkLoadChecker chunkLoadChecker, int chunkX, int chunkZ) {
+        if (chunkLoadChecker == null) {
+            return false;
+        }
+        try {
+            return chunkLoadChecker.isLoaded(chunkX, chunkZ);
+        } catch (RuntimeException e) {
+            return false;
+        }
+    }
+
+    private static long chunkKey(int chunkX, int chunkZ) {
+        return ((long) chunkX & 0xFFFFFFFFL) | (((long) chunkZ & 0xFFFFFFFFL) << 32);
+    }
+
+    @FunctionalInterface
+    public interface ChunkLoadChecker {
+        boolean isLoaded(int chunkX, int chunkZ);
+    }
+
     public record StatusSnapshot(
             int buffers,
             int maxBuffers,
@@ -199,6 +313,25 @@ public final class ForgeGpuMeshCache {
             int skippedByDistance,
             int skippedReleased,
             int limitedBuffers
+    ) {
+    }
+
+    public record VisibilitySnapshot(
+            int cachedBuffers,
+            int cachedChunks,
+            int candidateBuffers,
+            int chunksWithinDistanceWindow,
+            int renderableBuffers,
+            int renderableChunks,
+            int skippedByDimension,
+            int skippedNear,
+            int skippedFar,
+            int skippedLoaded,
+            int skippedLoadedChunks,
+            int skippedReleased,
+            int skippedTranslucent,
+            int nearestRenderableDistance,
+            int farthestRenderableDistance
     ) {
     }
 }

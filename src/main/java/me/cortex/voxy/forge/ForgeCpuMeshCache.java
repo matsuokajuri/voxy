@@ -12,7 +12,7 @@ import java.util.Map;
 import java.util.Set;
 
 public final class ForgeCpuMeshCache {
-    private static final int DEFAULT_MAX_ENTRIES = 512;
+    private static final int DEFAULT_MAX_ENTRIES = 2048;
 
     private final int fallbackMaxEntries;
     private final LinkedHashMap<Key, ForgeCpuBuiltSection> entries;
