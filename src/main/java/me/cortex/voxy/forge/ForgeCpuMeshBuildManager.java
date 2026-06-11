@@ -31,6 +31,7 @@ public final class ForgeCpuMeshBuildManager {
     private double windowElapsedMs;
     private long lastSummaryTick;
     private double lastBuildMs;
+    private double lastAverageMs;
 
     ForgeCpuMeshBuildManager(ForgeVoxyInstance instance) {
         this.instance = instance;
@@ -49,6 +50,7 @@ public final class ForgeCpuMeshBuildManager {
         this.activeDimension = null;
         this.scanCooldown = 0;
         this.lastBuildMs = 0.0;
+        this.lastAverageMs = 0.0;
     }
 
     public StatusSnapshot createStatusSnapshot() {
@@ -62,7 +64,8 @@ public final class ForgeCpuMeshBuildManager {
                 getConfiguredRadius(),
                 getConfiguredMaxChunksPerTick(),
                 getConfiguredCooldownTicks(),
-                this.lastBuildMs
+                this.lastBuildMs,
+                this.getAverageMs()
         );
     }
 
@@ -102,7 +105,11 @@ public final class ForgeCpuMeshBuildManager {
         }
 
         if (this.scanCooldown <= 0) {
-            this.enqueueNearbyLoadedChunks(level, player.chunkPosition().x, player.chunkPosition().z, getConfiguredRadius());
+            int centerChunkX = player.chunkPosition().x;
+            int centerChunkZ = player.chunkPosition().z;
+            int radius = getConfiguredRadius();
+            this.pruneRecordsAround(centerChunkX, centerChunkZ, radius);
+            this.enqueueNearbyLoadedChunks(level, centerChunkX, centerChunkZ, radius);
             this.scanCooldown = getConfiguredCooldownTicks();
         } else {
             this.scanCooldown--;
@@ -128,7 +135,13 @@ public final class ForgeCpuMeshBuildManager {
 
     private void tryQueueLoadedChunk(ClientLevel level, int chunkX, int chunkZ) {
         long key = ChunkPos.asLong(chunkX, chunkZ);
-        if (this.builtChunks.contains(key) || this.failedChunks.contains(key) || this.queuedChunks.contains(key)) {
+        if (this.builtChunks.contains(key)) {
+            if (this.activeDimension != null && this.instance.getCpuMeshCache().hasChunkEntries(this.activeDimension, chunkX, chunkZ)) {
+                return;
+            }
+            this.builtChunks.remove(key);
+        }
+        if (this.failedChunks.contains(key) || this.queuedChunks.contains(key)) {
             return;
         }
         if (getLoadedChunk(level, chunkX, chunkZ) == null) {
@@ -223,6 +236,7 @@ public final class ForgeCpuMeshBuildManager {
         );
         this.resetWindow();
         this.lastSummaryTick = this.tickCounter;
+        this.lastAverageMs = averageMs;
     }
 
     private void resetWindow() {
@@ -232,6 +246,27 @@ public final class ForgeCpuMeshBuildManager {
         this.windowBytes = 0;
         this.windowElapsedMs = 0.0;
         this.lastSummaryTick = this.tickCounter;
+    }
+
+    private double getAverageMs() {
+        if (this.windowChunks == 0) {
+            return this.lastAverageMs;
+        }
+        return this.windowElapsedMs / this.windowChunks;
+    }
+
+    private void pruneRecordsAround(int centerX, int centerZ, int radius) {
+        int retentionRadius = getRecordRetentionRadius(radius);
+        this.pendingChunks.removeIf(key -> {
+            boolean remove = !isWithinChunkRadius(key, centerX, centerZ, retentionRadius);
+            if (remove) {
+                this.queuedChunks.remove(key);
+            }
+            return remove;
+        });
+        this.queuedChunks.removeIf(key -> !isWithinChunkRadius(key, centerX, centerZ, retentionRadius));
+        this.builtChunks.removeIf(key -> !isWithinChunkRadius(key, centerX, centerZ, retentionRadius));
+        this.failedChunks.removeIf(key -> !isWithinChunkRadius(key, centerX, centerZ, retentionRadius));
     }
 
     private static LevelChunk getLoadedChunk(ClientLevel level, int chunkX, int chunkZ) {
@@ -253,6 +288,15 @@ public final class ForgeCpuMeshBuildManager {
         return Math.min(200, Math.max(0, ForgeVoxyConfig.AUTO_MESH_BUILD_COOLDOWN_TICKS.get()));
     }
 
+    private static int getRecordRetentionRadius(int activeRadius) {
+        int renderRadius = Math.min(8, Math.max(0, ForgeVoxyConfig.DEBUG_MESH_RENDER_DISTANCE_CHUNKS.get()));
+        return Math.max(8, Math.max(activeRadius, renderRadius) + 8);
+    }
+
+    private static boolean isWithinChunkRadius(long key, int centerX, int centerZ, int radius) {
+        return Math.abs(ChunkPos.getX(key) - centerX) <= radius && Math.abs(ChunkPos.getZ(key) - centerZ) <= radius;
+    }
+
     public record StatusSnapshot(
             boolean enginePresent,
             boolean autoEnabled,
@@ -263,7 +307,8 @@ public final class ForgeCpuMeshBuildManager {
             int radius,
             int maxChunksPerTick,
             int cooldownTicks,
-            double lastBuildMs
+            double lastBuildMs,
+            double averageMs
     ) {
     }
 }

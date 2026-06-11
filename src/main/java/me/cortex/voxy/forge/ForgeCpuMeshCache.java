@@ -1,5 +1,7 @@
 package me.cortex.voxy.forge;
 
+import me.cortex.voxy.config.ForgeVoxyConfig;
+
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.Iterator;
@@ -10,7 +12,7 @@ import java.util.Map;
 public final class ForgeCpuMeshCache {
     private static final int DEFAULT_MAX_ENTRIES = 512;
 
-    private final int maxEntries;
+    private final int fallbackMaxEntries;
     private final LinkedHashMap<Key, ForgeCpuBuiltSection> entries;
     private String activeDimension;
 
@@ -19,7 +21,7 @@ public final class ForgeCpuMeshCache {
     }
 
     public ForgeCpuMeshCache(int maxEntries) {
-        this.maxEntries = Math.max(1, maxEntries);
+        this.fallbackMaxEntries = Math.max(1, maxEntries);
         this.entries = new LinkedHashMap<>(64, 0.75f, true);
     }
 
@@ -73,6 +75,18 @@ public final class ForgeCpuMeshCache {
         }
     }
 
+    public synchronized boolean hasChunkEntries(String dimension, int chunkX, int chunkZ) {
+        for (ForgeCpuBuiltSection section : this.entries.values()) {
+            if (section.dimension().equals(dimension) && section.chunkX() == chunkX && section.chunkZ() == chunkZ) {
+                ForgeCpuMeshBuffer buffer = section.meshBuffer();
+                if (buffer != null && !buffer.isClosed()) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     public synchronized List<ForgeCpuBuiltSection> snapshotNear(String dimension, int centerChunkX, int centerChunkZ, int radiusChunks) {
         var snapshot = new ArrayList<ForgeCpuBuiltSection>();
         for (ForgeCpuBuiltSection section : this.entries.values()) {
@@ -88,6 +102,36 @@ public final class ForgeCpuMeshCache {
             snapshot.add(section);
         }
         return snapshot;
+    }
+
+    public synchronized RenderSnapshot createRenderSnapshot(String dimension, int centerChunkX, int centerChunkZ, int radiusChunks, int maxRenderedEntries) {
+        var snapshot = new ArrayList<ForgeCpuBuiltSection>();
+        int skippedByDimension = 0;
+        int skippedByDistance = 0;
+        int skippedReleased = 0;
+        int limitedEntries = 0;
+        int maxEntries = Math.max(1, maxRenderedEntries);
+        for (ForgeCpuBuiltSection section : this.entries.values()) {
+            if (!section.dimension().equals(dimension)) {
+                skippedByDimension++;
+                continue;
+            }
+            if (Math.abs(section.chunkX() - centerChunkX) > radiusChunks || Math.abs(section.chunkZ() - centerChunkZ) > radiusChunks) {
+                skippedByDistance++;
+                continue;
+            }
+            ForgeCpuMeshBuffer buffer = section.meshBuffer();
+            if (buffer == null || buffer.isClosed()) {
+                skippedReleased++;
+                continue;
+            }
+            if (snapshot.size() >= maxEntries) {
+                limitedEntries++;
+                continue;
+            }
+            snapshot.add(section);
+        }
+        return new RenderSnapshot(snapshot, skippedByDimension, skippedByDistance, skippedReleased, limitedEntries);
     }
 
     public synchronized BoundsSnapshot createBoundsSnapshot(String dimension, int chunkX, int chunkZ) {
@@ -136,6 +180,7 @@ public final class ForgeCpuMeshCache {
     }
 
     public synchronized StatusSnapshot createStatusSnapshot() {
+        this.trimToLimit();
         long vertices = 0;
         long quads = 0;
         long bytes = 0;
@@ -152,7 +197,7 @@ public final class ForgeCpuMeshCache {
 
         return new StatusSnapshot(
                 this.entries.size(),
-                this.maxEntries,
+                this.getConfiguredMaxEntries(),
                 vertices,
                 quads,
                 bytes,
@@ -162,11 +207,20 @@ public final class ForgeCpuMeshCache {
     }
 
     private void trimToLimit() {
+        int maxEntries = this.getConfiguredMaxEntries();
         Iterator<Map.Entry<Key, ForgeCpuBuiltSection>> iterator = this.entries.entrySet().iterator();
-        while (this.entries.size() > this.maxEntries && iterator.hasNext()) {
+        while (this.entries.size() > maxEntries && iterator.hasNext()) {
             Map.Entry<Key, ForgeCpuBuiltSection> eldest = iterator.next();
             eldest.getValue().close();
             iterator.remove();
+        }
+    }
+
+    private int getConfiguredMaxEntries() {
+        try {
+            return Math.min(8192, Math.max(1, ForgeVoxyConfig.CPU_MESH_CACHE_MAX_ENTRIES.get()));
+        } catch (IllegalStateException e) {
+            return this.fallbackMaxEntries;
         }
     }
 
@@ -232,6 +286,15 @@ public final class ForgeCpuMeshCache {
         private static BoundsSnapshot empty(String dimension, int chunkX, int chunkZ) {
             return new BoundsSnapshot(false, dimension, chunkX, chunkZ, 0, 0, 0, 0, 0, 0, 0, 0);
         }
+    }
+
+    public record RenderSnapshot(
+            List<ForgeCpuBuiltSection> sections,
+            int skippedByDimension,
+            int skippedByDistance,
+            int skippedReleased,
+            int limitedEntries
+    ) {
     }
 
     public record Key(

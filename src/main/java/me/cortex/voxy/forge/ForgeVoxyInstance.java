@@ -4,9 +4,11 @@ import me.cortex.voxy.common.config.section.SectionSerializationStorage;
 import me.cortex.voxy.common.config.storage.inmemory.MemoryStorageBackend;
 import me.cortex.voxy.common.world.WorldEngine;
 import me.cortex.voxy.config.ForgeVoxyConfig;
+import net.minecraft.client.Minecraft;
 import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
 import net.minecraftforge.client.event.RegisterClientCommandsEvent;
 import net.minecraftforge.common.MinecraftForge;
+import net.minecraftforge.event.TickEvent;
 
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -20,6 +22,7 @@ public final class ForgeVoxyInstance {
     private final ForgeCpuMeshCache cpuMeshCache = new ForgeCpuMeshCache();
     private final ForgeDebugMeshRenderer debugMeshRenderer = new ForgeDebugMeshRenderer(this);
     private final AtomicInteger storageWriteCount = new AtomicInteger();
+    private String activeClientDimension;
 
     private ForgeVoxyInstance() {
     }
@@ -27,6 +30,7 @@ public final class ForgeVoxyInstance {
     public void register() {
         MinecraftForge.EVENT_BUS.addListener(this::onClientLogin);
         MinecraftForge.EVENT_BUS.addListener(this::onClientLogout);
+        MinecraftForge.EVENT_BUS.addListener(this::onClientTick);
         MinecraftForge.EVENT_BUS.addListener(this::onRegisterClientCommands);
         this.chunkIngestManager.register();
         this.cpuMeshBuildManager.register();
@@ -67,6 +71,36 @@ public final class ForgeVoxyInstance {
         ForgeVoxyCommands.register(event.getDispatcher());
     }
 
+    private void onClientTick(TickEvent.ClientTickEvent event) {
+        if (event.phase != TickEvent.Phase.END) {
+            return;
+        }
+
+        var minecraft = Minecraft.getInstance();
+        if (minecraft.level == null || minecraft.player == null) {
+            return;
+        }
+
+        String dimension = minecraft.level.dimension().location().toString();
+        if (this.activeClientDimension == null) {
+            this.activeClientDimension = dimension;
+            return;
+        }
+        if (this.activeClientDimension.equals(dimension)) {
+            return;
+        }
+
+        this.activeClientDimension = dimension;
+        this.chunkIngestManager.clear();
+        this.cpuMeshBuildManager.clear();
+        this.cpuMeshCache.setActiveDimension(dimension);
+        this.closeActiveWorld();
+        if (ForgeVoxyConfig.ENABLE_WORLD_ENGINE_SKELETON.get()) {
+            this.createActiveWorldSkeleton();
+        }
+        VoxyForge.LOGGER.info("Cleared Voxy debug pipeline state after client dimension switch to {}.", dimension);
+    }
+
     private void onClientLogin(ClientPlayerNetworkEvent.LoggingIn event) {
         if (!ForgeVoxyConfig.ENABLE_WORLD_ENGINE_SKELETON.get()) {
             return;
@@ -75,6 +109,10 @@ public final class ForgeVoxyInstance {
             return;
         }
 
+        this.createActiveWorldSkeleton();
+    }
+
+    private void createActiveWorldSkeleton() {
         var storage = new SectionSerializationStorage(new MemoryStorageBackend());
         this.storageWriteCount.set(0);
         this.activeWorld = new WorldEngine(storage, this);
@@ -95,6 +133,7 @@ public final class ForgeVoxyInstance {
         this.chunkIngestManager.clear();
         this.cpuMeshBuildManager.clear();
         this.cpuMeshCache.clear();
+        this.activeClientDimension = null;
         this.closeActiveWorld();
     }
 

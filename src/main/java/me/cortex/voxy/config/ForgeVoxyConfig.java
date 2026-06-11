@@ -14,8 +14,10 @@ public final class ForgeVoxyConfig {
     public static final ForgeConfigSpec.IntValue AUTO_MESH_BUILD_RADIUS;
     public static final ForgeConfigSpec.IntValue AUTO_MESH_BUILD_MAX_CHUNKS_PER_TICK;
     public static final ForgeConfigSpec.IntValue AUTO_MESH_BUILD_COOLDOWN_TICKS;
+    public static final ForgeConfigSpec.IntValue CPU_MESH_CACHE_MAX_ENTRIES;
     public static final ForgeConfigSpec.BooleanValue ENABLE_DEBUG_MESH_RENDERER;
     public static final ForgeConfigSpec.IntValue DEBUG_MESH_RENDER_DISTANCE_CHUNKS;
+    public static final ForgeConfigSpec.IntValue DEBUG_MESH_MAX_RENDERED_ENTRIES;
     public static final ForgeConfigSpec.BooleanValue DEBUG_MESH_WIREFRAME;
     public static final ForgeConfigSpec.DoubleValue DEBUG_MESH_ALPHA;
     public static final ForgeConfigSpec.BooleanValue DEBUG_MESH_IGNORE_DEPTH;
@@ -54,12 +56,18 @@ public final class ForgeVoxyConfig {
         AUTO_MESH_BUILD_COOLDOWN_TICKS = builder
                 .comment("Ticks between nearby chunk scans for auto CPU mesh build. Queued chunks may still be processed every tick.")
                 .defineInRange("autoMeshBuildCooldownTicks", 20, 0, 200);
+        CPU_MESH_CACHE_MAX_ENTRIES = builder
+                .comment("Maximum cached CPU mesh section/layer entries kept by the debug pipeline. Old entries are closed and evicted with LRU ordering.")
+                .defineInRange("cpuMeshCacheMaxEntries", 512, 1, 8192);
         ENABLE_DEBUG_MESH_RENDERER = builder
                 .comment("Draws cached CPU mesh sections with a temporary vanilla debug renderer. Requires enableWorldEngineSkeleton and does not use the final Voxy renderer.")
                 .define("enableDebugMeshRenderer", false);
         DEBUG_MESH_RENDER_DISTANCE_CHUNKS = builder
                 .comment("Chunk radius around the player used by the temporary debug mesh renderer.")
                 .defineInRange("debugMeshRenderDistanceChunks", 2, 0, 8);
+        DEBUG_MESH_MAX_RENDERED_ENTRIES = builder
+                .comment("Maximum CPU mesh cache entries the temporary debug renderer may draw in one frame.")
+                .defineInRange("debugMeshMaxRenderedEntries", 512, 1, 8192);
         DEBUG_MESH_WIREFRAME = builder
                 .comment("Draws cached CPU mesh as wireframe lines instead of filled debug triangles.")
                 .define("debugMeshWireframe", false);

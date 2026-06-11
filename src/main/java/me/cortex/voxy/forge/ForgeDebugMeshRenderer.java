@@ -61,14 +61,20 @@ public final class ForgeDebugMeshRenderer {
         int radius = getConfiguredRenderDistanceChunks();
         int centerChunkX = minecraft.player.chunkPosition().x;
         int centerChunkZ = minecraft.player.chunkPosition().z;
-        List<ForgeCpuBuiltSection> sections = this.instance.getCpuMeshCache().snapshotNear(dimension, centerChunkX, centerChunkZ, radius);
-        if (sections.isEmpty()) {
-            this.lastFrameStats = FrameStats.skipped("cache-empty", dimension);
+        ForgeCpuMeshCache.RenderSnapshot snapshot = this.instance.getCpuMeshCache().createRenderSnapshot(
+                dimension,
+                centerChunkX,
+                centerChunkZ,
+                radius,
+                getConfiguredMaxRenderedEntries()
+        );
+        if (snapshot.sections().isEmpty()) {
+            this.lastFrameStats = FrameStats.skipped("cache-empty", dimension, snapshot);
             return;
         }
 
         try {
-            this.lastFrameStats = this.renderSections(event, dimension, sections);
+            this.lastFrameStats = this.renderSections(event, dimension, snapshot);
             this.logFrameSummaryIfNeeded(this.lastFrameStats);
         } catch (Exception e) {
             this.lastFrameStats = FrameStats.skipped("exception", dimension);
@@ -76,7 +82,7 @@ public final class ForgeDebugMeshRenderer {
         }
     }
 
-    private FrameStats renderSections(RenderLevelStageEvent event, String dimension, List<ForgeCpuBuiltSection> sections) {
+    private FrameStats renderSections(RenderLevelStageEvent event, String dimension, ForgeCpuMeshCache.RenderSnapshot snapshot) {
         boolean wireframe = ForgeVoxyConfig.DEBUG_MESH_WIREFRAME.get();
         boolean ignoreDepth = ForgeVoxyConfig.DEBUG_MESH_IGNORE_DEPTH.get();
         int alpha = getConfiguredAlphaByte();
@@ -84,7 +90,8 @@ public final class ForgeDebugMeshRenderer {
         Tesselator tesselator = Tesselator.getInstance();
         BufferBuilder builder = tesselator.getBuilder();
         VertexFormat.Mode mode = wireframe ? VertexFormat.Mode.DEBUG_LINES : VertexFormat.Mode.TRIANGLES;
-        RenderCounters counters = new RenderCounters(sections.size());
+        List<ForgeCpuBuiltSection> sections = snapshot.sections();
+        RenderCounters counters = new RenderCounters(snapshot);
         boolean began = false;
         try {
             builder.begin(mode, DefaultVertexFormat.POSITION_COLOR);
@@ -237,6 +244,10 @@ public final class ForgeDebugMeshRenderer {
         return Math.min(8, Math.max(0, ForgeVoxyConfig.DEBUG_MESH_RENDER_DISTANCE_CHUNKS.get()));
     }
 
+    public static int getConfiguredMaxRenderedEntries() {
+        return Math.min(8192, Math.max(1, ForgeVoxyConfig.DEBUG_MESH_MAX_RENDERED_ENTRIES.get()));
+    }
+
     public static int getConfiguredAlphaByte() {
         double alpha = Math.max(0.05D, Math.min(1.0D, ForgeVoxyConfig.DEBUG_MESH_ALPHA.get()));
         return Math.max(1, Math.min(255, (int) Math.round(alpha * 255.0D)));
@@ -289,6 +300,10 @@ public final class ForgeDebugMeshRenderer {
             int emittedVertices,
             int skippedTranslucentEntries,
             int skippedEmptyEntries,
+            int skippedByDimensionEntries,
+            int skippedByDistanceEntries,
+            int skippedReleasedEntries,
+            int limitedEntries,
             boolean wireframe,
             boolean ignoreDepth,
             int alphaByte,
@@ -299,19 +314,49 @@ public final class ForgeDebugMeshRenderer {
         }
 
         private static FrameStats skipped(String reason, String dimension) {
-            return new FrameStats(false, reason, RENDER_STAGE, dimension, 0, 0, 0, 0, 0, false, false, 0, 0.0F);
+            return new FrameStats(false, reason, RENDER_STAGE, dimension, 0, 0, 0, 0, 0, 0, 0, 0, 0, false, false, 0, 0.0F);
+        }
+
+        private static FrameStats skipped(String reason, String dimension, ForgeCpuMeshCache.RenderSnapshot snapshot) {
+            return new FrameStats(
+                    false,
+                    reason,
+                    RENDER_STAGE,
+                    dimension,
+                    snapshot.sections().size(),
+                    0,
+                    0,
+                    0,
+                    0,
+                    snapshot.skippedByDimension(),
+                    snapshot.skippedByDistance(),
+                    snapshot.skippedReleased(),
+                    snapshot.limitedEntries(),
+                    false,
+                    false,
+                    0,
+                    0.0F
+            );
         }
     }
 
     private static final class RenderCounters {
         private final int candidateEntries;
+        private final int skippedByDimensionEntries;
+        private final int skippedByDistanceEntries;
+        private final int skippedReleasedEntries;
+        private final int limitedEntries;
         private int renderedEntries;
         private int emittedVertices;
         private int skippedTranslucentEntries;
         private int skippedEmptyEntries;
 
-        private RenderCounters(int candidateEntries) {
-            this.candidateEntries = candidateEntries;
+        private RenderCounters(ForgeCpuMeshCache.RenderSnapshot snapshot) {
+            this.candidateEntries = snapshot.sections().size();
+            this.skippedByDimensionEntries = snapshot.skippedByDimension();
+            this.skippedByDistanceEntries = snapshot.skippedByDistance();
+            this.skippedReleasedEntries = snapshot.skippedReleased();
+            this.limitedEntries = snapshot.limitedEntries();
         }
 
         private FrameStats toFrameStats(boolean rendered, String reason, String dimension, boolean wireframe, boolean ignoreDepth, int alphaByte, float verticalOffset) {
@@ -325,6 +370,10 @@ public final class ForgeDebugMeshRenderer {
                     this.emittedVertices,
                     this.skippedTranslucentEntries,
                     this.skippedEmptyEntries,
+                    this.skippedByDimensionEntries,
+                    this.skippedByDistanceEntries,
+                    this.skippedReleasedEntries,
+                    this.limitedEntries,
                     wireframe,
                     ignoreDepth,
                     alphaByte,

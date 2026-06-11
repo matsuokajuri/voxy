@@ -31,6 +31,7 @@ public final class ForgeChunkIngestManager {
     private int windowStorageWrites;
     private double windowElapsedMs;
     private long lastSummaryTick;
+    private double lastAverageMs;
 
     ForgeChunkIngestManager(ForgeVoxyInstance instance) {
         this.instance = instance;
@@ -47,6 +48,7 @@ public final class ForgeChunkIngestManager {
         this.resetWindow();
         this.activeDimension = null;
         this.scanCooldown = 0;
+        this.lastAverageMs = 0.0;
     }
 
     public StatusSnapshot createStatusSnapshot() {
@@ -58,7 +60,8 @@ public final class ForgeChunkIngestManager {
                 this.ingestedChunks.size(),
                 getConfiguredRadius(),
                 getConfiguredMaxChunksPerTick(),
-                getConfiguredCooldownTicks()
+                getConfiguredCooldownTicks(),
+                this.getAverageMs()
         );
     }
 
@@ -97,7 +100,11 @@ public final class ForgeChunkIngestManager {
         }
 
         if (this.scanCooldown <= 0) {
-            this.enqueueNearbyLoadedChunks(level, player.chunkPosition().x, player.chunkPosition().z, getConfiguredRadius());
+            int centerChunkX = player.chunkPosition().x;
+            int centerChunkZ = player.chunkPosition().z;
+            int radius = getConfiguredRadius();
+            this.pruneRecordsAround(centerChunkX, centerChunkZ, radius);
+            this.enqueueNearbyLoadedChunks(level, centerChunkX, centerChunkZ, radius);
             this.scanCooldown = getConfiguredCooldownTicks();
         } else {
             this.scanCooldown--;
@@ -204,6 +211,7 @@ public final class ForgeChunkIngestManager {
         );
         this.resetWindow();
         this.lastSummaryTick = this.tickCounter;
+        this.lastAverageMs = averageMs;
     }
 
     private void resetWindow() {
@@ -214,6 +222,26 @@ public final class ForgeChunkIngestManager {
         this.windowStorageWrites = 0;
         this.windowElapsedMs = 0.0;
         this.lastSummaryTick = this.tickCounter;
+    }
+
+    private double getAverageMs() {
+        if (this.windowChunks == 0) {
+            return this.lastAverageMs;
+        }
+        return this.windowElapsedMs / this.windowChunks;
+    }
+
+    private void pruneRecordsAround(int centerX, int centerZ, int radius) {
+        int retentionRadius = getRecordRetentionRadius(radius);
+        this.pendingChunks.removeIf(key -> {
+            boolean remove = !isWithinChunkRadius(key, centerX, centerZ, retentionRadius);
+            if (remove) {
+                this.queuedChunks.remove(key);
+            }
+            return remove;
+        });
+        this.queuedChunks.removeIf(key -> !isWithinChunkRadius(key, centerX, centerZ, retentionRadius));
+        this.ingestedChunks.removeIf(key -> !isWithinChunkRadius(key, centerX, centerZ, retentionRadius));
     }
 
     private static LevelChunk getLoadedChunk(ClientLevel level, int chunkX, int chunkZ) {
@@ -235,6 +263,14 @@ public final class ForgeChunkIngestManager {
         return Math.min(200, Math.max(0, ForgeVoxyConfig.AUTO_INGEST_COOLDOWN_TICKS.get()));
     }
 
+    private static int getRecordRetentionRadius(int activeRadius) {
+        return Math.max(8, activeRadius + 8);
+    }
+
+    private static boolean isWithinChunkRadius(long key, int centerX, int centerZ, int radius) {
+        return Math.abs(ChunkPos.getX(key) - centerX) <= radius && Math.abs(ChunkPos.getZ(key) - centerZ) <= radius;
+    }
+
     public record StatusSnapshot(
             boolean enginePresent,
             boolean autoEnabled,
@@ -243,7 +279,8 @@ public final class ForgeChunkIngestManager {
             int ingestedChunks,
             int radius,
             int maxChunksPerTick,
-            int cooldownTicks
+            int cooldownTicks,
+            double averageMs
     ) {
     }
 }
