@@ -1,5 +1,9 @@
 Voxy is an LoD rendering mod for minecraft
 
-## Forge 1.20.1 cached LoD PoC testing
+## Forge 1.20.1 cached LoD PoC
 
-The Forge port keeps the experimental renderer disabled by default. To see cached LoD in this branch, enable the world engine skeleton, auto chunk ingest, auto CPU mesh build, and the simple GPU mesh renderer in the client config. For easier visual checks, lower Minecraft render distance to 4-6 chunks, keep `simpleGpuMeshRenderDistanceChunks` around 64, fly far enough to cache chunks, then look back. If nothing appears, run `/voxy lod_visibility_status` to see whether cached chunks are too near, too far, still vanilla-loaded, or not uploaded yet.
+This branch contains an experimental Forge 1.20.1 cached LoD proof of concept. The pipeline can ingest loaded chunks, build CPU mesh data, upload simple vanilla GPU buffers, and render cached LoD color blocks outside the vanilla render-distance neighborhood.
+
+The PoC is disabled by default and is not the final Voxy renderer. Use `/voxy preset lod` in a client world, lower Minecraft render distance to 4-6 chunks, fly through an area, then look back at chunks that have left vanilla view distance. Use `/voxy gpu_mesh_status` and `/voxy lod_visibility_status` for diagnostics.
+
+See `PORTING_NOTES.md` for the current status, test commands, limitations, and next migration steps.
