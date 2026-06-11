@@ -26,7 +26,9 @@ public final class ForgeVoxyConfig {
     public static final ForgeConfigSpec.IntValue SIMPLE_GPU_MESH_MAX_UPLOADS_PER_TICK;
     public static final ForgeConfigSpec.IntValue SIMPLE_GPU_MESH_MAX_BUFFERS;
     public static final ForgeConfigSpec.IntValue SIMPLE_GPU_MESH_RENDER_DISTANCE_CHUNKS;
+    public static final ForgeConfigSpec.IntValue SIMPLE_GPU_MESH_MAX_RENDERED_BUFFERS;
     public static final ForgeConfigSpec.DoubleValue SIMPLE_GPU_MESH_ALPHA;
+    public static final ForgeConfigSpec.BooleanValue SIMPLE_GPU_MESH_USE_ORIGINAL_COLORS;
 
     static {
         ForgeConfigSpec.Builder builder = new ForgeConfigSpec.Builder();
@@ -97,9 +99,15 @@ public final class ForgeVoxyConfig {
         SIMPLE_GPU_MESH_RENDER_DISTANCE_CHUNKS = builder
                 .comment("Chunk radius around the player used by the simple vanilla GPU mesh renderer.")
                 .defineInRange("simpleGpuMeshRenderDistanceChunks", 2, 0, 32);
+        SIMPLE_GPU_MESH_MAX_RENDERED_BUFFERS = builder
+                .comment("Maximum vanilla VertexBuffer mesh entries the simple GPU renderer may draw in one frame.")
+                .defineInRange("simpleGpuMeshMaxRenderedBuffers", 512, 1, 8192);
         SIMPLE_GPU_MESH_ALPHA = builder
                 .comment("Global alpha multiplier used by the simple vanilla GPU mesh renderer.")
                 .defineInRange("simpleGpuMeshAlpha", 1.0D, 0.05D, 1.0D);
+        SIMPLE_GPU_MESH_USE_ORIGINAL_COLORS = builder
+                .comment("Uses baked block/tint vertex colors for the simple GPU renderer. Disable to use bright layer debug colors.")
+                .define("simpleGpuMeshUseOriginalColors", true);
         builder.pop();
         CLIENT_SPEC = builder.build();
     }

@@ -58,6 +58,8 @@ public final class ForgeGpuMeshUploadManager {
         );
         List<ForgeCpuBuiltSection> sections = cpuSnapshot.sections();
         var liveKeys = new HashSet<ForgeCpuMeshCache.Key>(sections.size());
+        boolean useOriginalColors = useOriginalColors();
+        int colorModeStamp = ForgeGpuMeshBuffer.colorModeStamp(useOriginalColors);
         int pendingUploads = 0;
         int alreadyUploaded = 0;
         int skippedTranslucent = 0;
@@ -75,7 +77,7 @@ public final class ForgeGpuMeshUploadManager {
                 skippedEmpty++;
                 continue;
             }
-            if (this.instance.getGpuMeshCache().hasMatching(section)) {
+            if (this.instance.getGpuMeshCache().hasMatching(section, colorModeStamp)) {
                 alreadyUploaded++;
                 continue;
             }
@@ -103,12 +105,12 @@ public final class ForgeGpuMeshUploadManager {
                 if (meshBuffer == null || meshBuffer.isClosed() || meshBuffer.vertexCount() == 0) {
                     continue;
                 }
-                if (this.instance.getGpuMeshCache().hasMatching(section)) {
+                if (this.instance.getGpuMeshCache().hasMatching(section, colorModeStamp)) {
                     continue;
                 }
 
                 try {
-                    ForgeGpuMeshBuffer uploadedBuffer = ForgeGpuMeshBuffer.upload(section);
+                    ForgeGpuMeshBuffer uploadedBuffer = ForgeGpuMeshBuffer.upload(section, useOriginalColors);
                     uploadedVertices += uploadedBuffer.vertexCount();
                     uploadedBytes += uploadedBuffer.sizeBytes();
                     this.instance.getGpuMeshCache().put(uploadedBuffer);
@@ -153,7 +155,8 @@ public final class ForgeGpuMeshUploadManager {
                 cpuSnapshot.limitedEntries(),
                 uploadedVertices,
                 uploadedBytes,
-                this.lastAverageUploadMs
+                this.lastAverageUploadMs,
+                useOriginalColors
         );
         return this.lastStatus;
     }
@@ -184,6 +187,10 @@ public final class ForgeGpuMeshUploadManager {
         return Math.min(32, Math.max(0, ForgeVoxyConfig.SIMPLE_GPU_MESH_RENDER_DISTANCE_CHUNKS.get()));
     }
 
+    public static boolean useOriginalColors() {
+        return ForgeVoxyConfig.SIMPLE_GPU_MESH_USE_ORIGINAL_COLORS.get();
+    }
+
     public record UploadStatusSnapshot(
             boolean enabled,
             String reason,
@@ -202,7 +209,8 @@ public final class ForgeGpuMeshUploadManager {
             int limitedCpuEntries,
             long uploadedVerticesThisFrame,
             long uploadedBytesThisFrame,
-            double averageUploadMs
+            double averageUploadMs,
+            boolean useOriginalColors
     ) {
         private static UploadStatusSnapshot disabled() {
             return skipped("disabled", 0);
@@ -227,7 +235,8 @@ public final class ForgeGpuMeshUploadManager {
                     0,
                     0,
                     0,
-                    0.0D
+                    0.0D,
+                    true
             );
         }
     }

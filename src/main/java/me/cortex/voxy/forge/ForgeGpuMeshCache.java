@@ -40,9 +40,11 @@ public final class ForgeGpuMeshCache {
         }
     }
 
-    public synchronized boolean hasMatching(ForgeCpuBuiltSection section) {
+    public synchronized boolean hasMatching(ForgeCpuBuiltSection section, int colorModeStamp) {
         ForgeGpuMeshBuffer buffer = this.buffers.get(ForgeCpuMeshCache.Key.from(section));
-        return buffer != null && !buffer.isClosed() && buffer.sourceHash() == section.sourceHash();
+        return buffer != null && !buffer.isClosed()
+                && buffer.sourceHash() == section.sourceHash()
+                && buffer.colorModeStamp() == colorModeStamp;
     }
 
     public synchronized void put(ForgeGpuMeshBuffer buffer) {
@@ -72,11 +74,13 @@ public final class ForgeGpuMeshCache {
         }
     }
 
-    public synchronized RenderSnapshot createRenderSnapshot(String dimension, int centerChunkX, int centerChunkZ, int radiusChunks) {
+    public synchronized RenderSnapshot createRenderSnapshot(String dimension, int centerChunkX, int centerChunkZ, int radiusChunks, int maxRenderedBuffers) {
         var snapshot = new ArrayList<ForgeGpuMeshBuffer>();
         int skippedByDimension = 0;
         int skippedByDistance = 0;
         int skippedReleased = 0;
+        int limitedBuffers = 0;
+        int maxBuffers = Math.max(1, maxRenderedBuffers);
         for (ForgeGpuMeshBuffer buffer : this.buffers.values()) {
             if (!buffer.dimension().equals(dimension)) {
                 skippedByDimension++;
@@ -90,9 +94,13 @@ public final class ForgeGpuMeshCache {
                 skippedReleased++;
                 continue;
             }
+            if (snapshot.size() >= maxBuffers) {
+                limitedBuffers++;
+                continue;
+            }
             snapshot.add(buffer);
         }
-        return new RenderSnapshot(snapshot, skippedByDimension, skippedByDistance, skippedReleased);
+        return new RenderSnapshot(snapshot, skippedByDimension, skippedByDistance, skippedReleased, limitedBuffers);
     }
 
     public synchronized StatusSnapshot createStatusSnapshot() {
@@ -189,7 +197,8 @@ public final class ForgeGpuMeshCache {
             List<ForgeGpuMeshBuffer> buffers,
             int skippedByDimension,
             int skippedByDistance,
-            int skippedReleased
+            int skippedReleased,
+            int limitedBuffers
     ) {
     }
 }

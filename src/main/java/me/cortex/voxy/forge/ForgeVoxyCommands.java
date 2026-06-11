@@ -313,7 +313,7 @@ public final class ForgeVoxyCommands {
         var gpuUploadStatus = ForgeVoxyInstance.INSTANCE.getGpuMeshUploadManager().getLastStatus();
         var gpuRenderStats = ForgeVoxyInstance.INSTANCE.getSimpleGpuMeshRenderer().getLastFrameStats();
         String message = String.format(
-                "Voxy debug pipeline: engineConfig=%s engine=%s autoIngest=%s autoBuild=%s render=%s simpleGpu=%s dim=%s playerChunk=%s ingestQueue=%d ingestedRecords=%d avgIngestMs=%.2f buildQueue=%d builtRecords=%d failedRecords=%d avgBuildMs=%.2f lastBuildMs=%.2f cache=%d/%d vertices=%d quads=%d bytes=%d dimensions=%s layers=%s gpuBuffers=%d/%d gpuPending=%d gpuRendered=%d gpuVertices=%d renderDistance=%d maxRendered=%d ignoreDepth=%s alpha=%.2f verticalOffset=%.3f stage=%s %s %s",
+                "Voxy debug pipeline: engineConfig=%s engine=%s autoIngest=%s autoBuild=%s render=%s simpleGpu=%s dim=%s playerChunk=%s ingestQueue=%d ingestedRecords=%d avgIngestMs=%.2f buildQueue=%d builtRecords=%d failedRecords=%d avgBuildMs=%.2f lastBuildMs=%.2f cache=%d/%d vertices=%d quads=%d bytes=%d dimensions=%s layers=%s gpuBuffers=%d/%d gpuPending=%d gpuRendered=%d gpuVertices=%d gpuLimited=%d gpuAvgRenderMs=%.2f renderDistance=%d maxRendered=%d ignoreDepth=%s alpha=%.2f verticalOffset=%.3f stage=%s %s %s",
                 ForgeVoxyConfig.ENABLE_WORLD_ENGINE_SKELETON.get(),
                 meshBuildStatus.enginePresent(),
                 ingestStatus.autoEnabled(),
@@ -342,6 +342,8 @@ public final class ForgeVoxyCommands {
                 gpuUploadStatus.pendingUploads(),
                 gpuRenderStats.renderedBuffers(),
                 gpuRenderStats.renderedVertices(),
+                gpuRenderStats.limitedBuffers(),
+                gpuRenderStats.averageRenderMs(),
                 ForgeDebugMeshRenderer.getConfiguredRenderDistanceChunks(),
                 ForgeDebugMeshRenderer.getConfiguredMaxRenderedEntries(),
                 ForgeVoxyConfig.DEBUG_MESH_IGNORE_DEPTH.get(),
@@ -359,10 +361,19 @@ public final class ForgeVoxyCommands {
         var cacheStatus = ForgeVoxyInstance.INSTANCE.getGpuMeshCache().createStatusSnapshot();
         var uploadStatus = ForgeVoxyInstance.INSTANCE.getGpuMeshUploadManager().getLastStatus();
         var renderStats = ForgeVoxyInstance.INSTANCE.getSimpleGpuMeshRenderer().getLastFrameStats();
+        var minecraft = Minecraft.getInstance();
+        String currentDimension = "none";
+        String playerChunk = "none";
+        if (minecraft.level != null && minecraft.player != null) {
+            currentDimension = minecraft.level.dimension().location().toString();
+            playerChunk = minecraft.player.chunkPosition().x + "," + minecraft.player.chunkPosition().z;
+        }
         String message = String.format(
-                "Voxy simple GPU mesh: enabled=%s engine=%s buffers=%d/%d vertices=%d quads=%d bytes=%d dimensions=%s layers=%s pendingUploads=%d uploadBudget=%d uploadedLast=%d failedLast=%d skippedTranslucentUpload=%d avgUploadMs=%.2f render=%s reason=%s renderDim=%s renderedBuffers=%d renderedVertices=%d skippedDistance=%d skippedDimension=%d skippedReleased=%d skippedTranslucentRender=%d radius=%d alpha=%.2f stage=%s debugRenderer=%s",
+                "Voxy simple GPU mesh: enabled=%s engine=%s currentDim=%s playerChunk=%s buffers=%d/%d vertices=%d quads=%d bytes=%d dimensions=%s layers=%s pendingUploads=%d uploadBudget=%d uploadedLast=%d failedLast=%d skippedTranslucentUpload=%d cpuCandidates=%d cpuSkippedDistance=%d cpuLimited=%d avgUploadMs=%.2f colorMode=%s render=%s reason=%s renderDim=%s renderedBuffers=%d renderedVertices=%d skippedDistance=%d skippedDimension=%d skippedReleased=%d limitedRender=%d skippedTranslucentRender=%d lastRenderMs=%.2f avgRenderMs=%.2f radius=%d maxRendered=%d alpha=%.2f stage=%s debugRenderer=%s",
                 ForgeVoxyConfig.ENABLE_SIMPLE_GPU_MESH_RENDERER.get(),
                 ForgeVoxyInstance.INSTANCE.getCurrentEngineOptional().isPresent(),
+                currentDimension,
+                playerChunk,
                 cacheStatus.buffers(),
                 cacheStatus.maxBuffers(),
                 cacheStatus.totalVertices(),
@@ -375,7 +386,11 @@ public final class ForgeVoxyCommands {
                 uploadStatus.uploadedThisFrame(),
                 uploadStatus.failedThisFrame(),
                 uploadStatus.skippedTranslucent(),
+                uploadStatus.candidateCpuEntries(),
+                uploadStatus.skippedCpuByDistance(),
+                uploadStatus.limitedCpuEntries(),
                 uploadStatus.averageUploadMs(),
+                uploadStatus.useOriginalColors() ? "original" : "layer-debug",
                 renderStats.rendered(),
                 renderStats.reason(),
                 renderStats.dimension(),
@@ -384,8 +399,12 @@ public final class ForgeVoxyCommands {
                 renderStats.skippedByDistance(),
                 renderStats.skippedByDimension(),
                 renderStats.skippedReleased(),
+                renderStats.limitedBuffers(),
                 renderStats.skippedTranslucent(),
+                renderStats.lastRenderMs(),
+                renderStats.averageRenderMs(),
                 ForgeGpuMeshUploadManager.getConfiguredRenderDistanceChunks(),
+                ForgeSimpleGpuMeshRenderer.getConfiguredMaxRenderedBuffers(),
                 ForgeSimpleGpuMeshRenderer.getConfiguredAlpha(),
                 ForgeSimpleGpuMeshRenderer.getRenderStageName(),
                 ForgeVoxyConfig.ENABLE_DEBUG_MESH_RENDERER.get()

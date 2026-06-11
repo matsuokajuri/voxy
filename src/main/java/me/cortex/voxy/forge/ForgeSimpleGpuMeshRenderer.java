@@ -20,6 +20,9 @@ public final class ForgeSimpleGpuMeshRenderer {
     private final ForgeVoxyInstance instance;
     private volatile FrameStats lastFrameStats = FrameStats.skipped("not-run");
     private long nextSummaryLogMillis;
+    private long renderWindowCount;
+    private double renderWindowMs;
+    private double lastAverageRenderMs;
 
     ForgeSimpleGpuMeshRenderer(ForgeVoxyInstance instance) {
         this.instance = instance;
@@ -61,7 +64,8 @@ public final class ForgeSimpleGpuMeshRenderer {
                 dimension,
                 centerChunkX,
                 centerChunkZ,
-                ForgeGpuMeshUploadManager.getConfiguredRenderDistanceChunks()
+                ForgeGpuMeshUploadManager.getConfiguredRenderDistanceChunks(),
+                getConfiguredMaxRenderedBuffers()
         );
         if (snapshot.buffers().isEmpty()) {
             this.lastFrameStats = FrameStats.skipped("cache-empty", dimension, snapshot);
@@ -83,11 +87,13 @@ public final class ForgeSimpleGpuMeshRenderer {
         PoseStack poseStack = event.getPoseStack();
         Vec3 cameraPos = event.getCamera().getPosition();
         double alpha = getConfiguredAlpha();
+        long start = System.nanoTime();
 
         RenderSystem.setShader(GameRenderer::getPositionColorShader);
         ShaderInstance shader = GameRenderer.getPositionColorShader();
         if (shader == null) {
-            return counters.toFrameStats(false, "shader-missing", dimension, alpha);
+            double elapsedMs = (System.nanoTime() - start) / 1_000_000.0D;
+            return counters.toFrameStats(false, "shader-missing", dimension, alpha, elapsedMs, this.lastAverageRenderMs);
         }
 
         RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, (float) alpha);
@@ -109,15 +115,22 @@ public final class ForgeSimpleGpuMeshRenderer {
             poseStack.popPose();
             VertexBuffer.unbind();
             RenderSystem.enableCull();
+            RenderSystem.enableDepthTest();
             RenderSystem.depthMask(true);
             RenderSystem.disableBlend();
             RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
         }
 
-        if (counters.renderedBuffers == 0) {
-            return counters.toFrameStats(false, "no-buffers", dimension, alpha);
+        double elapsedMs = (System.nanoTime() - start) / 1_000_000.0D;
+        if (counters.renderedBuffers > 0) {
+            this.renderWindowCount++;
+            this.renderWindowMs += elapsedMs;
+            this.lastAverageRenderMs = this.renderWindowMs / this.renderWindowCount;
         }
-        return counters.toFrameStats(true, "rendered", dimension, alpha);
+        if (counters.renderedBuffers == 0) {
+            return counters.toFrameStats(false, "no-buffers", dimension, alpha, elapsedMs, this.lastAverageRenderMs);
+        }
+        return counters.toFrameStats(true, "rendered", dimension, alpha, elapsedMs, this.lastAverageRenderMs);
     }
 
     private void drawBuffer(
@@ -144,6 +157,10 @@ public final class ForgeSimpleGpuMeshRenderer {
 
     public static double getConfiguredAlpha() {
         return Math.max(0.05D, Math.min(1.0D, ForgeVoxyConfig.SIMPLE_GPU_MESH_ALPHA.get()));
+    }
+
+    public static int getConfiguredMaxRenderedBuffers() {
+        return Math.min(8192, Math.max(1, ForgeVoxyConfig.SIMPLE_GPU_MESH_MAX_RENDERED_BUFFERS.get()));
     }
 
     public static String getRenderStageName() {
@@ -182,15 +199,18 @@ public final class ForgeSimpleGpuMeshRenderer {
             int skippedByDimension,
             int skippedByDistance,
             int skippedReleased,
+            int limitedBuffers,
             int skippedTranslucent,
-            double alpha
+            double alpha,
+            double lastRenderMs,
+            double averageRenderMs
     ) {
         private static FrameStats skipped(String reason) {
             return skipped(reason, "none");
         }
 
         private static FrameStats skipped(String reason, String dimension) {
-            return new FrameStats(false, reason, RENDER_STAGE, dimension, 0, 0, 0, 0, 0, 0, 0, 0.0D);
+            return new FrameStats(false, reason, RENDER_STAGE, dimension, 0, 0, 0, 0, 0, 0, 0, 0, 0.0D, 0.0D, 0.0D);
         }
 
         private static FrameStats skipped(String reason, String dimension, ForgeGpuMeshCache.RenderSnapshot snapshot) {
@@ -205,7 +225,10 @@ public final class ForgeSimpleGpuMeshRenderer {
                     snapshot.skippedByDimension(),
                     snapshot.skippedByDistance(),
                     snapshot.skippedReleased(),
+                    snapshot.limitedBuffers(),
                     0,
+                    0.0D,
+                    0.0D,
                     0.0D
             );
         }
@@ -216,6 +239,7 @@ public final class ForgeSimpleGpuMeshRenderer {
         private final int skippedByDimension;
         private final int skippedByDistance;
         private final int skippedReleasedFromSnapshot;
+        private final int limitedBuffers;
         private int renderedBuffers;
         private long renderedVertices;
         private int skippedReleasedBuffers;
@@ -226,9 +250,10 @@ public final class ForgeSimpleGpuMeshRenderer {
             this.skippedByDimension = snapshot.skippedByDimension();
             this.skippedByDistance = snapshot.skippedByDistance();
             this.skippedReleasedFromSnapshot = snapshot.skippedReleased();
+            this.limitedBuffers = snapshot.limitedBuffers();
         }
 
-        private FrameStats toFrameStats(boolean rendered, String reason, String dimension, double alpha) {
+        private FrameStats toFrameStats(boolean rendered, String reason, String dimension, double alpha, double lastRenderMs, double averageRenderMs) {
             return new FrameStats(
                     rendered,
                     reason,
@@ -240,8 +265,11 @@ public final class ForgeSimpleGpuMeshRenderer {
                     this.skippedByDimension,
                     this.skippedByDistance,
                     this.skippedReleasedFromSnapshot + this.skippedReleasedBuffers,
+                    this.limitedBuffers,
                     this.skippedTranslucentBuffers,
-                    alpha
+                    alpha,
+                    lastRenderMs,
+                    averageRenderMs
             );
         }
     }

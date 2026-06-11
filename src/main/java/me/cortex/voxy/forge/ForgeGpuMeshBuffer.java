@@ -8,9 +8,13 @@ import com.mojang.blaze3d.vertex.VertexFormat;
 
 public final class ForgeGpuMeshBuffer implements AutoCloseable {
     private static final int TRIANGLE_VERTICES_PER_QUAD = 6;
+    private static final int SOLID_DEBUG_COLOR = 0xFF00FF;
+    private static final int CUTOUT_DEBUG_COLOR = 0x00FFFF;
+    private static final int OTHER_DEBUG_COLOR = 0xFFFF00;
 
     private final ForgeCpuMeshCache.Key key;
     private final long sourceHash;
+    private final int colorModeStamp;
     private final int vertexCount;
     private final int quadCount;
     private final long sizeBytes;
@@ -19,6 +23,7 @@ public final class ForgeGpuMeshBuffer implements AutoCloseable {
     private ForgeGpuMeshBuffer(
             ForgeCpuMeshCache.Key key,
             long sourceHash,
+            int colorModeStamp,
             int vertexCount,
             int quadCount,
             long sizeBytes,
@@ -26,13 +31,14 @@ public final class ForgeGpuMeshBuffer implements AutoCloseable {
     ) {
         this.key = key;
         this.sourceHash = sourceHash;
+        this.colorModeStamp = colorModeStamp;
         this.vertexCount = vertexCount;
         this.quadCount = quadCount;
         this.sizeBytes = sizeBytes;
         this.vertexBuffer = vertexBuffer;
     }
 
-    public static ForgeGpuMeshBuffer upload(ForgeCpuBuiltSection section) {
+    public static ForgeGpuMeshBuffer upload(ForgeCpuBuiltSection section, boolean useOriginalColors) {
         if (!RenderSystem.isOnRenderThread()) {
             throw new IllegalStateException("Simple GPU mesh upload must run on the render thread");
         }
@@ -53,7 +59,7 @@ public final class ForgeGpuMeshBuffer implements AutoCloseable {
         int[] data = meshBuffer.vertexData();
         for (int quad = 0; quad < quadCount; quad++) {
             int baseVertex = quad * 4;
-            emitTriangleQuad(builder, data, baseVertex);
+            emitTriangleQuad(builder, data, baseVertex, section.layer(), useOriginalColors);
         }
 
         VertexBuffer vertexBuffer = new VertexBuffer(VertexBuffer.Usage.STATIC);
@@ -64,6 +70,7 @@ public final class ForgeGpuMeshBuffer implements AutoCloseable {
         return new ForgeGpuMeshBuffer(
                 ForgeCpuMeshCache.Key.from(section),
                 section.sourceHash(),
+                colorModeStamp(useOriginalColors),
                 emittedVertices,
                 quadCount,
                 (long) emittedVertices * 16L,
@@ -71,21 +78,25 @@ public final class ForgeGpuMeshBuffer implements AutoCloseable {
         );
     }
 
-    private static void emitTriangleQuad(BufferBuilder builder, int[] data, int baseVertex) {
-        emitVertex(builder, data, baseVertex);
-        emitVertex(builder, data, baseVertex + 1);
-        emitVertex(builder, data, baseVertex + 2);
-        emitVertex(builder, data, baseVertex);
-        emitVertex(builder, data, baseVertex + 2);
-        emitVertex(builder, data, baseVertex + 3);
+    public static int colorModeStamp(boolean useOriginalColors) {
+        return useOriginalColors ? 1 : 2;
     }
 
-    private static void emitVertex(BufferBuilder builder, int[] data, int vertex) {
+    private static void emitTriangleQuad(BufferBuilder builder, int[] data, int baseVertex, ForgeCpuMeshLayer layer, boolean useOriginalColors) {
+        emitVertex(builder, data, baseVertex, layer, useOriginalColors);
+        emitVertex(builder, data, baseVertex + 1, layer, useOriginalColors);
+        emitVertex(builder, data, baseVertex + 2, layer, useOriginalColors);
+        emitVertex(builder, data, baseVertex, layer, useOriginalColors);
+        emitVertex(builder, data, baseVertex + 2, layer, useOriginalColors);
+        emitVertex(builder, data, baseVertex + 3, layer, useOriginalColors);
+    }
+
+    private static void emitVertex(BufferBuilder builder, int[] data, int vertex, ForgeCpuMeshLayer layer, boolean useOriginalColors) {
         int offset = vertex * ForgeCpuMeshBuffer.VERTEX_STRIDE_INTS;
         float x = Float.intBitsToFloat(data[offset]);
         float y = Float.intBitsToFloat(data[offset + 1]);
         float z = Float.intBitsToFloat(data[offset + 2]);
-        int color = data[offset + 3];
+        int color = useOriginalColors ? data[offset + 3] : getDebugColor(layer);
         int alpha = (color >>> 24) & 0xFF;
         if (alpha == 0) {
             alpha = 0xFF;
@@ -94,6 +105,14 @@ public final class ForgeGpuMeshBuffer implements AutoCloseable {
         int green = (color >>> 8) & 0xFF;
         int blue = color & 0xFF;
         builder.vertex(x, y, z).color(red, green, blue, alpha).endVertex();
+    }
+
+    private static int getDebugColor(ForgeCpuMeshLayer layer) {
+        return switch (layer) {
+            case SOLID -> SOLID_DEBUG_COLOR;
+            case CUTOUT -> CUTOUT_DEBUG_COLOR;
+            case TRANSLUCENT, OTHER -> OTHER_DEBUG_COLOR;
+        };
     }
 
     public ForgeCpuMeshCache.Key key() {
@@ -118,6 +137,10 @@ public final class ForgeGpuMeshBuffer implements AutoCloseable {
 
     public long sourceHash() {
         return this.sourceHash;
+    }
+
+    public int colorModeStamp() {
+        return this.colorModeStamp;
     }
 
     public int vertexCount() {
