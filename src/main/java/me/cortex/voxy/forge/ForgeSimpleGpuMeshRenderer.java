@@ -280,7 +280,8 @@ public final class ForgeSimpleGpuMeshRenderer {
         }
         this.nextSummaryLogMillis = now + 5_000L;
         VoxyForge.LOGGER.info(
-                "Voxy simple GPU mesh render: dimension={} buffers={}/{} chunks={} vertices={} skippedNear={} skippedLoadedState={} skippedRenderDistance={} alpha={} stage={}",
+                "Voxy simple GPU mesh render: source={} dimension={} buffers={}/{} chunks={} vertices={} skippedNear={} skippedLoadedState={} skippedRenderDistance={} alpha={} stage={}",
+                ForgeGpuMeshUploadManager.getConfiguredSource(),
                 stats.dimension(),
                 stats.renderedBuffers(),
                 stats.candidateBuffers(),

@@ -147,6 +147,30 @@ public final class ForgeVoxyQuadEncoder {
         return extract(record, MODEL_ID_BITS, MODEL_ID_SHIFT);
     }
 
+    static int extractFace(long record) {
+        return extract(record, FACE_BITS, FACE_SHIFT);
+    }
+
+    static int extractLength(long record) {
+        return extract(record, LENGTH_BITS, LENGTH_SHIFT) + 1;
+    }
+
+    static int extractWidth(long record) {
+        return extract(record, WIDTH_BITS, WIDTH_SHIFT) + 1;
+    }
+
+    static int extractLocalX(long record) {
+        return extract(record, LOCAL_POSITION_BITS, X_SHIFT);
+    }
+
+    static int extractLocalY(long record) {
+        return extract(record, LOCAL_POSITION_BITS, Y_SHIFT);
+    }
+
+    static int extractLocalZ(long record) {
+        return extract(record, LOCAL_POSITION_BITS, Z_SHIFT);
+    }
+
     static int extractBiomeId(long record) {
         return extract(record, BIOME_ID_BITS, BIOME_ID_SHIFT);
     }

@@ -28,6 +28,7 @@ public final class ForgeVoxyConfig {
     public static final ForgeConfigSpec.BooleanValue DEBUG_MESH_IGNORE_DEPTH;
     public static final ForgeConfigSpec.DoubleValue DEBUG_MESH_VERTICAL_OFFSET;
     public static final ForgeConfigSpec.BooleanValue ENABLE_SIMPLE_GPU_MESH_RENDERER;
+    public static final ForgeConfigSpec.EnumValue<SimpleGpuMeshSource> SIMPLE_GPU_MESH_SOURCE;
     public static final ForgeConfigSpec.IntValue SIMPLE_GPU_MESH_MAX_UPLOADS_PER_TICK;
     public static final ForgeConfigSpec.IntValue SIMPLE_GPU_MESH_MAX_BUFFERS;
     public static final ForgeConfigSpec.IntValue SIMPLE_GPU_MESH_RENDER_DISTANCE_CHUNKS;
@@ -115,6 +116,9 @@ public final class ForgeVoxyConfig {
         ENABLE_SIMPLE_GPU_MESH_RENDERER = builder
                 .comment("Draws cached CPU mesh through a simple vanilla VertexBuffer renderer. This is an early Forge renderer PoC and is disabled by default.")
                 .define("enableSimpleGpuMeshRenderer", false);
+        SIMPLE_GPU_MESH_SOURCE = builder
+                .comment("Selects the CPU data source for the simple GPU renderer. CPU_MESH is the existing path; BUILT_SECTION decodes the CPU-only Voxy BuiltSection cache.")
+                .defineEnum("simpleGpuMeshSource", SimpleGpuMeshSource.CPU_MESH);
         SIMPLE_GPU_MESH_MAX_UPLOADS_PER_TICK = builder
                 .comment("Maximum CPU mesh entries uploaded to vanilla VertexBuffer objects per client tick.")
                 .defineInRange("simpleGpuMeshMaxUploadsPerTick", 1, 1, 16);

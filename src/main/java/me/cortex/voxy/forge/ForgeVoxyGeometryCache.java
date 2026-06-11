@@ -4,7 +4,9 @@ import me.cortex.voxy.config.ForgeVoxyConfig;
 
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.Set;
 import java.util.List;
 import java.util.Map;
 
@@ -69,6 +71,46 @@ public final class ForgeVoxyGeometryCache {
             }
         }
         return false;
+    }
+
+    public synchronized RenderSnapshot createUploadSnapshot(String dimension, int maxUploadedEntries) {
+        this.trimToLimit();
+        var snapshot = new ArrayList<ForgeVoxyBuiltSection>();
+        int skippedByDimension = 0;
+        int skippedReleased = 0;
+        int limitedEntries = 0;
+        int maxEntries = Math.max(1, maxUploadedEntries);
+        for (ForgeVoxyBuiltSection section : this.entries.values()) {
+            if (!section.dimension().equals(dimension)) {
+                skippedByDimension++;
+                continue;
+            }
+            if (section.isClosed() || section.isEmpty() || section.geometryBuffer() == null || section.geometryBuffer().isClosed()) {
+                skippedReleased++;
+                continue;
+            }
+            if (snapshot.size() >= maxEntries) {
+                limitedEntries++;
+                continue;
+            }
+            snapshot.add(section);
+        }
+        return new RenderSnapshot(snapshot, skippedByDimension, skippedReleased, limitedEntries);
+    }
+
+    public synchronized Set<ForgeCpuMeshCache.Key> createKeySnapshot(String dimension) {
+        this.trimToLimit();
+        var keys = new HashSet<ForgeCpuMeshCache.Key>();
+        for (ForgeVoxyBuiltSection section : this.entries.values()) {
+            if (!section.dimension().equals(dimension)) {
+                continue;
+            }
+            if (section.isClosed() || section.isEmpty()) {
+                continue;
+            }
+            keys.add(ForgeGpuMeshBuffer.keyFromBuiltSection(section));
+        }
+        return keys;
     }
 
     public synchronized StatusSnapshot createStatusSnapshot() {
@@ -221,6 +263,14 @@ public final class ForgeVoxyGeometryCache {
             String firstEntryNamedOffsets,
             String sampleRecordHex,
             String sampleDecodedRecord
+    ) {
+    }
+
+    public record RenderSnapshot(
+            List<ForgeVoxyBuiltSection> sections,
+            int skippedByDimension,
+            int skippedReleased,
+            int limitedEntries
     ) {
     }
 

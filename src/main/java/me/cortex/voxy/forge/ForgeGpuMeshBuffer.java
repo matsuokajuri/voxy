@@ -82,6 +82,25 @@ public final class ForgeGpuMeshBuffer implements AutoCloseable {
         return useOriginalColors ? 1 : 2;
     }
 
+    public static ForgeCpuMeshCache.Key keyFromBuiltSection(ForgeVoxyBuiltSection section) {
+        return new ForgeCpuMeshCache.Key(
+                section.dimension(),
+                section.chunkX(),
+                section.chunkZ(),
+                section.position(),
+                ForgeCpuMeshLayer.OTHER
+        );
+    }
+
+    public static long sourceHashFromBuiltSection(ForgeVoxyBuiltSection section) {
+        long hash = section.position();
+        hash = hash * 31L + section.createdTimeMillis();
+        hash = hash * 31L + section.quadCount();
+        hash = hash * 31L + section.geometryBytes();
+        hash = hash * 31L + section.aabb();
+        return hash;
+    }
+
     private static void emitTriangleQuad(BufferBuilder builder, int[] data, int baseVertex, ForgeCpuMeshLayer layer, boolean useOriginalColors) {
         emitVertex(builder, data, baseVertex, layer, useOriginalColors);
         emitVertex(builder, data, baseVertex + 1, layer, useOriginalColors);

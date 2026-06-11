@@ -1,6 +1,7 @@
 package me.cortex.voxy.forge;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import me.cortex.voxy.config.SimpleGpuMeshSource;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.TickEvent;
 
@@ -15,6 +16,7 @@ public final class ForgeGpuMeshUploadManager {
     private long uploadWindowCount;
     private double uploadWindowMs;
     private double lastAverageUploadMs;
+    private SimpleGpuMeshSource activeSource;
 
     ForgeGpuMeshUploadManager(ForgeVoxyInstance instance) {
         this.instance = instance;
@@ -30,6 +32,7 @@ public final class ForgeGpuMeshUploadManager {
         this.uploadWindowCount = 0;
         this.uploadWindowMs = 0.0D;
         this.lastAverageUploadMs = 0.0D;
+        this.activeSource = null;
         this.lastStatus = UploadStatusSnapshot.disabled();
     }
 
@@ -47,6 +50,18 @@ public final class ForgeGpuMeshUploadManager {
             return this.lastStatus;
         }
 
+        SimpleGpuMeshSource source = getConfiguredSource();
+        if (source != this.activeSource) {
+            this.instance.getGpuMeshCache().clear();
+            this.activeSource = source;
+        }
+        if (source == SimpleGpuMeshSource.BUILT_SECTION) {
+            return this.processBuiltSectionUploads(dimension, source);
+        }
+        return this.processCpuMeshUploads(dimension, centerChunkX, centerChunkZ, source);
+    }
+
+    private UploadStatusSnapshot processCpuMeshUploads(String dimension, int centerChunkX, int centerChunkZ, SimpleGpuMeshSource source) {
         int radius = getConfiguredRenderDistanceChunks();
         int maxCandidates = getConfiguredMaxBuffers();
         boolean keepCachedChunks = keepCachedChunks();
@@ -147,24 +162,139 @@ public final class ForgeGpuMeshUploadManager {
         this.lastStatus = new UploadStatusSnapshot(
                 true,
                 "ok",
+                source,
                 dimension,
                 this.uploadBudget,
+                sections.size(),
+                0,
+                pendingUploads,
+                uploaded,
+                failed,
+                alreadyUploaded,
+                skippedTranslucent,
+                0,
+                skippedEmpty,
+                cpuSnapshot.skippedByDimension(),
+                cpuSnapshot.skippedByDistance(),
+                cpuSnapshot.skippedReleased(),
+                cpuSnapshot.limitedEntries(),
+                0,
+                uploadedVertices,
+                uploadedBytes,
+                this.lastAverageUploadMs,
+                useOriginalColors,
+                keepCachedChunks
+        );
+        return this.lastStatus;
+    }
+
+    private UploadStatusSnapshot processBuiltSectionUploads(String dimension, SimpleGpuMeshSource source) {
+        int maxCandidates = getConfiguredMaxBuffers();
+        ForgeVoxyGeometryCache.RenderSnapshot builtSnapshot = this.instance.getVoxyGeometryCache().createUploadSnapshot(dimension, maxCandidates);
+        List<ForgeVoxyBuiltSection> sections = builtSnapshot.sections();
+        Set<ForgeCpuMeshCache.Key> liveKeys = this.instance.getVoxyGeometryCache().createKeySnapshot(dimension);
+        boolean useOriginalColors = useOriginalColors();
+        int colorModeStamp = ForgeGpuMeshBuffer.colorModeStamp(useOriginalColors);
+        int pendingUploads = 0;
+        int alreadyUploaded = 0;
+        int skippedTranslucent = 0;
+        int doubleSidedAsSingle = 0;
+        int skippedEmpty = 0;
+
+        for (ForgeVoxyBuiltSection section : sections) {
+            ForgeBuiltSectionSimpleMeshBuilder.PreviewStats preview = ForgeBuiltSectionSimpleMeshBuilder.preview(section);
+            skippedTranslucent += preview.translucentRecords();
+            doubleSidedAsSingle += preview.doubleSidedRecords();
+            if (preview.uploadableRecords() == 0) {
+                skippedEmpty++;
+                continue;
+            }
+            if (this.instance.getGpuMeshCache().hasMatching(section, colorModeStamp)) {
+                alreadyUploaded++;
+                continue;
+            }
+            pendingUploads++;
+        }
+
+        this.instance.getGpuMeshCache().setActiveDimension(dimension);
+        this.instance.getGpuMeshCache().retainOnly(dimension, liveKeys);
+
+        int uploadLimit = Math.min(this.uploadBudget, getConfiguredMaxUploadsPerTick());
+        int uploaded = 0;
+        int failed = 0;
+        int skippedInvalid = 0;
+        long uploadedVertices = 0;
+        long uploadedBytes = 0;
+        long start = System.nanoTime();
+        if (uploadLimit > 0 && pendingUploads > 0) {
+            for (ForgeVoxyBuiltSection section : sections) {
+                if (uploaded >= uploadLimit) {
+                    break;
+                }
+                ForgeBuiltSectionSimpleMeshBuilder.PreviewStats preview = ForgeBuiltSectionSimpleMeshBuilder.preview(section);
+                if (preview.uploadableRecords() == 0 || this.instance.getGpuMeshCache().hasMatching(section, colorModeStamp)) {
+                    continue;
+                }
+
+                try (ForgeBuiltSectionSimpleMeshBuilder.AdaptedSection adapted = ForgeBuiltSectionSimpleMeshBuilder.build(section)) {
+                    skippedInvalid += adapted.stats().skippedInvalid();
+                    ForgeCpuBuiltSection cpuSection = adapted.section();
+                    if (cpuSection == null || cpuSection.meshBuffer() == null || cpuSection.meshBuffer().isClosed() || cpuSection.meshBuffer().vertexCount() == 0) {
+                        skippedEmpty++;
+                        continue;
+                    }
+                    ForgeGpuMeshBuffer uploadedBuffer = ForgeGpuMeshBuffer.upload(cpuSection, useOriginalColors);
+                    uploadedVertices += uploadedBuffer.vertexCount();
+                    uploadedBytes += uploadedBuffer.sizeBytes();
+                    this.instance.getGpuMeshCache().put(uploadedBuffer);
+                    uploaded++;
+                } catch (Exception e) {
+                    failed++;
+                    VoxyForge.LOGGER.error(
+                            "Failed to upload Voxy BuiltSection simple GPU mesh for {} chunk {},{} position {}",
+                            section.dimension(),
+                            section.chunkX(),
+                            section.chunkZ(),
+                            Long.toUnsignedString(section.position()),
+                            e
+                    );
+                }
+            }
+        }
+
+        if (uploaded > 0) {
+            this.uploadBudget = Math.max(0, this.uploadBudget - uploaded);
+            double elapsedMs = (System.nanoTime() - start) / 1_000_000.0D;
+            this.uploadWindowCount += uploaded;
+            this.uploadWindowMs += elapsedMs;
+            this.lastAverageUploadMs = this.uploadWindowMs / this.uploadWindowCount;
+        }
+
+        this.lastStatus = new UploadStatusSnapshot(
+                true,
+                "ok",
+                source,
+                dimension,
+                this.uploadBudget,
+                0,
                 sections.size(),
                 pendingUploads,
                 uploaded,
                 failed,
                 alreadyUploaded,
                 skippedTranslucent,
+                doubleSidedAsSingle,
                 skippedEmpty,
-                cpuSnapshot.skippedByDimension(),
-                cpuSnapshot.skippedByDistance(),
-                cpuSnapshot.skippedReleased(),
-                cpuSnapshot.limitedEntries(),
+                builtSnapshot.skippedByDimension(),
+                0,
+                builtSnapshot.skippedReleased(),
+                builtSnapshot.limitedEntries(),
+                skippedInvalid,
                 uploadedVertices,
                 uploadedBytes,
                 this.lastAverageUploadMs,
                 useOriginalColors,
-                keepCachedChunks
+                true
         );
         return this.lastStatus;
     }
@@ -203,22 +333,30 @@ public final class ForgeGpuMeshUploadManager {
         return ForgeVoxyRuntimeOverrides.simpleGpuMeshKeepCachedChunks();
     }
 
+    public static SimpleGpuMeshSource getConfiguredSource() {
+        return ForgeVoxyRuntimeOverrides.simpleGpuMeshSource();
+    }
+
     public record UploadStatusSnapshot(
             boolean enabled,
             String reason,
+            SimpleGpuMeshSource source,
             String dimension,
             int uploadBudget,
             int candidateCpuEntries,
+            int candidateBuiltSectionEntries,
             int pendingUploads,
             int uploadedThisFrame,
             int failedThisFrame,
             int alreadyUploaded,
             int skippedTranslucent,
+            int builtSectionDoubleSidedRecords,
             int skippedEmpty,
             int skippedCpuByDimension,
             int skippedCpuByDistance,
             int skippedCpuReleased,
             int limitedCpuEntries,
+            int skippedBuiltSectionInvalid,
             long uploadedVerticesThisFrame,
             long uploadedBytesThisFrame,
             double averageUploadMs,
@@ -233,8 +371,12 @@ public final class ForgeGpuMeshUploadManager {
             return new UploadStatusSnapshot(
                     false,
                     reason,
+                    SimpleGpuMeshSource.CPU_MESH,
                     "none",
                     uploadBudget,
+                    0,
+                    0,
+                    0,
                     0,
                     0,
                     0,

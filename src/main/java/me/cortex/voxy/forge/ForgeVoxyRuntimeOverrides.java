@@ -2,6 +2,7 @@ package me.cortex.voxy.forge;
 
 import me.cortex.voxy.config.ForgeVoxyConfig;
 import me.cortex.voxy.config.SimpleGpuMeshLoadedChunkSkipMode;
+import me.cortex.voxy.config.SimpleGpuMeshSource;
 
 public final class ForgeVoxyRuntimeOverrides {
     private static final String SOURCE_CONFIG = "config";
@@ -13,6 +14,7 @@ public final class ForgeVoxyRuntimeOverrides {
     private static Boolean enableAutoCpuMeshBuild;
     private static Boolean enableSimpleGpuMeshRenderer;
     private static Boolean enableDebugMeshRenderer;
+    private static SimpleGpuMeshSource simpleGpuMeshSource;
     private static Integer simpleGpuMeshMinRenderDistanceChunks;
     private static Integer simpleGpuMeshRenderDistanceChunks;
     private static Boolean simpleGpuMeshRenderLoadedChunks;
@@ -89,6 +91,7 @@ public final class ForgeVoxyRuntimeOverrides {
         enableAutoCpuMeshBuild = null;
         enableSimpleGpuMeshRenderer = null;
         enableDebugMeshRenderer = null;
+        simpleGpuMeshSource = null;
         simpleGpuMeshMinRenderDistanceChunks = null;
         simpleGpuMeshRenderDistanceChunks = null;
         simpleGpuMeshRenderLoadedChunks = null;
@@ -116,6 +119,8 @@ public final class ForgeVoxyRuntimeOverrides {
                 source(enableSimpleGpuMeshRenderer),
                 enableDebugMeshRenderer(),
                 source(enableDebugMeshRenderer),
+                simpleGpuMeshSource(),
+                source(simpleGpuMeshSource),
                 simpleGpuMeshMinRenderDistanceChunks(),
                 source(simpleGpuMeshMinRenderDistanceChunks),
                 simpleGpuMeshRenderDistanceChunks(),
@@ -169,6 +174,15 @@ public final class ForgeVoxyRuntimeOverrides {
         return value(enableDebugMeshRenderer, ForgeVoxyConfig.ENABLE_DEBUG_MESH_RENDERER.get());
     }
 
+    public static synchronized SimpleGpuMeshSource simpleGpuMeshSource() {
+        return value(simpleGpuMeshSource, ForgeVoxyConfig.SIMPLE_GPU_MESH_SOURCE.get());
+    }
+
+    public static synchronized void setSimpleGpuMeshSource(SimpleGpuMeshSource source) {
+        presetName = "custom";
+        simpleGpuMeshSource = source;
+    }
+
     public static synchronized int simpleGpuMeshMinRenderDistanceChunks() {
         return Math.min(64, Math.max(0, value(simpleGpuMeshMinRenderDistanceChunks, ForgeVoxyConfig.SIMPLE_GPU_MESH_MIN_RENDER_DISTANCE_CHUNKS.get())));
     }
@@ -219,6 +233,7 @@ public final class ForgeVoxyRuntimeOverrides {
                 || enableAutoCpuMeshBuild != null
                 || enableSimpleGpuMeshRenderer != null
                 || enableDebugMeshRenderer != null
+                || simpleGpuMeshSource != null
                 || simpleGpuMeshMinRenderDistanceChunks != null
                 || simpleGpuMeshRenderDistanceChunks != null
                 || simpleGpuMeshRenderLoadedChunks != null
@@ -265,6 +280,8 @@ public final class ForgeVoxyRuntimeOverrides {
             String enableSimpleGpuMeshRendererSource,
             boolean enableDebugMeshRenderer,
             String enableDebugMeshRendererSource,
+            SimpleGpuMeshSource simpleGpuMeshSource,
+            String simpleGpuMeshSourceSource,
             int simpleGpuMeshMinRenderDistanceChunks,
             String simpleGpuMeshMinRenderDistanceChunksSource,
             int simpleGpuMeshRenderDistanceChunks,

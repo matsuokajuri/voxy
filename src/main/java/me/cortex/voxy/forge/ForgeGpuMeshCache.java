@@ -49,6 +49,13 @@ public final class ForgeGpuMeshCache {
                 && buffer.colorModeStamp() == colorModeStamp;
     }
 
+    public synchronized boolean hasMatching(ForgeVoxyBuiltSection section, int colorModeStamp) {
+        ForgeGpuMeshBuffer buffer = this.buffers.get(ForgeGpuMeshBuffer.keyFromBuiltSection(section));
+        return buffer != null && !buffer.isClosed()
+                && buffer.sourceHash() == ForgeGpuMeshBuffer.sourceHashFromBuiltSection(section)
+                && buffer.colorModeStamp() == colorModeStamp;
+    }
+
     public synchronized void put(ForgeGpuMeshBuffer buffer) {
         ForgeGpuMeshBuffer previous = this.buffers.put(buffer.key(), buffer);
         if (previous != null) {
