@@ -28,6 +28,8 @@ public final class ForgeVoxyCommands {
                         .executes(ctx -> meshCacheStatus(ctx.getSource())))
                 .then(Commands.literal("mesh_cache_clear")
                         .executes(ctx -> clearMeshCache(ctx.getSource())))
+                .then(Commands.literal("mesh_build_clear")
+                        .executes(ctx -> clearMeshBuildState(ctx.getSource())))
                 .then(Commands.literal("ingest_status")
                         .executes(ctx -> ingestStatus(ctx.getSource())))
                 .then(Commands.literal("ingest_clear_cache")
@@ -293,8 +295,9 @@ public final class ForgeVoxyCommands {
         }
 
         var renderStats = ForgeVoxyInstance.INSTANCE.getDebugMeshRenderer().getLastFrameStats();
+        var meshBuildStatus = ForgeVoxyInstance.INSTANCE.getCpuMeshBuildManager().createStatusSnapshot();
         String message = String.format(
-                "Voxy CPU mesh cache: entries=%d/%d vertices=%d quads=%d bytes=%d dimensions=%s layers=%s render=%s distance=%d ignoreDepth=%s alpha=%.2f verticalOffset=%.3f stage=%s %s %s",
+                "Voxy CPU mesh cache: entries=%d/%d vertices=%d quads=%d bytes=%d dimensions=%s layers=%s autoBuild=%s buildQueue=%d built=%d failed=%d radius=%d maxPerTick=%d cooldown=%d lastBuildMs=%.2f render=%s distance=%d ignoreDepth=%s alpha=%.2f verticalOffset=%.3f stage=%s %s %s",
                 status.entries(),
                 status.maxEntries(),
                 status.totalVertices(),
@@ -302,6 +305,14 @@ public final class ForgeVoxyCommands {
                 status.totalBytes(),
                 status.dimensions(),
                 status.layers(),
+                meshBuildStatus.autoEnabled(),
+                meshBuildStatus.queuedChunks(),
+                meshBuildStatus.builtChunks(),
+                meshBuildStatus.failedChunks(),
+                meshBuildStatus.radius(),
+                meshBuildStatus.maxChunksPerTick(),
+                meshBuildStatus.cooldownTicks(),
+                meshBuildStatus.lastBuildMs(),
                 ForgeVoxyConfig.ENABLE_DEBUG_MESH_RENDERER.get(),
                 ForgeDebugMeshRenderer.getConfiguredRenderDistanceChunks(),
                 ForgeVoxyConfig.DEBUG_MESH_IGNORE_DEPTH.get(),
@@ -354,7 +365,14 @@ public final class ForgeVoxyCommands {
 
     private static int clearMeshCache(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getCpuMeshCache().clear();
-        source.sendSuccess(() -> Component.literal("Voxy: cleared CPU mesh cache."), false);
+        ForgeVoxyInstance.INSTANCE.getCpuMeshBuildManager().clear();
+        source.sendSuccess(() -> Component.literal("Voxy: cleared CPU mesh cache and auto mesh build record."), false);
+        return 1;
+    }
+
+    private static int clearMeshBuildState(CommandSourceStack source) {
+        ForgeVoxyInstance.INSTANCE.getCpuMeshBuildManager().clear();
+        source.sendSuccess(() -> Component.literal("Voxy: cleared auto CPU mesh build queue and built-record."), false);
         return 1;
     }
 

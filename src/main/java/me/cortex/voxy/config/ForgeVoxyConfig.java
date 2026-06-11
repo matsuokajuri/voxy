@@ -10,6 +10,10 @@ public final class ForgeVoxyConfig {
     public static final ForgeConfigSpec.IntValue AUTO_INGEST_RADIUS;
     public static final ForgeConfigSpec.IntValue AUTO_INGEST_MAX_CHUNKS_PER_TICK;
     public static final ForgeConfigSpec.IntValue AUTO_INGEST_COOLDOWN_TICKS;
+    public static final ForgeConfigSpec.BooleanValue ENABLE_AUTO_CPU_MESH_BUILD;
+    public static final ForgeConfigSpec.IntValue AUTO_MESH_BUILD_RADIUS;
+    public static final ForgeConfigSpec.IntValue AUTO_MESH_BUILD_MAX_CHUNKS_PER_TICK;
+    public static final ForgeConfigSpec.IntValue AUTO_MESH_BUILD_COOLDOWN_TICKS;
     public static final ForgeConfigSpec.BooleanValue ENABLE_DEBUG_MESH_RENDERER;
     public static final ForgeConfigSpec.IntValue DEBUG_MESH_RENDER_DISTANCE_CHUNKS;
     public static final ForgeConfigSpec.BooleanValue DEBUG_MESH_WIREFRAME;
@@ -38,6 +42,18 @@ public final class ForgeVoxyConfig {
         AUTO_INGEST_COOLDOWN_TICKS = builder
                 .comment("Ticks between nearby chunk scans. Queued chunks may still be processed every tick.")
                 .defineInRange("autoIngestCooldownTicks", 20, 0, 200);
+        ENABLE_AUTO_CPU_MESH_BUILD = builder
+                .comment("Automatically builds cached CPU mesh for already-ingested nearby chunks. Requires enableWorldEngineSkeleton and does not render by itself.")
+                .define("enableAutoCpuMeshBuild", false);
+        AUTO_MESH_BUILD_RADIUS = builder
+                .comment("Chunk radius around the player to scan for already-ingested chunks when auto CPU mesh build is enabled.")
+                .defineInRange("autoMeshBuildRadius", 2, 0, 8);
+        AUTO_MESH_BUILD_MAX_CHUNKS_PER_TICK = builder
+                .comment("Maximum chunks to build into CPU mesh per client tick when auto CPU mesh build is enabled.")
+                .defineInRange("autoMeshBuildMaxChunksPerTick", 1, 1, 8);
+        AUTO_MESH_BUILD_COOLDOWN_TICKS = builder
+                .comment("Ticks between nearby chunk scans for auto CPU mesh build. Queued chunks may still be processed every tick.")
+                .defineInRange("autoMeshBuildCooldownTicks", 20, 0, 200);
         ENABLE_DEBUG_MESH_RENDERER = builder
                 .comment("Draws cached CPU mesh sections with a temporary vanilla debug renderer. Requires enableWorldEngineSkeleton and does not use the final Voxy renderer.")
                 .define("enableDebugMeshRenderer", false);
