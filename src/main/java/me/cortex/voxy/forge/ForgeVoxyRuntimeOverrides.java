@@ -1,6 +1,7 @@
 package me.cortex.voxy.forge;
 
 import me.cortex.voxy.config.ForgeVoxyConfig;
+import me.cortex.voxy.config.SimpleGpuMeshLoadedChunkSkipMode;
 
 public final class ForgeVoxyRuntimeOverrides {
     private static final String SOURCE_CONFIG = "config";
@@ -15,6 +16,8 @@ public final class ForgeVoxyRuntimeOverrides {
     private static Integer simpleGpuMeshMinRenderDistanceChunks;
     private static Integer simpleGpuMeshRenderDistanceChunks;
     private static Boolean simpleGpuMeshRenderLoadedChunks;
+    private static SimpleGpuMeshLoadedChunkSkipMode simpleGpuMeshLoadedChunkSkipMode;
+    private static Integer simpleGpuMeshLoadedChunkMargin;
     private static Boolean simpleGpuMeshKeepCachedChunks;
     private static Boolean simpleGpuMeshUseOriginalColors;
     private static Boolean simpleGpuMeshIgnoreDepth;
@@ -46,6 +49,8 @@ public final class ForgeVoxyRuntimeOverrides {
         simpleGpuMeshMinRenderDistanceChunks = 0;
         simpleGpuMeshRenderDistanceChunks = 64;
         simpleGpuMeshRenderLoadedChunks = true;
+        simpleGpuMeshLoadedChunkSkipMode = SimpleGpuMeshLoadedChunkSkipMode.DISABLED;
+        simpleGpuMeshLoadedChunkMargin = 0;
         simpleGpuMeshKeepCachedChunks = true;
         simpleGpuMeshUseOriginalColors = false;
         simpleGpuMeshIgnoreDepth = true;
@@ -64,6 +69,8 @@ public final class ForgeVoxyRuntimeOverrides {
         simpleGpuMeshMinRenderDistanceChunks = 5;
         simpleGpuMeshRenderDistanceChunks = 64;
         simpleGpuMeshRenderLoadedChunks = false;
+        simpleGpuMeshLoadedChunkSkipMode = SimpleGpuMeshLoadedChunkSkipMode.BY_RENDER_DISTANCE;
+        simpleGpuMeshLoadedChunkMargin = 0;
         simpleGpuMeshKeepCachedChunks = true;
         simpleGpuMeshUseOriginalColors = true;
         simpleGpuMeshIgnoreDepth = false;
@@ -85,6 +92,8 @@ public final class ForgeVoxyRuntimeOverrides {
         simpleGpuMeshMinRenderDistanceChunks = null;
         simpleGpuMeshRenderDistanceChunks = null;
         simpleGpuMeshRenderLoadedChunks = null;
+        simpleGpuMeshLoadedChunkSkipMode = null;
+        simpleGpuMeshLoadedChunkMargin = null;
         simpleGpuMeshKeepCachedChunks = null;
         simpleGpuMeshUseOriginalColors = null;
         simpleGpuMeshIgnoreDepth = null;
@@ -113,6 +122,10 @@ public final class ForgeVoxyRuntimeOverrides {
                 source(simpleGpuMeshRenderDistanceChunks),
                 simpleGpuMeshRenderLoadedChunks(),
                 source(simpleGpuMeshRenderLoadedChunks),
+                simpleGpuMeshLoadedChunkSkipMode(),
+                source(simpleGpuMeshLoadedChunkSkipMode),
+                simpleGpuMeshLoadedChunkMargin(),
+                source(simpleGpuMeshLoadedChunkMargin),
                 simpleGpuMeshKeepCachedChunks(),
                 source(simpleGpuMeshKeepCachedChunks),
                 simpleGpuMeshUseOriginalColors(),
@@ -168,6 +181,14 @@ public final class ForgeVoxyRuntimeOverrides {
         return value(simpleGpuMeshRenderLoadedChunks, ForgeVoxyConfig.SIMPLE_GPU_MESH_RENDER_LOADED_CHUNKS.get());
     }
 
+    public static synchronized SimpleGpuMeshLoadedChunkSkipMode simpleGpuMeshLoadedChunkSkipMode() {
+        return value(simpleGpuMeshLoadedChunkSkipMode, ForgeVoxyConfig.SIMPLE_GPU_MESH_LOADED_CHUNK_SKIP_MODE.get());
+    }
+
+    public static synchronized int simpleGpuMeshLoadedChunkMargin() {
+        return Math.min(8, Math.max(0, value(simpleGpuMeshLoadedChunkMargin, ForgeVoxyConfig.SIMPLE_GPU_MESH_LOADED_CHUNK_MARGIN.get())));
+    }
+
     public static synchronized boolean simpleGpuMeshKeepCachedChunks() {
         return value(simpleGpuMeshKeepCachedChunks, ForgeVoxyConfig.SIMPLE_GPU_MESH_KEEP_CACHED_CHUNKS.get());
     }
@@ -201,6 +222,8 @@ public final class ForgeVoxyRuntimeOverrides {
                 || simpleGpuMeshMinRenderDistanceChunks != null
                 || simpleGpuMeshRenderDistanceChunks != null
                 || simpleGpuMeshRenderLoadedChunks != null
+                || simpleGpuMeshLoadedChunkSkipMode != null
+                || simpleGpuMeshLoadedChunkMargin != null
                 || simpleGpuMeshKeepCachedChunks != null
                 || simpleGpuMeshUseOriginalColors != null
                 || simpleGpuMeshIgnoreDepth != null
@@ -218,6 +241,10 @@ public final class ForgeVoxyRuntimeOverrides {
     }
 
     private static double value(Double override, double configValue) {
+        return override != null ? override : configValue;
+    }
+
+    private static <T> T value(T override, T configValue) {
         return override != null ? override : configValue;
     }
 
@@ -244,6 +271,10 @@ public final class ForgeVoxyRuntimeOverrides {
             String simpleGpuMeshRenderDistanceChunksSource,
             boolean simpleGpuMeshRenderLoadedChunks,
             String simpleGpuMeshRenderLoadedChunksSource,
+            SimpleGpuMeshLoadedChunkSkipMode simpleGpuMeshLoadedChunkSkipMode,
+            String simpleGpuMeshLoadedChunkSkipModeSource,
+            int simpleGpuMeshLoadedChunkMargin,
+            String simpleGpuMeshLoadedChunkMarginSource,
             boolean simpleGpuMeshKeepCachedChunks,
             String simpleGpuMeshKeepCachedChunksSource,
             boolean simpleGpuMeshUseOriginalColors,

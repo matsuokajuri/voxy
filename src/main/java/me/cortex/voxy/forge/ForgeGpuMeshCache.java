@@ -1,6 +1,7 @@
 package me.cortex.voxy.forge;
 
 import me.cortex.voxy.config.ForgeVoxyConfig;
+import me.cortex.voxy.config.SimpleGpuMeshLoadedChunkSkipMode;
 
 import java.util.ArrayList;
 import java.util.EnumMap;
@@ -111,14 +112,21 @@ public final class ForgeGpuMeshCache {
             int minDistanceChunks,
             int maxDistanceChunks,
             boolean renderLoadedChunks,
-            ChunkLoadChecker chunkLoadChecker
+            SimpleGpuMeshLoadedChunkSkipMode loadedChunkSkipMode,
+            int loadedChunkMargin,
+            int clientRenderDistance,
+            ForgeGpuMeshLoadedChunkFilter.ChunkLoadChecker chunkLoadChecker
     ) {
         this.trimToLimit();
         int minDistance = Math.max(0, Math.min(minDistanceChunks, maxDistanceChunks));
         int maxDistance = Math.max(0, maxDistanceChunks);
         var cachedChunks = new HashSet<Long>();
         var windowChunks = new HashSet<Long>();
-        var skippedLoadedChunks = new HashSet<Long>();
+        var loadedStateChunks = new HashSet<Long>();
+        var vanillaRenderDistanceChunks = new HashSet<Long>();
+        var outsideVanillaRenderDistanceChunks = new HashSet<Long>();
+        var skippedLoadedStateChunks = new HashSet<Long>();
+        var skippedRenderDistanceChunks = new HashSet<Long>();
         var renderableChunks = new HashSet<Long>();
         int cachedBuffers = 0;
         int candidateBuffers = 0;
@@ -126,7 +134,8 @@ public final class ForgeGpuMeshCache {
         int skippedByDimension = 0;
         int skippedNear = 0;
         int skippedFar = 0;
-        int skippedLoaded = 0;
+        int skippedLoadedState = 0;
+        int skippedRenderDistance = 0;
         int skippedReleased = 0;
         int skippedTranslucent = 0;
         int nearestRenderableDistance = Integer.MAX_VALUE;
@@ -158,9 +167,34 @@ public final class ForgeGpuMeshCache {
 
             candidateBuffers++;
             windowChunks.add(chunkKey);
-            if (!renderLoadedChunks && isLoaded(chunkLoadChecker, buffer.chunkX(), buffer.chunkZ())) {
-                skippedLoaded++;
-                skippedLoadedChunks.add(chunkKey);
+            if (ForgeGpuMeshLoadedChunkFilter.isLoaded(chunkLoadChecker, buffer.chunkX(), buffer.chunkZ())) {
+                loadedStateChunks.add(chunkKey);
+            }
+            if (ForgeGpuMeshLoadedChunkFilter.isInsideRenderDistance(buffer.chunkX(), buffer.chunkZ(), centerChunkX, centerChunkZ, clientRenderDistance, 0)) {
+                vanillaRenderDistanceChunks.add(chunkKey);
+            } else {
+                outsideVanillaRenderDistanceChunks.add(chunkKey);
+            }
+
+            ForgeGpuMeshLoadedChunkFilter.SkipReason skipReason = ForgeGpuMeshLoadedChunkFilter.evaluate(
+                    renderLoadedChunks,
+                    loadedChunkSkipMode,
+                    loadedChunkMargin,
+                    buffer.chunkX(),
+                    buffer.chunkZ(),
+                    centerChunkX,
+                    centerChunkZ,
+                    clientRenderDistance,
+                    chunkLoadChecker
+            );
+            if (skipReason == ForgeGpuMeshLoadedChunkFilter.SkipReason.LOADED_STATE) {
+                skippedLoadedState++;
+                skippedLoadedStateChunks.add(chunkKey);
+                continue;
+            }
+            if (skipReason == ForgeGpuMeshLoadedChunkFilter.SkipReason.RENDER_DISTANCE) {
+                skippedRenderDistance++;
+                skippedRenderDistanceChunks.add(chunkKey);
                 continue;
             }
             if (buffer.layer() == ForgeCpuMeshLayer.TRANSLUCENT) {
@@ -183,13 +217,18 @@ public final class ForgeGpuMeshCache {
                 cachedChunks.size(),
                 candidateBuffers,
                 windowChunks.size(),
+                loadedStateChunks.size(),
+                vanillaRenderDistanceChunks.size(),
+                outsideVanillaRenderDistanceChunks.size(),
                 renderableBuffers,
                 renderableChunks.size(),
                 skippedByDimension,
                 skippedNear,
                 skippedFar,
-                skippedLoaded,
-                skippedLoadedChunks.size(),
+                skippedLoadedState,
+                skippedLoadedStateChunks.size(),
+                skippedRenderDistance,
+                skippedRenderDistanceChunks.size(),
                 skippedReleased,
                 skippedTranslucent,
                 nearestRenderableDistance,
@@ -276,24 +315,8 @@ public final class ForgeGpuMeshCache {
         return builder.toString();
     }
 
-    private static boolean isLoaded(ChunkLoadChecker chunkLoadChecker, int chunkX, int chunkZ) {
-        if (chunkLoadChecker == null) {
-            return false;
-        }
-        try {
-            return chunkLoadChecker.isLoaded(chunkX, chunkZ);
-        } catch (RuntimeException e) {
-            return false;
-        }
-    }
-
     private static long chunkKey(int chunkX, int chunkZ) {
         return ((long) chunkX & 0xFFFFFFFFL) | (((long) chunkZ & 0xFFFFFFFFL) << 32);
-    }
-
-    @FunctionalInterface
-    public interface ChunkLoadChecker {
-        boolean isLoaded(int chunkX, int chunkZ);
     }
 
     public record StatusSnapshot(
@@ -321,17 +344,29 @@ public final class ForgeGpuMeshCache {
             int cachedChunks,
             int candidateBuffers,
             int chunksWithinDistanceWindow,
+            int loadedStateChunks,
+            int chunksWithinVanillaRenderDistance,
+            int chunksOutsideVanillaRenderDistance,
             int renderableBuffers,
             int renderableChunks,
             int skippedByDimension,
             int skippedNear,
             int skippedFar,
-            int skippedLoaded,
-            int skippedLoadedChunks,
+            int skippedLoadedState,
+            int skippedLoadedStateChunks,
+            int skippedRenderDistance,
+            int skippedRenderDistanceChunks,
             int skippedReleased,
             int skippedTranslucent,
             int nearestRenderableDistance,
             int farthestRenderableDistance
     ) {
+        public int skippedLoaded() {
+            return this.skippedLoadedState + this.skippedRenderDistance;
+        }
+
+        public int skippedLoadedChunks() {
+            return this.skippedLoadedStateChunks + this.skippedRenderDistanceChunks;
+        }
     }
 }

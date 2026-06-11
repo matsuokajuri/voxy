@@ -2,6 +2,7 @@ package me.cortex.voxy.forge;
 
 import com.mojang.brigadier.CommandDispatcher;
 import me.cortex.voxy.common.world.service.VoxelIngestService;
+import me.cortex.voxy.config.SimpleGpuMeshLoadedChunkSkipMode;
 import net.minecraft.client.Minecraft;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -330,7 +331,7 @@ public final class ForgeVoxyCommands {
         var gpuRenderStats = ForgeVoxyInstance.INSTANCE.getSimpleGpuMeshRenderer().getLastFrameStats();
         var presetStatus = ForgeVoxyRuntimeOverrides.createStatusSnapshot();
         String message = String.format(
-                "Voxy debug pipeline: preset=%s overrides=%s engineConfig=%s engine=%s autoIngest=%s autoBuild=%s render=%s simpleGpu=%s dim=%s playerChunk=%s ingestQueue=%d ingestedRecords=%d avgIngestMs=%.2f buildQueue=%d builtRecords=%d failedRecords=%d avgBuildMs=%.2f lastBuildMs=%.2f cache=%d/%d vertices=%d quads=%d bytes=%d dimensions=%s layers=%s gpuBuffers=%d/%d gpuPending=%d gpuRendered=%d gpuChunks=%d gpuVertices=%d gpuLimited=%d gpuSkippedNear=%d gpuSkippedLoaded=%d gpuSkippedFar=%d gpuAvgRenderMs=%.2f gpuMinDistance=%d gpuMaxDistance=%d gpuRenderLoaded=%s gpuKeepCached=%s maxRendered=%d ignoreDepth=%s alpha=%.2f verticalOffset=%.3f stage=%s %s %s",
+                "Voxy debug pipeline: preset=%s overrides=%s engineConfig=%s engine=%s autoIngest=%s autoBuild=%s render=%s simpleGpu=%s dim=%s playerChunk=%s ingestQueue=%d ingestedRecords=%d avgIngestMs=%.2f buildQueue=%d builtRecords=%d failedRecords=%d avgBuildMs=%.2f lastBuildMs=%.2f cache=%d/%d vertices=%d quads=%d bytes=%d dimensions=%s layers=%s gpuBuffers=%d/%d gpuPending=%d gpuRendered=%d gpuChunks=%d gpuVertices=%d gpuLimited=%d gpuSkippedNear=%d gpuSkippedLoaded=%d gpuSkippedLoadedState=%d gpuSkippedRenderDistance=%d gpuSkippedFar=%d gpuAvgRenderMs=%.2f gpuMinDistance=%d gpuMaxDistance=%d gpuRenderLoaded=%s gpuSkipMode=%s gpuLoadedMargin=%d gpuKeepCached=%s maxRendered=%d ignoreDepth=%s alpha=%.2f verticalOffset=%.3f stage=%s %s %s",
                 presetStatus.presetName(),
                 presetStatus.hasOverrides(),
                 ForgeVoxyRuntimeOverrides.enabledWorldEngineSkeleton(),
@@ -365,11 +366,15 @@ public final class ForgeVoxyCommands {
                 gpuRenderStats.limitedBuffers(),
                 gpuRenderStats.skippedNear(),
                 gpuRenderStats.skippedLoaded(),
+                gpuRenderStats.skippedLoadedState(),
+                gpuRenderStats.skippedRenderDistance(),
                 gpuRenderStats.skippedByDistance(),
                 gpuRenderStats.averageRenderMs(),
                 ForgeSimpleGpuMeshRenderer.getConfiguredMinRenderDistanceChunks(),
                 ForgeGpuMeshUploadManager.getConfiguredRenderDistanceChunks(),
                 ForgeSimpleGpuMeshRenderer.shouldRenderLoadedChunks(),
+                ForgeSimpleGpuMeshRenderer.getConfiguredLoadedChunkSkipMode(),
+                ForgeSimpleGpuMeshRenderer.getConfiguredLoadedChunkMargin(),
                 ForgeGpuMeshUploadManager.keepCachedChunks(),
                 ForgeSimpleGpuMeshRenderer.getConfiguredMaxRenderedBuffers(),
                 ForgeSimpleGpuMeshRenderer.shouldIgnoreDepth(),
@@ -400,7 +405,7 @@ public final class ForgeVoxyCommands {
             playerChunk = minecraft.player.chunkPosition().x + "," + minecraft.player.chunkPosition().z;
         }
         String message = String.format(
-                "Voxy simple GPU mesh: preset=%s overrides=%s enabled=%s engine=%s currentDim=%s playerChunk=%s vanillaRenderDistance=%d minDistance=%d maxDistance=%d renderLoadedChunks=%s keepCached=%s buffers=%d/%d renderableCachedChunks=%d vertices=%d quads=%d bytes=%d dimensions=%s layers=%s pendingUploads=%d uploadBudget=%d uploadedLast=%d failedLast=%d skippedTranslucentUpload=%d cpuCandidates=%d cpuSkippedDistance=%d cpuLimited=%d avgUploadMs=%.2f colorMode=%s ignoreDepth=%s verticalOffset=%.3f render=%s reason=%s noRenderReason=%s renderDim=%s candidateBuffers=%d renderedBuffers=%d renderedChunks=%d renderedVertices=%d skippedNear=%d skippedLoaded=%d skippedFar=%d skippedDimension=%d skippedReleased=%d limitedRender=%d skippedTranslucentRender=%d lastRenderMs=%.2f avgRenderMs=%.2f maxRendered=%d alpha=%.2f stage=%s debugRenderer=%s advice=%s",
+                "Voxy simple GPU mesh: preset=%s overrides=%s enabled=%s engine=%s currentDim=%s playerChunk=%s vanillaRenderDistance=%d minDistance=%d maxDistance=%d renderLoadedChunks=%s skipMode=%s loadedMargin=%d keepCached=%s buffers=%d/%d renderableCachedChunks=%d vertices=%d quads=%d bytes=%d dimensions=%s layers=%s pendingUploads=%d uploadBudget=%d uploadedLast=%d failedLast=%d skippedTranslucentUpload=%d cpuCandidates=%d cpuSkippedDistance=%d cpuLimited=%d avgUploadMs=%.2f colorMode=%s ignoreDepth=%s verticalOffset=%.3f render=%s reason=%s noRenderReason=%s renderDim=%s candidateBuffers=%d renderedBuffers=%d renderedChunks=%d renderedVertices=%d skippedNear=%d skippedLoaded=%d skippedLoadedState=%d skippedRenderDistance=%d skippedFar=%d skippedDimension=%d skippedReleased=%d limitedRender=%d skippedTranslucentRender=%d lastRenderMs=%.2f avgRenderMs=%.2f maxRendered=%d alpha=%.2f stage=%s debugRenderer=%s advice=%s",
                 ForgeVoxyRuntimeOverrides.presetName(),
                 ForgeVoxyRuntimeOverrides.hasOverrides(),
                 ForgeVoxyRuntimeOverrides.enableSimpleGpuMeshRenderer(),
@@ -411,6 +416,8 @@ public final class ForgeVoxyCommands {
                 ForgeSimpleGpuMeshRenderer.getConfiguredMinRenderDistanceChunks(),
                 ForgeGpuMeshUploadManager.getConfiguredRenderDistanceChunks(),
                 ForgeSimpleGpuMeshRenderer.shouldRenderLoadedChunks(),
+                ForgeSimpleGpuMeshRenderer.getConfiguredLoadedChunkSkipMode(),
+                ForgeSimpleGpuMeshRenderer.getConfiguredLoadedChunkMargin(),
                 ForgeGpuMeshUploadManager.keepCachedChunks(),
                 cacheStatus.buffers(),
                 cacheStatus.maxBuffers(),
@@ -442,6 +449,8 @@ public final class ForgeVoxyCommands {
                 renderStats.renderedVertices(),
                 renderStats.skippedNear(),
                 renderStats.skippedLoaded(),
+                renderStats.skippedLoadedState(),
+                renderStats.skippedRenderDistance(),
                 renderStats.skippedByDistance(),
                 renderStats.skippedByDimension(),
                 renderStats.skippedReleased(),
@@ -472,7 +481,7 @@ public final class ForgeVoxyCommands {
         var visibility = context.visibility();
         String advice = formatLodVisibilityAdvice(cacheStatus, renderStats, context);
         String message = String.format(
-                "Voxy LoD visibility: preset=%s overrides=%s dim=%s playerChunk=%d,%d vanillaRenderDistance=%d minDistance=%d maxDistance=%d renderLoadedChunks=%s keepCached=%s gpuBuffers=%d/%d cachedChunks=%d windowChunks=%d renderableChunks=%d candidateBuffers=%d renderableBuffers=%d skippedNear=%d skippedFar=%d skippedLoadedChunks=%d skippedLoadedBuffers=%d skippedDimension=%d skippedReleased=%d skippedTranslucent=%d nearestRenderable=%s farthestRenderable=%s advice=%s",
+                "Voxy LoD visibility: preset=%s overrides=%s dim=%s playerChunk=%d,%d vanillaRenderDistance=%d minDistance=%d maxDistance=%d renderLoadedChunks=%s skipMode=%s loadedMargin=%d keepCached=%s gpuBuffers=%d/%d cachedChunks=%d windowChunks=%d loadedStateChunks=%d chunksInsideVanillaDistance=%d chunksOutsideVanillaDistance=%d renderableChunks=%d candidateBuffers=%d renderableBuffers=%d skippedNear=%d skippedFar=%d skippedLoadedChunks=%d skippedLoadedBuffers=%d skippedLoadedStateChunks=%d skippedLoadedStateBuffers=%d skippedRenderDistanceChunks=%d skippedRenderDistanceBuffers=%d skippedDimension=%d skippedReleased=%d skippedTranslucent=%d nearestRenderable=%s farthestRenderable=%s advice=%s",
                 ForgeVoxyRuntimeOverrides.presetName(),
                 ForgeVoxyRuntimeOverrides.hasOverrides(),
                 context.dimension(),
@@ -482,11 +491,16 @@ public final class ForgeVoxyCommands {
                 context.minDistance(),
                 context.maxDistance(),
                 context.renderLoadedChunks(),
+                context.loadedChunkSkipMode(),
+                context.loadedChunkMargin(),
                 context.keepCachedChunks(),
                 cacheStatus.buffers(),
                 cacheStatus.maxBuffers(),
                 visibility.cachedChunks(),
                 visibility.chunksWithinDistanceWindow(),
+                visibility.loadedStateChunks(),
+                visibility.chunksWithinVanillaRenderDistance(),
+                visibility.chunksOutsideVanillaRenderDistance(),
                 visibility.renderableChunks(),
                 visibility.candidateBuffers(),
                 visibility.renderableBuffers(),
@@ -494,6 +508,10 @@ public final class ForgeVoxyCommands {
                 visibility.skippedFar(),
                 visibility.skippedLoadedChunks(),
                 visibility.skippedLoaded(),
+                visibility.skippedLoadedStateChunks(),
+                visibility.skippedLoadedState(),
+                visibility.skippedRenderDistanceChunks(),
+                visibility.skippedRenderDistance(),
                 visibility.skippedByDimension(),
                 visibility.skippedReleased(),
                 visibility.skippedTranslucent(),
@@ -523,7 +541,7 @@ public final class ForgeVoxyCommands {
         String advice = formatLodVisibilityAdvice(cacheStatus, renderStats, context);
         String noRenderReason = formatGpuNoRenderReason(renderStats, context);
         String message = String.format(
-                "Voxy LoD advice: preset=%s overrides=%s dim=%s playerChunk=%d,%d minecraftRenderDistance=%d lodMin=%d lodMax=%d renderLoadedChunks=%s cachedChunks=%d gpuBuffers=%d/%d renderableChunks=%d renderedBuffers=%d candidateBuffers=%d skippedLoadedChunks=%d skippedLoadedBuffers=%d skippedNear=%d skippedFar=%d noRenderReason=%s recommendation=%s",
+                "Voxy LoD advice: preset=%s overrides=%s dim=%s playerChunk=%d,%d minecraftRenderDistance=%d lodMin=%d lodMax=%d renderLoadedChunks=%s skipMode=%s loadedMargin=%d cachedChunks=%d windowChunks=%d loadedStateChunks=%d chunksInsideVanillaDistance=%d chunksOutsideVanillaDistance=%d gpuBuffers=%d/%d renderableChunks=%d renderedBuffers=%d candidateBuffers=%d skippedLoadedChunks=%d skippedLoadedBuffers=%d skippedLoadedStateChunks=%d skippedLoadedStateBuffers=%d skippedRenderDistanceChunks=%d skippedRenderDistanceBuffers=%d skippedNear=%d skippedFar=%d noRenderReason=%s recommendation=%s",
                 ForgeVoxyRuntimeOverrides.presetName(),
                 ForgeVoxyRuntimeOverrides.hasOverrides(),
                 context.dimension(),
@@ -533,7 +551,13 @@ public final class ForgeVoxyCommands {
                 context.minDistance(),
                 context.maxDistance(),
                 context.renderLoadedChunks(),
+                context.loadedChunkSkipMode(),
+                context.loadedChunkMargin(),
                 visibility.cachedChunks(),
+                visibility.chunksWithinDistanceWindow(),
+                visibility.loadedStateChunks(),
+                visibility.chunksWithinVanillaRenderDistance(),
+                visibility.chunksOutsideVanillaRenderDistance(),
                 cacheStatus.buffers(),
                 cacheStatus.maxBuffers(),
                 visibility.renderableChunks(),
@@ -541,6 +565,10 @@ public final class ForgeVoxyCommands {
                 renderStats.candidateBuffers(),
                 visibility.skippedLoadedChunks(),
                 visibility.skippedLoaded(),
+                visibility.skippedLoadedStateChunks(),
+                visibility.skippedLoadedState(),
+                visibility.skippedRenderDistanceChunks(),
+                visibility.skippedRenderDistance(),
                 visibility.skippedNear(),
                 visibility.skippedFar(),
                 noRenderReason,
@@ -562,7 +590,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyRuntimeOverrides.applyOverlayPreset();
         boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
         String message = "Voxy preset overlay: runtime-only overlay debug applied, not written to toml. "
-                + "Effective values: engine=true autoIngest=true autoCpuMesh=true simpleGpu=true debugRenderer=false minDistance=0 maxDistance=64 renderLoadedChunks=true keepCached=true colors=layer-debug ignoreDepth=true verticalOffset=0.05. "
+                + "Effective values: engine=true autoIngest=true autoCpuMesh=true simpleGpu=true debugRenderer=false minDistance=0 maxDistance=64 renderLoadedChunks=true skipMode=DISABLED loadedMargin=0 keepCached=true colors=layer-debug ignoreDepth=true verticalOffset=0.05. "
                 + (engineReady ? "WorldEngine is active." : "No active client world was found; enter or re-enter a world to create the WorldEngine.");
         source.sendSuccess(() -> Component.literal(message), false);
         return 1;
@@ -572,7 +600,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyRuntimeOverrides.applyLodPreset();
         boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
         String message = "Voxy preset lod: runtime-only cached LoD mode applied, not written to toml. "
-                + "Effective values: engine=true autoIngest=true autoCpuMesh=true simpleGpu=true debugRenderer=false minDistance=5 maxDistance=64 renderLoadedChunks=false keepCached=true colors=original ignoreDepth=false verticalOffset=0.0. "
+                + "Effective values: engine=true autoIngest=true autoCpuMesh=true simpleGpu=true debugRenderer=false minDistance=5 maxDistance=64 renderLoadedChunks=false skipMode=BY_RENDER_DISTANCE loadedMargin=0 keepCached=true colors=original ignoreDepth=false verticalOffset=0.0. "
                 + (engineReady ? "WorldEngine is active." : "No active client world was found; enter or re-enter a world to create the WorldEngine.");
         source.sendSuccess(() -> Component.literal(message), false);
         return 1;
@@ -591,7 +619,7 @@ public final class ForgeVoxyCommands {
     private static int presetStatus(CommandSourceStack source) {
         var status = ForgeVoxyRuntimeOverrides.createStatusSnapshot();
         String message = String.format(
-                "Voxy preset status: active=%s overrides=%s engine=%s(%s) autoIngest=%s(%s) autoCpuMesh=%s(%s) simpleGpu=%s(%s) debugRenderer=%s(%s) minDistance=%d(%s) maxDistance=%d(%s) renderLoadedChunks=%s(%s) keepCached=%s(%s) colors=%s(%s) simpleIgnoreDepth=%s(%s) simpleVerticalOffset=%.3f(%s) simpleAlpha=%.2f(%s) debugAlpha=%.2f(%s)",
+                "Voxy preset status: active=%s overrides=%s engine=%s(%s) autoIngest=%s(%s) autoCpuMesh=%s(%s) simpleGpu=%s(%s) debugRenderer=%s(%s) minDistance=%d(%s) maxDistance=%d(%s) renderLoadedChunks=%s(%s) skipMode=%s(%s) loadedMargin=%d(%s) keepCached=%s(%s) colors=%s(%s) simpleIgnoreDepth=%s(%s) simpleVerticalOffset=%.3f(%s) simpleAlpha=%.2f(%s) debugAlpha=%.2f(%s)",
                 status.presetName(),
                 status.hasOverrides(),
                 status.enableWorldEngineSkeleton(),
@@ -610,6 +638,10 @@ public final class ForgeVoxyCommands {
                 status.simpleGpuMeshRenderDistanceChunksSource(),
                 status.simpleGpuMeshRenderLoadedChunks(),
                 status.simpleGpuMeshRenderLoadedChunksSource(),
+                status.simpleGpuMeshLoadedChunkSkipMode(),
+                status.simpleGpuMeshLoadedChunkSkipModeSource(),
+                status.simpleGpuMeshLoadedChunkMargin(),
+                status.simpleGpuMeshLoadedChunkMarginSource(),
                 status.simpleGpuMeshKeepCachedChunks(),
                 status.simpleGpuMeshKeepCachedChunksSource(),
                 status.simpleGpuMeshUseOriginalColors() ? "original" : "layer-debug",
@@ -660,6 +692,9 @@ public final class ForgeVoxyCommands {
         int maxDistance = ForgeGpuMeshUploadManager.getConfiguredRenderDistanceChunks();
         int minDistance = Math.min(ForgeSimpleGpuMeshRenderer.getConfiguredMinRenderDistanceChunks(), maxDistance);
         boolean renderLoadedChunks = ForgeSimpleGpuMeshRenderer.shouldRenderLoadedChunks();
+        SimpleGpuMeshLoadedChunkSkipMode loadedChunkSkipMode = ForgeSimpleGpuMeshRenderer.getConfiguredLoadedChunkSkipMode();
+        int loadedChunkMargin = ForgeSimpleGpuMeshRenderer.getConfiguredLoadedChunkMargin();
+        int clientRenderDistance = getClientRenderDistanceChunks(minecraft);
         boolean keepCachedChunks = ForgeGpuMeshUploadManager.keepCachedChunks();
         ForgeGpuMeshCache.VisibilitySnapshot visibility = ForgeVoxyInstance.INSTANCE.getGpuMeshCache().createVisibilitySnapshot(
                 dimension,
@@ -668,16 +703,21 @@ public final class ForgeVoxyCommands {
                 minDistance,
                 maxDistance,
                 renderLoadedChunks,
+                loadedChunkSkipMode,
+                loadedChunkMargin,
+                clientRenderDistance,
                 minecraft.level::hasChunk
         );
         return new LodVisibilityContext(
                 dimension,
                 playerChunkX,
                 playerChunkZ,
-                getClientRenderDistanceChunks(minecraft),
+                clientRenderDistance,
                 minDistance,
                 maxDistance,
                 renderLoadedChunks,
+                loadedChunkSkipMode,
+                loadedChunkMargin,
                 keepCachedChunks,
                 visibility
         );
@@ -709,8 +749,11 @@ public final class ForgeVoxyCommands {
             return "no GPU buffers yet; fly to let chunks cache, or run ingest/build commands, and check auto ingest/build are enabled";
         }
         if (context.visibility().renderableChunks() == 0) {
-            if (context.visibility().skippedLoadedChunks() > 0 && !context.renderLoadedChunks()) {
-                return "cached chunks are still vanilla-loaded; lower Minecraft render distance to 4-6 or set simpleGpuMeshRenderLoadedChunks=true for overlay debugging";
+            if (context.visibility().skippedRenderDistanceChunks() > 0 && !context.renderLoadedChunks()) {
+                return "cached chunks are still inside the Minecraft render-distance neighborhood; lower Minecraft render distance to 4-6, fly farther, or use /voxy preset overlay for overlay debugging";
+            }
+            if (context.visibility().skippedLoadedStateChunks() > 0 && !context.renderLoadedChunks()) {
+                return "cached chunks are still reported loaded by ClientLevel.hasChunk; use BY_RENDER_DISTANCE or DISABLED skip mode for LoD visibility testing";
             }
             if (context.visibility().skippedFar() > 0 && context.visibility().candidateBuffers() == 0) {
                 return "cached chunks are beyond simpleGpuMeshRenderDistanceChunks; raise it, for example to 64";
@@ -749,8 +792,12 @@ public final class ForgeVoxyCommands {
             return "no candidate cached mesh in the current LoD distance window";
         }
         if (!context.renderLoadedChunks()
-                && (renderStats.skippedLoaded() > 0 || context.visibility().skippedLoaded() > 0)) {
-            return "loaded chunk filter: cached mesh is still inside vanilla-loaded chunks";
+                && (renderStats.skippedRenderDistance() > 0 || context.visibility().skippedRenderDistance() > 0)) {
+            return "render-distance loaded filter: cached mesh is still inside Minecraft render distance plus margin";
+        }
+        if (!context.renderLoadedChunks()
+                && (renderStats.skippedLoadedState() > 0 || context.visibility().skippedLoadedState() > 0)) {
+            return "loaded-state filter: ClientLevel.hasChunk still reports cached mesh chunks as loaded";
         }
         if (renderStats.skippedNear() > 0 || context.visibility().skippedNear() > 0) {
             return "near filter: lower simpleGpuMeshMinRenderDistanceChunks for overlay debug";
@@ -801,6 +848,8 @@ public final class ForgeVoxyCommands {
             int minDistance,
             int maxDistance,
             boolean renderLoadedChunks,
+            SimpleGpuMeshLoadedChunkSkipMode loadedChunkSkipMode,
+            int loadedChunkMargin,
             boolean keepCachedChunks,
             ForgeGpuMeshCache.VisibilitySnapshot visibility
     ) {

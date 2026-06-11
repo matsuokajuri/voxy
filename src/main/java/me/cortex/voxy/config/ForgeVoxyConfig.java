@@ -31,6 +31,8 @@ public final class ForgeVoxyConfig {
     public static final ForgeConfigSpec.DoubleValue SIMPLE_GPU_MESH_ALPHA;
     public static final ForgeConfigSpec.BooleanValue SIMPLE_GPU_MESH_USE_ORIGINAL_COLORS;
     public static final ForgeConfigSpec.BooleanValue SIMPLE_GPU_MESH_RENDER_LOADED_CHUNKS;
+    public static final ForgeConfigSpec.EnumValue<SimpleGpuMeshLoadedChunkSkipMode> SIMPLE_GPU_MESH_LOADED_CHUNK_SKIP_MODE;
+    public static final ForgeConfigSpec.IntValue SIMPLE_GPU_MESH_LOADED_CHUNK_MARGIN;
     public static final ForgeConfigSpec.BooleanValue SIMPLE_GPU_MESH_KEEP_CACHED_CHUNKS;
 
     static {
@@ -117,6 +119,12 @@ public final class ForgeVoxyConfig {
         SIMPLE_GPU_MESH_RENDER_LOADED_CHUNKS = builder
                 .comment("Allows the simple GPU renderer to draw chunks that are still loaded by the vanilla client. Disable to avoid overlaying nearby vanilla terrain.")
                 .define("simpleGpuMeshRenderLoadedChunks", false);
+        SIMPLE_GPU_MESH_LOADED_CHUNK_SKIP_MODE = builder
+                .comment("Controls how the simple GPU renderer avoids drawing over vanilla terrain when simpleGpuMeshRenderLoadedChunks is false. BY_RENDER_DISTANCE skips only the Minecraft render-distance neighborhood, BY_LOADED_STATE uses ClientLevel.hasChunk, and DISABLED skips none.")
+                .defineEnum("simpleGpuMeshLoadedChunkSkipMode", SimpleGpuMeshLoadedChunkSkipMode.BY_RENDER_DISTANCE);
+        SIMPLE_GPU_MESH_LOADED_CHUNK_MARGIN = builder
+                .comment("Extra chunk margin added to the Minecraft render distance when simpleGpuMeshLoadedChunkSkipMode is BY_RENDER_DISTANCE.")
+                .defineInRange("simpleGpuMeshLoadedChunkMargin", 0, 0, 8);
         SIMPLE_GPU_MESH_KEEP_CACHED_CHUNKS = builder
                 .comment("Keeps uploaded GPU mesh entries after the player leaves their upload window, until CPU/GPU cache limits or world lifecycle clear them.")
                 .define("simpleGpuMeshKeepCachedChunks", true);

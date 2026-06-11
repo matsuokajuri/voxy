@@ -3,6 +3,7 @@ package me.cortex.voxy.forge;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexBuffer;
+import me.cortex.voxy.config.SimpleGpuMeshLoadedChunkSkipMode;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.GameRenderer;
@@ -102,6 +103,9 @@ public final class ForgeSimpleGpuMeshRenderer {
         int maxDistance = ForgeGpuMeshUploadManager.getConfiguredRenderDistanceChunks();
         minDistance = Math.min(minDistance, maxDistance);
         boolean renderLoadedChunks = shouldRenderLoadedChunks();
+        SimpleGpuMeshLoadedChunkSkipMode loadedChunkSkipMode = getConfiguredLoadedChunkSkipMode();
+        int loadedChunkMargin = getConfiguredLoadedChunkMargin();
+        int clientRenderDistance = getClientRenderDistanceChunks();
         long start = System.nanoTime();
 
         RenderSystem.setShader(GameRenderer::getPositionColorShader);
@@ -128,7 +132,21 @@ public final class ForgeSimpleGpuMeshRenderer {
             Matrix4f modelView = poseStack.last().pose();
             Matrix4f projection = event.getProjectionMatrix();
             for (ForgeGpuMeshBuffer buffer : buffers) {
-                this.drawBuffer(modelView, projection, shader, buffer, level, centerChunkX, centerChunkZ, minDistance, renderLoadedChunks, counters);
+                this.drawBuffer(
+                        modelView,
+                        projection,
+                        shader,
+                        buffer,
+                        level,
+                        centerChunkX,
+                        centerChunkZ,
+                        minDistance,
+                        renderLoadedChunks,
+                        loadedChunkSkipMode,
+                        loadedChunkMargin,
+                        clientRenderDistance,
+                        counters
+                );
             }
         } finally {
             poseStack.popPose();
@@ -162,6 +180,9 @@ public final class ForgeSimpleGpuMeshRenderer {
             int centerChunkZ,
             int minDistance,
             boolean renderLoadedChunks,
+            SimpleGpuMeshLoadedChunkSkipMode loadedChunkSkipMode,
+            int loadedChunkMargin,
+            int clientRenderDistance,
             RenderCounters counters
     ) {
         if (buffer.isClosed() || buffer.vertexBuffer() == null) {
@@ -177,8 +198,23 @@ public final class ForgeSimpleGpuMeshRenderer {
             counters.skippedNearBuffers++;
             return;
         }
-        if (!renderLoadedChunks && isChunkLoaded(level, buffer.chunkX(), buffer.chunkZ())) {
-            counters.skippedLoadedBuffers++;
+        ForgeGpuMeshLoadedChunkFilter.SkipReason loadedSkipReason = ForgeGpuMeshLoadedChunkFilter.evaluate(
+                renderLoadedChunks,
+                loadedChunkSkipMode,
+                loadedChunkMargin,
+                buffer.chunkX(),
+                buffer.chunkZ(),
+                centerChunkX,
+                centerChunkZ,
+                clientRenderDistance,
+                level::hasChunk
+        );
+        if (loadedSkipReason == ForgeGpuMeshLoadedChunkFilter.SkipReason.LOADED_STATE) {
+            counters.skippedLoadedStateBuffers++;
+            return;
+        }
+        if (loadedSkipReason == ForgeGpuMeshLoadedChunkFilter.SkipReason.RENDER_DISTANCE) {
+            counters.skippedRenderDistanceBuffers++;
             return;
         }
 
@@ -205,6 +241,14 @@ public final class ForgeSimpleGpuMeshRenderer {
         return ForgeVoxyRuntimeOverrides.simpleGpuMeshRenderLoadedChunks();
     }
 
+    public static SimpleGpuMeshLoadedChunkSkipMode getConfiguredLoadedChunkSkipMode() {
+        return ForgeVoxyRuntimeOverrides.simpleGpuMeshLoadedChunkSkipMode();
+    }
+
+    public static int getConfiguredLoadedChunkMargin() {
+        return ForgeVoxyRuntimeOverrides.simpleGpuMeshLoadedChunkMargin();
+    }
+
     public static boolean shouldIgnoreDepth() {
         return ForgeVoxyRuntimeOverrides.simpleGpuMeshIgnoreDepth();
     }
@@ -217,14 +261,11 @@ public final class ForgeSimpleGpuMeshRenderer {
         return RENDER_STAGE;
     }
 
-    private static boolean isChunkLoaded(ClientLevel level, int chunkX, int chunkZ) {
-        if (level == null) {
-            return false;
-        }
+    private static int getClientRenderDistanceChunks() {
         try {
-            return level.hasChunk(chunkX, chunkZ);
+            return Minecraft.getInstance().options.renderDistance().get();
         } catch (RuntimeException e) {
-            return false;
+            return -1;
         }
     }
 
@@ -239,14 +280,15 @@ public final class ForgeSimpleGpuMeshRenderer {
         }
         this.nextSummaryLogMillis = now + 5_000L;
         VoxyForge.LOGGER.info(
-                "Voxy simple GPU mesh render: dimension={} buffers={}/{} chunks={} vertices={} skippedNear={} skippedLoaded={} alpha={} stage={}",
+                "Voxy simple GPU mesh render: dimension={} buffers={}/{} chunks={} vertices={} skippedNear={} skippedLoadedState={} skippedRenderDistance={} alpha={} stage={}",
                 stats.dimension(),
                 stats.renderedBuffers(),
                 stats.candidateBuffers(),
                 stats.renderedChunks(),
                 stats.renderedVertices(),
                 stats.skippedNear(),
-                stats.skippedLoaded(),
+                stats.skippedLoadedState(),
+                stats.skippedRenderDistance(),
                 stats.alpha(),
                 stats.stage()
         );
@@ -267,6 +309,8 @@ public final class ForgeSimpleGpuMeshRenderer {
             int limitedBuffers,
             int skippedNear,
             int skippedLoaded,
+            int skippedLoadedState,
+            int skippedRenderDistance,
             int skippedTranslucent,
             double alpha,
             double lastRenderMs,
@@ -277,7 +321,7 @@ public final class ForgeSimpleGpuMeshRenderer {
         }
 
         private static FrameStats skipped(String reason, String dimension) {
-            return new FrameStats(false, reason, RENDER_STAGE, dimension, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.0D, 0.0D, 0.0D);
+            return new FrameStats(false, reason, RENDER_STAGE, dimension, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.0D, 0.0D, 0.0D);
         }
 
         private static FrameStats skipped(String reason, String dimension, ForgeGpuMeshCache.RenderSnapshot snapshot) {
@@ -294,6 +338,8 @@ public final class ForgeSimpleGpuMeshRenderer {
                     snapshot.skippedByDistance(),
                     snapshot.skippedReleased(),
                     snapshot.limitedBuffers(),
+                    0,
+                    0,
                     0,
                     0,
                     0,
@@ -315,7 +361,8 @@ public final class ForgeSimpleGpuMeshRenderer {
         private long renderedVertices;
         private int skippedReleasedBuffers;
         private int skippedNearBuffers;
-        private int skippedLoadedBuffers;
+        private int skippedLoadedStateBuffers;
+        private int skippedRenderDistanceBuffers;
         private int skippedTranslucentBuffers;
 
         private RenderCounters(ForgeGpuMeshCache.RenderSnapshot snapshot) {
@@ -341,7 +388,9 @@ public final class ForgeSimpleGpuMeshRenderer {
                     this.skippedReleasedFromSnapshot + this.skippedReleasedBuffers,
                     this.limitedBuffers,
                     this.skippedNearBuffers,
-                    this.skippedLoadedBuffers,
+                    this.skippedLoadedStateBuffers + this.skippedRenderDistanceBuffers,
+                    this.skippedLoadedStateBuffers,
+                    this.skippedRenderDistanceBuffers,
                     this.skippedTranslucentBuffers,
                     alpha,
                     lastRenderMs,
