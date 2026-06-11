@@ -16,6 +16,7 @@ public final class ForgeVoxyInstance {
 
     private WorldEngine activeWorld;
     private final ForgeChunkIngestManager chunkIngestManager = new ForgeChunkIngestManager(this);
+    private final ForgeCpuMeshCache cpuMeshCache = new ForgeCpuMeshCache();
     private final AtomicInteger storageWriteCount = new AtomicInteger();
 
     private ForgeVoxyInstance() {
@@ -44,6 +45,10 @@ public final class ForgeVoxyInstance {
 
     public ForgeChunkIngestManager getChunkIngestManager() {
         return this.chunkIngestManager;
+    }
+
+    public ForgeCpuMeshCache getCpuMeshCache() {
+        return this.cpuMeshCache;
     }
 
     private void onRegisterClientCommands(RegisterClientCommandsEvent event) {
@@ -76,6 +81,7 @@ public final class ForgeVoxyInstance {
 
     private void onClientLogout(ClientPlayerNetworkEvent.LoggingOut event) {
         this.chunkIngestManager.clear();
+        this.cpuMeshCache.clear();
         this.closeActiveWorld();
     }
 
