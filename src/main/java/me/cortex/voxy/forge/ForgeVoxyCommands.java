@@ -12,6 +12,11 @@ import net.minecraft.world.level.chunk.ChunkStatus;
 import net.minecraft.world.level.chunk.LevelChunk;
 
 public final class ForgeVoxyCommands {
+    private static final SimpleGpuMeshSource RECOMMENDED_MESH_SOURCE = SimpleGpuMeshSource.BUILT_SECTION;
+    private static final SimpleGpuMeshSource FALLBACK_MESH_SOURCE = SimpleGpuMeshSource.CPU_MESH;
+    private static final String CPU_MESH_SOURCE_DESCRIPTION = "legacy PoC source / fallback";
+    private static final String BUILT_SECTION_SOURCE_DESCRIPTION = "recommended renderer migration source";
+
     private ForgeVoxyCommands() {
     }
 
@@ -444,7 +449,12 @@ public final class ForgeVoxyCommands {
         boolean gpuUsesBuiltSectionCache = ForgeGpuMeshUploadManager.getConfiguredSource() == SimpleGpuMeshSource.BUILT_SECTION;
         String buildDimension = buildStatus.dimension() == null ? "none" : buildStatus.dimension();
         String message = String.format(
-                "Voxy BuiltSection cache: auto=%s engine=%s buildDim=%s queue=%d builtRecords=%d failedRecords=%d radius=%d maxPerTick=%d cooldown=%d lastBuildMs=%.2f avgBuildMs=%.2f gpuUsesThisCache=%s estimatedGpuUploadedFromBuiltSections=%d lastConsumerSource=%s lastConsumerPending=%d lastConsumerUploaded=%d lastConsumerFailed=%d lastDecodeMs=%.2f avgDecodeMs=%.2f entries=%d/%d totalSections=%d totalNaiveQuads=%d totalMergedQuads=%d totalAverageQuadArea=%.2f totalSkippedTranslucent=%d totalSkippedNonMergeable=%d totalQuads=%d totalGeometryBytes=%d totalOccupancyBytes=%d finalFormatCount=%d partialFormatCount=%d partialOriginalBitLayoutCount=%d uniqueModelIds=%d missingModelRecords=%d runtimeModelMapperSize=%d uniqueBiomeIds=%d missingBiomeRecords=%d geometryFormat=%s closed=%d evicted=%d replaced=%d firstPosition=%s firstAabb=%s firstOffsets=%s firstNamedOffsets=%s offsetsSemantic=%s sampleRecord=%s decoded=\"%s\"",
+                "Voxy BuiltSection cache: recommendedSource=%s fallbackSource=%s gpuUsesThisCache=%s currentSource=%s currentSourceRole=%s auto=%s engine=%s buildDim=%s queue=%d builtRecords=%d failedRecords=%d radius=%d maxPerTick=%d cooldown=%d lastBuildMs=%.2f avgBuildMs=%.2f estimatedGpuUploadedFromBuiltSections=%d lastConsumerSource=%s lastConsumerPending=%d lastConsumerUploaded=%d lastConsumerFailed=%d lastDecodeMs=%.2f avgDecodeMs=%.2f entries=%d/%d totalSections=%d totalNaiveQuads=%d totalMergedQuads=%d totalAverageQuadArea=%.2f totalSkippedTranslucent=%d totalSkippedNonMergeable=%d totalQuads=%d totalGeometryBytes=%d totalOccupancyBytes=%d finalFormatCount=%d partialFormatCount=%d partialOriginalBitLayoutCount=%d uniqueModelIds=%d missingModelRecords=%d runtimeModelMapperSize=%d uniqueBiomeIds=%d missingBiomeRecords=%d geometryFormat=%s closed=%d evicted=%d replaced=%d firstPosition=%s firstAabb=%s firstOffsets=%s firstNamedOffsets=%s offsetsSemantic=%s sampleRecord=%s decoded=\"%s\"",
+                RECOMMENDED_MESH_SOURCE,
+                FALLBACK_MESH_SOURCE,
+                gpuUsesBuiltSectionCache,
+                ForgeGpuMeshUploadManager.getConfiguredSource(),
+                describeMeshSource(ForgeGpuMeshUploadManager.getConfiguredSource()),
                 buildStatus.autoEnabled(),
                 buildStatus.enginePresent(),
                 buildDimension,
@@ -542,7 +552,7 @@ public final class ForgeVoxyCommands {
         var gpuRenderStats = ForgeVoxyInstance.INSTANCE.getSimpleGpuMeshRenderer().getLastFrameStats();
         var presetStatus = ForgeVoxyRuntimeOverrides.createStatusSnapshot();
         String message = String.format(
-                "Voxy debug pipeline: preset=%s overrides=%s engineConfig=%s engine=%s autoIngest=%s autoBuild=%s render=%s simpleGpu=%s gpuSource=%s dim=%s playerChunk=%s ingestQueue=%d ingestedRecords=%d avgIngestMs=%.2f buildQueue=%d builtRecords=%d failedRecords=%d avgBuildMs=%.2f lastBuildMs=%.2f cache=%d/%d vertices=%d quads=%d bytes=%d dimensions=%s layers=%s gpuBuffers=%d/%d gpuPending=%d gpuRendered=%d gpuChunks=%d gpuVertices=%d gpuLimited=%d gpuSkippedNear=%d gpuSkippedLoaded=%d gpuSkippedLoadedState=%d gpuSkippedRenderDistance=%d gpuSkippedFar=%d gpuAvgRenderMs=%.2f gpuMinDistance=%d gpuMaxDistance=%d gpuRenderLoaded=%s gpuSkipMode=%s gpuLoadedMargin=%d gpuKeepCached=%s maxRendered=%d ignoreDepth=%s alpha=%.2f verticalOffset=%.3f stage=%s %s %s",
+                "Voxy debug pipeline: preset=%s overrides=%s engineConfig=%s engine=%s autoIngest=%s autoBuild=%s render=%s simpleGpu=%s gpuSource=%s sourceRole=%s recommendedSource=%s fallbackSource=%s dim=%s playerChunk=%s ingestQueue=%d ingestedRecords=%d avgIngestMs=%.2f buildQueue=%d builtRecords=%d failedRecords=%d avgBuildMs=%.2f lastBuildMs=%.2f cache=%d/%d vertices=%d quads=%d bytes=%d dimensions=%s layers=%s gpuBuffers=%d/%d gpuPending=%d gpuRendered=%d gpuChunks=%d gpuVertices=%d gpuLimited=%d gpuSkippedNear=%d gpuSkippedLoaded=%d gpuSkippedLoadedState=%d gpuSkippedRenderDistance=%d gpuSkippedFar=%d gpuAvgRenderMs=%.2f gpuMinDistance=%d gpuMaxDistance=%d gpuRenderLoaded=%s gpuSkipMode=%s gpuLoadedMargin=%d gpuKeepCached=%s maxRendered=%d ignoreDepth=%s alpha=%.2f verticalOffset=%.3f stage=%s %s %s",
                 presetStatus.presetName(),
                 presetStatus.hasOverrides(),
                 ForgeVoxyRuntimeOverrides.enabledWorldEngineSkeleton(),
@@ -552,6 +562,9 @@ public final class ForgeVoxyCommands {
                 ForgeVoxyRuntimeOverrides.enableDebugMeshRenderer(),
                 ForgeVoxyRuntimeOverrides.enableSimpleGpuMeshRenderer(),
                 ForgeGpuMeshUploadManager.getConfiguredSource(),
+                describeMeshSource(ForgeGpuMeshUploadManager.getConfiguredSource()),
+                RECOMMENDED_MESH_SOURCE,
+                FALLBACK_MESH_SOURCE,
                 currentDimension,
                 playerChunk,
                 ingestStatus.queuedChunks(),
@@ -619,12 +632,15 @@ public final class ForgeVoxyCommands {
             playerChunk = minecraft.player.chunkPosition().x + "," + minecraft.player.chunkPosition().z;
         }
         String message = String.format(
-                "Voxy simple GPU mesh: preset=%s overrides=%s enabled=%s source=%s uploadSource=%s engine=%s currentDim=%s playerChunk=%s vanillaRenderDistance=%d minDistance=%d maxDistance=%d renderLoadedChunks=%s skipMode=%s loadedMargin=%d keepCached=%s buffers=%d/%d renderableCachedChunks=%d vertices=%d quads=%d bytes=%d dimensions=%s layers=%s builtSectionCache=%d/%d builtSectionAuto=%s builtSectionBuiltRecords=%d builtSectionFailedRecords=%d builtSectionCandidates=%d pendingUploads=%d uploadBudget=%d uploadedLast=%d failedLast=%d skippedTranslucentUpload=%d builtDoubleSidedAsSingle=%d skippedBuiltInvalid=%d cpuCandidates=%d cpuSkippedDistance=%d cpuLimited=%d sourceSwitchCount=%d orphanReconciled=%d orphanReconciledTotal=%d lastBuiltSectionDecodeMs=%.2f avgBuiltSectionDecodeMs=%.2f avgUploadMs=%.2f colorMode=%s ignoreDepth=%s verticalOffset=%.3f render=%s reason=%s noRenderReason=%s renderDim=%s candidateBuffers=%d renderedBuffers=%d renderedChunks=%d renderedVertices=%d skippedNear=%d skippedLoaded=%d skippedLoadedState=%d skippedRenderDistance=%d skippedFar=%d skippedDimension=%d skippedReleased=%d limitedRender=%d skippedTranslucentRender=%d lastRenderMs=%.2f avgRenderMs=%.2f maxRendered=%d alpha=%.2f stage=%s debugRenderer=%s advice=%s",
+                "Voxy simple GPU mesh: preset=%s overrides=%s enabled=%s source=%s sourceRole=%s uploadSource=%s recommendedSource=%s fallbackSource=%s engine=%s currentDim=%s playerChunk=%s vanillaRenderDistance=%d minDistance=%d maxDistance=%d renderLoadedChunks=%s skipMode=%s loadedMargin=%d keepCached=%s buffers=%d/%d renderableCachedChunks=%d vertices=%d quads=%d bytes=%d dimensions=%s layers=%s builtSectionCache=%d/%d builtSectionAuto=%s builtSectionBuiltRecords=%d builtSectionFailedRecords=%d builtSectionCandidates=%d pendingUploads=%d uploadBudget=%d uploadedLast=%d failedLast=%d skippedTranslucentUpload=%d builtDoubleSidedAsSingle=%d skippedBuiltInvalid=%d cpuCandidates=%d cpuSkippedDistance=%d cpuLimited=%d sourceSwitchCount=%d orphanReconciled=%d orphanReconciledTotal=%d lastBuiltSectionDecodeMs=%.2f avgBuiltSectionDecodeMs=%.2f avgUploadMs=%.2f colorMode=%s ignoreDepth=%s verticalOffset=%.3f render=%s reason=%s noRenderReason=%s renderDim=%s candidateBuffers=%d renderedBuffers=%d renderedChunks=%d renderedVertices=%d skippedNear=%d skippedLoaded=%d skippedLoadedState=%d skippedRenderDistance=%d skippedFar=%d skippedDimension=%d skippedReleased=%d limitedRender=%d skippedTranslucentRender=%d lastRenderMs=%.2f avgRenderMs=%.2f maxRendered=%d alpha=%.2f stage=%s debugRenderer=%s advice=%s",
                 ForgeVoxyRuntimeOverrides.presetName(),
                 ForgeVoxyRuntimeOverrides.hasOverrides(),
                 ForgeVoxyRuntimeOverrides.enableSimpleGpuMeshRenderer(),
                 ForgeGpuMeshUploadManager.getConfiguredSource(),
+                describeMeshSource(ForgeGpuMeshUploadManager.getConfiguredSource()),
                 uploadStatus.source(),
+                RECOMMENDED_MESH_SOURCE,
+                FALLBACK_MESH_SOURCE,
                 ForgeVoxyInstance.INSTANCE.getCurrentEngineOptional().isPresent(),
                 currentDimension,
                 playerChunk,
@@ -701,6 +717,8 @@ public final class ForgeVoxyCommands {
         ForgeVoxyRuntimeOverrides.setSimpleGpuMeshSource(meshSource);
         ForgeVoxyInstance.INSTANCE.getGpuMeshUploadManager().clear();
         String message = "Voxy simple GPU mesh source: runtime-only source set to " + meshSource
+                + " (" + describeMeshSource(meshSource) + "). Recommended source for renderer migration is "
+                + RECOMMENDED_MESH_SOURCE + "; fallback source is " + FALLBACK_MESH_SOURCE
                 + ". GPU buffers were cleared and will be rebuilt from the selected source. This was not written to toml.";
         source.sendSuccess(() -> Component.literal(message), false);
         return 1;
@@ -842,7 +860,8 @@ public final class ForgeVoxyCommands {
         String message = "Voxy preset lod: runtime-only cached LoD mode applied, not written to toml. "
                 + "Effective values: engine=true autoIngest=true autoCpuMesh=true simpleGpu=true source="
                 + ForgeGpuMeshUploadManager.getConfiguredSource()
-                + " debugRenderer=false minDistance=5 maxDistance=64 renderLoadedChunks=false skipMode=BY_RENDER_DISTANCE loadedMargin=0 keepCached=true colors=original ignoreDepth=false verticalOffset=0.0. "
+                + " (" + CPU_MESH_SOURCE_DESCRIPTION + ") debugRenderer=false minDistance=5 maxDistance=64 renderLoadedChunks=false skipMode=BY_RENDER_DISTANCE loadedMargin=0 keepCached=true colors=original ignoreDepth=false verticalOffset=0.0. "
+                + "Use /voxy preset lod_built_section for the recommended BuiltSection migration source. "
                 + (engineReady ? "WorldEngine is active." : "No active client world was found; enter or re-enter a world to create the WorldEngine.");
         source.sendSuccess(() -> Component.literal(message), false);
         return 1;
@@ -854,7 +873,8 @@ public final class ForgeVoxyCommands {
         boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
         String message = "Voxy preset lod_built_section: runtime-only BuiltSection cached LoD mode applied, not written to toml. "
                 + "Effective values: engine=true autoIngest=true autoCpuMesh=false autoBuiltSection=true simpleGpu=true source=BUILT_SECTION "
-                + "debugRenderer=false minDistance=5 maxDistance=64 renderLoadedChunks=false skipMode=BY_RENDER_DISTANCE loadedMargin=0 keepCached=true colors=original ignoreDepth=false verticalOffset=0.0. "
+                + "(" + BUILT_SECTION_SOURCE_DESCRIPTION + ") debugRenderer=false minDistance=5 maxDistance=64 renderLoadedChunks=false skipMode=BY_RENDER_DISTANCE loadedMargin=0 keepCached=true colors=original ignoreDepth=false verticalOffset=0.0. "
+                + "Switch back with /voxy gpu_mesh_source cpu if you need the CPU_MESH fallback. "
                 + "GPU buffers were cleared so the selected source can rebuild cleanly. "
                 + (engineReady ? "WorldEngine is active." : "No active client world was found; enter or re-enter a world to create the WorldEngine.");
         source.sendSuccess(() -> Component.literal(message), false);
@@ -874,7 +894,7 @@ public final class ForgeVoxyCommands {
     private static int presetStatus(CommandSourceStack source) {
         var status = ForgeVoxyRuntimeOverrides.createStatusSnapshot();
         String message = String.format(
-                "Voxy preset status: active=%s overrides=%s engine=%s(%s) autoIngest=%s(%s) autoCpuMesh=%s(%s) autoBuiltSection=%s(%s) simpleGpu=%s(%s) debugRenderer=%s(%s) source=%s(%s) minDistance=%d(%s) maxDistance=%d(%s) renderLoadedChunks=%s(%s) skipMode=%s(%s) loadedMargin=%d(%s) keepCached=%s(%s) colors=%s(%s) simpleIgnoreDepth=%s(%s) simpleVerticalOffset=%.3f(%s) simpleAlpha=%.2f(%s) debugAlpha=%.2f(%s)",
+                "Voxy preset status: active=%s overrides=%s engine=%s(%s) autoIngest=%s(%s) autoCpuMesh=%s(%s) autoBuiltSection=%s(%s) simpleGpu=%s(%s) debugRenderer=%s(%s) source=%s(%s) sourceRole=%s recommendedSource=%s fallbackSource=%s minDistance=%d(%s) maxDistance=%d(%s) renderLoadedChunks=%s(%s) skipMode=%s(%s) loadedMargin=%d(%s) keepCached=%s(%s) colors=%s(%s) simpleIgnoreDepth=%s(%s) simpleVerticalOffset=%.3f(%s) simpleAlpha=%.2f(%s) debugAlpha=%.2f(%s)",
                 status.presetName(),
                 status.hasOverrides(),
                 status.enableWorldEngineSkeleton(),
@@ -891,6 +911,9 @@ public final class ForgeVoxyCommands {
                 status.enableDebugMeshRendererSource(),
                 status.simpleGpuMeshSource(),
                 status.simpleGpuMeshSourceSource(),
+                describeMeshSource(status.simpleGpuMeshSource()),
+                RECOMMENDED_MESH_SOURCE,
+                FALLBACK_MESH_SOURCE,
                 status.simpleGpuMeshMinRenderDistanceChunks(),
                 status.simpleGpuMeshMinRenderDistanceChunksSource(),
                 status.simpleGpuMeshRenderDistanceChunks(),
@@ -1085,6 +1108,10 @@ public final class ForgeVoxyCommands {
 
     private static String formatDistance(int distance) {
         return distance < 0 ? "none" : Integer.toString(distance);
+    }
+
+    private static String describeMeshSource(SimpleGpuMeshSource source) {
+        return source == SimpleGpuMeshSource.BUILT_SECTION ? BUILT_SECTION_SOURCE_DESCRIPTION : CPU_MESH_SOURCE_DESCRIPTION;
     }
 
     private static String formatBounds(ForgeCpuMeshCache.BoundsSnapshot bounds) {

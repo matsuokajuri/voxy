@@ -12,10 +12,31 @@ Working today:
 - Automatically ingests already-loaded client chunks when enabled.
 - Converts chunks into Voxy sections.
 - Builds CPU-side mesh data and stores it in a CPU mesh cache.
+- Builds CPU-only Voxy BuiltSection-style data and stores it in a GeometryCache-style cache.
 - Uploads simple mesh data into vanilla `VertexBuffer` objects.
 - Renders cached LoD color blocks outside the vanilla render-distance neighborhood.
 
 This renderer is a simple Forge GPU PoC. It is not the original Voxy renderer, and it does not use the original MDIC, SSBO, shader, or custom GL pipeline.
+
+## Mesh Source Modes
+
+The simple GPU renderer currently has two CPU data sources:
+
+- `CPU_MESH` - Legacy Forge PoC mesh source. It uploads the earlier Forge CPU mesh cache directly and is kept as a fallback for comparison.
+- `BUILT_SECTION` - Recommended renderer migration source. It decodes the CPU-only Voxy BuiltSection/GeometryCache path, which is closer to the original Voxy renderer architecture.
+
+Use these commands to switch and compare sources:
+
+```text
+/voxy preset lod
+/voxy preset lod_built_section
+/voxy gpu_mesh_source cpu
+/voxy gpu_mesh_source built_section
+```
+
+`/voxy preset lod` keeps the `CPU_MESH` fallback behavior. `/voxy preset lod_built_section` enables auto ingest, auto BuiltSection build, the simple GPU renderer, and `source=BUILT_SECTION` through runtime-only overrides. Neither preset writes the TOML config.
+
+Current recommendation: use `/voxy preset lod_built_section` as the baseline for future renderer migration work. If a regression appears, switch back to `CPU_MESH` to check whether the issue is in the BuiltSection path or in the shared upload/render path.
 
 ## How To Reproduce Cached LoD
 
@@ -24,7 +45,7 @@ This renderer is a simple Forge GPU PoC. It is not the original Voxy renderer, a
 3. Run:
 
    ```text
-   /voxy preset lod
+   /voxy preset lod_built_section
    ```
 
 4. Set Minecraft render distance to 4-6 chunks.
@@ -50,16 +71,21 @@ Overlay mode intentionally disables the loaded-chunk skip and uses bright debug 
 ## Common Commands
 
 - `/voxy preset overlay` - Runtime-only overlay debug preset. Does not write the TOML config.
-- `/voxy preset lod` - Runtime-only cached LoD preset. Does not write the TOML config.
-- `/voxy preset off` - Runtime-only shutdown for engine, auto ingest, auto CPU mesh build, and renderers.
+- `/voxy preset lod` - Runtime-only cached LoD preset using `CPU_MESH`, the legacy PoC source and fallback. Does not write the TOML config.
+- `/voxy preset lod_built_section` - Runtime-only cached LoD preset using `BUILT_SECTION`, the recommended renderer migration source. Does not write the TOML config.
+- `/voxy preset off` - Runtime-only shutdown for engine, auto ingest, auto CPU mesh build, auto BuiltSection build, and renderers.
 - `/voxy preset status` - Shows effective config values and whether each value came from config or runtime override.
+- `/voxy gpu_mesh_source cpu` - Runtime-only switch to the `CPU_MESH` fallback source and clear GPU buffers.
+- `/voxy gpu_mesh_source built_section` - Runtime-only switch to the recommended `BUILT_SECTION` source and clear GPU buffers.
 - `/voxy ingest_current_chunk` - Manually ingest the current chunk.
 - `/voxy build_current_chunk_cpu_mesh` - Manually build CPU mesh for the current chunk.
+- `/voxy build_current_chunk_built_section` - Manually build CPU-only BuiltSection data for the current chunk.
 - `/voxy mesh_cache_status` - Shows CPU mesh cache and debug pipeline status.
 - `/voxy gpu_mesh_status` - Shows GPU upload/render/cache status and LoD filter diagnostics.
+- `/voxy built_section_cache_status` - Shows CPU-only BuiltSection cache, auto build, and consumer status.
 - `/voxy lod_visibility_status` - Shows whether cached chunks are inside the current LoD visibility window.
-- `/voxy gpu_mesh_clear` - Clears simple GPU buffers while keeping the CPU mesh cache.
-- `/voxy debug_pipeline_clear` - Clears ingest records, mesh build records, CPU mesh cache, and GPU mesh cache.
+- `/voxy gpu_mesh_clear` - Clears simple GPU buffers while keeping CPU mesh and BuiltSection caches.
+- `/voxy debug_pipeline_clear` - Clears ingest records, mesh build records, BuiltSection build records, CPU mesh cache, BuiltSection cache, and GPU mesh cache.
 
 ## Current Limitations
 
@@ -68,6 +94,7 @@ Overlay mode intentionally disables the loaded-chunk skip and uses bright debug 
 - There is no shaderpack support.
 - There is no Embeddium or Oculus integration.
 - Mesh output is currently simplified color-block rendering.
+- `BUILT_SECTION` geometry records are still partial-original-bit-layout records, not final original renderer records.
 - Translucent mesh is skipped.
 - Ambient occlusion is not restored.
 - Transparent sorting is not restored.
@@ -86,6 +113,7 @@ Overlay mode intentionally disables the loaded-chunk skip and uses bright debug 
 - Stage C: WorldEngine skeleton, chunk conversion, controlled manual and automatic ingest.
 - Stage D: CPU mesh validation, model-aware mesh statistics, CPU mesh cache.
 - Stage E: Debug renderer, simple GPU renderer, runtime presets, and cached LoD visibility.
+- Stage G: CPU-only BuiltSection/GeometryCache path and simple GPU rendering from BuiltSection source.
 
 ## Next Recommended Steps
 
