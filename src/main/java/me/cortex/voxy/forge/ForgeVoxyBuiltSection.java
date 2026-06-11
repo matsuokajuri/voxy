@@ -13,6 +13,11 @@ public final class ForgeVoxyBuiltSection implements AutoCloseable {
     private final int aabb;
     private final int[] offsets;
     private final byte[] occupancy;
+    private final int naiveQuads;
+    private final int mergedQuads;
+    private final long coveredQuadArea;
+    private final long skippedTranslucent;
+    private final long skippedNonMergeable;
     private final long createdTimeMillis;
     private ForgeVoxyGeometryBuffer geometryBuffer;
     private boolean closed;
@@ -27,6 +32,11 @@ public final class ForgeVoxyBuiltSection implements AutoCloseable {
             int[] offsets,
             ForgeVoxyGeometryBuffer geometryBuffer,
             byte[] occupancy,
+            int naiveQuads,
+            int mergedQuads,
+            long coveredQuadArea,
+            long skippedTranslucent,
+            long skippedNonMergeable,
             long createdTimeMillis
     ) {
         this.dimension = dimension;
@@ -38,6 +48,11 @@ public final class ForgeVoxyBuiltSection implements AutoCloseable {
         this.offsets = offsets == null ? null : Arrays.copyOf(offsets, offsets.length);
         this.geometryBuffer = geometryBuffer;
         this.occupancy = occupancy == null ? null : Arrays.copyOf(occupancy, occupancy.length);
+        this.naiveQuads = naiveQuads;
+        this.mergedQuads = mergedQuads;
+        this.coveredQuadArea = coveredQuadArea;
+        this.skippedTranslucent = skippedTranslucent;
+        this.skippedNonMergeable = skippedNonMergeable;
         this.createdTimeMillis = createdTimeMillis;
         this.verifyOffsets();
     }
@@ -80,6 +95,26 @@ public final class ForgeVoxyBuiltSection implements AutoCloseable {
 
     public boolean occupancyPresent() {
         return this.occupancy != null && this.occupancy.length != 0;
+    }
+
+    public int naiveQuads() {
+        return this.naiveQuads;
+    }
+
+    public int mergedQuads() {
+        return this.mergedQuads;
+    }
+
+    public long coveredQuadArea() {
+        return this.coveredQuadArea;
+    }
+
+    public long skippedTranslucent() {
+        return this.skippedTranslucent;
+    }
+
+    public long skippedNonMergeable() {
+        return this.skippedNonMergeable;
     }
 
     public long createdTimeMillis() {

@@ -66,6 +66,16 @@ public final class ForgeVoxyBuiltSectionBuilder {
         long modelIdOverflow = 0;
         long missingBiomeId = 0;
         long biomeIdOverflow = 0;
+        long naiveQuads = 0;
+        long mergedQuads = 0;
+        long quadsAfterMerge = 0;
+        long coveredQuadArea = 0;
+        int maxQuadLength = 0;
+        int maxQuadWidth = 0;
+        long skippedTranslucent = 0;
+        long skippedNonMergeable = 0;
+        String sampleMergedRecordHex = "none";
+        String sampleMergedDecodedRecord = "none";
         var uniqueModelIds = new HashSet<Integer>();
         var uniqueBiomeIds = new HashSet<Integer>();
         long createdTime = System.currentTimeMillis();
@@ -81,6 +91,14 @@ public final class ForgeVoxyBuiltSectionBuilder {
             modelIdOverflow += section.modelIdOverflow;
             missingBiomeId += section.missingBiomeId;
             biomeIdOverflow += section.biomeIdOverflow;
+            naiveQuads += section.greedyStats.naiveQuads();
+            mergedQuads += section.greedyStats.mergedQuads();
+            quadsAfterMerge += section.greedyStats.quadsAfterMerge();
+            coveredQuadArea += section.greedyStats.coveredArea();
+            maxQuadLength = Math.max(maxQuadLength, section.greedyStats.maxQuadLength());
+            maxQuadWidth = Math.max(maxQuadWidth, section.greedyStats.maxQuadWidth());
+            skippedTranslucent += section.greedyStats.skippedTranslucent();
+            skippedNonMergeable += section.greedyStats.skippedNonMergeable();
             uniqueModelIds.addAll(section.uniqueModelIds);
             uniqueBiomeIds.addAll(section.uniqueBiomeIds);
             if ("none".equals(offsetsSample)) {
@@ -93,6 +111,10 @@ public final class ForgeVoxyBuiltSectionBuilder {
                 long record = built.sampleRecord();
                 sampleRecordHex = ForgeVoxyQuadEncoder.formatRecordHex(record);
                 sampleDecodedRecord = ForgeVoxyQuadEncoder.decodeRecord(record);
+            }
+            if ("none".equals(sampleMergedRecordHex) && !"none".equals(section.greedyStats.sampleMergedRecordHex())) {
+                sampleMergedRecordHex = section.greedyStats.sampleMergedRecordHex();
+                sampleMergedDecodedRecord = section.greedyStats.sampleMergedDecodedRecord();
             }
         }
 
@@ -121,6 +143,17 @@ public final class ForgeVoxyBuiltSectionBuilder {
                 biomeIdOverflow,
                 missingTexture,
                 missingGreedy,
+                naiveQuads,
+                mergedQuads,
+                quadsAfterMerge,
+                quadsAfterMerge == 0 ? 0.0 : (double) coveredQuadArea / quadsAfterMerge,
+                naiveQuads == 0 ? 0.0 : (double) mergedQuads / naiveQuads,
+                maxQuadLength,
+                maxQuadWidth,
+                skippedTranslucent,
+                skippedNonMergeable,
+                sampleMergedRecordHex,
+                sampleMergedDecodedRecord,
                 offsetsSample,
                 namedOffsetsSample,
                 positionSample,
@@ -215,7 +248,6 @@ public final class ForgeVoxyBuiltSectionBuilder {
     private static final class MutableSection {
         private final GroupKey key;
         private final List<ForgeCpuBuiltSection> sections = new ArrayList<>();
-        private final int[] bucketQuadCounts = new int[BUCKET_COUNT];
         private float minX = Float.POSITIVE_INFINITY;
         private float minY = Float.POSITIVE_INFINITY;
         private float minZ = Float.POSITIVE_INFINITY;
@@ -228,6 +260,7 @@ public final class ForgeVoxyBuiltSectionBuilder {
         private long biomeIdOverflow;
         private long missingTexture;
         private long missingGreedy;
+        private ForgeVoxyGreedyMesher.Stats greedyStats = new ForgeVoxyGreedyMesher.Stats(0, 0, 0, 0, 0, 0, 0, 0, "none", "none");
         private final HashSet<Integer> uniqueModelIds = new HashSet<>();
         private final HashSet<Integer> uniqueBiomeIds = new HashSet<>();
 
@@ -239,14 +272,11 @@ public final class ForgeVoxyBuiltSectionBuilder {
             this.sections.add(section);
             ForgeCpuMeshBuffer buffer = section.meshBuffer();
             int[] data = buffer.vertexData();
-            for (int quad = 0; quad < buffer.quadCount(); quad++) {
-                this.bucketQuadCounts[ForgeVoxyQuadEncoder.encode(section, data, quad).bucket()]++;
-            }
             for (int vertex = 0; vertex < buffer.vertexCount(); vertex++) {
                 int offset = vertex * ForgeCpuMeshBuffer.VERTEX_STRIDE_INTS;
-                float x = Float.intBitsToFloat(data[offset]);
-                float y = Float.intBitsToFloat(data[offset + 1]);
-                float z = Float.intBitsToFloat(data[offset + 2]);
+                float x = Float.intBitsToFloat(data[offset + ForgeCpuMeshBuffer.X_OFFSET]);
+                float y = Float.intBitsToFloat(data[offset + ForgeCpuMeshBuffer.Y_OFFSET]);
+                float z = Float.intBitsToFloat(data[offset + ForgeCpuMeshBuffer.Z_OFFSET]);
                 this.minX = Math.min(this.minX, x);
                 this.minY = Math.min(this.minY, y);
                 this.minZ = Math.min(this.minZ, z);
@@ -257,56 +287,41 @@ public final class ForgeVoxyBuiltSectionBuilder {
         }
 
         private ForgeVoxyBuiltSection build(long createdTime) {
-            int totalQuads = 0;
-            int[] offsets = new int[BUCKET_COUNT];
-            for (int i = 0; i < BUCKET_COUNT; i++) {
-                offsets[i] = totalQuads;
-                totalQuads += this.bucketQuadCounts[i];
-            }
-
-            long[] records = new long[totalQuads];
-            int[] writePositions = new int[BUCKET_COUNT];
-            for (int i = 0; i < BUCKET_COUNT; i++) {
-                writePositions[i] = offsets[i];
-            }
-
-            for (int bucket = 0; bucket < BUCKET_COUNT; bucket++) {
-                for (ForgeCpuBuiltSection section : this.sections) {
-                    ForgeCpuMeshBuffer buffer = section.meshBuffer();
-                    int[] data = buffer.vertexData();
-                    for (int quad = 0; quad < buffer.quadCount(); quad++) {
-                        ForgeVoxyQuadEncoder.EncodedQuad encoded = ForgeVoxyQuadEncoder.encode(section, data, quad);
-                        if (encoded.bucket() != bucket) {
-                            continue;
-                        }
-                        records[writePositions[bucket]++] = encoded.record();
-                        if (encoded.missingModelId()) {
-                            this.missingModelId++;
-                        }
-                        if (encoded.modelIdOverflow()) {
-                            this.modelIdOverflow++;
-                        }
-                        if (!encoded.missingModelId()) {
-                            this.uniqueModelIds.add(encoded.modelId());
-                        }
-                        if (encoded.missingBiomeId()) {
-                            this.missingBiomeId++;
-                        }
-                        if (encoded.biomeIdOverflow()) {
-                            this.biomeIdOverflow++;
-                        }
-                        if (!encoded.missingBiomeId()) {
-                            this.uniqueBiomeIds.add(encoded.biomeId());
-                        }
-                        if (encoded.missingTexture()) {
-                            this.missingTexture++;
-                        }
-                        if (encoded.missingGreedy()) {
-                            this.missingGreedy++;
-                        }
+            var encodedQuads = new ArrayList<ForgeVoxyQuadEncoder.EncodedQuad>();
+            for (ForgeCpuBuiltSection section : this.sections) {
+                ForgeCpuMeshBuffer buffer = section.meshBuffer();
+                int[] data = buffer.vertexData();
+                for (int quad = 0; quad < buffer.quadCount(); quad++) {
+                    ForgeVoxyQuadEncoder.EncodedQuad encoded = ForgeVoxyQuadEncoder.encode(section, data, quad);
+                    encodedQuads.add(encoded);
+                    if (encoded.missingModelId()) {
+                        this.missingModelId++;
+                    }
+                    if (encoded.modelIdOverflow()) {
+                        this.modelIdOverflow++;
+                    }
+                    if (!encoded.missingModelId()) {
+                        this.uniqueModelIds.add(encoded.modelId());
+                    }
+                    if (encoded.missingBiomeId()) {
+                        this.missingBiomeId++;
+                    }
+                    if (encoded.biomeIdOverflow()) {
+                        this.biomeIdOverflow++;
+                    }
+                    if (!encoded.missingBiomeId()) {
+                        this.uniqueBiomeIds.add(encoded.biomeId());
+                    }
+                    if (encoded.missingTexture()) {
+                        this.missingTexture++;
+                    }
+                    if (encoded.missingGreedy()) {
+                        this.missingGreedy++;
                     }
                 }
             }
+            ForgeVoxyGreedyMesher.Result greedyResult = ForgeVoxyGreedyMesher.merge(encodedQuads);
+            this.greedyStats = greedyResult.stats();
 
             int aabb = packAabb(this.minX, this.minY, this.minZ, this.maxX, this.maxY, this.maxZ, this.key.sectionPosition);
             return new ForgeVoxyBuiltSection(
@@ -316,9 +331,14 @@ public final class ForgeVoxyBuiltSectionBuilder {
                     this.key.sectionPosition,
                     (byte) 0,
                     aabb,
-                    offsets,
-                    ForgeVoxyGeometryBuffer.partialOriginalBitLayout(records),
+                    greedyResult.offsets(),
+                    ForgeVoxyGeometryBuffer.partialOriginalBitLayout(greedyResult.records()),
                     null,
+                    greedyResult.stats().naiveQuads(),
+                    greedyResult.stats().mergedQuads(),
+                    greedyResult.stats().coveredArea(),
+                    greedyResult.stats().skippedTranslucent(),
+                    greedyResult.stats().skippedNonMergeable(),
                     createdTime
             );
         }

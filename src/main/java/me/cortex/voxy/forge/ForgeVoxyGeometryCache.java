@@ -69,6 +69,11 @@ public final class ForgeVoxyGeometryCache {
         long partialOriginalBitLayoutEntries = 0;
         long missingModelRecords = 0;
         long missingBiomeRecords = 0;
+        long totalNaiveQuads = 0;
+        long totalMergedQuads = 0;
+        long totalCoveredQuadArea = 0;
+        long totalSkippedTranslucent = 0;
+        long totalSkippedNonMergeable = 0;
         var uniqueModelIds = new HashSet<Integer>();
         var uniqueBiomeIds = new HashSet<Integer>();
         String geometryFormat = "none";
@@ -83,6 +88,11 @@ public final class ForgeVoxyGeometryCache {
             totalQuads += section.quadCount();
             totalBytes += section.geometryBytes();
             totalOccupancyBytes += section.occupancyBytes();
+            totalNaiveQuads += section.naiveQuads();
+            totalMergedQuads += section.mergedQuads();
+            totalCoveredQuadArea += section.coveredQuadArea();
+            totalSkippedTranslucent += section.skippedTranslucent();
+            totalSkippedNonMergeable += section.skippedNonMergeable();
             ForgeVoxyGeometryBuffer buffer = section.geometryBuffer();
             if (buffer != null && !buffer.isClosed()) {
                 for (long record : buffer.packedQuads()) {
@@ -135,6 +145,11 @@ public final class ForgeVoxyGeometryCache {
                 uniqueBiomeIds.size(),
                 missingBiomeRecords,
                 ForgeVoxyModelIdMapper.INSTANCE.uniqueModelCount(),
+                totalNaiveQuads,
+                totalMergedQuads,
+                totalQuads == 0 ? 0.0 : (double) totalCoveredQuadArea / totalQuads,
+                totalSkippedTranslucent,
+                totalSkippedNonMergeable,
                 geometryFormat,
                 firstPosition,
                 firstAabb,
@@ -182,6 +197,11 @@ public final class ForgeVoxyGeometryCache {
             int totalUniqueBiomeIds,
             long missingBiomeRecords,
             int runtimeModelMapperSize,
+            long totalNaiveQuads,
+            long totalMergedQuads,
+            double totalAverageQuadArea,
+            long totalSkippedTranslucent,
+            long totalSkippedNonMergeable,
             String geometryFormat,
             String firstEntryPosition,
             String firstEntryAabb,

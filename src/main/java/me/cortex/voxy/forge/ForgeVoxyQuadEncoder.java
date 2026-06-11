@@ -50,29 +50,64 @@ public final class ForgeVoxyQuadEncoder {
     static EncodedQuad encode(ForgeCpuBuiltSection section, int[] data, int quadIndex) {
         int face = originalFace(data, quadIndex);
         int bucket = bucketFor(section.layer(), face);
-        int encodedPosition = packOriginalPositionBits(section.sectionPosition(), data, quadIndex, face);
+        QuadGeometry geometry = quadGeometry(section.sectionPosition(), data, quadIndex, face);
         int light = readLight(data, quadIndex);
         int blockId = readBlockId(data, quadIndex);
+        int layerId = readLayerId(data, quadIndex);
+        int tintIndex = readTintIndex(data, quadIndex);
         ForgeVoxyModelIdMapper.ModelIdResult modelId = ForgeVoxyModelIdMapper.INSTANCE.getOrCreateModelId(blockId);
         int rawBiomeId = readBiomeId(data, quadIndex);
         boolean missingBiomeId = rawBiomeId < 0;
         boolean biomeOverflow = rawBiomeId > MAX_BIOME_ID;
         int biomeId = missingBiomeId ? 0 : Math.min(rawBiomeId, MAX_BIOME_ID);
-        long record = Integer.toUnsignedLong(encodedPosition)
-                | ((long) modelId.modelId() << MODEL_ID_SHIFT)
-                | ((long) biomeId << BIOME_ID_SHIFT)
-                | ((long) light << LIGHT_SHIFT);
+        long record = packRecord(face, geometry.localX(), geometry.localY(), geometry.localZ(), geometry.length(), geometry.width(), modelId.modelId(), biomeId, light);
         return new EncodedQuad(
                 record,
                 bucket,
+                face,
+                geometry.localX(),
+                geometry.localY(),
+                geometry.localZ(),
+                geometry.length(),
+                geometry.width(),
                 modelId.modelId(),
                 modelId.missing(),
                 modelId.overflow(),
                 biomeId,
                 missingBiomeId,
                 biomeOverflow,
+                light,
+                layerId,
+                tintIndex,
                 true,
-                true
+                false,
+                geometry.mergeable()
+        );
+    }
+
+    static EncodedQuad encodeMerged(EncodedQuad source, int localX, int localY, int localZ, int length, int width) {
+        long record = packRecord(source.face(), localX, localY, localZ, length, width, source.modelId(), source.biomeId(), source.lightId());
+        return new EncodedQuad(
+                record,
+                source.bucket(),
+                source.face(),
+                localX,
+                localY,
+                localZ,
+                length,
+                width,
+                source.modelId(),
+                source.missingModelId(),
+                source.modelIdOverflow(),
+                source.biomeId(),
+                source.missingBiomeId(),
+                source.biomeIdOverflow(),
+                source.lightId(),
+                source.layerId(),
+                source.tintIndex(),
+                source.missingTexture(),
+                length == 1 && width == 1,
+                source.mergeable()
         );
     }
 
@@ -120,52 +155,72 @@ public final class ForgeVoxyQuadEncoder {
         return extract(record, LIGHT_BITS, LIGHT_SHIFT);
     }
 
-    private static int packOriginalPositionBits(long sectionPosition, int[] data, int quadIndex, int face) {
+    private static long packRecord(int face, int localX, int localY, int localZ, int length, int width, int modelId, int biomeId, int light) {
+        length = Math.max(1, Math.min(MAX_ORIGINAL_QUAD_SPAN, length));
+        width = Math.max(1, Math.min(MAX_ORIGINAL_QUAD_SPAN, width));
+        modelId = Math.max(0, Math.min(MAX_MODEL_ID, modelId));
+        biomeId = Math.max(0, Math.min(MAX_BIOME_ID, biomeId));
+        light &= 0xFF;
+
+        long record = face & ((1L << FACE_BITS) - 1L);
+        record |= (long) (length - 1) << LENGTH_SHIFT;
+        record |= (long) (width - 1) << WIDTH_SHIFT;
+        record |= (long) clampToSection(localZ) << Z_SHIFT;
+        record |= (long) clampToSection(localY) << Y_SHIFT;
+        record |= (long) clampToSection(localX) << X_SHIFT;
+        record |= (long) modelId << MODEL_ID_SHIFT;
+        record |= (long) biomeId << BIOME_ID_SHIFT;
+        record |= (long) light << LIGHT_SHIFT;
+        return record;
+    }
+
+    private static QuadGeometry quadGeometry(long sectionPosition, int[] data, int quadIndex, int face) {
         if (face < 0 || face > 5) {
             face = 0;
         }
         int axis = face >> 1;
         int axisSide = face & 1;
-        Bounds localBounds = localBounds(sectionPosition, data, quadIndex);
+        FloatBounds floatBounds = localFloatBounds(sectionPosition, data, quadIndex);
+        Bounds localBounds = floatBounds.toCellBounds();
 
-        int x;
-        int z;
+        int localX;
+        int localY;
+        int localZ;
         int length;
         int width;
-        int auxiliaryPosition;
         if (axis == 0) {
-            x = localBounds.minX();
-            z = localBounds.minZ();
+            localX = localBounds.minX();
+            localY = axisSide == 0 ? localBounds.minY() : localBounds.maxY();
+            localZ = localBounds.minZ();
             length = localBounds.sizeX();
             width = localBounds.sizeZ();
-            auxiliaryPosition = axisSide == 0 ? localBounds.minY() : localBounds.maxY();
         } else if (axis == 1) {
-            x = localBounds.minX();
-            z = localBounds.minY();
+            localX = localBounds.minX();
+            localY = localBounds.minY();
+            localZ = axisSide == 0 ? localBounds.minZ() : localBounds.maxZ();
             length = localBounds.sizeX();
             width = localBounds.sizeY();
-            auxiliaryPosition = axisSide == 0 ? localBounds.minZ() : localBounds.maxZ();
         } else {
-            x = localBounds.minY();
-            z = localBounds.minZ();
+            localX = axisSide == 0 ? localBounds.minX() : localBounds.maxX();
+            localY = localBounds.minY();
+            localZ = localBounds.minZ();
             length = localBounds.sizeY();
             width = localBounds.sizeZ();
-            auxiliaryPosition = axisSide == 0 ? localBounds.minX() : localBounds.maxX();
         }
 
         length = Math.max(1, Math.min(MAX_ORIGINAL_QUAD_SPAN, length));
         width = Math.max(1, Math.min(MAX_ORIGINAL_QUAD_SPAN, width));
-        int encodedPosition = face;
-        encodedPosition |= ((length - 1) << LENGTH_SHIFT);
-        encodedPosition |= ((width - 1) << WIDTH_SHIFT);
-        encodedPosition |= clampToSection(x) << (axis == 2 ? Y_SHIFT : X_SHIFT);
-        encodedPosition |= clampToSection(z) << (axis == 1 ? Y_SHIFT : Z_SHIFT);
-        int shiftAmount = axis == 0 ? Y_SHIFT : (axis == 1 ? Z_SHIFT : X_SHIFT);
-        encodedPosition |= clampToSection(auxiliaryPosition) << shiftAmount;
-        return encodedPosition;
+        return new QuadGeometry(
+                clampToSection(localX),
+                clampToSection(localY),
+                clampToSection(localZ),
+                length,
+                width,
+                isMergeableUnitFace(floatBounds, axis)
+        );
     }
 
-    private static Bounds localBounds(long sectionPosition, int[] data, int quadIndex) {
+    private static FloatBounds localFloatBounds(long sectionPosition, int[] data, int quadIndex) {
         int level = Math.max(0, WorldEngine.getLevel(sectionPosition));
         int scale = 1 << level;
         float baseX = WorldEngine.getX(sectionPosition) * (float) SECTION_SIZE * scale;
@@ -192,14 +247,35 @@ public final class ForgeVoxyQuadEncoder {
             maxZ = Math.max(maxZ, z);
         }
 
-        return new Bounds(
-                clampToSection((int) Math.floor(minX)),
-                clampToSection((int) Math.floor(minY)),
-                clampToSection((int) Math.floor(minZ)),
-                clampToSection((int) Math.ceil(maxX) - 1),
-                clampToSection((int) Math.ceil(maxY) - 1),
-                clampToSection((int) Math.ceil(maxZ) - 1)
-        );
+        return new FloatBounds(minX, minY, minZ, maxX, maxY, maxZ);
+    }
+
+    private static boolean isMergeableUnitFace(FloatBounds bounds, int axis) {
+        float sizeX = bounds.maxX() - bounds.minX();
+        float sizeY = bounds.maxY() - bounds.minY();
+        float sizeZ = bounds.maxZ() - bounds.minZ();
+        if (axis == 0) {
+            return isOne(sizeX) && isOne(sizeZ) && isZero(sizeY)
+                    && isInteger(bounds.minX()) && isInteger(bounds.minZ()) && isInteger(bounds.minY());
+        }
+        if (axis == 1) {
+            return isOne(sizeX) && isOne(sizeY) && isZero(sizeZ)
+                    && isInteger(bounds.minX()) && isInteger(bounds.minY()) && isInteger(bounds.minZ());
+        }
+        return isOne(sizeY) && isOne(sizeZ) && isZero(sizeX)
+                && isInteger(bounds.minY()) && isInteger(bounds.minZ()) && isInteger(bounds.minX());
+    }
+
+    private static boolean isOne(float value) {
+        return Math.abs(value - 1.0f) < 0.0001f;
+    }
+
+    private static boolean isZero(float value) {
+        return Math.abs(value) < 0.0001f;
+    }
+
+    private static boolean isInteger(float value) {
+        return Math.abs(value - Math.round(value)) < 0.0001f;
     }
 
     private static int readLight(int[] data, int quadIndex) {
@@ -225,6 +301,16 @@ public final class ForgeVoxyQuadEncoder {
         return normal >= 0 && normal <= 5 ? normal : -1;
     }
 
+    private static int readLayerId(int[] data, int quadIndex) {
+        int offset = quadIndex * 4 * ForgeCpuMeshBuffer.VERTEX_STRIDE_INTS;
+        return data[offset + ForgeCpuMeshBuffer.LAYER_OFFSET];
+    }
+
+    private static int readTintIndex(int[] data, int quadIndex) {
+        int offset = quadIndex * 4 * ForgeCpuMeshBuffer.VERTEX_STRIDE_INTS;
+        return data[offset + ForgeCpuMeshBuffer.TINT_INDEX_OFFSET];
+    }
+
     private static int clampToSection(int value) {
         return Math.max(0, Math.min(31, value));
     }
@@ -240,15 +326,41 @@ public final class ForgeVoxyQuadEncoder {
     record EncodedQuad(
             long record,
             int bucket,
+            int face,
+            int localX,
+            int localY,
+            int localZ,
+            int length,
+            int width,
             int modelId,
             boolean missingModelId,
             boolean modelIdOverflow,
             int biomeId,
             boolean missingBiomeId,
             boolean biomeIdOverflow,
+            int lightId,
+            int layerId,
+            int tintIndex,
             boolean missingTexture,
-            boolean missingGreedy
+            boolean missingGreedy,
+            boolean mergeable
     ) {
+    }
+
+    private record QuadGeometry(int localX, int localY, int localZ, int length, int width, boolean mergeable) {
+    }
+
+    private record FloatBounds(float minX, float minY, float minZ, float maxX, float maxY, float maxZ) {
+        private Bounds toCellBounds() {
+            return new Bounds(
+                    clampToSection((int) Math.floor(this.minX)),
+                    clampToSection((int) Math.floor(this.minY)),
+                    clampToSection((int) Math.floor(this.minZ)),
+                    clampToSection((int) Math.ceil(this.maxX) - 1),
+                    clampToSection((int) Math.ceil(this.maxY) - 1),
+                    clampToSection((int) Math.ceil(this.maxZ) - 1)
+            );
+        }
     }
 
     private record Bounds(int minX, int minY, int minZ, int maxX, int maxY, int maxZ) {

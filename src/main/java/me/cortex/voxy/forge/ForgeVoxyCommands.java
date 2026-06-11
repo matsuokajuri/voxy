@@ -364,7 +364,7 @@ public final class ForgeVoxyCommands {
                     .withElapsedMs(elapsedMs);
             var cacheStatus = cache.createStatusSnapshot();
             String message = String.format(
-                    "Voxy BuiltSection CPU: %s chunk %d,%d sourceCpuEntries=%d emptySections=%d sectionsBuilt=%d builtSectionCount=%d quads=%d geometryBytes=%d occupancyBytes=%d offsetsSemantic=%s geometryFormat=%s knownBits=%s knownFields=%s uniqueModelIds=%d missingModelIds=%d modelIdOverflow=%d uniqueBiomeIds=%d missingBiomeIds=%d biomeIdOverflow=%d missingTexture=%d missingGreedy=%d finalFormat=%s occupancyPresent=%s samplePosition=%s sampleAabb=%s sampleRecord=%s decoded=\"%s\" offsets=%s namedOffsets=%s cacheWritten=%d cacheEntries=%d elapsed=%.2fms",
+                    "Voxy BuiltSection CPU: %s chunk %d,%d sourceCpuEntries=%d emptySections=%d sectionsBuilt=%d builtSectionCount=%d naiveQuads=%d mergedQuads=%d quadsAfterMerge=%d mergeRatio=%.3f averageQuadArea=%.2f maxQuadLength=%d maxQuadWidth=%d skippedTranslucent=%d skippedNonMergeable=%d quads=%d geometryBytes=%d occupancyBytes=%d offsetsSemantic=%s geometryFormat=%s knownBits=%s knownFields=%s uniqueModelIds=%d missingModelIds=%d modelIdOverflow=%d uniqueBiomeIds=%d missingBiomeIds=%d biomeIdOverflow=%d missingTexture=%d missingGreedy=%d finalFormat=%s occupancyPresent=%s samplePosition=%s sampleAabb=%s sampleRecord=%s decoded=\"%s\" sampleMergedRecord=%s sampleMergedDecoded=\"%s\" offsets=%s namedOffsets=%s cacheWritten=%d cacheEntries=%d elapsed=%.2fms",
                     stats.dimension(),
                     stats.chunkX(),
                     stats.chunkZ(),
@@ -372,6 +372,15 @@ public final class ForgeVoxyCommands {
                     stats.emptySections(),
                     cpuStats.sectionsBuilt(),
                     stats.sectionsBuilt(),
+                    stats.naiveQuads(),
+                    stats.mergedQuads(),
+                    stats.quadsAfterMerge(),
+                    stats.mergeRatio(),
+                    stats.averageQuadArea(),
+                    stats.maxQuadLength(),
+                    stats.maxQuadWidth(),
+                    stats.skippedTranslucent(),
+                    stats.skippedNonMergeable(),
                     stats.totalQuads(),
                     stats.geometryBytes(),
                     stats.occupancyBytes(),
@@ -393,6 +402,8 @@ public final class ForgeVoxyCommands {
                     stats.aabbSample(),
                     stats.sampleRecordHex(),
                     stats.sampleDecodedRecord(),
+                    stats.sampleMergedRecordHex(),
+                    stats.sampleMergedDecodedRecord(),
                     stats.offsetsSummary(),
                     stats.offsetsNamed(),
                     stats.cacheEntriesWritten(),
@@ -418,10 +429,15 @@ public final class ForgeVoxyCommands {
     private static int builtSectionCacheStatus(CommandSourceStack source) {
         var status = ForgeVoxyInstance.INSTANCE.getVoxyGeometryCache().createStatusSnapshot();
         String message = String.format(
-                "Voxy BuiltSection cache: entries=%d/%d totalSections=%d totalQuads=%d totalGeometryBytes=%d totalOccupancyBytes=%d finalFormatCount=%d partialFormatCount=%d partialOriginalBitLayoutCount=%d uniqueModelIds=%d missingModelRecords=%d runtimeModelMapperSize=%d uniqueBiomeIds=%d missingBiomeRecords=%d geometryFormat=%s closed=%d evicted=%d replaced=%d firstPosition=%s firstAabb=%s firstOffsets=%s firstNamedOffsets=%s offsetsSemantic=%s sampleRecord=%s decoded=\"%s\"",
+                "Voxy BuiltSection cache: entries=%d/%d totalSections=%d totalNaiveQuads=%d totalMergedQuads=%d totalAverageQuadArea=%.2f totalSkippedTranslucent=%d totalSkippedNonMergeable=%d totalQuads=%d totalGeometryBytes=%d totalOccupancyBytes=%d finalFormatCount=%d partialFormatCount=%d partialOriginalBitLayoutCount=%d uniqueModelIds=%d missingModelRecords=%d runtimeModelMapperSize=%d uniqueBiomeIds=%d missingBiomeRecords=%d geometryFormat=%s closed=%d evicted=%d replaced=%d firstPosition=%s firstAabb=%s firstOffsets=%s firstNamedOffsets=%s offsetsSemantic=%s sampleRecord=%s decoded=\"%s\"",
                 status.entries(),
                 status.maxEntries(),
                 status.entries(),
+                status.totalNaiveQuads(),
+                status.totalMergedQuads(),
+                status.totalAverageQuadArea(),
+                status.totalSkippedTranslucent(),
+                status.totalSkippedNonMergeable(),
                 status.totalQuads(),
                 status.totalGeometryBytes(),
                 status.totalOccupancyBytes(),
