@@ -19,6 +19,7 @@ public final class ForgeVoxyInstance {
     private final ForgeChunkIngestManager chunkIngestManager = new ForgeChunkIngestManager(this);
     private final ForgeCpuMeshBuildManager cpuMeshBuildManager = new ForgeCpuMeshBuildManager(this);
     private final ForgeCpuMeshCache cpuMeshCache = new ForgeCpuMeshCache();
+    private final ForgeVoxyGeometryCache voxyGeometryCache = new ForgeVoxyGeometryCache();
     private final ForgeDebugMeshRenderer debugMeshRenderer = new ForgeDebugMeshRenderer(this);
     private final ForgeGpuMeshCache gpuMeshCache = new ForgeGpuMeshCache();
     private final ForgeGpuMeshUploadManager gpuMeshUploadManager = new ForgeGpuMeshUploadManager(this);
@@ -67,6 +68,10 @@ public final class ForgeVoxyInstance {
         return this.cpuMeshCache;
     }
 
+    public ForgeVoxyGeometryCache getVoxyGeometryCache() {
+        return this.voxyGeometryCache;
+    }
+
     public ForgeDebugMeshRenderer getDebugMeshRenderer() {
         return this.debugMeshRenderer;
     }
@@ -110,6 +115,7 @@ public final class ForgeVoxyInstance {
         this.chunkIngestManager.clear();
         this.cpuMeshBuildManager.clear();
         this.cpuMeshCache.setActiveDimension(dimension);
+        this.voxyGeometryCache.setActiveDimension(dimension);
         this.gpuMeshUploadManager.clear();
         this.gpuMeshCache.setActiveDimension(dimension);
         this.closeActiveWorld();
@@ -169,6 +175,7 @@ public final class ForgeVoxyInstance {
         this.chunkIngestManager.clear();
         this.cpuMeshBuildManager.clear();
         this.cpuMeshCache.clear();
+        this.voxyGeometryCache.clear();
         this.gpuMeshUploadManager.clear();
         this.gpuMeshCache.clear();
         this.activeClientDimension = null;

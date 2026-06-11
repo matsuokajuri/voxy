@@ -15,6 +15,7 @@ public final class ForgeVoxyConfig {
     public static final ForgeConfigSpec.IntValue AUTO_MESH_BUILD_MAX_CHUNKS_PER_TICK;
     public static final ForgeConfigSpec.IntValue AUTO_MESH_BUILD_COOLDOWN_TICKS;
     public static final ForgeConfigSpec.IntValue CPU_MESH_CACHE_MAX_ENTRIES;
+    public static final ForgeConfigSpec.IntValue BUILT_SECTION_CACHE_MAX_ENTRIES;
     public static final ForgeConfigSpec.BooleanValue ENABLE_DEBUG_MESH_RENDERER;
     public static final ForgeConfigSpec.IntValue DEBUG_MESH_RENDER_DISTANCE_CHUNKS;
     public static final ForgeConfigSpec.IntValue DEBUG_MESH_MAX_RENDERED_ENTRIES;
@@ -71,6 +72,9 @@ public final class ForgeVoxyConfig {
         CPU_MESH_CACHE_MAX_ENTRIES = builder
                 .comment("Maximum cached CPU mesh section/layer entries kept by the debug pipeline. Old entries are closed and evicted with LRU ordering.")
                 .defineInRange("cpuMeshCacheMaxEntries", 2048, 1, 8192);
+        BUILT_SECTION_CACHE_MAX_ENTRIES = builder
+                .comment("Maximum CPU-only Voxy BuiltSection-format entries kept for renderer migration validation. This cache is used only by manual debug commands.")
+                .defineInRange("builtSectionCacheMaxEntries", 2048, 1, 8192);
         ENABLE_DEBUG_MESH_RENDERER = builder
                 .comment("Draws cached CPU mesh sections with a temporary vanilla debug renderer. Requires enableWorldEngineSkeleton and does not use the final Voxy renderer.")
                 .define("enableDebugMeshRenderer", false);

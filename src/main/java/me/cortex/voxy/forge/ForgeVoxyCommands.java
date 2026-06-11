@@ -24,6 +24,12 @@ public final class ForgeVoxyCommands {
                         .executes(ctx -> buildCurrentChunkModelMesh(ctx.getSource())))
                 .then(Commands.literal("build_current_chunk_cpu_mesh")
                         .executes(ctx -> buildCurrentChunkCpuMesh(ctx.getSource())))
+                .then(Commands.literal("build_current_chunk_built_section")
+                        .executes(ctx -> buildCurrentChunkBuiltSection(ctx.getSource())))
+                .then(Commands.literal("built_section_cache_status")
+                        .executes(ctx -> builtSectionCacheStatus(ctx.getSource())))
+                .then(Commands.literal("built_section_cache_clear")
+                        .executes(ctx -> clearBuiltSectionCache(ctx.getSource())))
                 .then(Commands.literal("mesh_cache_status")
                         .executes(ctx -> meshCacheStatus(ctx.getSource())))
                 .then(Commands.literal("mesh_cache_clear")
@@ -305,6 +311,116 @@ public final class ForgeVoxyCommands {
             source.sendFailure(Component.literal("Voxy: CPU mesh build failed: " + e.getMessage()));
             return 0;
         }
+    }
+
+    private static int buildCurrentChunkBuiltSection(CommandSourceStack source) {
+        var minecraft = Minecraft.getInstance();
+        var player = minecraft.player;
+        var level = minecraft.level;
+        if (player == null || level == null) {
+            source.sendFailure(Component.literal("Voxy: no client world is active."));
+            return 0;
+        }
+
+        var engine = ForgeVoxyInstance.INSTANCE.getCurrentEngineOptional();
+        if (engine.isEmpty()) {
+            String reason = ForgeVoxyRuntimeOverrides.enabledWorldEngineSkeleton()
+                    ? "no WorldEngine is active for the current world"
+                    : "enableWorldEngineSkeleton is false";
+            source.sendFailure(Component.literal("Voxy: cannot build current chunk BuiltSection data; " + reason + "."));
+            return 0;
+        }
+
+        ForgeCpuMeshBuildResult cpuResult = null;
+        try {
+            long start = System.nanoTime();
+            int chunkX = player.chunkPosition().x;
+            int chunkZ = player.chunkPosition().z;
+            LevelChunk chunk = level.getChunkSource().getChunk(chunkX, chunkZ, ChunkStatus.FULL, false);
+            if (chunk == null) {
+                source.sendFailure(Component.literal("Voxy: current chunk is not loaded."));
+                return 0;
+            }
+
+            String dimension = level.dimension().location().toString();
+            cpuResult = ForgeCpuMeshBuilder.buildCurrentChunk(engine.get(), chunk, level, dimension);
+            var cpuStats = cpuResult.stats();
+            if (cpuStats.sectionsFound() == 0) {
+                source.sendFailure(Component.literal("Voxy: no ingested Voxy section found for current chunk; run /voxy ingest_current_chunk first."));
+                return 0;
+            }
+            if (cpuResult.sections().isEmpty()) {
+                source.sendFailure(Component.literal("Voxy: CPU mesh builder produced no section mesh for current chunk."));
+                return 0;
+            }
+
+            var builtResult = ForgeVoxyBuiltSectionBuilder.fromCpuMesh(cpuResult);
+            var cache = ForgeVoxyInstance.INSTANCE.getVoxyGeometryCache();
+            cache.setActiveDimension(dimension);
+            int cacheEntriesWritten = cache.putAll(builtResult.sections());
+            double elapsedMs = (System.nanoTime() - start) / 1_000_000.0;
+            var stats = builtResult.stats()
+                    .withCacheEntriesWritten(cacheEntriesWritten)
+                    .withElapsedMs(elapsedMs);
+            var cacheStatus = cache.createStatusSnapshot();
+            String message = String.format(
+                    "Voxy BuiltSection CPU: %s chunk %d,%d sourceCpuEntries=%d sectionsBuilt=%d builtSectionCount=%d quads=%d geometryBytes=%d offsets=%s aabb=%s cacheWritten=%d cacheEntries=%d finalFormat=%s elapsed=%.2fms",
+                    stats.dimension(),
+                    stats.chunkX(),
+                    stats.chunkZ(),
+                    stats.sourceCpuEntries(),
+                    cpuStats.sectionsBuilt(),
+                    stats.sectionsBuilt(),
+                    stats.totalQuads(),
+                    stats.geometryBytes(),
+                    stats.offsetsSummary(),
+                    stats.aabbSample(),
+                    stats.cacheEntriesWritten(),
+                    cacheStatus.entries(),
+                    stats.finalRendererFormat(),
+                    stats.elapsedMs()
+            );
+            VoxyForge.LOGGER.info(message);
+            source.sendSuccess(() -> Component.literal(message + " (partial adapter format; not final renderer format)"), false);
+            return stats.sectionsBuilt();
+        } catch (OutOfMemoryError e) {
+            VoxyForge.LOGGER.error("Failed to allocate current chunk BuiltSection data", e);
+            source.sendFailure(Component.literal("Voxy: BuiltSection build ran out of memory."));
+            return 0;
+        } catch (Exception e) {
+            VoxyForge.LOGGER.error("Failed to build current chunk BuiltSection data", e);
+            source.sendFailure(Component.literal("Voxy: BuiltSection build failed: " + e.getMessage()));
+            return 0;
+        } finally {
+            closeTemporaryCpuMesh(cpuResult);
+        }
+    }
+
+    private static int builtSectionCacheStatus(CommandSourceStack source) {
+        var status = ForgeVoxyInstance.INSTANCE.getVoxyGeometryCache().createStatusSnapshot();
+        String message = String.format(
+                "Voxy BuiltSection cache: entries=%d/%d totalSections=%d totalQuads=%d geometryBytes=%d closed=%d evicted=%d replaced=%d partialFormatEntries=%d firstPosition=%s firstAabb=%s firstOffsets=%s",
+                status.entries(),
+                status.maxEntries(),
+                status.entries(),
+                status.totalQuads(),
+                status.totalGeometryBytes(),
+                status.closedCount(),
+                status.evictedCount(),
+                status.replacedCount(),
+                status.partialFormatEntries(),
+                status.firstEntryPosition(),
+                status.firstEntryAabb(),
+                status.firstEntryOffsets()
+        );
+        source.sendSuccess(() -> Component.literal(message), false);
+        return status.entries();
+    }
+
+    private static int clearBuiltSectionCache(CommandSourceStack source) {
+        ForgeVoxyInstance.INSTANCE.getVoxyGeometryCache().clear();
+        source.sendSuccess(() -> Component.literal("Voxy: cleared CPU-only BuiltSection cache and closed all partial geometry buffers."), false);
+        return 1;
     }
 
     private static int meshCacheStatus(CommandSourceStack source) {
@@ -840,6 +956,17 @@ public final class ForgeVoxyCommands {
         );
     }
 
+    private static void closeTemporaryCpuMesh(ForgeCpuMeshBuildResult cpuResult) {
+        if (cpuResult == null) {
+            return;
+        }
+        for (ForgeCpuBuiltSection section : cpuResult.sections()) {
+            if (section != null) {
+                section.close();
+            }
+        }
+    }
+
     private record LodVisibilityContext(
             String dimension,
             int playerChunkX,
@@ -859,15 +986,17 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getChunkIngestManager().clear();
         ForgeVoxyInstance.INSTANCE.getCpuMeshBuildManager().clear();
         ForgeVoxyInstance.INSTANCE.getCpuMeshCache().clear();
+        ForgeVoxyInstance.INSTANCE.getVoxyGeometryCache().clear();
         ForgeVoxyInstance.INSTANCE.getGpuMeshUploadManager().clear();
         ForgeVoxyInstance.INSTANCE.getGpuMeshCache().clear();
     }
 
     private static int clearMeshCache(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getCpuMeshCache().clear();
+        ForgeVoxyInstance.INSTANCE.getVoxyGeometryCache().clear();
         ForgeVoxyInstance.INSTANCE.getCpuMeshBuildManager().clear();
         ForgeVoxyInstance.INSTANCE.getGpuMeshUploadManager().clear();
-        source.sendSuccess(() -> Component.literal("Voxy: cleared CPU mesh cache, GPU mesh cache, and auto mesh build record."), false);
+        source.sendSuccess(() -> Component.literal("Voxy: cleared CPU mesh cache, CPU-only BuiltSection cache, GPU mesh cache, and auto mesh build record."), false);
         return 1;
     }
 
@@ -887,8 +1016,9 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getChunkIngestManager().clear();
         ForgeVoxyInstance.INSTANCE.getCpuMeshBuildManager().clear();
         ForgeVoxyInstance.INSTANCE.getCpuMeshCache().clear();
+        ForgeVoxyInstance.INSTANCE.getVoxyGeometryCache().clear();
         ForgeVoxyInstance.INSTANCE.getGpuMeshUploadManager().clear();
-        source.sendSuccess(() -> Component.literal("Voxy: cleared debug pipeline ingest records, mesh build records, CPU mesh cache, and GPU mesh cache."), false);
+        source.sendSuccess(() -> Component.literal("Voxy: cleared debug pipeline ingest records, mesh build records, CPU mesh cache, CPU-only BuiltSection cache, and GPU mesh cache."), false);
         return 1;
     }
 
