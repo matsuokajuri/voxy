@@ -281,19 +281,51 @@ public final class ForgeVoxyCommands {
     }
 
     private static int meshCacheStatus(CommandSourceStack source) {
-        var status = ForgeVoxyInstance.INSTANCE.getCpuMeshCache().createStatusSnapshot();
+        var cache = ForgeVoxyInstance.INSTANCE.getCpuMeshCache();
+        var status = cache.createStatusSnapshot();
+        var minecraft = Minecraft.getInstance();
+        String bounds = "bounds=none";
+        if (minecraft.level != null && minecraft.player != null) {
+            String dimension = minecraft.level.dimension().location().toString();
+            int chunkX = minecraft.player.chunkPosition().x;
+            int chunkZ = minecraft.player.chunkPosition().z;
+            bounds = formatBounds(cache.createBoundsSnapshot(dimension, chunkX, chunkZ));
+        }
+
         String message = String.format(
-                "Voxy CPU mesh cache: entries=%d/%d vertices=%d quads=%d bytes=%d dimensions=%s layers=%s",
+                "Voxy CPU mesh cache: entries=%d/%d vertices=%d quads=%d bytes=%d dimensions=%s layers=%s render=%s distance=%d %s",
                 status.entries(),
                 status.maxEntries(),
                 status.totalVertices(),
                 status.totalQuads(),
                 status.totalBytes(),
                 status.dimensions(),
-                status.layers()
+                status.layers(),
+                ForgeVoxyConfig.ENABLE_DEBUG_MESH_RENDERER.get(),
+                ForgeDebugMeshRenderer.getConfiguredRenderDistanceChunks(),
+                bounds
         );
         source.sendSuccess(() -> Component.literal(message), false);
         return status.entries();
+    }
+
+    private static String formatBounds(ForgeCpuMeshCache.BoundsSnapshot bounds) {
+        if (!bounds.available()) {
+            return "bounds=none";
+        }
+        return String.format(
+                "bounds=%s chunk %d,%d entries=%d min=%.2f,%.2f,%.2f max=%.2f,%.2f,%.2f",
+                bounds.dimension(),
+                bounds.chunkX(),
+                bounds.chunkZ(),
+                bounds.entries(),
+                bounds.minX(),
+                bounds.minY(),
+                bounds.minZ(),
+                bounds.maxX(),
+                bounds.maxY(),
+                bounds.maxZ()
+        );
     }
 
     private static int clearMeshCache(CommandSourceStack source) {

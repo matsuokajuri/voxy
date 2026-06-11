@@ -17,6 +17,7 @@ public final class ForgeVoxyInstance {
     private WorldEngine activeWorld;
     private final ForgeChunkIngestManager chunkIngestManager = new ForgeChunkIngestManager(this);
     private final ForgeCpuMeshCache cpuMeshCache = new ForgeCpuMeshCache();
+    private final ForgeDebugMeshRenderer debugMeshRenderer = new ForgeDebugMeshRenderer(this);
     private final AtomicInteger storageWriteCount = new AtomicInteger();
 
     private ForgeVoxyInstance() {
@@ -27,6 +28,7 @@ public final class ForgeVoxyInstance {
         MinecraftForge.EVENT_BUS.addListener(this::onClientLogout);
         MinecraftForge.EVENT_BUS.addListener(this::onRegisterClientCommands);
         this.chunkIngestManager.register();
+        this.debugMeshRenderer.register();
     }
 
     public WorldEngine getActiveWorld() {

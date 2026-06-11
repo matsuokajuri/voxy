@@ -1,5 +1,6 @@
 package me.cortex.voxy.forge;
 
+import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
@@ -70,6 +71,68 @@ public final class ForgeCpuMeshCache {
                 iterator.remove();
             }
         }
+    }
+
+    public synchronized List<ForgeCpuBuiltSection> snapshotNear(String dimension, int centerChunkX, int centerChunkZ, int radiusChunks) {
+        var snapshot = new ArrayList<ForgeCpuBuiltSection>();
+        for (ForgeCpuBuiltSection section : this.entries.values()) {
+            if (!section.dimension().equals(dimension)) {
+                continue;
+            }
+            if (Math.abs(section.chunkX() - centerChunkX) > radiusChunks || Math.abs(section.chunkZ() - centerChunkZ) > radiusChunks) {
+                continue;
+            }
+            if (section.meshBuffer() == null || section.meshBuffer().isClosed()) {
+                continue;
+            }
+            snapshot.add(section);
+        }
+        return snapshot;
+    }
+
+    public synchronized BoundsSnapshot createBoundsSnapshot(String dimension, int chunkX, int chunkZ) {
+        int entries = 0;
+        long vertices = 0;
+        float minX = Float.POSITIVE_INFINITY;
+        float minY = Float.POSITIVE_INFINITY;
+        float minZ = Float.POSITIVE_INFINITY;
+        float maxX = Float.NEGATIVE_INFINITY;
+        float maxY = Float.NEGATIVE_INFINITY;
+        float maxZ = Float.NEGATIVE_INFINITY;
+
+        for (ForgeCpuBuiltSection section : this.entries.values()) {
+            if (!section.dimension().equals(dimension) || section.chunkX() != chunkX || section.chunkZ() != chunkZ) {
+                continue;
+            }
+            ForgeCpuMeshBuffer buffer = section.meshBuffer();
+            if (buffer == null || buffer.isClosed()) {
+                continue;
+            }
+            int[] data = buffer.vertexData();
+            if (data == null) {
+                continue;
+            }
+
+            entries++;
+            vertices += buffer.vertexCount();
+            for (int vertex = 0; vertex < buffer.vertexCount(); vertex++) {
+                int offset = vertex * ForgeCpuMeshBuffer.VERTEX_STRIDE_INTS;
+                float x = Float.intBitsToFloat(data[offset]);
+                float y = Float.intBitsToFloat(data[offset + 1]);
+                float z = Float.intBitsToFloat(data[offset + 2]);
+                minX = Math.min(minX, x);
+                minY = Math.min(minY, y);
+                minZ = Math.min(minZ, z);
+                maxX = Math.max(maxX, x);
+                maxY = Math.max(maxY, y);
+                maxZ = Math.max(maxZ, z);
+            }
+        }
+
+        if (entries == 0) {
+            return BoundsSnapshot.empty(dimension, chunkX, chunkZ);
+        }
+        return new BoundsSnapshot(true, dimension, chunkX, chunkZ, entries, vertices, minX, minY, minZ, maxX, maxY, maxZ);
     }
 
     public synchronized StatusSnapshot createStatusSnapshot() {
@@ -150,6 +213,25 @@ public final class ForgeCpuMeshCache {
             String dimensions,
             String layers
     ) {
+    }
+
+    public record BoundsSnapshot(
+            boolean available,
+            String dimension,
+            int chunkX,
+            int chunkZ,
+            int entries,
+            long vertices,
+            float minX,
+            float minY,
+            float minZ,
+            float maxX,
+            float maxY,
+            float maxZ
+    ) {
+        private static BoundsSnapshot empty(String dimension, int chunkX, int chunkZ) {
+            return new BoundsSnapshot(false, dimension, chunkX, chunkZ, 0, 0, 0, 0, 0, 0, 0, 0);
+        }
     }
 
     public record Key(
