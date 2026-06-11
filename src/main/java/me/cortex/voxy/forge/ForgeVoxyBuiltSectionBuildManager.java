@@ -1,6 +1,5 @@
 package me.cortex.voxy.forge;
 
-import me.cortex.voxy.config.ForgeVoxyConfig;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.world.level.ChunkPos;
@@ -293,19 +292,19 @@ public final class ForgeVoxyBuiltSectionBuildManager {
     }
 
     private static boolean isAutoEnabled() {
-        return ForgeVoxyConfig.ENABLE_AUTO_BUILT_SECTION_BUILD.get();
+        return ForgeVoxyRuntimeOverrides.enableAutoBuiltSectionBuild();
     }
 
     private static int getConfiguredRadius() {
-        return Math.min(8, Math.max(0, ForgeVoxyConfig.AUTO_BUILT_SECTION_BUILD_RADIUS.get()));
+        return Math.min(8, Math.max(0, me.cortex.voxy.config.ForgeVoxyConfig.AUTO_BUILT_SECTION_BUILD_RADIUS.get()));
     }
 
     private static int getConfiguredMaxChunksPerTick() {
-        return Math.min(8, Math.max(1, ForgeVoxyConfig.AUTO_BUILT_SECTION_MAX_CHUNKS_PER_TICK.get()));
+        return Math.min(8, Math.max(1, me.cortex.voxy.config.ForgeVoxyConfig.AUTO_BUILT_SECTION_MAX_CHUNKS_PER_TICK.get()));
     }
 
     private static int getConfiguredCooldownTicks() {
-        return Math.min(200, Math.max(0, ForgeVoxyConfig.AUTO_BUILT_SECTION_COOLDOWN_TICKS.get()));
+        return Math.min(200, Math.max(0, me.cortex.voxy.config.ForgeVoxyConfig.AUTO_BUILT_SECTION_COOLDOWN_TICKS.get()));
     }
 
     private static int getRecordRetentionRadius(int activeRadius) {

@@ -16,6 +16,13 @@ public final class ForgeGpuMeshUploadManager {
     private long uploadWindowCount;
     private double uploadWindowMs;
     private double lastAverageUploadMs;
+    private long sourceSwitchCount;
+    private long orphanReconciledTotal;
+    private int pendingOrphanReconciled;
+    private double lastBuiltSectionDecodeMs;
+    private long builtSectionDecodeWindowCount;
+    private double builtSectionDecodeWindowMs;
+    private double lastAverageBuiltSectionDecodeMs;
     private SimpleGpuMeshSource activeSource;
 
     ForgeGpuMeshUploadManager(ForgeVoxyInstance instance) {
@@ -27,11 +34,16 @@ public final class ForgeGpuMeshUploadManager {
     }
 
     public void clear() {
-        this.instance.getGpuMeshCache().clear();
+        int closed = this.instance.getGpuMeshCache().clear();
+        this.recordOrphanReconciled(closed);
         this.uploadBudget = 0;
         this.uploadWindowCount = 0;
         this.uploadWindowMs = 0.0D;
         this.lastAverageUploadMs = 0.0D;
+        this.lastBuiltSectionDecodeMs = 0.0D;
+        this.builtSectionDecodeWindowCount = 0;
+        this.builtSectionDecodeWindowMs = 0.0D;
+        this.lastAverageBuiltSectionDecodeMs = 0.0D;
         this.activeSource = null;
         this.lastStatus = UploadStatusSnapshot.disabled();
     }
@@ -52,7 +64,9 @@ public final class ForgeGpuMeshUploadManager {
 
         SimpleGpuMeshSource source = getConfiguredSource();
         if (source != this.activeSource) {
-            this.instance.getGpuMeshCache().clear();
+            int closed = this.instance.getGpuMeshCache().clear();
+            this.recordOrphanReconciled(closed);
+            this.sourceSwitchCount++;
             this.activeSource = source;
         }
         if (source == SimpleGpuMeshSource.BUILT_SECTION) {
@@ -107,7 +121,10 @@ public final class ForgeGpuMeshUploadManager {
         }
 
         this.instance.getGpuMeshCache().setActiveDimension(dimension);
-        this.instance.getGpuMeshCache().retainOnly(dimension, liveKeys);
+        int orphanReconciled = this.consumePendingOrphanReconciled();
+        int retainedRemoved = this.instance.getGpuMeshCache().retainOnly(dimension, liveKeys);
+        orphanReconciled += retainedRemoved;
+        this.orphanReconciledTotal += retainedRemoved;
 
         int uploadLimit = Math.min(this.uploadBudget, getConfiguredMaxUploadsPerTick());
         int uploaded = 0;
@@ -179,6 +196,11 @@ public final class ForgeGpuMeshUploadManager {
                 cpuSnapshot.skippedReleased(),
                 cpuSnapshot.limitedEntries(),
                 0,
+                orphanReconciled,
+                this.orphanReconciledTotal,
+                this.sourceSwitchCount,
+                this.lastBuiltSectionDecodeMs,
+                this.lastAverageBuiltSectionDecodeMs,
                 uploadedVertices,
                 uploadedBytes,
                 this.lastAverageUploadMs,
@@ -217,7 +239,10 @@ public final class ForgeGpuMeshUploadManager {
         }
 
         this.instance.getGpuMeshCache().setActiveDimension(dimension);
-        this.instance.getGpuMeshCache().retainOnly(dimension, liveKeys);
+        int orphanReconciled = this.consumePendingOrphanReconciled();
+        int retainedRemoved = this.instance.getGpuMeshCache().retainOnly(dimension, liveKeys);
+        orphanReconciled += retainedRemoved;
+        this.orphanReconciledTotal += retainedRemoved;
 
         int uploadLimit = Math.min(this.uploadBudget, getConfiguredMaxUploadsPerTick());
         int uploaded = 0;
@@ -236,7 +261,9 @@ public final class ForgeGpuMeshUploadManager {
                     continue;
                 }
 
+                long decodeStart = System.nanoTime();
                 try (ForgeBuiltSectionSimpleMeshBuilder.AdaptedSection adapted = ForgeBuiltSectionSimpleMeshBuilder.build(section)) {
+                    this.recordBuiltSectionDecodeMs((System.nanoTime() - decodeStart) / 1_000_000.0D);
                     skippedInvalid += adapted.stats().skippedInvalid();
                     ForgeCpuBuiltSection cpuSection = adapted.section();
                     if (cpuSection == null || cpuSection.meshBuffer() == null || cpuSection.meshBuffer().isClosed() || cpuSection.meshBuffer().vertexCount() == 0) {
@@ -249,6 +276,7 @@ public final class ForgeGpuMeshUploadManager {
                     this.instance.getGpuMeshCache().put(uploadedBuffer);
                     uploaded++;
                 } catch (Exception e) {
+                    this.recordBuiltSectionDecodeMs((System.nanoTime() - decodeStart) / 1_000_000.0D);
                     failed++;
                     VoxyForge.LOGGER.error(
                             "Failed to upload Voxy BuiltSection simple GPU mesh for {} chunk {},{} position {}",
@@ -290,6 +318,11 @@ public final class ForgeGpuMeshUploadManager {
                 builtSnapshot.skippedReleased(),
                 builtSnapshot.limitedEntries(),
                 skippedInvalid,
+                orphanReconciled,
+                this.orphanReconciledTotal,
+                this.sourceSwitchCount,
+                this.lastBuiltSectionDecodeMs,
+                this.lastAverageBuiltSectionDecodeMs,
                 uploadedVertices,
                 uploadedBytes,
                 this.lastAverageUploadMs,
@@ -337,6 +370,27 @@ public final class ForgeGpuMeshUploadManager {
         return ForgeVoxyRuntimeOverrides.simpleGpuMeshSource();
     }
 
+    private void recordOrphanReconciled(int count) {
+        if (count <= 0) {
+            return;
+        }
+        this.pendingOrphanReconciled += count;
+        this.orphanReconciledTotal += count;
+    }
+
+    private int consumePendingOrphanReconciled() {
+        int count = this.pendingOrphanReconciled;
+        this.pendingOrphanReconciled = 0;
+        return count;
+    }
+
+    private void recordBuiltSectionDecodeMs(double elapsedMs) {
+        this.lastBuiltSectionDecodeMs = elapsedMs;
+        this.builtSectionDecodeWindowCount++;
+        this.builtSectionDecodeWindowMs += elapsedMs;
+        this.lastAverageBuiltSectionDecodeMs = this.builtSectionDecodeWindowMs / this.builtSectionDecodeWindowCount;
+    }
+
     public record UploadStatusSnapshot(
             boolean enabled,
             String reason,
@@ -357,6 +411,11 @@ public final class ForgeGpuMeshUploadManager {
             int skippedCpuReleased,
             int limitedCpuEntries,
             int skippedBuiltSectionInvalid,
+            int orphanReconciled,
+            long orphanReconciledTotal,
+            long sourceSwitchCount,
+            double lastBuiltSectionDecodeMs,
+            double averageBuiltSectionDecodeMs,
             long uploadedVerticesThisFrame,
             long uploadedBytesThisFrame,
             double averageUploadMs,
@@ -389,7 +448,12 @@ public final class ForgeGpuMeshUploadManager {
                     0,
                     0,
                     0,
-                    0,
+                    0L,
+                    0L,
+                    0.0D,
+                    0.0D,
+                    0L,
+                    0L,
                     0.0D,
                     true,
                     true

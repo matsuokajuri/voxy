@@ -64,14 +64,17 @@ public final class ForgeGpuMeshCache {
         this.trimToLimit();
     }
 
-    public synchronized void clear() {
+    public synchronized int clear() {
+        int closed = this.buffers.size();
         for (ForgeGpuMeshBuffer buffer : this.buffers.values()) {
             buffer.close();
         }
         this.buffers.clear();
+        return closed;
     }
 
-    public synchronized void retainOnly(String dimension, Set<ForgeCpuMeshCache.Key> liveCpuKeys) {
+    public synchronized int retainOnly(String dimension, Set<ForgeCpuMeshCache.Key> liveCpuKeys) {
+        int removed = 0;
         Iterator<Map.Entry<ForgeCpuMeshCache.Key, ForgeGpuMeshBuffer>> iterator = this.buffers.entrySet().iterator();
         while (iterator.hasNext()) {
             Map.Entry<ForgeCpuMeshCache.Key, ForgeGpuMeshBuffer> entry = iterator.next();
@@ -79,8 +82,10 @@ public final class ForgeGpuMeshCache {
             if (!key.dimension().equals(dimension) || !liveCpuKeys.contains(key)) {
                 entry.getValue().close();
                 iterator.remove();
+                removed++;
             }
         }
+        return removed;
     }
 
     public synchronized RenderSnapshot createRenderSnapshot(String dimension, int centerChunkX, int centerChunkZ, int radiusChunks, int maxRenderedBuffers) {
