@@ -78,6 +78,10 @@ public final class ForgeVoxyBuiltSection implements AutoCloseable {
         return this.occupancy == null ? 0 : this.occupancy.length;
     }
 
+    public boolean occupancyPresent() {
+        return this.occupancy != null && this.occupancy.length != 0;
+    }
+
     public long createdTimeMillis() {
         return this.createdTimeMillis;
     }
@@ -100,6 +104,10 @@ public final class ForgeVoxyBuiltSection implements AutoCloseable {
 
     public boolean isFinalRendererFormat() {
         return this.geometryBuffer != null && this.geometryBuffer.isFinalRendererFormat();
+    }
+
+    public String geometryFormat() {
+        return this.geometryBuffer == null ? "none" : this.geometryBuffer.geometryFormat();
     }
 
     @Override

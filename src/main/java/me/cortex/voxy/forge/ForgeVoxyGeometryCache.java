@@ -62,21 +62,28 @@ public final class ForgeVoxyGeometryCache {
         this.trimToLimit();
         long totalQuads = 0;
         long totalBytes = 0;
+        long totalOccupancyBytes = 0;
+        long finalFormatEntries = 0;
         long partialFormatEntries = 0;
         String firstPosition = "none";
         String firstAabb = "none";
         String firstOffsets = "none";
+        String firstNamedOffsets = "none";
 
         for (ForgeVoxyBuiltSection section : this.entries.values()) {
             totalQuads += section.quadCount();
             totalBytes += section.geometryBytes();
-            if (!section.isFinalRendererFormat()) {
+            totalOccupancyBytes += section.occupancyBytes();
+            if (section.isFinalRendererFormat()) {
+                finalFormatEntries++;
+            } else {
                 partialFormatEntries++;
             }
             if ("none".equals(firstPosition)) {
                 firstPosition = Long.toUnsignedString(section.position());
                 firstAabb = ForgeVoxyBuiltSectionBuilder.formatAabb(section.aabb());
                 firstOffsets = ForgeVoxyBuiltSectionBuilder.formatOffsets(section.offsets());
+                firstNamedOffsets = ForgeVoxyBuiltSectionBuilder.formatNamedOffsets(section.offsets());
             }
         }
 
@@ -85,13 +92,16 @@ public final class ForgeVoxyGeometryCache {
                 this.getConfiguredMaxEntries(),
                 totalQuads,
                 totalBytes,
+                totalOccupancyBytes,
                 this.closedCount,
                 this.evictedCount,
                 this.replacedCount,
+                finalFormatEntries,
                 partialFormatEntries,
                 firstPosition,
                 firstAabb,
-                firstOffsets
+                firstOffsets,
+                firstNamedOffsets
         );
     }
 
@@ -120,13 +130,16 @@ public final class ForgeVoxyGeometryCache {
             int maxEntries,
             long totalQuads,
             long totalGeometryBytes,
+            long totalOccupancyBytes,
             long closedCount,
             long evictedCount,
             long replacedCount,
+            long finalFormatEntries,
             long partialFormatEntries,
             String firstEntryPosition,
             String firstEntryAabb,
-            String firstEntryOffsets
+            String firstEntryOffsets,
+            String firstEntryNamedOffsets
     ) {
     }
 

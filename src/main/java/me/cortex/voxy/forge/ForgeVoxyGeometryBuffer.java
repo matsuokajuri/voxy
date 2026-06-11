@@ -3,16 +3,20 @@ package me.cortex.voxy.forge;
 import java.util.Arrays;
 
 public final class ForgeVoxyGeometryBuffer implements AutoCloseable {
+    public static final String PARTIAL_ORIGINAL_POSITION_FORMAT = "partial-original-position";
+
     private long[] packedQuads;
     private final boolean finalRendererFormat;
+    private final String geometryFormat;
 
-    private ForgeVoxyGeometryBuffer(long[] packedQuads, boolean finalRendererFormat) {
+    private ForgeVoxyGeometryBuffer(long[] packedQuads, boolean finalRendererFormat, String geometryFormat) {
         this.packedQuads = packedQuads;
         this.finalRendererFormat = finalRendererFormat;
+        this.geometryFormat = geometryFormat;
     }
 
-    public static ForgeVoxyGeometryBuffer partial(long[] packedQuads) {
-        return new ForgeVoxyGeometryBuffer(Arrays.copyOf(packedQuads, packedQuads.length), false);
+    public static ForgeVoxyGeometryBuffer partialOriginalPosition(long[] packedQuads) {
+        return new ForgeVoxyGeometryBuffer(Arrays.copyOf(packedQuads, packedQuads.length), false, PARTIAL_ORIGINAL_POSITION_FORMAT);
     }
 
     public long[] packedQuads() {
@@ -29,6 +33,10 @@ public final class ForgeVoxyGeometryBuffer implements AutoCloseable {
 
     public boolean isFinalRendererFormat() {
         return this.finalRendererFormat;
+    }
+
+    public String geometryFormat() {
+        return this.geometryFormat;
     }
 
     public boolean isClosed() {

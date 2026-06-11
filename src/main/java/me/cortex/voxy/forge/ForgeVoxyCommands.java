@@ -364,20 +364,27 @@ public final class ForgeVoxyCommands {
                     .withElapsedMs(elapsedMs);
             var cacheStatus = cache.createStatusSnapshot();
             String message = String.format(
-                    "Voxy BuiltSection CPU: %s chunk %d,%d sourceCpuEntries=%d sectionsBuilt=%d builtSectionCount=%d quads=%d geometryBytes=%d offsets=%s aabb=%s cacheWritten=%d cacheEntries=%d finalFormat=%s elapsed=%.2fms",
+                    "Voxy BuiltSection CPU: %s chunk %d,%d sourceCpuEntries=%d emptySections=%d sectionsBuilt=%d builtSectionCount=%d quads=%d geometryBytes=%d occupancyBytes=%d offsetsSemantic=%s geometryFormat=%s finalFormat=%s occupancyPresent=%s samplePosition=%s sampleAabb=%s offsets=%s namedOffsets=%s cacheWritten=%d cacheEntries=%d elapsed=%.2fms",
                     stats.dimension(),
                     stats.chunkX(),
                     stats.chunkZ(),
                     stats.sourceCpuEntries(),
+                    stats.emptySections(),
                     cpuStats.sectionsBuilt(),
                     stats.sectionsBuilt(),
                     stats.totalQuads(),
                     stats.geometryBytes(),
-                    stats.offsetsSummary(),
+                    stats.occupancyBytes(),
+                    stats.offsetsSemantic(),
+                    stats.geometryFormat(),
+                    stats.finalRendererFormat(),
+                    stats.occupancyPresent(),
+                    stats.samplePosition(),
                     stats.aabbSample(),
+                    stats.offsetsSummary(),
+                    stats.offsetsNamed(),
                     stats.cacheEntriesWritten(),
                     cacheStatus.entries(),
-                    stats.finalRendererFormat(),
                     stats.elapsedMs()
             );
             VoxyForge.LOGGER.info(message);
@@ -399,19 +406,23 @@ public final class ForgeVoxyCommands {
     private static int builtSectionCacheStatus(CommandSourceStack source) {
         var status = ForgeVoxyInstance.INSTANCE.getVoxyGeometryCache().createStatusSnapshot();
         String message = String.format(
-                "Voxy BuiltSection cache: entries=%d/%d totalSections=%d totalQuads=%d geometryBytes=%d closed=%d evicted=%d replaced=%d partialFormatEntries=%d firstPosition=%s firstAabb=%s firstOffsets=%s",
+                "Voxy BuiltSection cache: entries=%d/%d totalSections=%d totalQuads=%d totalGeometryBytes=%d totalOccupancyBytes=%d finalFormatCount=%d partialFormatCount=%d closed=%d evicted=%d replaced=%d firstPosition=%s firstAabb=%s firstOffsets=%s firstNamedOffsets=%s offsetsSemantic=%s",
                 status.entries(),
                 status.maxEntries(),
                 status.entries(),
                 status.totalQuads(),
                 status.totalGeometryBytes(),
+                status.totalOccupancyBytes(),
+                status.finalFormatEntries(),
+                status.partialFormatEntries(),
                 status.closedCount(),
                 status.evictedCount(),
                 status.replacedCount(),
-                status.partialFormatEntries(),
                 status.firstEntryPosition(),
                 status.firstEntryAabb(),
-                status.firstEntryOffsets()
+                status.firstEntryOffsets(),
+                status.firstEntryNamedOffsets(),
+                ForgeVoxyBuiltSectionBuilder.OFFSETS_SEMANTIC
         );
         source.sendSuccess(() -> Component.literal(message), false);
         return status.entries();

@@ -10,8 +10,19 @@ import java.util.Map;
 
 public final class ForgeVoxyBuiltSectionBuilder {
     private static final int BUCKET_COUNT = 8;
-    private static final int BYTES_PER_PARTIAL_QUAD = Long.BYTES;
     private static final int SECTION_SIZE = 32;
+    private static final int MAX_ORIGINAL_QUAD_SPAN = 16;
+    static final String OFFSETS_SEMANTIC = "original-quad-index-buckets";
+    static final String[] BUCKET_NAMES = {
+            "translucent",
+            "double_sided",
+            "directional_y_minus",
+            "directional_y_plus",
+            "directional_z_minus",
+            "directional_z_plus",
+            "directional_x_minus",
+            "directional_x_plus"
+    };
 
     private ForgeVoxyBuiltSectionBuilder() {
     }
@@ -41,17 +52,24 @@ public final class ForgeVoxyBuiltSectionBuilder {
         var builtSections = new ArrayList<ForgeVoxyBuiltSection>(groups.size());
         long totalQuads = 0;
         long geometryBytes = 0;
+        long occupancyBytes = 0;
+        int emptySections = Math.max(0, cpuResult.stats().sectionsFound() - groups.size());
         String offsetsSample = "none";
+        String namedOffsetsSample = "none";
         String aabbSample = "none";
+        String positionSample = "none";
         long createdTime = System.currentTimeMillis();
         for (MutableSection section : groups.values()) {
             ForgeVoxyBuiltSection built = section.build(createdTime);
             builtSections.add(built);
             totalQuads += built.quadCount();
             geometryBytes += built.geometryBytes();
+            occupancyBytes += built.occupancyBytes();
             if ("none".equals(offsetsSample)) {
                 offsetsSample = formatOffsets(built.offsets());
+                namedOffsetsSample = formatNamedOffsets(built.offsets());
                 aabbSample = formatAabb(built.aabb());
+                positionSample = Long.toUnsignedString(built.position());
             }
         }
 
@@ -64,10 +82,17 @@ public final class ForgeVoxyBuiltSectionBuilder {
                 cpuSections.size(),
                 builtSections.size(),
                 0,
+                emptySections,
                 totalQuads,
                 geometryBytes,
+                occupancyBytes,
+                OFFSETS_SEMANTIC,
+                ForgeVoxyGeometryBuffer.PARTIAL_ORIGINAL_POSITION_FORMAT,
                 offsetsSample,
+                namedOffsetsSample,
+                positionSample,
                 aabbSample,
+                occupancyBytes != 0,
                 false,
                 elapsedMs
         );
@@ -79,6 +104,27 @@ public final class ForgeVoxyBuiltSectionBuilder {
             return "none";
         }
         return Arrays.toString(offsets);
+    }
+
+    static String formatNamedOffsets(int[] offsets) {
+        if (offsets == null) {
+            return "none";
+        }
+        StringBuilder builder = new StringBuilder();
+        int previous = 0;
+        for (int i = 0; i < BUCKET_COUNT; i++) {
+            if (i != 0) {
+                builder.append(',');
+            }
+            int start = i < offsets.length ? offsets[i] : previous;
+            int next = i + 1 < offsets.length ? offsets[i + 1] : -1;
+            builder.append(BUCKET_NAMES[i]).append('=').append(start);
+            if (next >= 0) {
+                builder.append('+').append(Math.max(0, next - start));
+            }
+            previous = start;
+        }
+        return builder.toString();
     }
 
     static String formatAabb(int aabb) {
@@ -94,13 +140,15 @@ public final class ForgeVoxyBuiltSectionBuilder {
         return minX + "," + minY + "," + minZ + "+" + sizeX + "," + sizeY + "," + sizeZ;
     }
 
-    private static int bucketFor(ForgeCpuMeshLayer layer) {
-        return switch (layer) {
-            case SOLID -> 0;
-            case CUTOUT -> 1;
-            case TRANSLUCENT -> 2;
-            case OTHER -> 3;
-        };
+    private static int bucketFor(ForgeCpuBuiltSection section, int[] data, int quadIndex) {
+        if (section.layer() == ForgeCpuMeshLayer.TRANSLUCENT) {
+            return 0;
+        }
+        int face = originalFace(data, quadIndex);
+        if (face < 0 || face > 5) {
+            return 1;
+        }
+        return 2 + face;
     }
 
     private static int packAabb(float minX, float minY, float minZ, float maxX, float maxY, float maxZ, long sectionPosition) {
@@ -137,34 +185,105 @@ public final class ForgeVoxyBuiltSectionBuilder {
         return Math.max(0, Math.min(31, value));
     }
 
-    private static long packPartialQuadRecord(ForgeCpuBuiltSection section, int[] data, int quadIndex, int globalQuadIndex) {
+    private static long packPartialQuadRecord(ForgeCpuBuiltSection section, int[] data, int quadIndex) {
         int baseVertex = quadIndex * 4;
         int baseOffset = baseVertex * ForgeCpuMeshBuffer.VERTEX_STRIDE_INTS;
-        int color = data[baseOffset + 3];
-        int normal = data[baseOffset + 7] & 15;
+        int encodedPosition = packOriginalPositionBits(section.sectionPosition(), data, quadIndex);
+        int light = data[baseOffset + 6] & 0xFF;
+        int tint = data[baseOffset + 9] < 0 ? 0 : Math.min(3, data[baseOffset + 9]);
         int layer = section.layer().id & 15;
-        int bucket = bucketFor(section.layer()) & 7;
-        int centroidX = 0;
-        int centroidY = 0;
-        int centroidZ = 0;
-        for (int i = 0; i < 4; i++) {
-            int vertexOffset = (baseVertex + i) * ForgeCpuMeshBuffer.VERTEX_STRIDE_INTS;
-            centroidX += Math.round(Float.intBitsToFloat(data[vertexOffset]));
-            centroidY += Math.round(Float.intBitsToFloat(data[vertexOffset + 1]));
-            centroidZ += Math.round(Float.intBitsToFloat(data[vertexOffset + 2]));
-        }
-        centroidX = clampToSection(Math.floorMod(centroidX / 4, SECTION_SIZE));
-        centroidY = clampToSection(Math.floorMod(centroidY / 4, SECTION_SIZE));
-        centroidZ = clampToSection(Math.floorMod(centroidZ / 4, SECTION_SIZE));
+        long partialMetadata = ((long) light << 55)
+                | ((long) tint << 53)
+                | ((long) layer << 49);
+        return partialMetadata | Integer.toUnsignedLong(encodedPosition);
+    }
 
-        return (color & 0xFFFFFFFFL)
-                | ((long) layer << 32)
-                | ((long) normal << 36)
-                | ((long) centroidX << 40)
-                | ((long) centroidY << 45)
-                | ((long) centroidZ << 50)
-                | ((long) bucket << 55)
-                | (((long) globalQuadIndex & 0x3FL) << 58);
+    private static int packOriginalPositionBits(long sectionPosition, int[] data, int quadIndex) {
+        int face = originalFace(data, quadIndex);
+        if (face < 0 || face > 5) {
+            face = 0;
+        }
+        int axis = face >> 1;
+        int axisSide = face & 1;
+        Bounds localBounds = localBounds(sectionPosition, data, quadIndex);
+
+        int x;
+        int z;
+        int length;
+        int width;
+        int auxiliaryPosition;
+        if (axis == 0) {
+            x = localBounds.minX();
+            z = localBounds.minZ();
+            length = localBounds.sizeX();
+            width = localBounds.sizeZ();
+            auxiliaryPosition = axisSide == 0 ? localBounds.minY() : localBounds.maxY();
+        } else if (axis == 1) {
+            x = localBounds.minX();
+            z = localBounds.minY();
+            length = localBounds.sizeX();
+            width = localBounds.sizeY();
+            auxiliaryPosition = axisSide == 0 ? localBounds.minZ() : localBounds.maxZ();
+        } else {
+            x = localBounds.minY();
+            z = localBounds.minZ();
+            length = localBounds.sizeY();
+            width = localBounds.sizeZ();
+            auxiliaryPosition = axisSide == 0 ? localBounds.minX() : localBounds.maxX();
+        }
+
+        length = Math.max(1, Math.min(MAX_ORIGINAL_QUAD_SPAN, length));
+        width = Math.max(1, Math.min(MAX_ORIGINAL_QUAD_SPAN, width));
+        int encodedPosition = face;
+        encodedPosition |= ((width - 1) << 7) | ((length - 1) << 3);
+        encodedPosition |= clampToSection(x) << (axis == 2 ? 16 : 21);
+        encodedPosition |= clampToSection(z) << (axis == 1 ? 16 : 11);
+        int shiftAmount = axis == 0 ? 16 : (axis == 1 ? 11 : 21);
+        encodedPosition |= clampToSection(auxiliaryPosition) << shiftAmount;
+        return encodedPosition;
+    }
+
+    private static int originalFace(int[] data, int quadIndex) {
+        int offset = quadIndex * 4 * ForgeCpuMeshBuffer.VERTEX_STRIDE_INTS;
+        int normal = data[offset + 7];
+        return normal >= 0 && normal <= 5 ? normal : -1;
+    }
+
+    private static Bounds localBounds(long sectionPosition, int[] data, int quadIndex) {
+        int level = Math.max(0, WorldEngine.getLevel(sectionPosition));
+        int scale = 1 << level;
+        float baseX = WorldEngine.getX(sectionPosition) * (float) SECTION_SIZE * scale;
+        float baseY = WorldEngine.getY(sectionPosition) * (float) SECTION_SIZE * scale;
+        float baseZ = WorldEngine.getZ(sectionPosition) * (float) SECTION_SIZE * scale;
+
+        float minX = Float.POSITIVE_INFINITY;
+        float minY = Float.POSITIVE_INFINITY;
+        float minZ = Float.POSITIVE_INFINITY;
+        float maxX = Float.NEGATIVE_INFINITY;
+        float maxY = Float.NEGATIVE_INFINITY;
+        float maxZ = Float.NEGATIVE_INFINITY;
+        int baseVertex = quadIndex * 4;
+        for (int i = 0; i < 4; i++) {
+            int offset = (baseVertex + i) * ForgeCpuMeshBuffer.VERTEX_STRIDE_INTS;
+            float x = (Float.intBitsToFloat(data[offset]) - baseX) / scale;
+            float y = (Float.intBitsToFloat(data[offset + 1]) - baseY) / scale;
+            float z = (Float.intBitsToFloat(data[offset + 2]) - baseZ) / scale;
+            minX = Math.min(minX, x);
+            minY = Math.min(minY, y);
+            minZ = Math.min(minZ, z);
+            maxX = Math.max(maxX, x);
+            maxY = Math.max(maxY, y);
+            maxZ = Math.max(maxZ, z);
+        }
+
+        return new Bounds(
+                clampToSection((int) Math.floor(minX)),
+                clampToSection((int) Math.floor(minY)),
+                clampToSection((int) Math.floor(minZ)),
+                clampToSection((int) Math.ceil(maxX) - 1),
+                clampToSection((int) Math.ceil(maxY) - 1),
+                clampToSection((int) Math.ceil(maxZ) - 1)
+        );
     }
 
     private record GroupKey(String dimension, int chunkX, int chunkZ, long sectionPosition) {
@@ -187,9 +306,11 @@ public final class ForgeVoxyBuiltSectionBuilder {
 
         private void add(ForgeCpuBuiltSection section) {
             this.sections.add(section);
-            this.bucketQuadCounts[bucketFor(section.layer())] += section.quadCount();
             ForgeCpuMeshBuffer buffer = section.meshBuffer();
             int[] data = buffer.vertexData();
+            for (int quad = 0; quad < buffer.quadCount(); quad++) {
+                this.bucketQuadCounts[bucketFor(section, data, quad)]++;
+            }
             for (int vertex = 0; vertex < buffer.vertexCount(); vertex++) {
                 int offset = vertex * ForgeCpuMeshBuffer.VERTEX_STRIDE_INTS;
                 float x = Float.intBitsToFloat(data[offset]);
@@ -208,26 +329,25 @@ public final class ForgeVoxyBuiltSectionBuilder {
             int totalQuads = 0;
             int[] offsets = new int[BUCKET_COUNT];
             for (int i = 0; i < BUCKET_COUNT; i++) {
-                offsets[i] = totalQuads * BYTES_PER_PARTIAL_QUAD;
+                offsets[i] = totalQuads;
                 totalQuads += this.bucketQuadCounts[i];
             }
 
             long[] records = new long[totalQuads];
             int[] writePositions = new int[BUCKET_COUNT];
             for (int i = 0; i < BUCKET_COUNT; i++) {
-                writePositions[i] = offsets[i] / BYTES_PER_PARTIAL_QUAD;
+                writePositions[i] = offsets[i];
             }
 
-            int globalQuadIndex = 0;
             for (int bucket = 0; bucket < BUCKET_COUNT; bucket++) {
                 for (ForgeCpuBuiltSection section : this.sections) {
-                    if (bucketFor(section.layer()) != bucket) {
-                        continue;
-                    }
                     ForgeCpuMeshBuffer buffer = section.meshBuffer();
                     int[] data = buffer.vertexData();
                     for (int quad = 0; quad < buffer.quadCount(); quad++) {
-                        records[writePositions[bucket]++] = packPartialQuadRecord(section, data, quad, globalQuadIndex++);
+                        if (bucketFor(section, data, quad) != bucket) {
+                            continue;
+                        }
+                        records[writePositions[bucket]++] = packPartialQuadRecord(section, data, quad);
                     }
                 }
             }
@@ -241,10 +361,24 @@ public final class ForgeVoxyBuiltSectionBuilder {
                     (byte) 0,
                     aabb,
                     offsets,
-                    ForgeVoxyGeometryBuffer.partial(records),
+                    ForgeVoxyGeometryBuffer.partialOriginalPosition(records),
                     null,
                     createdTime
             );
+        }
+    }
+
+    private record Bounds(int minX, int minY, int minZ, int maxX, int maxY, int maxZ) {
+        private int sizeX() {
+            return Math.max(1, this.maxX - this.minX + 1);
+        }
+
+        private int sizeY() {
+            return Math.max(1, this.maxY - this.minY + 1);
+        }
+
+        private int sizeZ() {
+            return Math.max(1, this.maxZ - this.minZ + 1);
         }
     }
 }
