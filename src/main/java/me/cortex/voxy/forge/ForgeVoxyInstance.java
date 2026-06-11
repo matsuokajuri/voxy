@@ -21,6 +21,9 @@ public final class ForgeVoxyInstance {
     private final ForgeCpuMeshBuildManager cpuMeshBuildManager = new ForgeCpuMeshBuildManager(this);
     private final ForgeCpuMeshCache cpuMeshCache = new ForgeCpuMeshCache();
     private final ForgeDebugMeshRenderer debugMeshRenderer = new ForgeDebugMeshRenderer(this);
+    private final ForgeGpuMeshCache gpuMeshCache = new ForgeGpuMeshCache();
+    private final ForgeGpuMeshUploadManager gpuMeshUploadManager = new ForgeGpuMeshUploadManager(this);
+    private final ForgeSimpleGpuMeshRenderer simpleGpuMeshRenderer = new ForgeSimpleGpuMeshRenderer(this);
     private final AtomicInteger storageWriteCount = new AtomicInteger();
     private String activeClientDimension;
 
@@ -35,6 +38,8 @@ public final class ForgeVoxyInstance {
         this.chunkIngestManager.register();
         this.cpuMeshBuildManager.register();
         this.debugMeshRenderer.register();
+        this.gpuMeshUploadManager.register();
+        this.simpleGpuMeshRenderer.register();
     }
 
     public WorldEngine getActiveWorld() {
@@ -67,6 +72,18 @@ public final class ForgeVoxyInstance {
         return this.debugMeshRenderer;
     }
 
+    public ForgeGpuMeshCache getGpuMeshCache() {
+        return this.gpuMeshCache;
+    }
+
+    public ForgeGpuMeshUploadManager getGpuMeshUploadManager() {
+        return this.gpuMeshUploadManager;
+    }
+
+    public ForgeSimpleGpuMeshRenderer getSimpleGpuMeshRenderer() {
+        return this.simpleGpuMeshRenderer;
+    }
+
     private void onRegisterClientCommands(RegisterClientCommandsEvent event) {
         ForgeVoxyCommands.register(event.getDispatcher());
     }
@@ -94,6 +111,8 @@ public final class ForgeVoxyInstance {
         this.chunkIngestManager.clear();
         this.cpuMeshBuildManager.clear();
         this.cpuMeshCache.setActiveDimension(dimension);
+        this.gpuMeshUploadManager.clear();
+        this.gpuMeshCache.setActiveDimension(dimension);
         this.closeActiveWorld();
         if (ForgeVoxyConfig.ENABLE_WORLD_ENGINE_SKELETON.get()) {
             this.createActiveWorldSkeleton();
@@ -133,6 +152,8 @@ public final class ForgeVoxyInstance {
         this.chunkIngestManager.clear();
         this.cpuMeshBuildManager.clear();
         this.cpuMeshCache.clear();
+        this.gpuMeshUploadManager.clear();
+        this.gpuMeshCache.clear();
         this.activeClientDimension = null;
         this.closeActiveWorld();
     }

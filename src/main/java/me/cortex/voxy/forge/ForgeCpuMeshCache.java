@@ -304,7 +304,7 @@ public final class ForgeCpuMeshCache {
             long sectionPosition,
             ForgeCpuMeshLayer layer
     ) {
-        private static Key from(ForgeCpuBuiltSection section) {
+        public static Key from(ForgeCpuBuiltSection section) {
             return new Key(section.dimension(), section.chunkX(), section.chunkZ(), section.sectionPosition(), section.layer());
         }
     }

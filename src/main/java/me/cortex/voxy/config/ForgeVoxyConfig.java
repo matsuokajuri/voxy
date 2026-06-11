@@ -22,6 +22,11 @@ public final class ForgeVoxyConfig {
     public static final ForgeConfigSpec.DoubleValue DEBUG_MESH_ALPHA;
     public static final ForgeConfigSpec.BooleanValue DEBUG_MESH_IGNORE_DEPTH;
     public static final ForgeConfigSpec.DoubleValue DEBUG_MESH_VERTICAL_OFFSET;
+    public static final ForgeConfigSpec.BooleanValue ENABLE_SIMPLE_GPU_MESH_RENDERER;
+    public static final ForgeConfigSpec.IntValue SIMPLE_GPU_MESH_MAX_UPLOADS_PER_TICK;
+    public static final ForgeConfigSpec.IntValue SIMPLE_GPU_MESH_MAX_BUFFERS;
+    public static final ForgeConfigSpec.IntValue SIMPLE_GPU_MESH_RENDER_DISTANCE_CHUNKS;
+    public static final ForgeConfigSpec.DoubleValue SIMPLE_GPU_MESH_ALPHA;
 
     static {
         ForgeConfigSpec.Builder builder = new ForgeConfigSpec.Builder();
@@ -80,6 +85,21 @@ public final class ForgeVoxyConfig {
         DEBUG_MESH_VERTICAL_OFFSET = builder
                 .comment("Small upward offset applied only while drawing the temporary debug mesh to reduce z-fighting with vanilla terrain.")
                 .defineInRange("debugMeshVerticalOffset", 0.05D, -2.0D, 2.0D);
+        ENABLE_SIMPLE_GPU_MESH_RENDERER = builder
+                .comment("Draws cached CPU mesh through a simple vanilla VertexBuffer renderer. This is an early Forge renderer PoC and is disabled by default.")
+                .define("enableSimpleGpuMeshRenderer", false);
+        SIMPLE_GPU_MESH_MAX_UPLOADS_PER_TICK = builder
+                .comment("Maximum CPU mesh entries uploaded to vanilla VertexBuffer objects per client tick.")
+                .defineInRange("simpleGpuMeshMaxUploadsPerTick", 1, 1, 16);
+        SIMPLE_GPU_MESH_MAX_BUFFERS = builder
+                .comment("Maximum cached vanilla VertexBuffer mesh entries. Old GPU buffers are closed and evicted with LRU ordering.")
+                .defineInRange("simpleGpuMeshMaxBuffers", 512, 1, 8192);
+        SIMPLE_GPU_MESH_RENDER_DISTANCE_CHUNKS = builder
+                .comment("Chunk radius around the player used by the simple vanilla GPU mesh renderer.")
+                .defineInRange("simpleGpuMeshRenderDistanceChunks", 2, 0, 32);
+        SIMPLE_GPU_MESH_ALPHA = builder
+                .comment("Global alpha multiplier used by the simple vanilla GPU mesh renderer.")
+                .defineInRange("simpleGpuMeshAlpha", 1.0D, 0.05D, 1.0D);
         builder.pop();
         CLIENT_SPEC = builder.build();
     }
