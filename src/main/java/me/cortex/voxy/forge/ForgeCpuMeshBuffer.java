@@ -3,7 +3,19 @@ package me.cortex.voxy.forge;
 import java.util.Arrays;
 
 public final class ForgeCpuMeshBuffer implements AutoCloseable {
-    public static final int VERTEX_STRIDE_INTS = 10;
+    public static final int X_OFFSET = 0;
+    public static final int Y_OFFSET = 1;
+    public static final int Z_OFFSET = 2;
+    public static final int COLOR_OFFSET = 3;
+    public static final int U_OFFSET = 4;
+    public static final int V_OFFSET = 5;
+    public static final int LIGHT_OFFSET = 6;
+    public static final int NORMAL_OFFSET = 7;
+    public static final int LAYER_OFFSET = 8;
+    public static final int TINT_INDEX_OFFSET = 9;
+    public static final int BLOCK_ID_OFFSET = 10;
+    public static final int BIOME_ID_OFFSET = 11;
+    public static final int VERTEX_STRIDE_INTS = 12;
     public static final int VERTEX_STRIDE_BYTES = VERTEX_STRIDE_INTS * Integer.BYTES;
 
     private int[] vertexData;
@@ -55,20 +67,24 @@ public final class ForgeCpuMeshBuffer implements AutoCloseable {
                 int light,
                 int normal,
                 int layer,
-                int tintIndex
+                int tintIndex,
+                int blockId,
+                int biomeId
         ) {
             this.ensureVertexCapacity(this.vertexCount + 1);
             int offset = this.vertexCount * VERTEX_STRIDE_INTS;
-            this.vertexData[offset] = Float.floatToRawIntBits(x);
-            this.vertexData[offset + 1] = Float.floatToRawIntBits(y);
-            this.vertexData[offset + 2] = Float.floatToRawIntBits(z);
-            this.vertexData[offset + 3] = color;
-            this.vertexData[offset + 4] = Float.floatToRawIntBits(u);
-            this.vertexData[offset + 5] = Float.floatToRawIntBits(v);
-            this.vertexData[offset + 6] = light;
-            this.vertexData[offset + 7] = normal;
-            this.vertexData[offset + 8] = layer;
-            this.vertexData[offset + 9] = tintIndex;
+            this.vertexData[offset + X_OFFSET] = Float.floatToRawIntBits(x);
+            this.vertexData[offset + Y_OFFSET] = Float.floatToRawIntBits(y);
+            this.vertexData[offset + Z_OFFSET] = Float.floatToRawIntBits(z);
+            this.vertexData[offset + COLOR_OFFSET] = color;
+            this.vertexData[offset + U_OFFSET] = Float.floatToRawIntBits(u);
+            this.vertexData[offset + V_OFFSET] = Float.floatToRawIntBits(v);
+            this.vertexData[offset + LIGHT_OFFSET] = light;
+            this.vertexData[offset + NORMAL_OFFSET] = normal;
+            this.vertexData[offset + LAYER_OFFSET] = layer;
+            this.vertexData[offset + TINT_INDEX_OFFSET] = tintIndex;
+            this.vertexData[offset + BLOCK_ID_OFFSET] = blockId;
+            this.vertexData[offset + BIOME_ID_OFFSET] = biomeId;
             this.vertexCount++;
         }
 

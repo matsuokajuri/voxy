@@ -12,7 +12,7 @@ import me.cortex.voxy.common.world.WorldEngine;
  */
 public final class ForgeVoxyQuadEncoder {
     static final String GEOMETRY_FORMAT = "partial-original-bit-layout";
-    static final String KNOWN_FIELDS = "face,size,localPosition,light";
+    static final String KNOWN_FIELDS = "face,size,localPosition,clientModelId,biomeId,light";
     static final int FACE_SHIFT = 0;
     static final int FACE_BITS = 3;
     static final int LENGTH_SHIFT = 3;
@@ -35,12 +35,14 @@ public final class ForgeVoxyQuadEncoder {
             | mask(LOCAL_POSITION_BITS, Z_SHIFT)
             | mask(LOCAL_POSITION_BITS, Y_SHIFT)
             | mask(LOCAL_POSITION_BITS, X_SHIFT)
+            | mask(MODEL_ID_BITS, MODEL_ID_SHIFT)
+            | mask(BIOME_ID_BITS, BIOME_ID_SHIFT)
             | mask(LIGHT_BITS, LIGHT_SHIFT);
 
     private static final int SECTION_SIZE = 32;
     private static final int MAX_ORIGINAL_QUAD_SPAN = 16;
-    private static final int UNKNOWN_MODEL_ID = 0;
-    private static final int UNKNOWN_BIOME_ID = 0;
+    private static final int MAX_MODEL_ID = (1 << MODEL_ID_BITS) - 1;
+    private static final int MAX_BIOME_ID = (1 << BIOME_ID_BITS) - 1;
 
     private ForgeVoxyQuadEncoder() {
     }
@@ -50,11 +52,28 @@ public final class ForgeVoxyQuadEncoder {
         int bucket = bucketFor(section.layer(), face);
         int encodedPosition = packOriginalPositionBits(section.sectionPosition(), data, quadIndex, face);
         int light = readLight(data, quadIndex);
+        int blockId = readBlockId(data, quadIndex);
+        ForgeVoxyModelIdMapper.ModelIdResult modelId = ForgeVoxyModelIdMapper.INSTANCE.getOrCreateModelId(blockId);
+        int rawBiomeId = readBiomeId(data, quadIndex);
+        boolean missingBiomeId = rawBiomeId < 0;
+        boolean biomeOverflow = rawBiomeId > MAX_BIOME_ID;
+        int biomeId = missingBiomeId ? 0 : Math.min(rawBiomeId, MAX_BIOME_ID);
         long record = Integer.toUnsignedLong(encodedPosition)
-                | ((long) UNKNOWN_MODEL_ID << MODEL_ID_SHIFT)
-                | ((long) UNKNOWN_BIOME_ID << BIOME_ID_SHIFT)
+                | ((long) modelId.modelId() << MODEL_ID_SHIFT)
+                | ((long) biomeId << BIOME_ID_SHIFT)
                 | ((long) light << LIGHT_SHIFT);
-        return new EncodedQuad(record, bucket, true, true, true);
+        return new EncodedQuad(
+                record,
+                bucket,
+                modelId.modelId(),
+                modelId.missing(),
+                modelId.overflow(),
+                biomeId,
+                missingBiomeId,
+                biomeOverflow,
+                true,
+                true
+        );
     }
 
     static int bucketFor(ForgeCpuMeshLayer layer, int face) {
@@ -78,15 +97,27 @@ public final class ForgeVoxyQuadEncoder {
         int x = extract(record, LOCAL_POSITION_BITS, X_SHIFT);
         int y = extract(record, LOCAL_POSITION_BITS, Y_SHIFT);
         int z = extract(record, LOCAL_POSITION_BITS, Z_SHIFT);
-        int modelId = extract(record, MODEL_ID_BITS, MODEL_ID_SHIFT);
-        int biomeId = extract(record, BIOME_ID_BITS, BIOME_ID_SHIFT);
-        int light = extract(record, LIGHT_BITS, LIGHT_SHIFT);
+        int modelId = extractModelId(record);
+        int biomeId = extractBiomeId(record);
+        int light = extractLightId(record);
         return "face=" + face
                 + " size=" + length + "x" + width
                 + " pos=" + x + "," + y + "," + z
                 + " modelId=" + modelId
                 + " biome=" + biomeId
                 + " light=" + light;
+    }
+
+    static int extractModelId(long record) {
+        return extract(record, MODEL_ID_BITS, MODEL_ID_SHIFT);
+    }
+
+    static int extractBiomeId(long record) {
+        return extract(record, BIOME_ID_BITS, BIOME_ID_SHIFT);
+    }
+
+    static int extractLightId(long record) {
+        return extract(record, LIGHT_BITS, LIGHT_SHIFT);
     }
 
     private static int packOriginalPositionBits(long sectionPosition, int[] data, int quadIndex, int face) {
@@ -150,9 +181,9 @@ public final class ForgeVoxyQuadEncoder {
         int baseVertex = quadIndex * 4;
         for (int i = 0; i < 4; i++) {
             int offset = (baseVertex + i) * ForgeCpuMeshBuffer.VERTEX_STRIDE_INTS;
-            float x = (Float.intBitsToFloat(data[offset]) - baseX) / scale;
-            float y = (Float.intBitsToFloat(data[offset + 1]) - baseY) / scale;
-            float z = (Float.intBitsToFloat(data[offset + 2]) - baseZ) / scale;
+            float x = (Float.intBitsToFloat(data[offset + ForgeCpuMeshBuffer.X_OFFSET]) - baseX) / scale;
+            float y = (Float.intBitsToFloat(data[offset + ForgeCpuMeshBuffer.Y_OFFSET]) - baseY) / scale;
+            float z = (Float.intBitsToFloat(data[offset + ForgeCpuMeshBuffer.Z_OFFSET]) - baseZ) / scale;
             minX = Math.min(minX, x);
             minY = Math.min(minY, y);
             minZ = Math.min(minZ, z);
@@ -173,12 +204,24 @@ public final class ForgeVoxyQuadEncoder {
 
     private static int readLight(int[] data, int quadIndex) {
         int offset = quadIndex * 4 * ForgeCpuMeshBuffer.VERTEX_STRIDE_INTS;
-        return data[offset + 6] & 0xFF;
+        return data[offset + ForgeCpuMeshBuffer.LIGHT_OFFSET] & 0xFF;
+    }
+
+    private static int readBlockId(int[] data, int quadIndex) {
+        int offset = quadIndex * 4 * ForgeCpuMeshBuffer.VERTEX_STRIDE_INTS;
+        int index = offset + ForgeCpuMeshBuffer.BLOCK_ID_OFFSET;
+        return index < data.length ? data[index] : 0;
+    }
+
+    private static int readBiomeId(int[] data, int quadIndex) {
+        int offset = quadIndex * 4 * ForgeCpuMeshBuffer.VERTEX_STRIDE_INTS;
+        int index = offset + ForgeCpuMeshBuffer.BIOME_ID_OFFSET;
+        return index < data.length ? data[index] : -1;
     }
 
     private static int originalFace(int[] data, int quadIndex) {
         int offset = quadIndex * 4 * ForgeCpuMeshBuffer.VERTEX_STRIDE_INTS;
-        int normal = data[offset + 7];
+        int normal = data[offset + ForgeCpuMeshBuffer.NORMAL_OFFSET];
         return normal >= 0 && normal <= 5 ? normal : -1;
     }
 
@@ -197,7 +240,12 @@ public final class ForgeVoxyQuadEncoder {
     record EncodedQuad(
             long record,
             int bucket,
+            int modelId,
             boolean missingModelId,
+            boolean modelIdOverflow,
+            int biomeId,
+            boolean missingBiomeId,
+            boolean biomeIdOverflow,
             boolean missingTexture,
             boolean missingGreedy
     ) {

@@ -364,7 +364,7 @@ public final class ForgeVoxyCommands {
                     .withElapsedMs(elapsedMs);
             var cacheStatus = cache.createStatusSnapshot();
             String message = String.format(
-                    "Voxy BuiltSection CPU: %s chunk %d,%d sourceCpuEntries=%d emptySections=%d sectionsBuilt=%d builtSectionCount=%d quads=%d geometryBytes=%d occupancyBytes=%d offsetsSemantic=%s geometryFormat=%s knownBits=%s knownFields=%s missingModelId=%d missingTexture=%d missingGreedy=%d finalFormat=%s occupancyPresent=%s samplePosition=%s sampleAabb=%s sampleRecord=%s decoded=\"%s\" offsets=%s namedOffsets=%s cacheWritten=%d cacheEntries=%d elapsed=%.2fms",
+                    "Voxy BuiltSection CPU: %s chunk %d,%d sourceCpuEntries=%d emptySections=%d sectionsBuilt=%d builtSectionCount=%d quads=%d geometryBytes=%d occupancyBytes=%d offsetsSemantic=%s geometryFormat=%s knownBits=%s knownFields=%s uniqueModelIds=%d missingModelIds=%d modelIdOverflow=%d uniqueBiomeIds=%d missingBiomeIds=%d biomeIdOverflow=%d missingTexture=%d missingGreedy=%d finalFormat=%s occupancyPresent=%s samplePosition=%s sampleAabb=%s sampleRecord=%s decoded=\"%s\" offsets=%s namedOffsets=%s cacheWritten=%d cacheEntries=%d elapsed=%.2fms",
                     stats.dimension(),
                     stats.chunkX(),
                     stats.chunkZ(),
@@ -379,7 +379,12 @@ public final class ForgeVoxyCommands {
                     stats.geometryFormat(),
                     stats.knownBitsMask(),
                     stats.knownFields(),
+                    stats.uniqueModelIds(),
                     stats.missingModelId(),
+                    stats.modelIdOverflow(),
+                    stats.uniqueBiomeIds(),
+                    stats.missingBiomeId(),
+                    stats.biomeIdOverflow(),
                     stats.missingTexture(),
                     stats.missingGreedy(),
                     stats.finalRendererFormat(),
@@ -413,7 +418,7 @@ public final class ForgeVoxyCommands {
     private static int builtSectionCacheStatus(CommandSourceStack source) {
         var status = ForgeVoxyInstance.INSTANCE.getVoxyGeometryCache().createStatusSnapshot();
         String message = String.format(
-                "Voxy BuiltSection cache: entries=%d/%d totalSections=%d totalQuads=%d totalGeometryBytes=%d totalOccupancyBytes=%d finalFormatCount=%d partialFormatCount=%d partialOriginalBitLayoutCount=%d geometryFormat=%s closed=%d evicted=%d replaced=%d firstPosition=%s firstAabb=%s firstOffsets=%s firstNamedOffsets=%s offsetsSemantic=%s sampleRecord=%s decoded=\"%s\"",
+                "Voxy BuiltSection cache: entries=%d/%d totalSections=%d totalQuads=%d totalGeometryBytes=%d totalOccupancyBytes=%d finalFormatCount=%d partialFormatCount=%d partialOriginalBitLayoutCount=%d uniqueModelIds=%d missingModelRecords=%d runtimeModelMapperSize=%d uniqueBiomeIds=%d missingBiomeRecords=%d geometryFormat=%s closed=%d evicted=%d replaced=%d firstPosition=%s firstAabb=%s firstOffsets=%s firstNamedOffsets=%s offsetsSemantic=%s sampleRecord=%s decoded=\"%s\"",
                 status.entries(),
                 status.maxEntries(),
                 status.entries(),
@@ -423,6 +428,11 @@ public final class ForgeVoxyCommands {
                 status.finalFormatEntries(),
                 status.partialFormatEntries(),
                 status.partialOriginalBitLayoutEntries(),
+                status.totalUniqueModelIds(),
+                status.missingModelRecords(),
+                status.runtimeModelMapperSize(),
+                status.totalUniqueBiomeIds(),
+                status.missingBiomeRecords(),
                 status.geometryFormat(),
                 status.closedCount(),
                 status.evictedCount(),

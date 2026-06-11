@@ -4,6 +4,7 @@ import me.cortex.voxy.common.world.WorldEngine;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -62,6 +63,11 @@ public final class ForgeVoxyBuiltSectionBuilder {
         long missingModelId = 0;
         long missingTexture = 0;
         long missingGreedy = 0;
+        long modelIdOverflow = 0;
+        long missingBiomeId = 0;
+        long biomeIdOverflow = 0;
+        var uniqueModelIds = new HashSet<Integer>();
+        var uniqueBiomeIds = new HashSet<Integer>();
         long createdTime = System.currentTimeMillis();
         for (MutableSection section : groups.values()) {
             ForgeVoxyBuiltSection built = section.build(createdTime);
@@ -72,6 +78,11 @@ public final class ForgeVoxyBuiltSectionBuilder {
             missingModelId += section.missingModelId;
             missingTexture += section.missingTexture;
             missingGreedy += section.missingGreedy;
+            modelIdOverflow += section.modelIdOverflow;
+            missingBiomeId += section.missingBiomeId;
+            biomeIdOverflow += section.biomeIdOverflow;
+            uniqueModelIds.addAll(section.uniqueModelIds);
+            uniqueBiomeIds.addAll(section.uniqueBiomeIds);
             if ("none".equals(offsetsSample)) {
                 offsetsSample = formatOffsets(built.offsets());
                 namedOffsetsSample = formatNamedOffsets(built.offsets());
@@ -102,7 +113,12 @@ public final class ForgeVoxyBuiltSectionBuilder {
                 ForgeVoxyGeometryBuffer.PARTIAL_ORIGINAL_BIT_LAYOUT_FORMAT,
                 String.format("0x%016X", ForgeVoxyQuadEncoder.KNOWN_BITS_MASK),
                 ForgeVoxyQuadEncoder.KNOWN_FIELDS,
+                uniqueModelIds.size(),
                 missingModelId,
+                modelIdOverflow,
+                uniqueBiomeIds.size(),
+                missingBiomeId,
+                biomeIdOverflow,
                 missingTexture,
                 missingGreedy,
                 offsetsSample,
@@ -207,8 +223,13 @@ public final class ForgeVoxyBuiltSectionBuilder {
         private float maxY = Float.NEGATIVE_INFINITY;
         private float maxZ = Float.NEGATIVE_INFINITY;
         private long missingModelId;
+        private long modelIdOverflow;
+        private long missingBiomeId;
+        private long biomeIdOverflow;
         private long missingTexture;
         private long missingGreedy;
+        private final HashSet<Integer> uniqueModelIds = new HashSet<>();
+        private final HashSet<Integer> uniqueBiomeIds = new HashSet<>();
 
         private MutableSection(GroupKey key) {
             this.key = key;
@@ -261,6 +282,21 @@ public final class ForgeVoxyBuiltSectionBuilder {
                         records[writePositions[bucket]++] = encoded.record();
                         if (encoded.missingModelId()) {
                             this.missingModelId++;
+                        }
+                        if (encoded.modelIdOverflow()) {
+                            this.modelIdOverflow++;
+                        }
+                        if (!encoded.missingModelId()) {
+                            this.uniqueModelIds.add(encoded.modelId());
+                        }
+                        if (encoded.missingBiomeId()) {
+                            this.missingBiomeId++;
+                        }
+                        if (encoded.biomeIdOverflow()) {
+                            this.biomeIdOverflow++;
+                        }
+                        if (!encoded.missingBiomeId()) {
+                            this.uniqueBiomeIds.add(encoded.biomeId());
                         }
                         if (encoded.missingTexture()) {
                             this.missingTexture++;

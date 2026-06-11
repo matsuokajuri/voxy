@@ -2,6 +2,7 @@ package me.cortex.voxy.forge;
 
 import me.cortex.voxy.config.ForgeVoxyConfig;
 
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -66,6 +67,10 @@ public final class ForgeVoxyGeometryCache {
         long finalFormatEntries = 0;
         long partialFormatEntries = 0;
         long partialOriginalBitLayoutEntries = 0;
+        long missingModelRecords = 0;
+        long missingBiomeRecords = 0;
+        var uniqueModelIds = new HashSet<Integer>();
+        var uniqueBiomeIds = new HashSet<Integer>();
         String geometryFormat = "none";
         String firstPosition = "none";
         String firstAabb = "none";
@@ -78,6 +83,19 @@ public final class ForgeVoxyGeometryCache {
             totalQuads += section.quadCount();
             totalBytes += section.geometryBytes();
             totalOccupancyBytes += section.occupancyBytes();
+            ForgeVoxyGeometryBuffer buffer = section.geometryBuffer();
+            if (buffer != null && !buffer.isClosed()) {
+                for (long record : buffer.packedQuads()) {
+                    int modelId = ForgeVoxyQuadEncoder.extractModelId(record);
+                    int biomeId = ForgeVoxyQuadEncoder.extractBiomeId(record);
+                    if (modelId == 0) {
+                        missingModelRecords++;
+                    } else {
+                        uniqueModelIds.add(modelId);
+                    }
+                    uniqueBiomeIds.add(biomeId);
+                }
+            }
             if (ForgeVoxyGeometryBuffer.PARTIAL_ORIGINAL_BIT_LAYOUT_FORMAT.equals(section.geometryFormat())) {
                 partialOriginalBitLayoutEntries++;
             }
@@ -112,6 +130,11 @@ public final class ForgeVoxyGeometryCache {
                 finalFormatEntries,
                 partialFormatEntries,
                 partialOriginalBitLayoutEntries,
+                uniqueModelIds.size(),
+                missingModelRecords,
+                uniqueBiomeIds.size(),
+                missingBiomeRecords,
+                ForgeVoxyModelIdMapper.INSTANCE.uniqueModelCount(),
                 geometryFormat,
                 firstPosition,
                 firstAabb,
@@ -154,6 +177,11 @@ public final class ForgeVoxyGeometryCache {
             long finalFormatEntries,
             long partialFormatEntries,
             long partialOriginalBitLayoutEntries,
+            int totalUniqueModelIds,
+            long missingModelRecords,
+            int totalUniqueBiomeIds,
+            long missingBiomeRecords,
+            int runtimeModelMapperSize,
             String geometryFormat,
             String firstEntryPosition,
             String firstEntryAabb,

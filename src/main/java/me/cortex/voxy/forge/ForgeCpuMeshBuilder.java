@@ -219,8 +219,10 @@ public final class ForgeCpuMeshBuilder {
         }
 
         int light = Mapper.getLightId(mapping);
+        int blockId = Mapper.getBlockId(mapping);
+        int biomeId = Mapper.getBiomeId(mapping);
         for (BakedQuad quad : quads) {
-            if (!appendQuad(context, target, model, quad, worldX, worldY, worldZ, pos, light, cullDirection)) {
+            if (!appendQuad(context, target, model, quad, worldX, worldY, worldZ, pos, light, blockId, biomeId, cullDirection)) {
                 stats.unsupportedBlocks++;
                 continue;
             }
@@ -246,6 +248,8 @@ public final class ForgeCpuMeshBuilder {
             int worldZ,
             BlockPos pos,
             int light,
+            int blockId,
+            int biomeId,
             Direction cullDirection
     ) {
         int[] vertices = quad.getVertices();
@@ -271,7 +275,7 @@ public final class ForgeCpuMeshBuilder {
             float u = Float.intBitsToFloat(vertices[offset + 4]);
             float v = Float.intBitsToFloat(vertices[offset + 5]);
             int vertexColor = quad.isTinted() ? color : getBakedColor(vertices, offset, color);
-            target.builder.putVertex(x, y, z, vertexColor, u, v, light, normal, model.layer.id, tintIndex);
+            target.builder.putVertex(x, y, z, vertexColor, u, v, light, normal, model.layer.id, tintIndex, blockId, biomeId);
         }
         return true;
     }
