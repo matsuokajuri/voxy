@@ -110,6 +110,14 @@ public final class ForgeVoxyBuiltSection implements AutoCloseable {
         return this.geometryBuffer == null ? "none" : this.geometryBuffer.geometryFormat();
     }
 
+    public boolean hasSampleRecord() {
+        return this.geometryBuffer != null && this.geometryBuffer.hasSampleRecord();
+    }
+
+    public long sampleRecord() {
+        return this.geometryBuffer == null ? 0L : this.geometryBuffer.sampleRecord();
+    }
+
     @Override
     public void close() {
         if (this.closed) {

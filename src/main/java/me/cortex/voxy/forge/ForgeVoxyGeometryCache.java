@@ -65,25 +65,38 @@ public final class ForgeVoxyGeometryCache {
         long totalOccupancyBytes = 0;
         long finalFormatEntries = 0;
         long partialFormatEntries = 0;
+        long partialOriginalBitLayoutEntries = 0;
+        String geometryFormat = "none";
         String firstPosition = "none";
         String firstAabb = "none";
         String firstOffsets = "none";
         String firstNamedOffsets = "none";
+        String sampleRecordHex = "none";
+        String sampleDecodedRecord = "none";
 
         for (ForgeVoxyBuiltSection section : this.entries.values()) {
             totalQuads += section.quadCount();
             totalBytes += section.geometryBytes();
             totalOccupancyBytes += section.occupancyBytes();
+            if (ForgeVoxyGeometryBuffer.PARTIAL_ORIGINAL_BIT_LAYOUT_FORMAT.equals(section.geometryFormat())) {
+                partialOriginalBitLayoutEntries++;
+            }
             if (section.isFinalRendererFormat()) {
                 finalFormatEntries++;
             } else {
                 partialFormatEntries++;
             }
             if ("none".equals(firstPosition)) {
+                geometryFormat = section.geometryFormat();
                 firstPosition = Long.toUnsignedString(section.position());
                 firstAabb = ForgeVoxyBuiltSectionBuilder.formatAabb(section.aabb());
                 firstOffsets = ForgeVoxyBuiltSectionBuilder.formatOffsets(section.offsets());
                 firstNamedOffsets = ForgeVoxyBuiltSectionBuilder.formatNamedOffsets(section.offsets());
+                if (section.hasSampleRecord()) {
+                    long record = section.sampleRecord();
+                    sampleRecordHex = ForgeVoxyQuadEncoder.formatRecordHex(record);
+                    sampleDecodedRecord = ForgeVoxyQuadEncoder.decodeRecord(record);
+                }
             }
         }
 
@@ -98,10 +111,14 @@ public final class ForgeVoxyGeometryCache {
                 this.replacedCount,
                 finalFormatEntries,
                 partialFormatEntries,
+                partialOriginalBitLayoutEntries,
+                geometryFormat,
                 firstPosition,
                 firstAabb,
                 firstOffsets,
-                firstNamedOffsets
+                firstNamedOffsets,
+                sampleRecordHex,
+                sampleDecodedRecord
         );
     }
 
@@ -136,10 +153,14 @@ public final class ForgeVoxyGeometryCache {
             long replacedCount,
             long finalFormatEntries,
             long partialFormatEntries,
+            long partialOriginalBitLayoutEntries,
+            String geometryFormat,
             String firstEntryPosition,
             String firstEntryAabb,
             String firstEntryOffsets,
-            String firstEntryNamedOffsets
+            String firstEntryNamedOffsets,
+            String sampleRecordHex,
+            String sampleDecodedRecord
     ) {
     }
 
