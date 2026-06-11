@@ -56,7 +56,7 @@ public final class ForgeCpuMeshBuildManager {
     public StatusSnapshot createStatusSnapshot() {
         return new StatusSnapshot(
                 this.instance.getCurrentEngineOptional().isPresent(),
-                ForgeVoxyConfig.ENABLE_AUTO_CPU_MESH_BUILD.get(),
+                ForgeVoxyRuntimeOverrides.enableAutoCpuMeshBuild(),
                 this.activeDimension,
                 this.pendingChunks.size(),
                 this.builtChunks.size(),
@@ -75,7 +75,7 @@ public final class ForgeCpuMeshBuildManager {
         }
         this.tickCounter++;
 
-        if (!ForgeVoxyConfig.ENABLE_AUTO_CPU_MESH_BUILD.get()) {
+        if (!ForgeVoxyRuntimeOverrides.enableAutoCpuMeshBuild()) {
             if (!this.pendingChunks.isEmpty() || !this.queuedChunks.isEmpty()) {
                 this.pendingChunks.clear();
                 this.queuedChunks.clear();

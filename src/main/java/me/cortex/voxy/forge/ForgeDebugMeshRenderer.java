@@ -6,7 +6,6 @@ import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.Tesselator;
 import com.mojang.blaze3d.vertex.VertexFormat;
-import me.cortex.voxy.config.ForgeVoxyConfig;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.world.phys.Vec3;
@@ -42,7 +41,7 @@ public final class ForgeDebugMeshRenderer {
         if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_TRANSLUCENT_BLOCKS) {
             return;
         }
-        if (!ForgeVoxyConfig.ENABLE_WORLD_ENGINE_SKELETON.get() || !ForgeVoxyConfig.ENABLE_DEBUG_MESH_RENDERER.get()) {
+        if (!ForgeVoxyRuntimeOverrides.enabledWorldEngineSkeleton() || !ForgeVoxyRuntimeOverrides.enableDebugMeshRenderer()) {
             this.lastFrameStats = FrameStats.skipped("disabled");
             return;
         }
@@ -83,8 +82,8 @@ public final class ForgeDebugMeshRenderer {
     }
 
     private FrameStats renderSections(RenderLevelStageEvent event, String dimension, ForgeCpuMeshCache.RenderSnapshot snapshot) {
-        boolean wireframe = ForgeVoxyConfig.DEBUG_MESH_WIREFRAME.get();
-        boolean ignoreDepth = ForgeVoxyConfig.DEBUG_MESH_IGNORE_DEPTH.get();
+        boolean wireframe = me.cortex.voxy.config.ForgeVoxyConfig.DEBUG_MESH_WIREFRAME.get();
+        boolean ignoreDepth = me.cortex.voxy.config.ForgeVoxyConfig.DEBUG_MESH_IGNORE_DEPTH.get();
         int alpha = getConfiguredAlphaByte();
         float verticalOffset = getConfiguredVerticalOffsetBlocks();
         Tesselator tesselator = Tesselator.getInstance();
@@ -241,24 +240,24 @@ public final class ForgeDebugMeshRenderer {
     }
 
     public static int getConfiguredRenderDistanceChunks() {
-        return Math.min(8, Math.max(0, ForgeVoxyConfig.DEBUG_MESH_RENDER_DISTANCE_CHUNKS.get()));
+        return Math.min(8, Math.max(0, me.cortex.voxy.config.ForgeVoxyConfig.DEBUG_MESH_RENDER_DISTANCE_CHUNKS.get()));
     }
 
     public static int getConfiguredMaxRenderedEntries() {
-        return Math.min(8192, Math.max(1, ForgeVoxyConfig.DEBUG_MESH_MAX_RENDERED_ENTRIES.get()));
+        return Math.min(8192, Math.max(1, me.cortex.voxy.config.ForgeVoxyConfig.DEBUG_MESH_MAX_RENDERED_ENTRIES.get()));
     }
 
     public static int getConfiguredAlphaByte() {
-        double alpha = Math.max(0.05D, Math.min(1.0D, ForgeVoxyConfig.DEBUG_MESH_ALPHA.get()));
+        double alpha = ForgeVoxyRuntimeOverrides.debugMeshAlpha();
         return Math.max(1, Math.min(255, (int) Math.round(alpha * 255.0D)));
     }
 
     public static double getConfiguredAlpha() {
-        return Math.max(0.05D, Math.min(1.0D, ForgeVoxyConfig.DEBUG_MESH_ALPHA.get()));
+        return ForgeVoxyRuntimeOverrides.debugMeshAlpha();
     }
 
     public static float getConfiguredVerticalOffsetBlocks() {
-        double offset = Math.max(-2.0D, Math.min(2.0D, ForgeVoxyConfig.DEBUG_MESH_VERTICAL_OFFSET.get()));
+        double offset = Math.max(-2.0D, Math.min(2.0D, me.cortex.voxy.config.ForgeVoxyConfig.DEBUG_MESH_VERTICAL_OFFSET.get()));
         return (float) offset;
     }
 

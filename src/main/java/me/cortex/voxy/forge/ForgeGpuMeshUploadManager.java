@@ -1,7 +1,6 @@
 package me.cortex.voxy.forge;
 
 import com.mojang.blaze3d.systems.RenderSystem;
-import me.cortex.voxy.config.ForgeVoxyConfig;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.TickEvent;
 
@@ -39,7 +38,7 @@ public final class ForgeGpuMeshUploadManager {
     }
 
     public UploadStatusSnapshot processUploads(String dimension, int centerChunkX, int centerChunkZ) {
-        if (!ForgeVoxyConfig.ENABLE_SIMPLE_GPU_MESH_RENDERER.get()) {
+        if (!ForgeVoxyRuntimeOverrides.enableSimpleGpuMeshRenderer()) {
             this.lastStatus = UploadStatusSnapshot.disabled();
             return this.lastStatus;
         }
@@ -174,7 +173,7 @@ public final class ForgeGpuMeshUploadManager {
         if (event.phase != TickEvent.Phase.END) {
             return;
         }
-        if (!ForgeVoxyConfig.ENABLE_SIMPLE_GPU_MESH_RENDERER.get() || this.instance.getCurrentEngineOptional().isEmpty()) {
+        if (!ForgeVoxyRuntimeOverrides.enableSimpleGpuMeshRenderer() || this.instance.getCurrentEngineOptional().isEmpty()) {
             if (this.lastStatus.enabled()) {
                 this.clear();
             }
@@ -185,23 +184,23 @@ public final class ForgeGpuMeshUploadManager {
     }
 
     public static int getConfiguredMaxUploadsPerTick() {
-        return Math.min(16, Math.max(1, ForgeVoxyConfig.SIMPLE_GPU_MESH_MAX_UPLOADS_PER_TICK.get()));
+        return Math.min(16, Math.max(1, me.cortex.voxy.config.ForgeVoxyConfig.SIMPLE_GPU_MESH_MAX_UPLOADS_PER_TICK.get()));
     }
 
     public static int getConfiguredMaxBuffers() {
-        return Math.min(8192, Math.max(1, ForgeVoxyConfig.SIMPLE_GPU_MESH_MAX_BUFFERS.get()));
+        return Math.min(8192, Math.max(1, me.cortex.voxy.config.ForgeVoxyConfig.SIMPLE_GPU_MESH_MAX_BUFFERS.get()));
     }
 
     public static int getConfiguredRenderDistanceChunks() {
-        return Math.min(128, Math.max(0, ForgeVoxyConfig.SIMPLE_GPU_MESH_RENDER_DISTANCE_CHUNKS.get()));
+        return ForgeVoxyRuntimeOverrides.simpleGpuMeshRenderDistanceChunks();
     }
 
     public static boolean useOriginalColors() {
-        return ForgeVoxyConfig.SIMPLE_GPU_MESH_USE_ORIGINAL_COLORS.get();
+        return ForgeVoxyRuntimeOverrides.simpleGpuMeshUseOriginalColors();
     }
 
     public static boolean keepCachedChunks() {
-        return ForgeVoxyConfig.SIMPLE_GPU_MESH_KEEP_CACHED_CHUNKS.get();
+        return ForgeVoxyRuntimeOverrides.simpleGpuMeshKeepCachedChunks();
     }
 
     public record UploadStatusSnapshot(

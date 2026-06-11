@@ -3,7 +3,6 @@ package me.cortex.voxy.forge;
 import me.cortex.voxy.common.config.section.SectionSerializationStorage;
 import me.cortex.voxy.common.config.storage.inmemory.MemoryStorageBackend;
 import me.cortex.voxy.common.world.WorldEngine;
-import me.cortex.voxy.config.ForgeVoxyConfig;
 import net.minecraft.client.Minecraft;
 import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
 import net.minecraftforge.client.event.RegisterClientCommandsEvent;
@@ -114,14 +113,14 @@ public final class ForgeVoxyInstance {
         this.gpuMeshUploadManager.clear();
         this.gpuMeshCache.setActiveDimension(dimension);
         this.closeActiveWorld();
-        if (ForgeVoxyConfig.ENABLE_WORLD_ENGINE_SKELETON.get()) {
+        if (ForgeVoxyRuntimeOverrides.enabledWorldEngineSkeleton()) {
             this.createActiveWorldSkeleton();
         }
         VoxyForge.LOGGER.info("Cleared Voxy debug pipeline state after client dimension switch to {}.", dimension);
     }
 
     private void onClientLogin(ClientPlayerNetworkEvent.LoggingIn event) {
-        if (!ForgeVoxyConfig.ENABLE_WORLD_ENGINE_SKELETON.get()) {
+        if (!ForgeVoxyRuntimeOverrides.enabledWorldEngineSkeleton()) {
             return;
         }
         if (this.activeWorld != null && this.activeWorld.isLive()) {
@@ -129,6 +128,24 @@ public final class ForgeVoxyInstance {
         }
 
         this.createActiveWorldSkeleton();
+    }
+
+    public boolean ensureActiveWorldSkeletonForCurrentWorldIfAllowed() {
+        if (!ForgeVoxyRuntimeOverrides.enabledWorldEngineSkeleton()) {
+            return false;
+        }
+        if (this.activeWorld != null && this.activeWorld.isLive()) {
+            return true;
+        }
+
+        var minecraft = Minecraft.getInstance();
+        if (minecraft.level == null || minecraft.player == null) {
+            return false;
+        }
+
+        this.activeClientDimension = minecraft.level.dimension().location().toString();
+        this.createActiveWorldSkeleton();
+        return true;
     }
 
     private void createActiveWorldSkeleton() {

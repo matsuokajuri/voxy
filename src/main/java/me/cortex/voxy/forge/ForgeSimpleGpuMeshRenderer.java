@@ -3,7 +3,6 @@ package me.cortex.voxy.forge;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexBuffer;
-import me.cortex.voxy.config.ForgeVoxyConfig;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.GameRenderer;
@@ -43,7 +42,7 @@ public final class ForgeSimpleGpuMeshRenderer {
         if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_TRANSLUCENT_BLOCKS) {
             return;
         }
-        if (!ForgeVoxyConfig.ENABLE_WORLD_ENGINE_SKELETON.get() || !ForgeVoxyConfig.ENABLE_SIMPLE_GPU_MESH_RENDERER.get()) {
+        if (!ForgeVoxyRuntimeOverrides.enabledWorldEngineSkeleton() || !ForgeVoxyRuntimeOverrides.enableSimpleGpuMeshRenderer()) {
             this.lastFrameStats = FrameStats.skipped("disabled");
             return;
         }
@@ -97,6 +96,8 @@ public final class ForgeSimpleGpuMeshRenderer {
         PoseStack poseStack = event.getPoseStack();
         Vec3 cameraPos = event.getCamera().getPosition();
         double alpha = getConfiguredAlpha();
+        double verticalOffset = getConfiguredVerticalOffsetBlocks();
+        boolean ignoreDepth = shouldIgnoreDepth();
         int minDistance = getConfiguredMinRenderDistanceChunks();
         int maxDistance = ForgeGpuMeshUploadManager.getConfiguredRenderDistanceChunks();
         minDistance = Math.min(minDistance, maxDistance);
@@ -113,13 +114,17 @@ public final class ForgeSimpleGpuMeshRenderer {
         RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, (float) alpha);
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
-        RenderSystem.enableDepthTest();
+        if (ignoreDepth) {
+            RenderSystem.disableDepthTest();
+        } else {
+            RenderSystem.enableDepthTest();
+        }
         RenderSystem.depthMask(false);
         RenderSystem.disableCull();
 
         poseStack.pushPose();
         try {
-            poseStack.translate(-cameraPos.x, -cameraPos.y, -cameraPos.z);
+            poseStack.translate(-cameraPos.x, -cameraPos.y + verticalOffset, -cameraPos.z);
             Matrix4f modelView = poseStack.last().pose();
             Matrix4f projection = event.getProjectionMatrix();
             for (ForgeGpuMeshBuffer buffer : buffers) {
@@ -185,19 +190,27 @@ public final class ForgeSimpleGpuMeshRenderer {
     }
 
     public static double getConfiguredAlpha() {
-        return Math.max(0.05D, Math.min(1.0D, ForgeVoxyConfig.SIMPLE_GPU_MESH_ALPHA.get()));
+        return ForgeVoxyRuntimeOverrides.simpleGpuMeshAlpha();
     }
 
     public static int getConfiguredMaxRenderedBuffers() {
-        return Math.min(8192, Math.max(1, ForgeVoxyConfig.SIMPLE_GPU_MESH_MAX_RENDERED_BUFFERS.get()));
+        return Math.min(8192, Math.max(1, me.cortex.voxy.config.ForgeVoxyConfig.SIMPLE_GPU_MESH_MAX_RENDERED_BUFFERS.get()));
     }
 
     public static int getConfiguredMinRenderDistanceChunks() {
-        return Math.min(64, Math.max(0, ForgeVoxyConfig.SIMPLE_GPU_MESH_MIN_RENDER_DISTANCE_CHUNKS.get()));
+        return ForgeVoxyRuntimeOverrides.simpleGpuMeshMinRenderDistanceChunks();
     }
 
     public static boolean shouldRenderLoadedChunks() {
-        return ForgeVoxyConfig.SIMPLE_GPU_MESH_RENDER_LOADED_CHUNKS.get();
+        return ForgeVoxyRuntimeOverrides.simpleGpuMeshRenderLoadedChunks();
+    }
+
+    public static boolean shouldIgnoreDepth() {
+        return ForgeVoxyRuntimeOverrides.simpleGpuMeshIgnoreDepth();
+    }
+
+    public static double getConfiguredVerticalOffsetBlocks() {
+        return ForgeVoxyRuntimeOverrides.simpleGpuMeshVerticalOffset();
     }
 
     public static String getRenderStageName() {

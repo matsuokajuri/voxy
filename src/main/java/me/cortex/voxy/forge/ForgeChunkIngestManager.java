@@ -1,7 +1,6 @@
 package me.cortex.voxy.forge;
 
 import me.cortex.voxy.common.world.service.VoxelIngestService;
-import me.cortex.voxy.config.ForgeVoxyConfig;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.world.level.ChunkPos;
@@ -54,7 +53,7 @@ public final class ForgeChunkIngestManager {
     public StatusSnapshot createStatusSnapshot() {
         return new StatusSnapshot(
                 this.instance.getCurrentEngineOptional().isPresent(),
-                ForgeVoxyConfig.ENABLE_AUTO_CHUNK_INGEST.get(),
+                ForgeVoxyRuntimeOverrides.enableAutoChunkIngest(),
                 this.activeDimension,
                 this.pendingChunks.size(),
                 this.ingestedChunks.size(),
@@ -71,7 +70,7 @@ public final class ForgeChunkIngestManager {
         }
         this.tickCounter++;
 
-        if (!ForgeVoxyConfig.ENABLE_AUTO_CHUNK_INGEST.get()) {
+        if (!ForgeVoxyRuntimeOverrides.enableAutoChunkIngest()) {
             if (!this.pendingChunks.isEmpty() || !this.queuedChunks.isEmpty()) {
                 this.pendingChunks.clear();
                 this.queuedChunks.clear();
@@ -252,15 +251,15 @@ public final class ForgeChunkIngestManager {
     }
 
     private static int getConfiguredRadius() {
-        return Math.min(8, Math.max(0, ForgeVoxyConfig.AUTO_INGEST_RADIUS.get()));
+        return Math.min(8, Math.max(0, me.cortex.voxy.config.ForgeVoxyConfig.AUTO_INGEST_RADIUS.get()));
     }
 
     private static int getConfiguredMaxChunksPerTick() {
-        return Math.min(8, Math.max(1, ForgeVoxyConfig.AUTO_INGEST_MAX_CHUNKS_PER_TICK.get()));
+        return Math.min(8, Math.max(1, me.cortex.voxy.config.ForgeVoxyConfig.AUTO_INGEST_MAX_CHUNKS_PER_TICK.get()));
     }
 
     private static int getConfiguredCooldownTicks() {
-        return Math.min(200, Math.max(0, ForgeVoxyConfig.AUTO_INGEST_COOLDOWN_TICKS.get()));
+        return Math.min(200, Math.max(0, me.cortex.voxy.config.ForgeVoxyConfig.AUTO_INGEST_COOLDOWN_TICKS.get()));
     }
 
     private static int getRecordRetentionRadius(int activeRadius) {
