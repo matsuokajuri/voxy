@@ -53,6 +53,10 @@ public final class ForgeVoxyInstance {
         return this.cpuMeshCache;
     }
 
+    public ForgeDebugMeshRenderer getDebugMeshRenderer() {
+        return this.debugMeshRenderer;
+    }
+
     private void onRegisterClientCommands(RegisterClientCommandsEvent event) {
         ForgeVoxyCommands.register(event.getDispatcher());
     }

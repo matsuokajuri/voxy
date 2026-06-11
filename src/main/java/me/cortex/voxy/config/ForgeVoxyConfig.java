@@ -14,6 +14,8 @@ public final class ForgeVoxyConfig {
     public static final ForgeConfigSpec.IntValue DEBUG_MESH_RENDER_DISTANCE_CHUNKS;
     public static final ForgeConfigSpec.BooleanValue DEBUG_MESH_WIREFRAME;
     public static final ForgeConfigSpec.DoubleValue DEBUG_MESH_ALPHA;
+    public static final ForgeConfigSpec.BooleanValue DEBUG_MESH_IGNORE_DEPTH;
+    public static final ForgeConfigSpec.DoubleValue DEBUG_MESH_VERTICAL_OFFSET;
 
     static {
         ForgeConfigSpec.Builder builder = new ForgeConfigSpec.Builder();
@@ -47,7 +49,13 @@ public final class ForgeVoxyConfig {
                 .define("debugMeshWireframe", false);
         DEBUG_MESH_ALPHA = builder
                 .comment("Alpha used by the temporary debug mesh renderer.")
-                .defineInRange("debugMeshAlpha", 0.35D, 0.05D, 1.0D);
+                .defineInRange("debugMeshAlpha", 0.8D, 0.05D, 1.0D);
+        DEBUG_MESH_IGNORE_DEPTH = builder
+                .comment("Draws the temporary debug mesh through terrain. Useful when cached mesh exactly overlaps vanilla blocks.")
+                .define("debugMeshIgnoreDepth", false);
+        DEBUG_MESH_VERTICAL_OFFSET = builder
+                .comment("Small upward offset applied only while drawing the temporary debug mesh to reduce z-fighting with vanilla terrain.")
+                .defineInRange("debugMeshVerticalOffset", 0.05D, -2.0D, 2.0D);
         builder.pop();
         CLIENT_SPEC = builder.build();
     }

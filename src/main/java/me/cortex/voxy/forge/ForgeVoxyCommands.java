@@ -292,8 +292,9 @@ public final class ForgeVoxyCommands {
             bounds = formatBounds(cache.createBoundsSnapshot(dimension, chunkX, chunkZ));
         }
 
+        var renderStats = ForgeVoxyInstance.INSTANCE.getDebugMeshRenderer().getLastFrameStats();
         String message = String.format(
-                "Voxy CPU mesh cache: entries=%d/%d vertices=%d quads=%d bytes=%d dimensions=%s layers=%s render=%s distance=%d %s",
+                "Voxy CPU mesh cache: entries=%d/%d vertices=%d quads=%d bytes=%d dimensions=%s layers=%s render=%s distance=%d ignoreDepth=%s alpha=%.2f verticalOffset=%.3f stage=%s %s %s",
                 status.entries(),
                 status.maxEntries(),
                 status.totalVertices(),
@@ -303,10 +304,33 @@ public final class ForgeVoxyCommands {
                 status.layers(),
                 ForgeVoxyConfig.ENABLE_DEBUG_MESH_RENDERER.get(),
                 ForgeDebugMeshRenderer.getConfiguredRenderDistanceChunks(),
+                ForgeVoxyConfig.DEBUG_MESH_IGNORE_DEPTH.get(),
+                ForgeDebugMeshRenderer.getConfiguredAlpha(),
+                ForgeDebugMeshRenderer.getConfiguredVerticalOffsetBlocks(),
+                ForgeDebugMeshRenderer.getRenderStageName(),
+                formatRenderStats(renderStats),
                 bounds
         );
         source.sendSuccess(() -> Component.literal(message), false);
         return status.entries();
+    }
+
+    private static String formatRenderStats(ForgeDebugMeshRenderer.FrameStats stats) {
+        return String.format(
+                "lastRender=%s reason=%s dimension=%s candidates=%d renderedEntries=%d emittedVertices=%d skippedTranslucent=%d skippedEmpty=%d wireframe=%s ignoreDepth=%s alphaByte=%d offset=%.3f",
+                stats.rendered(),
+                stats.reason(),
+                stats.dimension(),
+                stats.candidateEntries(),
+                stats.renderedEntries(),
+                stats.emittedVertices(),
+                stats.skippedTranslucentEntries(),
+                stats.skippedEmptyEntries(),
+                stats.wireframe(),
+                stats.ignoreDepth(),
+                stats.alphaByte(),
+                stats.verticalOffset()
+        );
     }
 
     private static String formatBounds(ForgeCpuMeshCache.BoundsSnapshot bounds) {
