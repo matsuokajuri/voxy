@@ -26,9 +26,12 @@ public final class ForgeVoxyConfig {
     public static final ForgeConfigSpec.IntValue SIMPLE_GPU_MESH_MAX_UPLOADS_PER_TICK;
     public static final ForgeConfigSpec.IntValue SIMPLE_GPU_MESH_MAX_BUFFERS;
     public static final ForgeConfigSpec.IntValue SIMPLE_GPU_MESH_RENDER_DISTANCE_CHUNKS;
+    public static final ForgeConfigSpec.IntValue SIMPLE_GPU_MESH_MIN_RENDER_DISTANCE_CHUNKS;
     public static final ForgeConfigSpec.IntValue SIMPLE_GPU_MESH_MAX_RENDERED_BUFFERS;
     public static final ForgeConfigSpec.DoubleValue SIMPLE_GPU_MESH_ALPHA;
     public static final ForgeConfigSpec.BooleanValue SIMPLE_GPU_MESH_USE_ORIGINAL_COLORS;
+    public static final ForgeConfigSpec.BooleanValue SIMPLE_GPU_MESH_RENDER_LOADED_CHUNKS;
+    public static final ForgeConfigSpec.BooleanValue SIMPLE_GPU_MESH_KEEP_CACHED_CHUNKS;
 
     static {
         ForgeConfigSpec.Builder builder = new ForgeConfigSpec.Builder();
@@ -98,7 +101,10 @@ public final class ForgeVoxyConfig {
                 .defineInRange("simpleGpuMeshMaxBuffers", 512, 1, 8192);
         SIMPLE_GPU_MESH_RENDER_DISTANCE_CHUNKS = builder
                 .comment("Chunk radius around the player used by the simple vanilla GPU mesh renderer.")
-                .defineInRange("simpleGpuMeshRenderDistanceChunks", 2, 0, 32);
+                .defineInRange("simpleGpuMeshRenderDistanceChunks", 16, 0, 32);
+        SIMPLE_GPU_MESH_MIN_RENDER_DISTANCE_CHUNKS = builder
+                .comment("Minimum chunk distance before cached GPU mesh is rendered. This avoids drawing over nearby vanilla terrain.")
+                .defineInRange("simpleGpuMeshMinRenderDistanceChunks", 4, 0, 64);
         SIMPLE_GPU_MESH_MAX_RENDERED_BUFFERS = builder
                 .comment("Maximum vanilla VertexBuffer mesh entries the simple GPU renderer may draw in one frame.")
                 .defineInRange("simpleGpuMeshMaxRenderedBuffers", 512, 1, 8192);
@@ -108,6 +114,12 @@ public final class ForgeVoxyConfig {
         SIMPLE_GPU_MESH_USE_ORIGINAL_COLORS = builder
                 .comment("Uses baked block/tint vertex colors for the simple GPU renderer. Disable to use bright layer debug colors.")
                 .define("simpleGpuMeshUseOriginalColors", true);
+        SIMPLE_GPU_MESH_RENDER_LOADED_CHUNKS = builder
+                .comment("Allows the simple GPU renderer to draw chunks that are still loaded by the vanilla client. Disable to avoid overlaying nearby vanilla terrain.")
+                .define("simpleGpuMeshRenderLoadedChunks", false);
+        SIMPLE_GPU_MESH_KEEP_CACHED_CHUNKS = builder
+                .comment("Keeps uploaded GPU mesh entries after the player leaves their upload window, until CPU/GPU cache limits or world lifecycle clear them.")
+                .define("simpleGpuMeshKeepCachedChunks", true);
         builder.pop();
         CLIENT_SPEC = builder.build();
     }

@@ -4,10 +4,12 @@ import me.cortex.voxy.config.ForgeVoxyConfig;
 
 import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public final class ForgeCpuMeshCache {
     private static final int DEFAULT_MAX_ENTRIES = 512;
@@ -132,6 +134,48 @@ public final class ForgeCpuMeshCache {
             snapshot.add(section);
         }
         return new RenderSnapshot(snapshot, skippedByDimension, skippedByDistance, skippedReleased, limitedEntries);
+    }
+
+    public synchronized RenderSnapshot createUploadSnapshot(String dimension, int maxUploadedEntries) {
+        this.trimToLimit();
+        var snapshot = new ArrayList<ForgeCpuBuiltSection>();
+        int skippedByDimension = 0;
+        int skippedReleased = 0;
+        int limitedEntries = 0;
+        int maxEntries = Math.max(1, maxUploadedEntries);
+        for (ForgeCpuBuiltSection section : this.entries.values()) {
+            if (!section.dimension().equals(dimension)) {
+                skippedByDimension++;
+                continue;
+            }
+            ForgeCpuMeshBuffer buffer = section.meshBuffer();
+            if (buffer == null || buffer.isClosed()) {
+                skippedReleased++;
+                continue;
+            }
+            if (snapshot.size() >= maxEntries) {
+                limitedEntries++;
+                continue;
+            }
+            snapshot.add(section);
+        }
+        return new RenderSnapshot(snapshot, skippedByDimension, 0, skippedReleased, limitedEntries);
+    }
+
+    public synchronized Set<Key> createKeySnapshot(String dimension) {
+        this.trimToLimit();
+        var keys = new HashSet<Key>();
+        for (Map.Entry<Key, ForgeCpuBuiltSection> entry : this.entries.entrySet()) {
+            if (!entry.getKey().dimension().equals(dimension)) {
+                continue;
+            }
+            ForgeCpuMeshBuffer buffer = entry.getValue().meshBuffer();
+            if (buffer == null || buffer.isClosed()) {
+                continue;
+            }
+            keys.add(entry.getKey());
+        }
+        return keys;
     }
 
     public synchronized BoundsSnapshot createBoundsSnapshot(String dimension, int chunkX, int chunkZ) {

@@ -7,6 +7,7 @@ import net.minecraftforge.event.TickEvent;
 
 import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 public final class ForgeGpuMeshUploadManager {
     private final ForgeVoxyInstance instance;
@@ -49,15 +50,20 @@ public final class ForgeGpuMeshUploadManager {
 
         int radius = getConfiguredRenderDistanceChunks();
         int maxCandidates = getConfiguredMaxBuffers();
-        ForgeCpuMeshCache.RenderSnapshot cpuSnapshot = this.instance.getCpuMeshCache().createRenderSnapshot(
-                dimension,
-                centerChunkX,
-                centerChunkZ,
-                radius,
-                maxCandidates
-        );
+        boolean keepCachedChunks = keepCachedChunks();
+        ForgeCpuMeshCache.RenderSnapshot cpuSnapshot = keepCachedChunks
+                ? this.instance.getCpuMeshCache().createUploadSnapshot(dimension, maxCandidates)
+                : this.instance.getCpuMeshCache().createRenderSnapshot(
+                        dimension,
+                        centerChunkX,
+                        centerChunkZ,
+                        radius,
+                        maxCandidates
+                );
         List<ForgeCpuBuiltSection> sections = cpuSnapshot.sections();
-        var liveKeys = new HashSet<ForgeCpuMeshCache.Key>(sections.size());
+        Set<ForgeCpuMeshCache.Key> liveKeys = keepCachedChunks
+                ? this.instance.getCpuMeshCache().createKeySnapshot(dimension)
+                : new HashSet<>(sections.size());
         boolean useOriginalColors = useOriginalColors();
         int colorModeStamp = ForgeGpuMeshBuffer.colorModeStamp(useOriginalColors);
         int pendingUploads = 0;
@@ -67,7 +73,9 @@ public final class ForgeGpuMeshUploadManager {
 
         for (ForgeCpuBuiltSection section : sections) {
             ForgeCpuMeshCache.Key key = ForgeCpuMeshCache.Key.from(section);
-            liveKeys.add(key);
+            if (!keepCachedChunks) {
+                liveKeys.add(key);
+            }
             if (section.layer() == ForgeCpuMeshLayer.TRANSLUCENT) {
                 skippedTranslucent++;
                 continue;
@@ -156,7 +164,8 @@ public final class ForgeGpuMeshUploadManager {
                 uploadedVertices,
                 uploadedBytes,
                 this.lastAverageUploadMs,
-                useOriginalColors
+                useOriginalColors,
+                keepCachedChunks
         );
         return this.lastStatus;
     }
@@ -191,6 +200,10 @@ public final class ForgeGpuMeshUploadManager {
         return ForgeVoxyConfig.SIMPLE_GPU_MESH_USE_ORIGINAL_COLORS.get();
     }
 
+    public static boolean keepCachedChunks() {
+        return ForgeVoxyConfig.SIMPLE_GPU_MESH_KEEP_CACHED_CHUNKS.get();
+    }
+
     public record UploadStatusSnapshot(
             boolean enabled,
             String reason,
@@ -210,7 +223,8 @@ public final class ForgeGpuMeshUploadManager {
             long uploadedVerticesThisFrame,
             long uploadedBytesThisFrame,
             double averageUploadMs,
-            boolean useOriginalColors
+            boolean useOriginalColors,
+            boolean keepCachedChunks
     ) {
         private static UploadStatusSnapshot disabled() {
             return skipped("disabled", 0);
@@ -236,6 +250,7 @@ public final class ForgeGpuMeshUploadManager {
                     0,
                     0,
                     0.0D,
+                    true,
                     true
             );
         }
