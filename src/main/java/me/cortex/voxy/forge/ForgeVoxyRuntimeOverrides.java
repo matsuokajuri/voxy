@@ -16,6 +16,7 @@ public final class ForgeVoxyRuntimeOverrides {
     private static Boolean enableAutoGeometryManagerConsume;
     private static Boolean enableGeometryGpuUpload;
     private static Boolean enableGeometryGpuVisualization;
+    private static Boolean enableGeometryGpuReadbackMeshAutoRefresh;
     private static Double geometryGpuVisualizationAlpha;
     private static Boolean geometryGpuVisualizationIgnoreDepth;
     private static Boolean geometryGpuVisualizationDoubleSided;
@@ -47,6 +48,7 @@ public final class ForgeVoxyRuntimeOverrides {
         enableAutoGeometryManagerConsume = false;
         enableGeometryGpuUpload = false;
         enableGeometryGpuVisualization = false;
+        enableGeometryGpuReadbackMeshAutoRefresh = false;
         enableSimpleGpuMeshRenderer = false;
         enableDebugMeshRenderer = false;
     }
@@ -58,6 +60,7 @@ public final class ForgeVoxyRuntimeOverrides {
         enableAutoChunkIngest = true;
         enableAutoCpuMeshBuild = true;
         enableAutoBuiltSectionBuild = false;
+        enableGeometryGpuReadbackMeshAutoRefresh = false;
         enableSimpleGpuMeshRenderer = true;
         enableDebugMeshRenderer = false;
         simpleGpuMeshMinRenderDistanceChunks = 0;
@@ -79,6 +82,7 @@ public final class ForgeVoxyRuntimeOverrides {
         enableAutoChunkIngest = true;
         enableAutoCpuMeshBuild = true;
         enableAutoBuiltSectionBuild = false;
+        enableGeometryGpuReadbackMeshAutoRefresh = false;
         enableSimpleGpuMeshRenderer = true;
         enableDebugMeshRenderer = false;
         simpleGpuMeshMinRenderDistanceChunks = 5;
@@ -101,6 +105,7 @@ public final class ForgeVoxyRuntimeOverrides {
         enableAutoCpuMeshBuild = false;
         enableAutoBuiltSectionBuild = true;
         enableAutoGeometryManagerConsume = false;
+        enableGeometryGpuReadbackMeshAutoRefresh = false;
         enableSimpleGpuMeshRenderer = true;
         enableDebugMeshRenderer = false;
         simpleGpuMeshSource = SimpleGpuMeshSource.BUILT_SECTION;
@@ -124,6 +129,7 @@ public final class ForgeVoxyRuntimeOverrides {
         enableAutoBuiltSectionBuild = true;
         enableAutoGeometryManagerConsume = true;
         enableGeometryGpuUpload = false;
+        enableGeometryGpuReadbackMeshAutoRefresh = false;
     }
 
     public static synchronized void applyGlHeapVisualizePreset() {
@@ -136,6 +142,7 @@ public final class ForgeVoxyRuntimeOverrides {
         enableAutoGeometryManagerConsume = true;
         enableGeometryGpuUpload = true;
         enableGeometryGpuVisualization = true;
+        enableGeometryGpuReadbackMeshAutoRefresh = false;
         geometryGpuVisualizationAlpha = 0.85D;
         geometryGpuVisualizationIgnoreDepth = true;
         geometryGpuVisualizationDoubleSided = true;
@@ -153,6 +160,7 @@ public final class ForgeVoxyRuntimeOverrides {
         enableAutoGeometryManagerConsume = true;
         enableGeometryGpuUpload = true;
         enableGeometryGpuVisualization = false;
+        enableGeometryGpuReadbackMeshAutoRefresh = true;
         enableSimpleGpuMeshRenderer = true;
         enableDebugMeshRenderer = false;
         simpleGpuMeshSource = SimpleGpuMeshSource.GL_HEAP_READBACK;
@@ -195,6 +203,11 @@ public final class ForgeVoxyRuntimeOverrides {
         enableGeometryGpuVisualization = enabled;
     }
 
+    public static synchronized void setGeometryGpuReadbackMeshAutoRefresh(boolean enabled) {
+        presetName = "custom";
+        enableGeometryGpuReadbackMeshAutoRefresh = enabled;
+    }
+
     public static synchronized void clear() {
         clearInternal();
     }
@@ -208,6 +221,7 @@ public final class ForgeVoxyRuntimeOverrides {
         enableAutoGeometryManagerConsume = null;
         enableGeometryGpuUpload = null;
         enableGeometryGpuVisualization = null;
+        enableGeometryGpuReadbackMeshAutoRefresh = null;
         geometryGpuVisualizationAlpha = null;
         geometryGpuVisualizationIgnoreDepth = null;
         geometryGpuVisualizationDoubleSided = null;
@@ -245,6 +259,8 @@ public final class ForgeVoxyRuntimeOverrides {
                 source(enableGeometryGpuUpload),
                 enableGeometryGpuVisualization(),
                 source(enableGeometryGpuVisualization),
+                enableGeometryGpuReadbackMeshAutoRefresh(),
+                source(enableGeometryGpuReadbackMeshAutoRefresh),
                 geometryGpuVisualizationAlpha(),
                 source(geometryGpuVisualizationAlpha),
                 geometryGpuVisualizationIgnoreDepth(),
@@ -316,6 +332,10 @@ public final class ForgeVoxyRuntimeOverrides {
 
     public static synchronized boolean enableGeometryGpuVisualization() {
         return value(enableGeometryGpuVisualization, ForgeVoxyConfig.ENABLE_GEOMETRY_GPU_VISUALIZATION.get());
+    }
+
+    public static synchronized boolean enableGeometryGpuReadbackMeshAutoRefresh() {
+        return value(enableGeometryGpuReadbackMeshAutoRefresh, ForgeVoxyConfig.ENABLE_GEOMETRY_GPU_READBACK_MESH_AUTO_REFRESH.get());
     }
 
     public static synchronized double geometryGpuVisualizationAlpha() {
@@ -399,6 +419,7 @@ public final class ForgeVoxyRuntimeOverrides {
                 || enableAutoGeometryManagerConsume != null
                 || enableGeometryGpuUpload != null
                 || enableGeometryGpuVisualization != null
+                || enableGeometryGpuReadbackMeshAutoRefresh != null
                 || geometryGpuVisualizationAlpha != null
                 || geometryGpuVisualizationIgnoreDepth != null
                 || geometryGpuVisualizationDoubleSided != null
@@ -455,6 +476,8 @@ public final class ForgeVoxyRuntimeOverrides {
             String enableGeometryGpuUploadSource,
             boolean enableGeometryGpuVisualization,
             String enableGeometryGpuVisualizationSource,
+            boolean enableGeometryGpuReadbackMeshAutoRefresh,
+            String enableGeometryGpuReadbackMeshAutoRefreshSource,
             double geometryGpuVisualizationAlpha,
             String geometryGpuVisualizationAlphaSource,
             boolean geometryGpuVisualizationIgnoreDepth,

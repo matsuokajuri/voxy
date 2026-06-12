@@ -36,6 +36,14 @@ public final class ForgeVoxyConfig {
     public static final ForgeConfigSpec.BooleanValue GEOMETRY_GPU_VISUALIZATION_DOUBLE_SIDED;
     public static final ForgeConfigSpec.IntValue GEOMETRY_GPU_READBACK_MESH_MAX_SECTIONS;
     public static final ForgeConfigSpec.IntValue GEOMETRY_GPU_READBACK_MESH_MAX_RECORDS;
+    public static final ForgeConfigSpec.BooleanValue ENABLE_GEOMETRY_GPU_READBACK_MESH_AUTO_REFRESH;
+    public static final ForgeConfigSpec.IntValue GEOMETRY_GPU_READBACK_MESH_REFRESH_COOLDOWN_TICKS;
+    public static final ForgeConfigSpec.IntValue GEOMETRY_GPU_READBACK_MESH_REFRESH_MAX_SECTIONS;
+    public static final ForgeConfigSpec.IntValue GEOMETRY_GPU_READBACK_MESH_REFRESH_MAX_RECORDS;
+    public static final ForgeConfigSpec.BooleanValue GEOMETRY_GPU_READBACK_MESH_REFRESH_ONLY_WHEN_SOURCE_ACTIVE;
+    public static final ForgeConfigSpec.BooleanValue GEOMETRY_GPU_READBACK_MESH_REFRESH_ONLY_WHEN_RENDERER_ENABLED;
+    public static final ForgeConfigSpec.BooleanValue GEOMETRY_GPU_READBACK_MESH_REFRESH_ON_DIMENSION_CHANGE;
+    public static final ForgeConfigSpec.BooleanValue GEOMETRY_GPU_READBACK_MESH_REFRESH_ON_PRESET;
     public static final ForgeConfigSpec.IntValue CPU_MESH_CACHE_MAX_ENTRIES;
     public static final ForgeConfigSpec.IntValue BUILT_SECTION_CACHE_MAX_ENTRIES;
     public static final ForgeConfigSpec.BooleanValue ENABLE_DEBUG_MESH_RENDERER;
@@ -158,6 +166,30 @@ public final class ForgeVoxyConfig {
         GEOMETRY_GPU_READBACK_MESH_MAX_RECORDS = builder
                 .comment("Maximum quad records read back by one geometry_gpu_readback_mesh_build command for the simple GPU GL_HEAP_READBACK debug source.")
                 .defineInRange("geometryGpuReadbackMeshMaxRecords", 16384, 1, 131072);
+        ENABLE_GEOMETRY_GPU_READBACK_MESH_AUTO_REFRESH = builder
+                .comment("Automatically refreshes the GL_HEAP_READBACK simple GPU debug source from the upload-only GL heap. Disabled by default and rate-limited.")
+                .define("enableGeometryGpuReadbackMeshAutoRefresh", false);
+        GEOMETRY_GPU_READBACK_MESH_REFRESH_COOLDOWN_TICKS = builder
+                .comment("Ticks between automatic GL_HEAP_READBACK readback mesh refresh attempts.")
+                .defineInRange("geometryGpuReadbackMeshRefreshCooldownTicks", 40, 1, 400);
+        GEOMETRY_GPU_READBACK_MESH_REFRESH_MAX_SECTIONS = builder
+                .comment("Maximum uploaded sections read back by one automatic GL_HEAP_READBACK refresh.")
+                .defineInRange("geometryGpuReadbackMeshRefreshMaxSections", 16, 1, 64);
+        GEOMETRY_GPU_READBACK_MESH_REFRESH_MAX_RECORDS = builder
+                .comment("Maximum quad records read back by one automatic GL_HEAP_READBACK refresh.")
+                .defineInRange("geometryGpuReadbackMeshRefreshMaxRecords", 16384, 1, 131072);
+        GEOMETRY_GPU_READBACK_MESH_REFRESH_ONLY_WHEN_SOURCE_ACTIVE = builder
+                .comment("When true, automatic GL_HEAP_READBACK refresh only runs while the simple GPU source is GL_HEAP_READBACK.")
+                .define("geometryGpuReadbackMeshRefreshOnlyWhenSourceActive", true);
+        GEOMETRY_GPU_READBACK_MESH_REFRESH_ONLY_WHEN_RENDERER_ENABLED = builder
+                .comment("When true, automatic GL_HEAP_READBACK refresh only runs while the simple GPU renderer is enabled.")
+                .define("geometryGpuReadbackMeshRefreshOnlyWhenRendererEnabled", true);
+        GEOMETRY_GPU_READBACK_MESH_REFRESH_ON_DIMENSION_CHANGE = builder
+                .comment("Requests a delayed GL_HEAP_READBACK refresh after client dimension changes when auto refresh is enabled.")
+                .define("geometryGpuReadbackMeshRefreshOnDimensionChange", true);
+        GEOMETRY_GPU_READBACK_MESH_REFRESH_ON_PRESET = builder
+                .comment("Requests a delayed GL_HEAP_READBACK refresh when the runtime gl_heap_readback preset is applied.")
+                .define("geometryGpuReadbackMeshRefreshOnPreset", true);
         CPU_MESH_CACHE_MAX_ENTRIES = builder
                 .comment("Maximum cached CPU mesh section/layer entries kept by the debug pipeline. Old entries are closed and evicted with LRU ordering.")
                 .defineInRange("cpuMeshCacheMaxEntries", 2048, 1, 8192);

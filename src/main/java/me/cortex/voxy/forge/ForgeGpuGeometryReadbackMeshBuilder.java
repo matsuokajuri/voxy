@@ -16,6 +16,10 @@ public final class ForgeGpuGeometryReadbackMeshBuilder {
     }
 
     public static ForgeGpuGeometryReadbackMeshResult buildSample(ForgeVoxyInstance instance) {
+        return buildSample(instance, getConfiguredMaxSections(), getConfiguredMaxRecords());
+    }
+
+    public static ForgeGpuGeometryReadbackMeshResult buildSample(ForgeVoxyInstance instance, int maxSections, int maxRecords) {
         long start = System.nanoTime();
         if (!RenderSystem.isOnRenderThread()) {
             return ForgeGpuGeometryReadbackMeshResult.failure("not-render-thread");
@@ -42,8 +46,8 @@ public final class ForgeGpuGeometryReadbackMeshBuilder {
         Collections.sort(sectionIds);
 
         String dimension = minecraft.level.dimension().location().toString();
-        int maxSections = getConfiguredMaxSections();
-        int remainingRecords = getConfiguredMaxRecords();
+        int sectionLimit = Math.min(64, Math.max(1, maxSections));
+        int remainingRecords = Math.min(131072, Math.max(1, maxRecords));
         int builtSections = 0;
         int recordsRead = 0;
         int quads = 0;
@@ -61,7 +65,7 @@ public final class ForgeGpuGeometryReadbackMeshBuilder {
             if (sectionId == null || sectionId < 0) {
                 continue;
             }
-            if (builtSections >= maxSections || remainingRecords <= 0) {
+            if (builtSections >= sectionLimit || remainingRecords <= 0) {
                 break;
             }
 

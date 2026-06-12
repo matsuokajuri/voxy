@@ -28,6 +28,7 @@ public final class ForgeVoxyInstance {
     private final ForgeGpuMeshUploadManager gpuMeshUploadManager = new ForgeGpuMeshUploadManager(this);
     private final ForgeGpuGeometryVisualizationCache gpuGeometryVisualizationCache = new ForgeGpuGeometryVisualizationCache();
     private final ForgeGpuGeometryReadbackMeshCache gpuGeometryReadbackMeshCache = new ForgeGpuGeometryReadbackMeshCache();
+    private final ForgeGpuGeometryReadbackMeshRefreshManager gpuGeometryReadbackMeshRefreshManager = new ForgeGpuGeometryReadbackMeshRefreshManager(this);
     private final ForgeGpuGeometryReadbackDebugRenderer gpuGeometryReadbackDebugRenderer = new ForgeGpuGeometryReadbackDebugRenderer(this);
     private final ForgeGpuGeometryUploadManager gpuGeometryUploadManager = new ForgeGpuGeometryUploadManager(this);
     private final ForgeSimpleGpuMeshRenderer simpleGpuMeshRenderer = new ForgeSimpleGpuMeshRenderer(this);
@@ -50,6 +51,7 @@ public final class ForgeVoxyInstance {
         this.gpuMeshUploadManager.register();
         this.gpuGeometryReadbackDebugRenderer.register();
         this.gpuGeometryUploadManager.register();
+        this.gpuGeometryReadbackMeshRefreshManager.register();
         this.simpleGpuMeshRenderer.register();
     }
 
@@ -119,6 +121,10 @@ public final class ForgeVoxyInstance {
         return this.gpuGeometryReadbackMeshCache;
     }
 
+    public ForgeGpuGeometryReadbackMeshRefreshManager getGpuGeometryReadbackMeshRefreshManager() {
+        return this.gpuGeometryReadbackMeshRefreshManager;
+    }
+
     public ForgeGpuGeometryReadbackDebugRenderer getGpuGeometryReadbackDebugRenderer() {
         return this.gpuGeometryReadbackDebugRenderer;
     }
@@ -161,11 +167,15 @@ public final class ForgeVoxyInstance {
         this.gpuGeometryUploadManager.clear();
         this.gpuGeometryVisualizationCache.clear();
         this.gpuGeometryReadbackMeshCache.clear();
+        this.gpuGeometryReadbackMeshRefreshManager.clear();
         this.gpuGeometryReadbackDebugRenderer.clearStats();
         this.gpuMeshCache.setActiveDimension(dimension);
         this.closeActiveWorld();
         if (ForgeVoxyRuntimeOverrides.enabledWorldEngineSkeleton()) {
             this.createActiveWorldSkeleton();
+        }
+        if (ForgeGpuGeometryReadbackMeshRefreshManager.refreshOnDimensionChange()) {
+            this.gpuGeometryReadbackMeshRefreshManager.requestRefresh(ForgeGpuGeometryReadbackMeshRefreshManager.REASON_DIMENSION_CHANGE);
         }
         VoxyForge.LOGGER.info("Cleared Voxy debug pipeline state after client dimension switch to {}.", dimension);
     }
@@ -227,6 +237,7 @@ public final class ForgeVoxyInstance {
         this.gpuGeometryUploadManager.clear();
         this.gpuGeometryVisualizationCache.clear();
         this.gpuGeometryReadbackMeshCache.clear();
+        this.gpuGeometryReadbackMeshRefreshManager.clear();
         this.gpuGeometryReadbackDebugRenderer.clearStats();
         this.gpuMeshCache.clear();
         this.activeClientDimension = null;

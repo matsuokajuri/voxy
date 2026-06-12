@@ -195,6 +195,7 @@ public final class ForgeGpuGeometryUploadManager {
         this.lastStatus = ForgeGpuGeometryStats.disabled();
         this.instance.getGpuGeometryVisualizationCache().clear();
         this.instance.getGpuGeometryReadbackMeshCache().clear();
+        this.instance.getGpuGeometryReadbackMeshRefreshManager().clear();
         if (ForgeGpuMeshUploadManager.getConfiguredSource() == me.cortex.voxy.config.SimpleGpuMeshSource.GL_HEAP_READBACK) {
             this.instance.getGpuMeshUploadManager().clear();
         }
