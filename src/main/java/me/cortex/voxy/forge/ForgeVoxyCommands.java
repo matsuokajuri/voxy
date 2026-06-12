@@ -50,6 +50,8 @@ public final class ForgeVoxyCommands {
                         .executes(ctx -> clearGeometryManagerConsumeState(ctx.getSource())))
                 .then(Commands.literal("geometry_gpu_upload_status")
                         .executes(ctx -> geometryGpuUploadStatus(ctx.getSource())))
+                .then(Commands.literal("geometry_gpu_validate_sample")
+                        .executes(ctx -> geometryGpuValidateSample(ctx.getSource())))
                 .then(Commands.literal("geometry_gpu_upload_enable")
                         .executes(ctx -> setGeometryGpuUpload(ctx.getSource(), true)))
                 .then(Commands.literal("geometry_gpu_upload_disable")
@@ -699,7 +701,7 @@ public final class ForgeVoxyCommands {
         var status = ForgeVoxyInstance.INSTANCE.getGpuGeometryUploadManager().createStatusSnapshot();
         var geometryStatus = ForgeVoxyInstance.INSTANCE.getSectionGeometryManager().createStatusSnapshot();
         String message = String.format(
-                "Voxy upload-only GL geometry heap: enabled=%s reason=%s heapCreated=%s geometryCapacityBytes=%d metadataCapacityBytes=%d uploadedGeometryBytes=%d uploadedSections=%d metadataWrites=%d removeIntentsProcessed=%d pendingUploadIntents=%d pendingRemoveIntents=%d pendingDirtyMetadata=%d cpuUploadIntents=%d cpuRemoveIntents=%d cpuDirtyMetadata=%d failures=%d lastError=%s lastUploadMs=%.2f avgUploadMs=%.2f releasedBuffers=%d clears=%d renderThreadOnly=%s draws=false rendererUsesHeap=false",
+                "Voxy upload-only GL geometry heap: enabled=%s reason=%s heapCreated=%s geometryCapacityBytes=%d metadataCapacityBytes=%d uploadedGeometryBytes=%d uploadedSections=%d metadataWrites=%d removeIntentsProcessed=%d pendingUploadIntents=%d pendingRemoveIntents=%d pendingDirtyMetadata=%d cpuUploadIntents=%d cpuRemoveIntents=%d cpuDirtyMetadata=%d failures=%d lastError=%s lastUploadMs=%.2f avgUploadMs=%.2f validationRuns=%d validationFailures=%d lastValidationError=%s lastValidationSectionId=%d lastValidationGeometryPtr=%s lastMetadataMatch=%s lastGeometryMatch=%s releasedBuffers=%d clears=%d renderThreadOnly=%s draws=false rendererUsesHeap=false",
                 status.enabled(),
                 status.reason(),
                 status.heapCreated(),
@@ -719,12 +721,47 @@ public final class ForgeVoxyCommands {
                 status.lastError(),
                 status.lastUploadMs(),
                 status.averageUploadMs(),
+                status.validationRuns(),
+                status.validationFailures(),
+                status.lastValidationError(),
+                status.lastValidationSectionId(),
+                formatGeometryPointer(status.lastValidationGeometryPtr()),
+                status.lastMetadataMatch(),
+                status.lastGeometryMatch(),
                 status.releasedBuffers(),
                 status.clearCount(),
                 status.renderThreadOnly()
         );
         source.sendSuccess(() -> Component.literal(message), false);
         return status.enabled() ? 1 : 0;
+    }
+
+    private static int geometryGpuValidateSample(CommandSourceStack source) {
+        ForgeGpuGeometryValidationResult result = ForgeVoxyInstance.INSTANCE.getGpuGeometryUploadManager().validateSample(8);
+        String message = String.format(
+                "Voxy upload-only GL geometry validation: success=%s reason=%s sectionId=%d geometryPtr=%s recordCount=%d metadataMatch=%s geometryMatch=%s expectedMetadataHash=%d actualMetadataHash=%d expectedGeometrySampleHash=%d actualGeometrySampleHash=%d expectedMetadata=%s actualMetadata=%s expectedRecords=%s actualRecords=%s readbackApi=glGetNamedBufferSubData renderThreadOnly=true draws=false",
+                result.success(),
+                result.reason(),
+                result.sectionId(),
+                formatGeometryPointer(result.geometryPtr()),
+                result.recordCount(),
+                result.metadataMatch(),
+                result.geometryMatch(),
+                result.expectedMetadataHash(),
+                result.actualMetadataHash(),
+                result.expectedGeometrySampleHash(),
+                result.actualGeometrySampleHash(),
+                result.expectedMetadataWords(),
+                result.actualMetadataWords(),
+                result.expectedGeometryRecords(),
+                result.actualGeometryRecords()
+        );
+        if (result.success()) {
+            source.sendSuccess(() -> Component.literal(message), false);
+            return 1;
+        }
+        source.sendFailure(Component.literal(message));
+        return 0;
     }
 
     private static int setGeometryGpuUpload(CommandSourceStack source, boolean enabled) {
@@ -1347,6 +1384,10 @@ public final class ForgeVoxyCommands {
 
     private static String describeMeshSource(SimpleGpuMeshSource source) {
         return source == SimpleGpuMeshSource.BUILT_SECTION ? BUILT_SECTION_SOURCE_DESCRIPTION : CPU_MESH_SOURCE_DESCRIPTION;
+    }
+
+    private static String formatGeometryPointer(int geometryPtr) {
+        return geometryPtr < 0 ? "none" : Long.toUnsignedString(Integer.toUnsignedLong(geometryPtr));
     }
 
     private static String formatBounds(ForgeCpuMeshCache.BoundsSnapshot bounds) {

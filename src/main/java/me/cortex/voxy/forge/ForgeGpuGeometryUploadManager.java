@@ -5,6 +5,7 @@ import me.cortex.voxy.config.ForgeVoxyConfig;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.TickEvent;
 
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -28,6 +29,13 @@ public final class ForgeGpuGeometryUploadManager {
     private double uploadWindowMs;
     private long uploadWindowCount;
     private long clearCount;
+    private long validationRuns;
+    private long validationFailures;
+    private String lastValidationError = "none";
+    private int lastValidationSectionId = -1;
+    private int lastValidationGeometryPtr = -1;
+    private boolean lastMetadataMatch;
+    private boolean lastGeometryMatch;
     private int releasedBuffers;
     private boolean renderCallQueued;
     private boolean disabledByFailure;
@@ -65,6 +73,13 @@ public final class ForgeGpuGeometryUploadManager {
                 this.averageUploadMs(),
                 this.releasedBuffers,
                 this.clearCount,
+                this.validationRuns,
+                this.validationFailures,
+                this.lastValidationError,
+                this.lastValidationSectionId,
+                this.lastValidationGeometryPtr,
+                this.lastMetadataMatch,
+                this.lastGeometryMatch,
                 true
         );
     }
@@ -84,8 +99,58 @@ public final class ForgeGpuGeometryUploadManager {
         this.uploadWindowCount = 0;
         this.clearCount++;
         this.disabledByFailure = false;
+        this.lastValidationError = "none";
+        this.lastValidationSectionId = -1;
+        this.lastValidationGeometryPtr = -1;
+        this.lastMetadataMatch = false;
+        this.lastGeometryMatch = false;
         this.releasedBuffers += this.closeHeapSafely();
         this.lastStatus = ForgeGpuGeometryStats.disabled();
+    }
+
+    public ForgeGpuGeometryValidationResult validateSample(int maxRecords) {
+        this.validationRuns++;
+        if (!RenderSystem.isOnRenderThread()) {
+            return this.recordValidationResult(ForgeGpuGeometryValidationResult.failure("not-render-thread"));
+        }
+        if (!isEnabled()) {
+            return this.recordValidationResult(ForgeGpuGeometryValidationResult.failure("geometry-gpu-upload-disabled"));
+        }
+        if (!this.heap.isCreated()) {
+            return this.recordValidationResult(ForgeGpuGeometryValidationResult.failure("heap-not-created"));
+        }
+
+        int recordLimit = Math.min(16, Math.max(1, maxRecords));
+        try {
+            List<ForgeSectionGeometryUploadIntent> uploads = this.instance.getSectionGeometryManager().createUploadIntentSnapshot();
+            for (ForgeSectionGeometryUploadIntent intent : uploads) {
+                Integer uploadedHash = this.uploadedGeometryHashes.get(intent.geometryPtr());
+                if (uploadedHash == null || uploadedHash != intent.recordHash()) {
+                    continue;
+                }
+                int[] expectedMetadata = this.instance.getSectionGeometryManager().createMetadataWordsSnapshot(intent.sectionId());
+                Integer metadataHash = this.uploadedMetadataHashes.get(intent.sectionId());
+                if (metadataHash == null || metadataHash != metadataHash(expectedMetadata)) {
+                    continue;
+                }
+
+                long[] expectedRecords = Arrays.copyOf(intent.recordsCopy(), Math.min(recordLimit, intent.itemCount()));
+                int[] actualMetadata = this.heap.readbackMetadata(intent.sectionId());
+                long[] actualRecords = this.heap.readbackGeometry(intent.geometryPtr(), expectedRecords.length);
+                return this.recordValidationResult(ForgeGpuGeometryValidationResult.success(
+                        intent.sectionId(),
+                        intent.geometryPtr(),
+                        expectedMetadata,
+                        actualMetadata,
+                        expectedRecords,
+                        actualRecords
+                ));
+            }
+            return this.recordValidationResult(ForgeGpuGeometryValidationResult.failure("no-uploaded-sample"));
+        } catch (RuntimeException e) {
+            this.recordFailure("validation " + e.getClass().getSimpleName() + ": " + e.getMessage());
+            return this.recordValidationResult(ForgeGpuGeometryValidationResult.failure(e.getClass().getSimpleName() + ": " + e.getMessage()));
+        }
     }
 
     private void onClientTick(TickEvent.ClientTickEvent event) {
@@ -293,6 +358,19 @@ public final class ForgeGpuGeometryUploadManager {
         this.failures++;
         this.lastError = message == null ? "unknown" : message;
         this.lastStatus = this.createStatusSnapshot();
+    }
+
+    private ForgeGpuGeometryValidationResult recordValidationResult(ForgeGpuGeometryValidationResult result) {
+        this.lastValidationSectionId = result.sectionId();
+        this.lastValidationGeometryPtr = result.geometryPtr();
+        this.lastMetadataMatch = result.metadataMatch();
+        this.lastGeometryMatch = result.geometryMatch();
+        this.lastValidationError = result.success() ? "none" : result.reason();
+        if (!result.success()) {
+            this.validationFailures++;
+        }
+        this.lastStatus = this.createStatusSnapshot();
+        return result;
     }
 
     private double averageUploadMs() {

@@ -6,6 +6,7 @@ import org.lwjgl.system.MemoryUtil;
 import static org.lwjgl.opengl.GL15C.GL_DYNAMIC_DRAW;
 import static org.lwjgl.opengl.GL15C.glDeleteBuffers;
 import static org.lwjgl.opengl.GL45C.glCreateBuffers;
+import static org.lwjgl.opengl.GL45C.nglGetNamedBufferSubData;
 import static org.lwjgl.opengl.GL45C.nglNamedBufferData;
 import static org.lwjgl.opengl.GL45C.nglNamedBufferSubData;
 
@@ -112,6 +113,56 @@ public final class ForgeGpuGeometryHeap {
                 MemoryUtil.memPutInt(ptr + i * (long) Integer.BYTES, metadataWords[i]);
             }
             nglNamedBufferSubData(this.metadataBufferId, offsetBytes, METADATA_BYTES, ptr);
+        } finally {
+            MemoryUtil.nmemFree(ptr);
+        }
+    }
+
+    public long[] readbackGeometry(int geometryPtrItems, int recordCount) {
+        requireRenderThread("read back geometry records");
+        if (!this.isCreated()) {
+            throw new IllegalStateException("GL geometry heap is not created");
+        }
+        if (recordCount <= 0) {
+            return new long[0];
+        }
+        long offsetBytes = Integer.toUnsignedLong(geometryPtrItems) * GEOMETRY_RECORD_BYTES;
+        long byteSize = (long) recordCount * GEOMETRY_RECORD_BYTES;
+        if (offsetBytes < 0 || offsetBytes + byteSize > this.geometryCapacityBytes) {
+            throw new IllegalArgumentException("Geometry readback exceeds GL heap capacity: offset=" + offsetBytes + " bytes=" + byteSize + " capacity=" + this.geometryCapacityBytes);
+        }
+
+        long[] records = new long[recordCount];
+        long ptr = MemoryUtil.nmemAlloc(byteSize);
+        try {
+            nglGetNamedBufferSubData(this.geometryBufferId, offsetBytes, byteSize, ptr);
+            for (int i = 0; i < records.length; i++) {
+                records[i] = MemoryUtil.memGetLong(ptr + i * (long) GEOMETRY_RECORD_BYTES);
+            }
+            return records;
+        } finally {
+            MemoryUtil.nmemFree(ptr);
+        }
+    }
+
+    public int[] readbackMetadata(int sectionId) {
+        requireRenderThread("read back section metadata");
+        if (!this.isCreated()) {
+            throw new IllegalStateException("GL geometry heap is not created");
+        }
+        long offsetBytes = (long) sectionId * METADATA_BYTES;
+        if (sectionId < 0 || offsetBytes + METADATA_BYTES > this.metadataCapacityBytes) {
+            throw new IllegalArgumentException("Metadata readback exceeds GL heap capacity: sectionId=" + sectionId + " offset=" + offsetBytes + " capacity=" + this.metadataCapacityBytes);
+        }
+
+        int[] words = new int[ForgeSectionGeometryMetadata.METADATA_WORDS];
+        long ptr = MemoryUtil.nmemAlloc(METADATA_BYTES);
+        try {
+            nglGetNamedBufferSubData(this.metadataBufferId, offsetBytes, METADATA_BYTES, ptr);
+            for (int i = 0; i < words.length; i++) {
+                words[i] = MemoryUtil.memGetInt(ptr + i * (long) Integer.BYTES);
+            }
+            return words;
         } finally {
             MemoryUtil.nmemFree(ptr);
         }
