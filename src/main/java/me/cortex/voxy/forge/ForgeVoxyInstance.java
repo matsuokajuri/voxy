@@ -27,6 +27,7 @@ public final class ForgeVoxyInstance {
     private final ForgeGpuMeshCache gpuMeshCache = new ForgeGpuMeshCache();
     private final ForgeGpuMeshUploadManager gpuMeshUploadManager = new ForgeGpuMeshUploadManager(this);
     private final ForgeGpuGeometryVisualizationCache gpuGeometryVisualizationCache = new ForgeGpuGeometryVisualizationCache();
+    private final ForgeGpuGeometryReadbackMeshCache gpuGeometryReadbackMeshCache = new ForgeGpuGeometryReadbackMeshCache();
     private final ForgeGpuGeometryReadbackDebugRenderer gpuGeometryReadbackDebugRenderer = new ForgeGpuGeometryReadbackDebugRenderer(this);
     private final ForgeGpuGeometryUploadManager gpuGeometryUploadManager = new ForgeGpuGeometryUploadManager(this);
     private final ForgeSimpleGpuMeshRenderer simpleGpuMeshRenderer = new ForgeSimpleGpuMeshRenderer(this);
@@ -114,6 +115,10 @@ public final class ForgeVoxyInstance {
         return this.gpuGeometryVisualizationCache;
     }
 
+    public ForgeGpuGeometryReadbackMeshCache getGpuGeometryReadbackMeshCache() {
+        return this.gpuGeometryReadbackMeshCache;
+    }
+
     public ForgeGpuGeometryReadbackDebugRenderer getGpuGeometryReadbackDebugRenderer() {
         return this.gpuGeometryReadbackDebugRenderer;
     }
@@ -155,6 +160,7 @@ public final class ForgeVoxyInstance {
         this.gpuMeshUploadManager.clear();
         this.gpuGeometryUploadManager.clear();
         this.gpuGeometryVisualizationCache.clear();
+        this.gpuGeometryReadbackMeshCache.clear();
         this.gpuGeometryReadbackDebugRenderer.clearStats();
         this.gpuMeshCache.setActiveDimension(dimension);
         this.closeActiveWorld();
@@ -220,6 +226,7 @@ public final class ForgeVoxyInstance {
         this.gpuMeshUploadManager.clear();
         this.gpuGeometryUploadManager.clear();
         this.gpuGeometryVisualizationCache.clear();
+        this.gpuGeometryReadbackMeshCache.clear();
         this.gpuGeometryReadbackDebugRenderer.clearStats();
         this.gpuMeshCache.clear();
         this.activeClientDimension = null;

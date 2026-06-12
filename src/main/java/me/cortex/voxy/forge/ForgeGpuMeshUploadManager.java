@@ -72,6 +72,9 @@ public final class ForgeGpuMeshUploadManager {
         if (source == SimpleGpuMeshSource.BUILT_SECTION) {
             return this.processBuiltSectionUploads(dimension, source);
         }
+        if (source == SimpleGpuMeshSource.GL_HEAP_READBACK) {
+            return this.processGlHeapReadbackUploads(dimension, source);
+        }
         return this.processCpuMeshUploads(dimension, centerChunkX, centerChunkZ, source);
     }
 
@@ -183,6 +186,7 @@ public final class ForgeGpuMeshUploadManager {
                 dimension,
                 this.uploadBudget,
                 sections.size(),
+                0,
                 0,
                 pendingUploads,
                 uploaded,
@@ -306,6 +310,7 @@ public final class ForgeGpuMeshUploadManager {
                 this.uploadBudget,
                 0,
                 sections.size(),
+                0,
                 pendingUploads,
                 uploaded,
                 failed,
@@ -318,6 +323,126 @@ public final class ForgeGpuMeshUploadManager {
                 builtSnapshot.skippedReleased(),
                 builtSnapshot.limitedEntries(),
                 skippedInvalid,
+                orphanReconciled,
+                this.orphanReconciledTotal,
+                this.sourceSwitchCount,
+                this.lastBuiltSectionDecodeMs,
+                this.lastAverageBuiltSectionDecodeMs,
+                uploadedVertices,
+                uploadedBytes,
+                this.lastAverageUploadMs,
+                useOriginalColors,
+                true
+        );
+        return this.lastStatus;
+    }
+
+    private UploadStatusSnapshot processGlHeapReadbackUploads(String dimension, SimpleGpuMeshSource source) {
+        int maxCandidates = getConfiguredMaxBuffers();
+        ForgeCpuMeshCache.RenderSnapshot snapshot = this.instance.getGpuGeometryReadbackMeshCache().createUploadSnapshot(dimension, maxCandidates);
+        List<ForgeCpuBuiltSection> sections = snapshot.sections();
+        Set<ForgeCpuMeshCache.Key> liveKeys = this.instance.getGpuGeometryReadbackMeshCache().createKeySnapshot(dimension);
+        boolean useOriginalColors = useOriginalColors();
+        int colorModeStamp = ForgeGpuMeshBuffer.colorModeStamp(useOriginalColors);
+        int pendingUploads = 0;
+        int alreadyUploaded = 0;
+        int skippedTranslucent = 0;
+        int skippedEmpty = 0;
+
+        for (ForgeCpuBuiltSection section : sections) {
+            if (section.layer() == ForgeCpuMeshLayer.TRANSLUCENT) {
+                skippedTranslucent++;
+                continue;
+            }
+            ForgeCpuMeshBuffer meshBuffer = section.meshBuffer();
+            if (meshBuffer == null || meshBuffer.isClosed() || meshBuffer.vertexCount() == 0) {
+                skippedEmpty++;
+                continue;
+            }
+            if (this.instance.getGpuMeshCache().hasMatching(section, colorModeStamp)) {
+                alreadyUploaded++;
+                continue;
+            }
+            pendingUploads++;
+        }
+
+        this.instance.getGpuMeshCache().setActiveDimension(dimension);
+        int orphanReconciled = this.consumePendingOrphanReconciled();
+        int retainedRemoved = this.instance.getGpuMeshCache().retainOnly(dimension, liveKeys);
+        orphanReconciled += retainedRemoved;
+        this.orphanReconciledTotal += retainedRemoved;
+
+        int uploadLimit = Math.min(this.uploadBudget, getConfiguredMaxUploadsPerTick());
+        int uploaded = 0;
+        int failed = 0;
+        long uploadedVertices = 0;
+        long uploadedBytes = 0;
+        long start = System.nanoTime();
+        if (uploadLimit > 0 && pendingUploads > 0) {
+            for (ForgeCpuBuiltSection section : sections) {
+                if (uploaded >= uploadLimit) {
+                    break;
+                }
+                if (section.layer() == ForgeCpuMeshLayer.TRANSLUCENT) {
+                    continue;
+                }
+                ForgeCpuMeshBuffer meshBuffer = section.meshBuffer();
+                if (meshBuffer == null || meshBuffer.isClosed() || meshBuffer.vertexCount() == 0) {
+                    continue;
+                }
+                if (this.instance.getGpuMeshCache().hasMatching(section, colorModeStamp)) {
+                    continue;
+                }
+
+                try {
+                    ForgeGpuMeshBuffer uploadedBuffer = ForgeGpuMeshBuffer.upload(section, useOriginalColors);
+                    uploadedVertices += uploadedBuffer.vertexCount();
+                    uploadedBytes += uploadedBuffer.sizeBytes();
+                    this.instance.getGpuMeshCache().put(uploadedBuffer);
+                    uploaded++;
+                } catch (Exception e) {
+                    failed++;
+                    VoxyForge.LOGGER.error(
+                            "Failed to upload Voxy GL heap readback simple GPU mesh for {} chunk {},{} position {}",
+                            section.dimension(),
+                            section.chunkX(),
+                            section.chunkZ(),
+                            Long.toUnsignedString(section.sectionPosition()),
+                            e
+                    );
+                }
+            }
+        }
+
+        if (uploaded > 0) {
+            this.uploadBudget = Math.max(0, this.uploadBudget - uploaded);
+            double elapsedMs = (System.nanoTime() - start) / 1_000_000.0D;
+            this.uploadWindowCount += uploaded;
+            this.uploadWindowMs += elapsedMs;
+            this.lastAverageUploadMs = this.uploadWindowMs / this.uploadWindowCount;
+        }
+
+        this.lastStatus = new UploadStatusSnapshot(
+                true,
+                "ok",
+                source,
+                dimension,
+                this.uploadBudget,
+                0,
+                0,
+                sections.size(),
+                pendingUploads,
+                uploaded,
+                failed,
+                alreadyUploaded,
+                skippedTranslucent,
+                0,
+                skippedEmpty,
+                snapshot.skippedByDimension(),
+                snapshot.skippedByDistance(),
+                snapshot.skippedReleased(),
+                snapshot.limitedEntries(),
+                0,
                 orphanReconciled,
                 this.orphanReconciledTotal,
                 this.sourceSwitchCount,
@@ -399,6 +524,7 @@ public final class ForgeGpuMeshUploadManager {
             int uploadBudget,
             int candidateCpuEntries,
             int candidateBuiltSectionEntries,
+            int candidateGlHeapReadbackEntries,
             int pendingUploads,
             int uploadedThisFrame,
             int failedThisFrame,
@@ -433,6 +559,7 @@ public final class ForgeGpuMeshUploadManager {
                     SimpleGpuMeshSource.CPU_MESH,
                     "none",
                     uploadBudget,
+                    0,
                     0,
                     0,
                     0,

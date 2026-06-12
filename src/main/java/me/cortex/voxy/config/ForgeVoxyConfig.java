@@ -34,6 +34,8 @@ public final class ForgeVoxyConfig {
     public static final ForgeConfigSpec.DoubleValue GEOMETRY_GPU_VISUALIZATION_ALPHA;
     public static final ForgeConfigSpec.BooleanValue GEOMETRY_GPU_VISUALIZATION_IGNORE_DEPTH;
     public static final ForgeConfigSpec.BooleanValue GEOMETRY_GPU_VISUALIZATION_DOUBLE_SIDED;
+    public static final ForgeConfigSpec.IntValue GEOMETRY_GPU_READBACK_MESH_MAX_SECTIONS;
+    public static final ForgeConfigSpec.IntValue GEOMETRY_GPU_READBACK_MESH_MAX_RECORDS;
     public static final ForgeConfigSpec.IntValue CPU_MESH_CACHE_MAX_ENTRIES;
     public static final ForgeConfigSpec.IntValue BUILT_SECTION_CACHE_MAX_ENTRIES;
     public static final ForgeConfigSpec.BooleanValue ENABLE_DEBUG_MESH_RENDERER;
@@ -150,6 +152,12 @@ public final class ForgeVoxyConfig {
         GEOMETRY_GPU_VISUALIZATION_DOUBLE_SIDED = builder
                 .comment("Disables culling for the upload-only GL heap readback visualization so debug quads remain visible while winding is still being audited.")
                 .define("geometryGpuVisualizationDoubleSided", true);
+        GEOMETRY_GPU_READBACK_MESH_MAX_SECTIONS = builder
+                .comment("Maximum uploaded sections read back by one geometry_gpu_readback_mesh_build command for the simple GPU GL_HEAP_READBACK debug source.")
+                .defineInRange("geometryGpuReadbackMeshMaxSections", 16, 1, 64);
+        GEOMETRY_GPU_READBACK_MESH_MAX_RECORDS = builder
+                .comment("Maximum quad records read back by one geometry_gpu_readback_mesh_build command for the simple GPU GL_HEAP_READBACK debug source.")
+                .defineInRange("geometryGpuReadbackMeshMaxRecords", 16384, 1, 131072);
         CPU_MESH_CACHE_MAX_ENTRIES = builder
                 .comment("Maximum cached CPU mesh section/layer entries kept by the debug pipeline. Old entries are closed and evicted with LRU ordering.")
                 .defineInRange("cpuMeshCacheMaxEntries", 2048, 1, 8192);
@@ -181,7 +189,7 @@ public final class ForgeVoxyConfig {
                 .comment("Draws cached CPU mesh through a simple vanilla VertexBuffer renderer. This is an early Forge renderer PoC and is disabled by default.")
                 .define("enableSimpleGpuMeshRenderer", false);
         SIMPLE_GPU_MESH_SOURCE = builder
-                .comment("Selects the CPU data source for the simple GPU renderer. CPU_MESH is the existing path; BUILT_SECTION decodes the CPU-only Voxy BuiltSection cache.")
+                .comment("Selects the CPU data source for the simple GPU renderer. CPU_MESH is the existing path; BUILT_SECTION decodes the CPU-only Voxy BuiltSection cache; GL_HEAP_READBACK uses command-built debug mesh decoded from the upload-only GL heap.")
                 .defineEnum("simpleGpuMeshSource", SimpleGpuMeshSource.CPU_MESH);
         SIMPLE_GPU_MESH_MAX_UPLOADS_PER_TICK = builder
                 .comment("Maximum CPU mesh entries uploaded to vanilla VertexBuffer objects per client tick.")

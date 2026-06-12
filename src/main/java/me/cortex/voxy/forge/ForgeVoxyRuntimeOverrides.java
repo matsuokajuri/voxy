@@ -143,6 +143,48 @@ public final class ForgeVoxyRuntimeOverrides {
         enableDebugMeshRenderer = false;
     }
 
+    public static synchronized void applyGlHeapReadbackPreset() {
+        clearInternal();
+        presetName = "gl_heap_readback";
+        enableWorldEngineSkeleton = true;
+        enableAutoChunkIngest = true;
+        enableAutoCpuMeshBuild = false;
+        enableAutoBuiltSectionBuild = true;
+        enableAutoGeometryManagerConsume = true;
+        enableGeometryGpuUpload = true;
+        enableGeometryGpuVisualization = false;
+        enableSimpleGpuMeshRenderer = true;
+        enableDebugMeshRenderer = false;
+        simpleGpuMeshSource = SimpleGpuMeshSource.GL_HEAP_READBACK;
+        simpleGpuMeshMinRenderDistanceChunks = 0;
+        simpleGpuMeshRenderDistanceChunks = 64;
+        simpleGpuMeshRenderLoadedChunks = true;
+        simpleGpuMeshLoadedChunkSkipMode = SimpleGpuMeshLoadedChunkSkipMode.DISABLED;
+        simpleGpuMeshLoadedChunkMargin = 0;
+        simpleGpuMeshKeepCachedChunks = true;
+        simpleGpuMeshUseOriginalColors = true;
+        simpleGpuMeshIgnoreDepth = true;
+        simpleGpuMeshVerticalOffset = 0.05D;
+        simpleGpuMeshAlpha = 1.0D;
+    }
+
+    public static synchronized void setGlHeapReadbackMeshSource() {
+        presetName = "custom";
+        enableSimpleGpuMeshRenderer = true;
+        enableGeometryGpuVisualization = false;
+        simpleGpuMeshSource = SimpleGpuMeshSource.GL_HEAP_READBACK;
+        simpleGpuMeshMinRenderDistanceChunks = 0;
+        simpleGpuMeshRenderDistanceChunks = 64;
+        simpleGpuMeshRenderLoadedChunks = true;
+        simpleGpuMeshLoadedChunkSkipMode = SimpleGpuMeshLoadedChunkSkipMode.DISABLED;
+        simpleGpuMeshLoadedChunkMargin = 0;
+        simpleGpuMeshKeepCachedChunks = true;
+        simpleGpuMeshUseOriginalColors = true;
+        simpleGpuMeshIgnoreDepth = true;
+        simpleGpuMeshVerticalOffset = 0.05D;
+        simpleGpuMeshAlpha = 1.0D;
+    }
+
     public static synchronized void setGeometryGpuUpload(boolean enabled) {
         presetName = "custom";
         enableGeometryGpuUpload = enabled;
