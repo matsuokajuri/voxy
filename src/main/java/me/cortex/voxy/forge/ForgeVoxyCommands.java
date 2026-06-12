@@ -52,6 +52,12 @@ public final class ForgeVoxyCommands {
                         .executes(ctx -> geometryGpuUploadStatus(ctx.getSource())))
                 .then(Commands.literal("geometry_gpu_validate_sample")
                         .executes(ctx -> geometryGpuValidateSample(ctx.getSource())))
+                .then(Commands.literal("geometry_gpu_audit_sample")
+                        .executes(ctx -> geometryGpuAuditSample(ctx.getSource())))
+                .then(Commands.literal("geometry_gpu_audit_status")
+                        .executes(ctx -> geometryGpuAuditStatus(ctx.getSource())))
+                .then(Commands.literal("geometry_gpu_audit_clear")
+                        .executes(ctx -> geometryGpuAuditClear(ctx.getSource())))
                 .then(Commands.literal("geometry_gpu_stress_status")
                         .executes(ctx -> geometryGpuStressStatus(ctx.getSource())))
                 .then(Commands.literal("geometry_gpu_stress_clear")
@@ -768,6 +774,69 @@ public final class ForgeVoxyCommands {
         }
         source.sendFailure(Component.literal(message));
         return 0;
+    }
+
+    private static int geometryGpuAuditSample(CommandSourceStack source) {
+        ForgeGpuGeometryAuditResult result = ForgeVoxyInstance.INSTANCE.getGpuGeometryUploadManager().auditSample();
+        String message = String.format(
+                "Voxy upload-only GL geometry audit: success=%s reason=%s auditedSections=%d decodedRecords=%d invalidMetadata=%d invalidGeometryRecords=%d emptyBuckets=%d nonEmptyBuckets=%d maxQuadLength=%d maxQuadWidth=%d lastAuditedSectionId=%d lastAuditedPosition=%s lastAuditedGeometryPtr=%s lastAuditError=%s metadataWords=%s decodedMetadata=\"%s\" decodedRecords=\"%s\" readbackApi=glGetNamedBufferSubData renderThreadOnly=true drainsIntents=false draws=false",
+                result.success(),
+                result.reason(),
+                result.auditedSections(),
+                result.decodedRecords(),
+                result.invalidMetadata(),
+                result.invalidGeometryRecords(),
+                result.emptyBuckets(),
+                result.nonEmptyBuckets(),
+                result.maxQuadLength(),
+                result.maxQuadWidth(),
+                result.lastAuditedSectionId(),
+                Long.toUnsignedString(result.lastAuditedPosition()),
+                formatGeometryPointer(result.lastAuditedGeometryPtr()),
+                result.lastAuditError(),
+                result.lastMetadataWords(),
+                result.lastDecodedMetadata(),
+                result.lastDecodedRecords()
+        );
+        if (result.success()) {
+            source.sendSuccess(() -> Component.literal(message), false);
+            return result.decodedRecords();
+        }
+        source.sendFailure(Component.literal(message));
+        return 0;
+    }
+
+    private static int geometryGpuAuditStatus(CommandSourceStack source) {
+        ForgeGpuGeometryAuditStats audit = ForgeVoxyInstance.INSTANCE.getGpuGeometryUploadManager().createAuditStatusSnapshot();
+        ForgeGpuGeometryStats upload = ForgeVoxyInstance.INSTANCE.getGpuGeometryUploadManager().createStatusSnapshot();
+        String message = String.format(
+                "Voxy upload-only GL geometry audit status: auditRuns=%d auditFailures=%d lastAuditError=%s lastAuditDurationMs=%.2f lastAuditedSections=%d lastDecodedRecords=%d lastInvalidMetadata=%d lastInvalidGeometryRecords=%d lastEmptyBuckets=%d lastNonEmptyBuckets=%d lastMaxQuadLength=%d lastMaxQuadWidth=%d lastAuditedSectionId=%d lastAuditedGeometryPtr=%s uploadEnabled=%s heapCreated=%s uploadedSections=%d renderThreadOnly=true drainsIntents=false draws=false",
+                audit.auditRuns(),
+                audit.auditFailures(),
+                audit.lastAuditError(),
+                audit.lastAuditDurationMs(),
+                audit.lastAuditedSections(),
+                audit.lastDecodedRecords(),
+                audit.lastInvalidMetadata(),
+                audit.lastInvalidGeometryRecords(),
+                audit.lastEmptyBuckets(),
+                audit.lastNonEmptyBuckets(),
+                audit.lastMaxQuadLength(),
+                audit.lastMaxQuadWidth(),
+                audit.lastAuditedSectionId(),
+                formatGeometryPointer(audit.lastAuditedGeometryPtr()),
+                upload.enabled(),
+                upload.heapCreated(),
+                upload.uploadedSections()
+        );
+        source.sendSuccess(() -> Component.literal(message), false);
+        return 1;
+    }
+
+    private static int geometryGpuAuditClear(CommandSourceStack source) {
+        ForgeVoxyInstance.INSTANCE.getGpuGeometryUploadManager().clearAuditStats();
+        source.sendSuccess(() -> Component.literal("Voxy: cleared upload-only GL geometry audit counters and last decoded sample. GL buffers and CPU geometry intents were left intact."), false);
+        return 1;
     }
 
     private static int geometryGpuStressStatus(CommandSourceStack source) {

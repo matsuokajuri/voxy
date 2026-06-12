@@ -6,7 +6,9 @@ import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.TickEvent;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -49,6 +51,10 @@ public final class ForgeGpuGeometryUploadManager {
     private long lastAfterReenableGeometryBytes;
     private boolean lastValidationAfterReenableMetadataMatch;
     private boolean lastValidationAfterReenableGeometryMatch;
+    private long auditRuns;
+    private long auditFailures;
+    private double lastAuditDurationMs;
+    private ForgeGpuGeometryAuditResult lastAuditResult = ForgeGpuGeometryAuditResult.failure("none");
     private int releasedBuffers;
     private boolean renderCallQueued;
     private boolean disabledByFailure;
@@ -114,6 +120,32 @@ public final class ForgeGpuGeometryUploadManager {
         );
     }
 
+    public ForgeGpuGeometryAuditStats createAuditStatusSnapshot() {
+        return new ForgeGpuGeometryAuditStats(
+                this.auditRuns,
+                this.auditFailures,
+                this.lastAuditResult.lastAuditError(),
+                this.lastAuditDurationMs,
+                this.lastAuditResult.auditedSections(),
+                this.lastAuditResult.decodedRecords(),
+                this.lastAuditResult.invalidMetadata(),
+                this.lastAuditResult.invalidGeometryRecords(),
+                this.lastAuditResult.emptyBuckets(),
+                this.lastAuditResult.nonEmptyBuckets(),
+                this.lastAuditResult.maxQuadLength(),
+                this.lastAuditResult.maxQuadWidth(),
+                this.lastAuditResult.lastAuditedSectionId(),
+                this.lastAuditResult.lastAuditedGeometryPtr()
+        );
+    }
+
+    public void clearAuditStats() {
+        this.auditRuns = 0;
+        this.auditFailures = 0;
+        this.lastAuditDurationMs = 0.0D;
+        this.lastAuditResult = ForgeGpuGeometryAuditResult.failure("none");
+    }
+
     public void clearStressStats() {
         this.stressRuns = 0;
         this.stressFailures = 0;
@@ -149,6 +181,8 @@ public final class ForgeGpuGeometryUploadManager {
         this.lastValidationGeometryPtr = -1;
         this.lastMetadataMatch = false;
         this.lastGeometryMatch = false;
+        this.lastAuditResult = ForgeGpuGeometryAuditResult.failure("none");
+        this.lastAuditDurationMs = 0.0D;
         this.releasedBuffers += this.closeHeapSafely();
         this.lastStatus = ForgeGpuGeometryStats.disabled();
     }
@@ -252,6 +286,35 @@ public final class ForgeGpuGeometryUploadManager {
             this.recordFailure("validation " + e.getClass().getSimpleName() + ": " + e.getMessage());
             return this.recordValidationResult(ForgeGpuGeometryValidationResult.failure(e.getClass().getSimpleName() + ": " + e.getMessage()));
         }
+    }
+
+    public ForgeGpuGeometryAuditResult auditSample() {
+        this.auditRuns++;
+        long start = System.nanoTime();
+        ForgeGpuGeometryAuditResult result;
+        if (!RenderSystem.isOnRenderThread()) {
+            result = ForgeGpuGeometryAuditResult.failure("not-render-thread");
+        } else if (!isEnabled()) {
+            result = ForgeGpuGeometryAuditResult.failure("geometry-gpu-upload-disabled");
+        } else if (!this.heap.isCreated()) {
+            result = ForgeGpuGeometryAuditResult.failure("heap-not-created");
+        } else {
+            try {
+                var sectionIds = new ArrayList<>(this.uploadedMetadataHashes.keySet());
+                Collections.sort(sectionIds);
+                result = ForgeGpuGeometryAuditor.audit(this.heap, sectionIds, this.instance.getSectionGeometryManager(), 1);
+            } catch (RuntimeException e) {
+                this.recordFailure("audit " + e.getClass().getSimpleName() + ": " + e.getMessage());
+                result = ForgeGpuGeometryAuditResult.failure(e.getClass().getSimpleName() + ": " + e.getMessage());
+            }
+        }
+
+        this.lastAuditDurationMs = (System.nanoTime() - start) / 1_000_000.0D;
+        this.lastAuditResult = result;
+        if (!result.success()) {
+            this.auditFailures++;
+        }
+        return result;
     }
 
     private void onClientTick(TickEvent.ClientTickEvent event) {
