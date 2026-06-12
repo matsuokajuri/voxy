@@ -42,6 +42,8 @@ public final class ForgeVoxyCommands {
                         .executes(ctx -> consumeCurrentChunkGeometryManager(ctx.getSource())))
                 .then(Commands.literal("geometry_manager_status")
                         .executes(ctx -> geometryManagerStatus(ctx.getSource())))
+                .then(Commands.literal("geometry_manager_dump_sample")
+                        .executes(ctx -> geometryManagerDumpSample(ctx.getSource())))
                 .then(Commands.literal("geometry_manager_clear")
                         .executes(ctx -> clearGeometryManager(ctx.getSource())))
                 .then(Commands.literal("geometry_manager_consume_clear")
@@ -476,7 +478,6 @@ public final class ForgeVoxyCommands {
                 buildStatus.cooldownTicks(),
                 buildStatus.lastBuildMs(),
                 buildStatus.averageMs(),
-                gpuUsesBuiltSectionCache,
                 gpuUsesBuiltSectionCache ? gpuStatus.buffers() : 0,
                 uploadStatus.source(),
                 uploadStatus.pendingUploads(),
@@ -571,7 +572,7 @@ public final class ForgeVoxyCommands {
             var result = manager.consumeChunk(dimension, chunkX, chunkZ, builtSections);
             var status = result.status();
             String message = String.format(
-                    "Voxy section geometry manager consume: %s chunk %d,%d cacheSections=%d consumed=%d replaced=%d skippedClosed=%d skippedEmpty=%d skippedWrongChunk=%d allocatedIds=%s geometryItems=%d geometryBytes=%d activeSections=%d/%d usedItems=%d usedBytes=%d uploadIntents=%d removeIntents=%d dirtyMetadataIds=%d sampleId=%d metadataWords=%s decoded=\"%s\"",
+                    "Voxy section geometry manager consume: %s chunk %d,%d cacheSections=%d consumed=%d replaced=%d skippedClosed=%d skippedEmpty=%d skippedWrongChunk=%d allocatedIds=%s geometryItems=%d geometryBytes=%d activeSections=%d/%d usedItems=%d usedBytes=%d uploadIntents=%d uploadIntentItems=%d uploadIntentBytes=%d removeIntents=%d removeIntentItems=%d removeIntentBytes=%d dirtyMetadataIds=%d metadataValid=%d metadataInvalid=%d lastMetadataError=%s sampleId=%d metadataWords=%s decoded=\"%s\"",
                     result.dimension(),
                     result.chunkX(),
                     result.chunkZ(),
@@ -589,8 +590,15 @@ public final class ForgeVoxyCommands {
                     status.usedGeometryItems(),
                     status.usedGeometryBytes(),
                     status.uploadIntents(),
+                    status.uploadIntentItems(),
+                    status.uploadIntentBytes(),
                     status.removeIntents(),
+                    status.removeIntentItems(),
+                    status.removeIntentBytes(),
                     status.dirtyMetadataIds(),
+                    status.metadataValid(),
+                    status.metadataInvalid(),
+                    status.lastMetadataError(),
                     status.sampleSectionId(),
                     status.sampleMetadataWords(),
                     status.sampleMetadataDecoded()
@@ -608,7 +616,7 @@ public final class ForgeVoxyCommands {
         var status = ForgeVoxyInstance.INSTANCE.getSectionGeometryManager().createStatusSnapshot();
         var consumeStatus = ForgeVoxyInstance.INSTANCE.getSectionGeometryConsumeManager().createStatusSnapshot();
         String message = String.format(
-                "Voxy section geometry manager: autoConsume=%s engine=%s consumeDim=%s queue=%d consumedRecords=%d failedRecords=%d radius=%d maxPerTick=%d cooldown=%d lastConsumeMs=%.2f avgConsumeMs=%.2f lastFailure=%s activeDimension=%s activeSections=%d/%d allocatedIds=%d metadataSlots=%d usedGeometryItems=%d usedGeometryBytes=%d arenaSizeItems=%d arenaLimitItems=%d uploadIntents=%d removeIntents=%d dirtyMetadataIds=%d totalUploads=%d totalRemoves=%d totalReplacements=%d clears=%d sampleId=%d metadataWords=%s decoded=\"%s\" orphanTracking=distance-prune-and-lifecycle-clear cpuOnly=true gl=false",
+                "Voxy section geometry manager: autoConsume=%s engine=%s consumeDim=%s queue=%d consumedRecords=%d failedRecords=%d radius=%d maxPerTick=%d cooldown=%d lastConsumeMs=%.2f avgConsumeMs=%.2f lastFailure=%s activeDimension=%s activeSections=%d/%d sectionIdHighWaterMark=%d metadataSlots=%d metadataValid=%d metadataInvalid=%d lastMetadataError=%s usedGeometryItems=%d usedGeometryBytes=%d arenaSizeItems=%d arenaLimitItems=%d arenaFreeItems=%d arenaFreeBlocks=%d arenaLargestFreeBlockItems=%d uploadIntents=%d uploadIntentItems=%d uploadIntentBytes=%d removeIntents=%d removeIntentItems=%d removeIntentBytes=%d dirtyMetadataIds=%d totalUploads=%d totalRemoves=%d totalReplacements=%d clears=%d sampleId=%d metadataWords=%s decoded=\"%s\" sampleOffsets=%s sampleDeltas=%s sampleUploadHash=%d sampleRecords=%s orphanTracking=distance-prune-and-lifecycle-clear cpuOnly=true gl=false",
                 consumeStatus.autoEnabled(),
                 consumeStatus.enginePresent(),
                 consumeStatus.dimension() == null ? "none" : consumeStatus.dimension(),
@@ -624,14 +632,24 @@ public final class ForgeVoxyCommands {
                 status.activeDimension(),
                 status.activeSections(),
                 status.maxSections(),
-                status.activeSections(),
+                status.sectionIdHighWaterMark(),
                 status.metadataSlots(),
+                status.metadataValid(),
+                status.metadataInvalid(),
+                status.lastMetadataError(),
                 status.usedGeometryItems(),
                 status.usedGeometryBytes(),
                 status.arenaSizeItems(),
                 status.arenaLimitItems(),
+                status.arenaFreeItems(),
+                status.arenaFreeBlocks(),
+                status.arenaLargestFreeBlockItems(),
                 status.uploadIntents(),
+                status.uploadIntentItems(),
+                status.uploadIntentBytes(),
                 status.removeIntents(),
+                status.removeIntentItems(),
+                status.removeIntentBytes(),
                 status.dirtyMetadataIds(),
                 status.totalUploads(),
                 status.totalRemoves(),
@@ -639,10 +657,20 @@ public final class ForgeVoxyCommands {
                 status.clearCount(),
                 status.sampleSectionId(),
                 status.sampleMetadataWords(),
-                status.sampleMetadataDecoded()
+                status.sampleMetadataDecoded(),
+                status.sampleOffsets(),
+                status.sampleDeltas(),
+                status.sampleUploadIntentHash(),
+                status.sampleFirstRecordsDecoded()
         );
         source.sendSuccess(() -> Component.literal(message), false);
         return status.activeSections();
+    }
+
+    private static int geometryManagerDumpSample(CommandSourceStack source) {
+        String message = ForgeVoxyInstance.INSTANCE.getSectionGeometryManager().createSampleDump();
+        source.sendSuccess(() -> Component.literal(message), false);
+        return ForgeVoxyInstance.INSTANCE.getSectionGeometryManager().createStatusSnapshot().activeSections();
     }
 
     private static int clearGeometryManager(CommandSourceStack source) {

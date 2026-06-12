@@ -38,6 +38,34 @@ Use these commands to switch and compare sources:
 
 Current recommendation: use `/voxy preset lod_built_section` as the baseline for future renderer migration work. If a regression appears, switch back to `CPU_MESH` to check whether the issue is in the BuiltSection path or in the shared upload/render path.
 
+## CPU-Only Section Geometry Manager
+
+The Forge port also has a CPU-only `SectionGeometryManager` path that mirrors the intent layer of Voxy's original `BasicAsyncGeometryManager`.
+
+It currently tracks:
+
+- section ids
+- heap item pointers in 8-byte geometry-record units
+- 32-byte section metadata samples
+- upload intents
+- remove intents
+- dirty metadata ids
+
+The 32-byte metadata sample follows the original eight-int layout:
+
+```text
+word0 = section position high 32 bits
+word1 = section position low 32 bits
+word2 = packed AABB
+word3 = geometry pointer + offsets[0]
+word4 = delta offsets 0->1 and 1->2
+word5 = delta offsets 2->3 and 3->4
+word6 = delta offsets 4->5 and 5->6
+word7 = delta offsets 6->7 and 7->itemCount
+```
+
+This is still CPU-only. It does not create `GlBuffer`, upload to an SSBO/MDIC heap, or connect to `VoxyRenderSystem`. The upload/remove intents are diagnostic inputs for the future GL heap migration. Use `/voxy geometry_manager_status` and `/voxy geometry_manager_dump_sample` to inspect validation, metadata words, decoded offsets, upload intent hashes, and sample quad records.
+
 ## How To Reproduce Cached LoD
 
 1. Start the Forge client with `runClient`.

@@ -43,6 +43,10 @@ public final class ForgeSectionGeometryUploadIntent {
         return (long) this.itemCount * Long.BYTES;
     }
 
+    public int recordHash() {
+        return Arrays.hashCode(this.records);
+    }
+
     public long[] recordsCopy() {
         return Arrays.copyOf(this.records, this.records.length);
     }

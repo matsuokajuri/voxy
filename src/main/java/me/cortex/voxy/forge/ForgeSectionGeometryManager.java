@@ -4,11 +4,9 @@ import me.cortex.voxy.common.util.AllocationArena;
 import me.cortex.voxy.common.util.HierarchicalBitSet;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 
 public final class ForgeSectionGeometryManager {
     private static final int DEFAULT_MAX_SECTIONS = 1 << 20;
@@ -147,6 +145,39 @@ public final class ForgeSectionGeometryManager {
             }
         }
 
+        int metadataValid = 0;
+        int metadataInvalid = 0;
+        String lastMetadataError = "none";
+        for (int i = 0; i < this.metadataById.size(); i++) {
+            ForgeSectionGeometryMetadata metadata = this.metadataById.get(i);
+            if (metadata == null) {
+                continue;
+            }
+            ForgeSectionGeometryMetadata.ValidationResult validation = this.validateMetadata(i, metadata);
+            if (validation.valid()) {
+                metadataValid++;
+            } else {
+                metadataInvalid++;
+                lastMetadataError = "id=" + i + " " + validation.error();
+            }
+        }
+
+        long uploadIntentItems = 0;
+        long uploadIntentBytes = 0;
+        for (ForgeSectionGeometryUploadIntent intent : this.uploadIntents.values()) {
+            uploadIntentItems += intent.itemCount();
+            uploadIntentBytes += intent.sizeBytes();
+        }
+
+        long removeIntentItems = 0;
+        long removeIntentBytes = 0;
+        for (ForgeSectionGeometryRemoveIntent intent : this.removeIntents.values()) {
+            removeIntentItems += intent.freedItems();
+            removeIntentBytes += intent.freedBytes();
+        }
+
+        ForgeSectionGeometryUploadIntent sampleUpload = sampleMetadata == null ? null : this.uploadIntents.get(sampleMetadata.geometryPtr());
+
         return new ForgeSectionGeometryStats(
                 this.activeDimension == null ? "none" : this.activeDimension,
                 this.sectionIds.getCount(),
@@ -155,17 +186,76 @@ public final class ForgeSectionGeometryManager {
                 this.usedGeometryItems * GEOMETRY_ELEMENT_SIZE_BYTES,
                 this.geometryArena.getSize(),
                 this.geometryArena.getLimit(),
+                Math.max(0L, this.geometryArena.getSize() - this.usedGeometryItems),
+                this.geometryArena.numFreeBlocks(),
+                this.largestFreeBlockItems(),
                 this.uploadIntents.size(),
+                uploadIntentItems,
+                uploadIntentBytes,
                 this.removeIntents.size(),
+                removeIntentItems,
+                removeIntentBytes,
                 this.dirtyMetadataIds.size(),
                 this.metadataById.size(),
+                metadataValid,
+                metadataInvalid,
+                lastMetadataError,
+                this.sectionIds.getMaxIndex(),
                 this.totalUploads,
                 this.totalRemoves,
                 this.totalReplacements,
                 this.clearCount,
                 sampleSectionId,
-                sampleMetadata == null ? "none" : sampleMetadata.formatMetadataWords(),
-                sampleMetadata == null ? "none" : sampleMetadata.decodeMetadataWords()
+                sampleMetadata == null ? "none" : safeMetadataWords(sampleMetadata),
+                sampleMetadata == null ? "none" : safeMetadataDecode(sampleMetadata),
+                sampleMetadata == null ? "none" : sampleMetadata.formatOffsets(),
+                sampleMetadata == null ? "none" : sampleMetadata.formatDeltas(),
+                sampleUpload == null ? 0 : sampleUpload.recordHash(),
+                sampleUpload == null ? "none" : formatFirstRecords(sampleUpload.recordsCopy(), 3)
+        );
+    }
+
+    public synchronized String createSampleDump() {
+        int sampleSectionId = -1;
+        ForgeSectionGeometryMetadata sampleMetadata = null;
+        for (int i = 0; i < this.metadataById.size(); i++) {
+            ForgeSectionGeometryMetadata metadata = this.metadataById.get(i);
+            if (metadata != null) {
+                sampleSectionId = i;
+                sampleMetadata = metadata;
+                break;
+            }
+        }
+
+        if (sampleMetadata == null) {
+            return "Voxy section geometry manager sample: empty activeSections=0";
+        }
+
+        ForgeSectionGeometryUploadIntent uploadIntent = this.uploadIntents.get(sampleMetadata.geometryPtr());
+        ForgeSectionGeometryMetadata.ValidationResult validation = this.validateMetadata(sampleSectionId, sampleMetadata);
+        long[] records = uploadIntent == null ? new long[0] : uploadIntent.recordsCopy();
+        return String.format(
+                "Voxy section geometry manager sample: sectionId=%d dimension=%s chunk=%d,%d position=%s aabb=%s geometryPtr=%d itemCount=%d allocatedItems=%d offsets=%s deltas=%s metadataWords=%s decoded=\"%s\" metadataValid=%s metadataError=%s uploadIntentPresent=%s uploadIntentHash=%d uploadIntentItems=%d uploadIntentBytes=%d firstRecords=%s cpuOnly=true gl=false",
+                sampleSectionId,
+                sampleMetadata.dimension(),
+                sampleMetadata.chunkX(),
+                sampleMetadata.chunkZ(),
+                Long.toUnsignedString(sampleMetadata.position()),
+                ForgeVoxyBuiltSectionBuilder.formatAabb(sampleMetadata.aabb()),
+                Integer.toUnsignedLong(sampleMetadata.geometryPtr()),
+                sampleMetadata.itemCount(),
+                sampleMetadata.allocatedItems(),
+                sampleMetadata.formatOffsets(),
+                sampleMetadata.formatDeltas(),
+                safeMetadataWords(sampleMetadata),
+                safeMetadataDecode(sampleMetadata),
+                validation.valid(),
+                validation.error(),
+                uploadIntent != null,
+                uploadIntent == null ? 0 : uploadIntent.recordHash(),
+                uploadIntent == null ? 0 : uploadIntent.itemCount(),
+                uploadIntent == null ? 0 : uploadIntent.sizeBytes(),
+                formatFirstRecords(records, 4)
         );
     }
 
@@ -288,6 +378,59 @@ public final class ForgeSectionGeometryManager {
 
     private static int alignGeometryItems(int itemCount) {
         return (itemCount + 127) & ~127;
+    }
+
+    private ForgeSectionGeometryMetadata.ValidationResult validateMetadata(int sectionId, ForgeSectionGeometryMetadata metadata) {
+        return metadata.validate(sectionId, this.uploadIntents.get(metadata.geometryPtr()));
+    }
+
+    private int largestFreeBlockItems() {
+        if (this.geometryArena.numFreeBlocks() == 0) {
+            return 0;
+        }
+        try {
+            return this.geometryArena.getLargestFreeBlockSize(0);
+        } catch (RuntimeException e) {
+            return -1;
+        }
+    }
+
+    private static String safeMetadataWords(ForgeSectionGeometryMetadata metadata) {
+        try {
+            return metadata.formatMetadataWords();
+        } catch (RuntimeException e) {
+            return "invalid:" + e.getClass().getSimpleName() + ":" + e.getMessage();
+        }
+    }
+
+    private static String safeMetadataDecode(ForgeSectionGeometryMetadata metadata) {
+        try {
+            return metadata.decodeMetadataWords();
+        } catch (RuntimeException e) {
+            return "invalid:" + e.getClass().getSimpleName() + ":" + e.getMessage();
+        }
+    }
+
+    private static String formatFirstRecords(long[] records, int maxRecords) {
+        if (records.length == 0) {
+            return "[]";
+        }
+        StringBuilder builder = new StringBuilder("[");
+        int count = Math.min(records.length, maxRecords);
+        for (int i = 0; i < count; i++) {
+            if (i != 0) {
+                builder.append("; ");
+            }
+            long record = records[i];
+            builder.append(ForgeVoxyQuadEncoder.formatRecordHex(record))
+                    .append(' ')
+                    .append(ForgeVoxyQuadEncoder.decodeRecord(record));
+        }
+        if (records.length > count) {
+            builder.append("; ...+").append(records.length - count);
+        }
+        builder.append(']');
+        return builder.toString();
     }
 
     private record Key(String dimension, long position) {

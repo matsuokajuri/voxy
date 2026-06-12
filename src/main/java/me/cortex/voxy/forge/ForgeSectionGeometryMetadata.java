@@ -64,6 +64,10 @@ public final class ForgeSectionGeometryMetadata {
         return this.geometryPtr;
     }
 
+    public int aabb() {
+        return this.aabb;
+    }
+
     public int itemCount() {
         return this.itemCount;
     }
@@ -86,6 +90,15 @@ public final class ForgeSectionGeometryMetadata {
 
     public int[] offsets() {
         return Arrays.copyOf(this.offsets, this.offsets.length);
+    }
+
+    public int[] deltas() {
+        int[] deltas = new int[this.offsets.length];
+        for (int i = 0; i < this.offsets.length - 1; i++) {
+            deltas[i] = this.offsets[i + 1] - this.offsets[i];
+        }
+        deltas[this.offsets.length - 1] = this.itemCount - this.offsets[this.offsets.length - 1];
+        return deltas;
     }
 
     public int[] metadataWords() {
@@ -138,6 +151,91 @@ public final class ForgeSectionGeometryMetadata {
         );
     }
 
+    public ValidationResult validate(int sectionId, ForgeSectionGeometryUploadIntent uploadIntent) {
+        try {
+            if (sectionId < 0) {
+                return ValidationResult.failure("negative section id");
+            }
+            if (this.itemCount <= 0) {
+                return ValidationResult.failure("empty geometry item count");
+            }
+            if (this.allocatedItems < this.itemCount) {
+                return ValidationResult.failure("allocated items smaller than item count");
+            }
+            if ((this.allocatedItems & 127) != 0) {
+                return ValidationResult.failure("allocated items are not aligned to 128-item heap blocks");
+            }
+            if ((Integer.toUnsignedLong(this.geometryPtr) & 127L) != 0L) {
+                return ValidationResult.failure("geometry pointer is not aligned to a 128-item heap block");
+            }
+            if (this.offsets[0] != 0) {
+                return ValidationResult.failure("offsets[0] is not zero");
+            }
+            int previous = 0;
+            for (int i = 0; i < this.offsets.length; i++) {
+                int offset = this.offsets[i];
+                if (offset < previous) {
+                    return ValidationResult.failure("offsets are not monotonic at index " + i);
+                }
+                if (offset > this.itemCount) {
+                    return ValidationResult.failure("offset " + i + " exceeds item count");
+                }
+                previous = offset;
+            }
+            int[] deltas = this.deltas();
+            for (int i = 0; i < deltas.length; i++) {
+                int delta = deltas[i];
+                if (delta < 0 || delta > 0xFFFF) {
+                    return ValidationResult.failure("delta " + i + " is outside 16-bit metadata range");
+                }
+            }
+
+            int[] words = this.metadataWords();
+            long decodedPosition = ((long) words[0] << 32) | (words[1] & 0xFFFFFFFFL);
+            if (decodedPosition != this.position) {
+                return ValidationResult.failure("position high/low words do not round-trip");
+            }
+            if (words[2] != this.aabb) {
+                return ValidationResult.failure("aabb word does not round-trip");
+            }
+            int expectedFirstGeometryOffset = this.geometryPtr + this.offsets[0];
+            if (words[3] != expectedFirstGeometryOffset) {
+                return ValidationResult.failure("geometry pointer plus first offset word does not match");
+            }
+
+            if (uploadIntent == null) {
+                return ValidationResult.failure("missing upload intent for active metadata");
+            }
+            if (uploadIntent.sectionId() != sectionId) {
+                return ValidationResult.failure("upload intent section id mismatch");
+            }
+            if (!uploadIntent.dimension().equals(this.dimension)) {
+                return ValidationResult.failure("upload intent dimension mismatch");
+            }
+            if (uploadIntent.position() != this.position) {
+                return ValidationResult.failure("upload intent position mismatch");
+            }
+            if (uploadIntent.geometryPtr() != this.geometryPtr) {
+                return ValidationResult.failure("upload intent geometry pointer mismatch");
+            }
+            if (uploadIntent.itemCount() != this.itemCount) {
+                return ValidationResult.failure("upload intent item count mismatch");
+            }
+
+            return ValidationResult.success();
+        } catch (RuntimeException e) {
+            return ValidationResult.failure(e.getClass().getSimpleName() + ": " + e.getMessage());
+        }
+    }
+
+    public String formatOffsets() {
+        return Arrays.toString(this.offsets);
+    }
+
+    public String formatDeltas() {
+        return Arrays.toString(this.deltas());
+    }
+
     private static int packDeltaPair(int low, int high) {
         validateDelta(low);
         validateDelta(high);
@@ -156,5 +254,15 @@ public final class ForgeSectionGeometryMetadata {
 
     private static int unpackHigh(int packed) {
         return (packed >>> 16) & 0xFFFF;
+    }
+
+    public record ValidationResult(boolean valid, String error) {
+        private static ValidationResult success() {
+            return new ValidationResult(true, "none");
+        }
+
+        private static ValidationResult failure(String error) {
+            return new ValidationResult(false, error == null ? "unknown" : error);
+        }
     }
 }
