@@ -18,6 +18,10 @@ public final class ForgeVoxyConfig {
     public static final ForgeConfigSpec.IntValue AUTO_BUILT_SECTION_BUILD_RADIUS;
     public static final ForgeConfigSpec.IntValue AUTO_BUILT_SECTION_MAX_CHUNKS_PER_TICK;
     public static final ForgeConfigSpec.IntValue AUTO_BUILT_SECTION_COOLDOWN_TICKS;
+    public static final ForgeConfigSpec.BooleanValue ENABLE_AUTO_GEOMETRY_MANAGER_CONSUME;
+    public static final ForgeConfigSpec.IntValue AUTO_GEOMETRY_CONSUME_RADIUS;
+    public static final ForgeConfigSpec.IntValue AUTO_GEOMETRY_CONSUME_MAX_SECTIONS_PER_TICK;
+    public static final ForgeConfigSpec.IntValue AUTO_GEOMETRY_CONSUME_COOLDOWN_TICKS;
     public static final ForgeConfigSpec.IntValue CPU_MESH_CACHE_MAX_ENTRIES;
     public static final ForgeConfigSpec.IntValue BUILT_SECTION_CACHE_MAX_ENTRIES;
     public static final ForgeConfigSpec.BooleanValue ENABLE_DEBUG_MESH_RENDERER;
@@ -86,6 +90,18 @@ public final class ForgeVoxyConfig {
         AUTO_BUILT_SECTION_COOLDOWN_TICKS = builder
                 .comment("Ticks between nearby chunk scans for auto BuiltSection build. Queued chunks may still be processed every tick.")
                 .defineInRange("autoBuiltSectionCooldownTicks", 20, 0, 200);
+        ENABLE_AUTO_GEOMETRY_MANAGER_CONSUME = builder
+                .comment("Automatically consumes CPU-only BuiltSection cache entries into the CPU-only section geometry manager. This records section ids, metadata, and upload/remove intents only; it does not upload GL buffers.")
+                .define("enableAutoGeometryManagerConsume", false);
+        AUTO_GEOMETRY_CONSUME_RADIUS = builder
+                .comment("Chunk radius around the player to scan for BuiltSection cache entries when auto geometry-manager consume is enabled.")
+                .defineInRange("autoGeometryConsumeRadius", 2, 0, 8);
+        AUTO_GEOMETRY_CONSUME_MAX_SECTIONS_PER_TICK = builder
+                .comment("Maximum BuiltSection entries to consume into the CPU-only section geometry manager per client tick.")
+                .defineInRange("autoGeometryConsumeMaxSectionsPerTick", 4, 1, 64);
+        AUTO_GEOMETRY_CONSUME_COOLDOWN_TICKS = builder
+                .comment("Ticks between nearby BuiltSection cache scans for auto geometry-manager consume. Queued sections may still be processed every tick.")
+                .defineInRange("autoGeometryConsumeCooldownTicks", 20, 0, 200);
         CPU_MESH_CACHE_MAX_ENTRIES = builder
                 .comment("Maximum cached CPU mesh section/layer entries kept by the debug pipeline. Old entries are closed and evicted with LRU ordering.")
                 .defineInRange("cpuMeshCacheMaxEntries", 2048, 1, 8192);

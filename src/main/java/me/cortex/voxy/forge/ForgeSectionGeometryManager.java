@@ -107,6 +107,34 @@ public final class ForgeSectionGeometryManager {
         );
     }
 
+    public synchronized SectionConsumeResult consumeSection(ForgeVoxyBuiltSection section) {
+        if (section == null || section.isClosed()) {
+            return new SectionConsumeResult(false, false, -1, 0, 0, "section-closed-or-null");
+        }
+        if (section.isEmpty() || section.geometryBuffer() == null || section.geometryBuffer().isClosed()) {
+            return new SectionConsumeResult(false, false, -1, 0, 0, "section-empty-or-buffer-closed");
+        }
+        this.setActiveDimension(section.dimension());
+        UploadResult result = this.uploadReplaceSection(section);
+        return new SectionConsumeResult(
+                true,
+                result.replaced(),
+                result.sectionId(),
+                result.itemCount(),
+                result.geometryBytes(),
+                "ok"
+        );
+    }
+
+    public synchronized boolean removeSection(String dimension, long position) {
+        Integer id = this.positionToId.get(new Key(dimension, position));
+        return id != null && this.removeSection(id);
+    }
+
+    public synchronized boolean hasSection(String dimension, long position) {
+        return this.positionToId.containsKey(new Key(dimension, position));
+    }
+
     public synchronized ForgeSectionGeometryStats createStatusSnapshot() {
         int sampleSectionId = -1;
         ForgeSectionGeometryMetadata sampleMetadata = null;
@@ -269,6 +297,16 @@ public final class ForgeSectionGeometryManager {
     }
 
     private record UploadResult(int sectionId, int itemCount, long geometryBytes, boolean replaced) {
+    }
+
+    public record SectionConsumeResult(
+            boolean consumed,
+            boolean replaced,
+            int sectionId,
+            int geometryItems,
+            long geometryBytes,
+            String reason
+    ) {
     }
 
     public record ConsumeResult(

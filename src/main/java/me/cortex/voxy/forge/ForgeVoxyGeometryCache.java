@@ -88,6 +88,36 @@ public final class ForgeVoxyGeometryCache {
         return snapshot;
     }
 
+    public synchronized List<ForgeVoxyBuiltSection> createAreaSnapshot(String dimension, int centerChunkX, int centerChunkZ, int radius, int maxEntries) {
+        this.trimToLimit();
+        var snapshot = new ArrayList<ForgeVoxyBuiltSection>();
+        int limit = Math.max(1, maxEntries);
+        for (ForgeVoxyBuiltSection section : this.entries.values()) {
+            if (!section.dimension().equals(dimension)) {
+                continue;
+            }
+            if (Math.abs(section.chunkX() - centerChunkX) > radius || Math.abs(section.chunkZ() - centerChunkZ) > radius) {
+                continue;
+            }
+            if (section.isClosed() || section.isEmpty() || section.geometryBuffer() == null || section.geometryBuffer().isClosed()) {
+                continue;
+            }
+            snapshot.add(section);
+            if (snapshot.size() >= limit) {
+                break;
+            }
+        }
+        return snapshot;
+    }
+
+    public synchronized ForgeVoxyBuiltSection findLiveSection(String dimension, long position) {
+        ForgeVoxyBuiltSection section = this.entries.get(new Key(dimension, position));
+        if (section == null || section.isClosed() || section.isEmpty() || section.geometryBuffer() == null || section.geometryBuffer().isClosed()) {
+            return null;
+        }
+        return section;
+    }
+
     public synchronized RenderSnapshot createUploadSnapshot(String dimension, int maxUploadedEntries) {
         this.trimToLimit();
         var snapshot = new ArrayList<ForgeVoxyBuiltSection>();

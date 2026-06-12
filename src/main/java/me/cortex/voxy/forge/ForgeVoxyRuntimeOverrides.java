@@ -13,6 +13,7 @@ public final class ForgeVoxyRuntimeOverrides {
     private static Boolean enableAutoChunkIngest;
     private static Boolean enableAutoCpuMeshBuild;
     private static Boolean enableAutoBuiltSectionBuild;
+    private static Boolean enableAutoGeometryManagerConsume;
     private static Boolean enableSimpleGpuMeshRenderer;
     private static Boolean enableDebugMeshRenderer;
     private static SimpleGpuMeshSource simpleGpuMeshSource;
@@ -38,6 +39,7 @@ public final class ForgeVoxyRuntimeOverrides {
         enableAutoChunkIngest = false;
         enableAutoCpuMeshBuild = false;
         enableAutoBuiltSectionBuild = false;
+        enableAutoGeometryManagerConsume = false;
         enableSimpleGpuMeshRenderer = false;
         enableDebugMeshRenderer = false;
     }
@@ -91,6 +93,7 @@ public final class ForgeVoxyRuntimeOverrides {
         enableAutoChunkIngest = true;
         enableAutoCpuMeshBuild = false;
         enableAutoBuiltSectionBuild = true;
+        enableAutoGeometryManagerConsume = false;
         enableSimpleGpuMeshRenderer = true;
         enableDebugMeshRenderer = false;
         simpleGpuMeshSource = SimpleGpuMeshSource.BUILT_SECTION;
@@ -106,6 +109,15 @@ public final class ForgeVoxyRuntimeOverrides {
         simpleGpuMeshAlpha = 1.0D;
     }
 
+    public static synchronized void applyGeometryManagerPreset() {
+        presetName = "geometry_manager";
+        enableWorldEngineSkeleton = true;
+        enableAutoChunkIngest = true;
+        enableAutoCpuMeshBuild = false;
+        enableAutoBuiltSectionBuild = true;
+        enableAutoGeometryManagerConsume = true;
+    }
+
     public static synchronized void clear() {
         clearInternal();
     }
@@ -116,6 +128,7 @@ public final class ForgeVoxyRuntimeOverrides {
         enableAutoChunkIngest = null;
         enableAutoCpuMeshBuild = null;
         enableAutoBuiltSectionBuild = null;
+        enableAutoGeometryManagerConsume = null;
         enableSimpleGpuMeshRenderer = null;
         enableDebugMeshRenderer = null;
         simpleGpuMeshSource = null;
@@ -144,6 +157,8 @@ public final class ForgeVoxyRuntimeOverrides {
                 source(enableAutoCpuMeshBuild),
                 enableAutoBuiltSectionBuild(),
                 source(enableAutoBuiltSectionBuild),
+                enableAutoGeometryManagerConsume(),
+                source(enableAutoGeometryManagerConsume),
                 enableSimpleGpuMeshRenderer(),
                 source(enableSimpleGpuMeshRenderer),
                 enableDebugMeshRenderer(),
@@ -197,6 +212,10 @@ public final class ForgeVoxyRuntimeOverrides {
 
     public static synchronized boolean enableAutoBuiltSectionBuild() {
         return value(enableAutoBuiltSectionBuild, ForgeVoxyConfig.ENABLE_AUTO_BUILT_SECTION_BUILD.get());
+    }
+
+    public static synchronized boolean enableAutoGeometryManagerConsume() {
+        return value(enableAutoGeometryManagerConsume, ForgeVoxyConfig.ENABLE_AUTO_GEOMETRY_MANAGER_CONSUME.get());
     }
 
     public static synchronized boolean enableSimpleGpuMeshRenderer() {
@@ -265,6 +284,7 @@ public final class ForgeVoxyRuntimeOverrides {
                 || enableAutoChunkIngest != null
                 || enableAutoCpuMeshBuild != null
                 || enableAutoBuiltSectionBuild != null
+                || enableAutoGeometryManagerConsume != null
                 || enableSimpleGpuMeshRenderer != null
                 || enableDebugMeshRenderer != null
                 || simpleGpuMeshSource != null
@@ -312,6 +332,8 @@ public final class ForgeVoxyRuntimeOverrides {
             String enableAutoCpuMeshBuildSource,
             boolean enableAutoBuiltSectionBuild,
             String enableAutoBuiltSectionBuildSource,
+            boolean enableAutoGeometryManagerConsume,
+            String enableAutoGeometryManagerConsumeSource,
             boolean enableSimpleGpuMeshRenderer,
             String enableSimpleGpuMeshRendererSource,
             boolean enableDebugMeshRenderer,
