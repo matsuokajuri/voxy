@@ -73,6 +73,21 @@ public final class ForgeVoxyGeometryCache {
         return false;
     }
 
+    public synchronized List<ForgeVoxyBuiltSection> createChunkSnapshot(String dimension, int chunkX, int chunkZ) {
+        this.trimToLimit();
+        var snapshot = new ArrayList<ForgeVoxyBuiltSection>();
+        for (ForgeVoxyBuiltSection section : this.entries.values()) {
+            if (!section.dimension().equals(dimension) || section.chunkX() != chunkX || section.chunkZ() != chunkZ) {
+                continue;
+            }
+            if (section.isClosed() || section.isEmpty() || section.geometryBuffer() == null || section.geometryBuffer().isClosed()) {
+                continue;
+            }
+            snapshot.add(section);
+        }
+        return snapshot;
+    }
+
     public synchronized RenderSnapshot createUploadSnapshot(String dimension, int maxUploadedEntries) {
         this.trimToLimit();
         var snapshot = new ArrayList<ForgeVoxyBuiltSection>();
