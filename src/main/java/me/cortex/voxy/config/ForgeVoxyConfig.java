@@ -44,6 +44,10 @@ public final class ForgeVoxyConfig {
     public static final ForgeConfigSpec.BooleanValue GEOMETRY_GPU_READBACK_MESH_REFRESH_ONLY_WHEN_RENDERER_ENABLED;
     public static final ForgeConfigSpec.BooleanValue GEOMETRY_GPU_READBACK_MESH_REFRESH_ON_DIMENSION_CHANGE;
     public static final ForgeConfigSpec.BooleanValue GEOMETRY_GPU_READBACK_MESH_REFRESH_ON_PRESET;
+    public static final ForgeConfigSpec.BooleanValue ENABLE_DIRECT_GPU_GEOMETRY_RENDERER;
+    public static final ForgeConfigSpec.IntValue DIRECT_GPU_GEOMETRY_RENDERER_MAX_SECTIONS;
+    public static final ForgeConfigSpec.IntValue DIRECT_GPU_GEOMETRY_RENDERER_MAX_RECORDS;
+    public static final ForgeConfigSpec.BooleanValue DIRECT_GPU_GEOMETRY_RENDERER_DEBUG_LOG;
     public static final ForgeConfigSpec.IntValue CPU_MESH_CACHE_MAX_ENTRIES;
     public static final ForgeConfigSpec.IntValue BUILT_SECTION_CACHE_MAX_ENTRIES;
     public static final ForgeConfigSpec.BooleanValue ENABLE_DEBUG_MESH_RENDERER;
@@ -190,6 +194,18 @@ public final class ForgeVoxyConfig {
         GEOMETRY_GPU_READBACK_MESH_REFRESH_ON_PRESET = builder
                 .comment("Requests a delayed GL_HEAP_READBACK refresh when the runtime gl_heap_readback preset is applied.")
                 .define("geometryGpuReadbackMeshRefreshOnPreset", true);
+        ENABLE_DIRECT_GPU_GEOMETRY_RENDERER = builder
+                .comment("G5.0 skeleton-only direct GL geometry renderer flag. It plans against the upload-only GL heap but does not issue draw calls.")
+                .define("enableDirectGpuGeometryRenderer", false);
+        DIRECT_GPU_GEOMETRY_RENDERER_MAX_SECTIONS = builder
+                .comment("Maximum uploaded section metadata entries inspected by one direct_gl_renderer_plan_sample command.")
+                .defineInRange("directGpuGeometryRendererMaxSections", 16, 1, 128);
+        DIRECT_GPU_GEOMETRY_RENDERER_MAX_RECORDS = builder
+                .comment("Maximum packed geometry records counted by one direct_gl_renderer_plan_sample command. No geometry draw is performed.")
+                .defineInRange("directGpuGeometryRendererMaxRecords", 16384, 1, 131072);
+        DIRECT_GPU_GEOMETRY_RENDERER_DEBUG_LOG = builder
+                .comment("Logs G5.0 skeleton direct GL geometry renderer planning summaries. No draw calls are emitted.")
+                .define("directGpuGeometryRendererDebugLog", false);
         CPU_MESH_CACHE_MAX_ENTRIES = builder
                 .comment("Maximum cached CPU mesh section/layer entries kept by the debug pipeline. Old entries are closed and evicted with LRU ordering.")
                 .defineInRange("cpuMeshCacheMaxEntries", 2048, 1, 8192);

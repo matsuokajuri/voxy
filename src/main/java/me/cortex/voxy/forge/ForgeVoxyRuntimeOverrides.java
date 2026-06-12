@@ -17,6 +17,7 @@ public final class ForgeVoxyRuntimeOverrides {
     private static Boolean enableGeometryGpuUpload;
     private static Boolean enableGeometryGpuVisualization;
     private static Boolean enableGeometryGpuReadbackMeshAutoRefresh;
+    private static Boolean enableDirectGpuGeometryRenderer;
     private static Double geometryGpuVisualizationAlpha;
     private static Boolean geometryGpuVisualizationIgnoreDepth;
     private static Boolean geometryGpuVisualizationDoubleSided;
@@ -49,6 +50,7 @@ public final class ForgeVoxyRuntimeOverrides {
         enableGeometryGpuUpload = false;
         enableGeometryGpuVisualization = false;
         enableGeometryGpuReadbackMeshAutoRefresh = false;
+        enableDirectGpuGeometryRenderer = false;
         enableSimpleGpuMeshRenderer = false;
         enableDebugMeshRenderer = false;
     }
@@ -176,6 +178,22 @@ public final class ForgeVoxyRuntimeOverrides {
         simpleGpuMeshAlpha = 1.0D;
     }
 
+    public static synchronized void applyDirectGlDebugPreset() {
+        clearInternal();
+        presetName = "direct_gl_debug";
+        enableWorldEngineSkeleton = true;
+        enableAutoChunkIngest = true;
+        enableAutoCpuMeshBuild = false;
+        enableAutoBuiltSectionBuild = true;
+        enableAutoGeometryManagerConsume = true;
+        enableGeometryGpuUpload = true;
+        enableGeometryGpuVisualization = false;
+        enableGeometryGpuReadbackMeshAutoRefresh = false;
+        enableDirectGpuGeometryRenderer = true;
+        enableSimpleGpuMeshRenderer = false;
+        enableDebugMeshRenderer = false;
+    }
+
     public static synchronized void setGlHeapReadbackMeshSource() {
         presetName = "custom";
         enableSimpleGpuMeshRenderer = true;
@@ -208,6 +226,11 @@ public final class ForgeVoxyRuntimeOverrides {
         enableGeometryGpuReadbackMeshAutoRefresh = enabled;
     }
 
+    public static synchronized void setDirectGpuGeometryRenderer(boolean enabled) {
+        presetName = "custom";
+        enableDirectGpuGeometryRenderer = enabled;
+    }
+
     public static synchronized void clear() {
         clearInternal();
     }
@@ -222,6 +245,7 @@ public final class ForgeVoxyRuntimeOverrides {
         enableGeometryGpuUpload = null;
         enableGeometryGpuVisualization = null;
         enableGeometryGpuReadbackMeshAutoRefresh = null;
+        enableDirectGpuGeometryRenderer = null;
         geometryGpuVisualizationAlpha = null;
         geometryGpuVisualizationIgnoreDepth = null;
         geometryGpuVisualizationDoubleSided = null;
@@ -261,6 +285,8 @@ public final class ForgeVoxyRuntimeOverrides {
                 source(enableGeometryGpuVisualization),
                 enableGeometryGpuReadbackMeshAutoRefresh(),
                 source(enableGeometryGpuReadbackMeshAutoRefresh),
+                enableDirectGpuGeometryRenderer(),
+                source(enableDirectGpuGeometryRenderer),
                 geometryGpuVisualizationAlpha(),
                 source(geometryGpuVisualizationAlpha),
                 geometryGpuVisualizationIgnoreDepth(),
@@ -336,6 +362,10 @@ public final class ForgeVoxyRuntimeOverrides {
 
     public static synchronized boolean enableGeometryGpuReadbackMeshAutoRefresh() {
         return value(enableGeometryGpuReadbackMeshAutoRefresh, ForgeVoxyConfig.ENABLE_GEOMETRY_GPU_READBACK_MESH_AUTO_REFRESH.get());
+    }
+
+    public static synchronized boolean enableDirectGpuGeometryRenderer() {
+        return value(enableDirectGpuGeometryRenderer, ForgeVoxyConfig.ENABLE_DIRECT_GPU_GEOMETRY_RENDERER.get());
     }
 
     public static synchronized double geometryGpuVisualizationAlpha() {
@@ -420,6 +450,7 @@ public final class ForgeVoxyRuntimeOverrides {
                 || enableGeometryGpuUpload != null
                 || enableGeometryGpuVisualization != null
                 || enableGeometryGpuReadbackMeshAutoRefresh != null
+                || enableDirectGpuGeometryRenderer != null
                 || geometryGpuVisualizationAlpha != null
                 || geometryGpuVisualizationIgnoreDepth != null
                 || geometryGpuVisualizationDoubleSided != null
@@ -478,6 +509,8 @@ public final class ForgeVoxyRuntimeOverrides {
             String enableGeometryGpuVisualizationSource,
             boolean enableGeometryGpuReadbackMeshAutoRefresh,
             String enableGeometryGpuReadbackMeshAutoRefreshSource,
+            boolean enableDirectGpuGeometryRenderer,
+            String enableDirectGpuGeometryRendererSource,
             double geometryGpuVisualizationAlpha,
             String geometryGpuVisualizationAlphaSource,
             boolean geometryGpuVisualizationIgnoreDepth,
