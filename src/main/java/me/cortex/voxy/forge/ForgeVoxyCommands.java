@@ -64,6 +64,16 @@ public final class ForgeVoxyCommands {
                         .executes(ctx -> geometryGpuStressClear(ctx.getSource())))
                 .then(Commands.literal("geometry_gpu_stress_once")
                         .executes(ctx -> geometryGpuStressOnce(ctx.getSource())))
+                .then(Commands.literal("geometry_gpu_visualize_sample")
+                        .executes(ctx -> geometryGpuVisualizeSample(ctx.getSource())))
+                .then(Commands.literal("geometry_gpu_visualize_status")
+                        .executes(ctx -> geometryGpuVisualizeStatus(ctx.getSource())))
+                .then(Commands.literal("geometry_gpu_visualize_clear")
+                        .executes(ctx -> geometryGpuVisualizeClear(ctx.getSource())))
+                .then(Commands.literal("geometry_gpu_visualize_enable")
+                        .executes(ctx -> setGeometryGpuVisualization(ctx.getSource(), true)))
+                .then(Commands.literal("geometry_gpu_visualize_disable")
+                        .executes(ctx -> setGeometryGpuVisualization(ctx.getSource(), false)))
                 .then(Commands.literal("geometry_gpu_upload_enable")
                         .executes(ctx -> setGeometryGpuUpload(ctx.getSource(), true)))
                 .then(Commands.literal("geometry_gpu_upload_disable")
@@ -98,6 +108,8 @@ public final class ForgeVoxyCommands {
                                 .executes(ctx -> applyPresetLodBuiltSection(ctx.getSource())))
                         .then(Commands.literal("geometry_manager")
                                 .executes(ctx -> applyPresetGeometryManager(ctx.getSource())))
+                        .then(Commands.literal("gl_heap_visualize")
+                                .executes(ctx -> applyPresetGlHeapVisualize(ctx.getSource())))
                         .then(Commands.literal("clear")
                                 .executes(ctx -> clearPreset(ctx.getSource())))
                         .then(Commands.literal("status")
@@ -899,6 +911,93 @@ public final class ForgeVoxyCommands {
         return 0;
     }
 
+    private static int geometryGpuVisualizeSample(CommandSourceStack source) {
+        ForgeGpuGeometryVisualizationResult result = ForgeGpuGeometryVisualizationBuilder.buildSample(ForgeVoxyInstance.INSTANCE);
+        String message = String.format(
+                "Voxy GL heap readback visualization sample: success=%s reason=%s builtSections=%d recordsRead=%d quads=%d vertices=%d invalidMetadata=%d invalidRecords=%d skippedBuckets=%d durationMs=%.2f lastSectionId=%d lastPosition=%s lastGeometryPtr=%s lastError=%s lastDecodedRecord=\"%s\" lastSource=%s readbackApi=glGetNamedBufferSubData drainsIntents=false formalRenderer=false",
+                result.success(),
+                result.reason(),
+                result.builtSections(),
+                result.recordsRead(),
+                result.quads(),
+                result.vertices(),
+                result.invalidMetadata(),
+                result.invalidRecords(),
+                result.skippedBuckets(),
+                result.durationMs(),
+                result.lastSectionId(),
+                Long.toUnsignedString(result.lastPosition()),
+                formatGeometryPointer(result.lastGeometryPtr()),
+                result.lastError(),
+                result.lastDecodedRecord(),
+                result.lastSource()
+        );
+        if (result.success()) {
+            source.sendSuccess(() -> Component.literal(message), false);
+            return result.quads();
+        }
+        source.sendFailure(Component.literal(message));
+        return 0;
+    }
+
+    private static int geometryGpuVisualizeStatus(CommandSourceStack source) {
+        var status = ForgeVoxyInstance.INSTANCE.getGpuGeometryVisualizationCache().createStatusSnapshot();
+        var build = status.lastBuildResult();
+        var render = ForgeVoxyInstance.INSTANCE.getGpuGeometryReadbackDebugRenderer().getLastFrameStats();
+        String message = String.format(
+                "Voxy GL heap readback visualization: enabled=%s cacheSections=%d cacheQuads=%d cacheVertices=%d lastBuildSections=%d lastBuildRecordsRead=%d lastBuildQuads=%d lastBuildVertices=%d lastBuildInvalidMetadata=%d lastBuildInvalidRecords=%d lastBuildSkippedBuckets=%d lastBuildDurationMs=%.2f lastBuildError=%s lastRenderedQuads=%d lastRenderedVertices=%d lastRenderDistanceChunks=%d lastSource=%s render=%s renderReason=%s renderSections=%d alpha=%.2f ignoreDepth=%s doubleSided=%s stage=%s maxSections=%d maxRecords=%d clears=%d formalRenderer=false",
+                ForgeVoxyRuntimeOverrides.enableGeometryGpuVisualization(),
+                status.cacheSections(),
+                status.cacheQuads(),
+                status.cacheVertices(),
+                build.builtSections(),
+                build.recordsRead(),
+                build.quads(),
+                build.vertices(),
+                build.invalidMetadata(),
+                build.invalidRecords(),
+                build.skippedBuckets(),
+                build.durationMs(),
+                build.lastError(),
+                render.renderedQuads(),
+                render.renderedVertices(),
+                render.renderDistanceChunks(),
+                render.source(),
+                render.rendered(),
+                render.reason(),
+                render.renderedSections(),
+                ForgeGpuGeometryReadbackDebugRenderer.getConfiguredAlpha(),
+                ForgeGpuGeometryReadbackDebugRenderer.shouldIgnoreDepth(),
+                ForgeGpuGeometryReadbackDebugRenderer.shouldRenderDoubleSided(),
+                ForgeGpuGeometryReadbackDebugRenderer.getRenderStageName(),
+                ForgeGpuGeometryVisualizationBuilder.getConfiguredMaxSections(),
+                ForgeGpuGeometryVisualizationBuilder.getConfiguredMaxRecords(),
+                status.clearCount()
+        );
+        source.sendSuccess(() -> Component.literal(message), false);
+        return status.cacheQuads();
+    }
+
+    private static int geometryGpuVisualizeClear(CommandSourceStack source) {
+        ForgeVoxyInstance.INSTANCE.getGpuGeometryVisualizationCache().clear();
+        ForgeVoxyInstance.INSTANCE.getGpuGeometryReadbackDebugRenderer().clearStats();
+        source.sendSuccess(() -> Component.literal("Voxy: cleared GL heap readback visualization cache and render stats. Upload-only GL heap, CPU BuiltSection cache, and CPU section geometry manager were left intact."), false);
+        return 1;
+    }
+
+    private static int setGeometryGpuVisualization(CommandSourceStack source, boolean enabled) {
+        ForgeVoxyRuntimeOverrides.setGeometryGpuVisualization(enabled);
+        if (!enabled) {
+            ForgeVoxyInstance.INSTANCE.getGpuGeometryVisualizationCache().clear();
+            ForgeVoxyInstance.INSTANCE.getGpuGeometryReadbackDebugRenderer().clearStats();
+        }
+        String message = enabled
+                ? "Voxy GL heap readback visualization: runtime-only debug renderer enabled. Use /voxy geometry_gpu_visualize_sample to read back GL heap data into a temporary visualization cache. This was not written to toml."
+                : "Voxy GL heap readback visualization: runtime-only debug renderer disabled and visualization cache was cleared. This was not written to toml.";
+        source.sendSuccess(() -> Component.literal(message), false);
+        return 1;
+    }
+
     private static int setGeometryGpuUpload(CommandSourceStack source, boolean enabled) {
         ForgeVoxyRuntimeOverrides.setGeometryGpuUpload(enabled);
         if (!enabled) {
@@ -906,14 +1005,14 @@ public final class ForgeVoxyCommands {
         }
         String message = enabled
                 ? "Voxy upload-only GL geometry heap: runtime-only upload enabled. It will copy CPU section geometry upload/metadata intents into small GL buffers on the render thread; it does not render or draw."
-                : "Voxy upload-only GL geometry heap: runtime-only upload disabled and GL buffers were released. This was not written to toml.";
+                : "Voxy upload-only GL geometry heap: runtime-only upload disabled, GL buffers were released, and GL heap readback visualization cache was cleared. This was not written to toml.";
         source.sendSuccess(() -> Component.literal(message), false);
         return 1;
     }
 
     private static int clearGeometryGpuUpload(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getGpuGeometryUploadManager().clear();
-        source.sendSuccess(() -> Component.literal("Voxy: released upload-only GL geometry heap buffers and cleared GPU upload processed-state. CPU section geometry manager intents were left intact and can re-upload."), false);
+        source.sendSuccess(() -> Component.literal("Voxy: released upload-only GL geometry heap buffers, cleared GPU upload processed-state, and cleared GL heap readback visualization cache. CPU section geometry manager intents were left intact and can re-upload."), false);
         return 1;
     }
 
@@ -1284,6 +1383,22 @@ public final class ForgeVoxyCommands {
         return 1;
     }
 
+    private static int applyPresetGlHeapVisualize(CommandSourceStack source) {
+        ForgeVoxyRuntimeOverrides.applyGlHeapVisualizePreset();
+        ForgeVoxyInstance.INSTANCE.getGpuMeshUploadManager().clear();
+        ForgeVoxyInstance.INSTANCE.getGpuMeshCache().clear();
+        ForgeVoxyInstance.INSTANCE.getGpuGeometryVisualizationCache().clear();
+        ForgeVoxyInstance.INSTANCE.getGpuGeometryReadbackDebugRenderer().clearStats();
+        boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
+        String message = "Voxy preset gl_heap_visualize: runtime-only GL heap readback visualization mode applied, not written to toml. "
+                + "Effective values forced: engine=true autoIngest=true autoBuiltSection=true autoGeometryConsume=true geometryGpuUpload=true geometryGpuVisualization=true simpleGpu=false debugRenderer=false. "
+                + "This path reads the upload-only GL heap on command, builds a temporary debug visualization cache, and draws that cache only; it is not MDIC/VoxyRenderSystem/simple GPU renderer. "
+                + "Run /voxy geometry_gpu_visualize_sample after geometry_gpu_upload_status shows uploadedSections > 0. "
+                + (engineReady ? "WorldEngine is active." : "No active client world was found; enter or re-enter a world to create the WorldEngine.");
+        source.sendSuccess(() -> Component.literal(message), false);
+        return 1;
+    }
+
     private static int clearPreset(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.clear();
         if (!ForgeVoxyRuntimeOverrides.enabledWorldEngineSkeleton()) {
@@ -1297,7 +1412,7 @@ public final class ForgeVoxyCommands {
     private static int presetStatus(CommandSourceStack source) {
         var status = ForgeVoxyRuntimeOverrides.createStatusSnapshot();
         String message = String.format(
-                "Voxy preset status: active=%s overrides=%s engine=%s(%s) autoIngest=%s(%s) autoCpuMesh=%s(%s) autoBuiltSection=%s(%s) autoGeometryConsume=%s(%s) geometryGpuUpload=%s(%s) simpleGpu=%s(%s) debugRenderer=%s(%s) source=%s(%s) sourceRole=%s recommendedSource=%s fallbackSource=%s minDistance=%d(%s) maxDistance=%d(%s) renderLoadedChunks=%s(%s) skipMode=%s(%s) loadedMargin=%d(%s) keepCached=%s(%s) colors=%s(%s) simpleIgnoreDepth=%s(%s) simpleVerticalOffset=%.3f(%s) simpleAlpha=%.2f(%s) debugAlpha=%.2f(%s)",
+                "Voxy preset status: active=%s overrides=%s engine=%s(%s) autoIngest=%s(%s) autoCpuMesh=%s(%s) autoBuiltSection=%s(%s) autoGeometryConsume=%s(%s) geometryGpuUpload=%s(%s) geometryGpuVisualization=%s(%s) visualizationAlpha=%.2f(%s) visualizationIgnoreDepth=%s(%s) visualizationDoubleSided=%s(%s) simpleGpu=%s(%s) debugRenderer=%s(%s) source=%s(%s) sourceRole=%s recommendedSource=%s fallbackSource=%s minDistance=%d(%s) maxDistance=%d(%s) renderLoadedChunks=%s(%s) skipMode=%s(%s) loadedMargin=%d(%s) keepCached=%s(%s) colors=%s(%s) simpleIgnoreDepth=%s(%s) simpleVerticalOffset=%.3f(%s) simpleAlpha=%.2f(%s) debugAlpha=%.2f(%s)",
                 status.presetName(),
                 status.hasOverrides(),
                 status.enableWorldEngineSkeleton(),
@@ -1312,6 +1427,14 @@ public final class ForgeVoxyCommands {
                 status.enableAutoGeometryManagerConsumeSource(),
                 status.enableGeometryGpuUpload(),
                 status.enableGeometryGpuUploadSource(),
+                status.enableGeometryGpuVisualization(),
+                status.enableGeometryGpuVisualizationSource(),
+                status.geometryGpuVisualizationAlpha(),
+                status.geometryGpuVisualizationAlphaSource(),
+                status.geometryGpuVisualizationIgnoreDepth(),
+                status.geometryGpuVisualizationIgnoreDepthSource(),
+                status.geometryGpuVisualizationDoubleSided(),
+                status.geometryGpuVisualizationDoubleSidedSource(),
                 status.enableSimpleGpuMeshRenderer(),
                 status.enableSimpleGpuMeshRendererSource(),
                 status.enableDebugMeshRenderer(),
@@ -1579,6 +1702,8 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getSectionGeometryConsumeManager().clear();
         ForgeVoxyInstance.INSTANCE.getGpuMeshUploadManager().clear();
         ForgeVoxyInstance.INSTANCE.getGpuGeometryUploadManager().clear();
+        ForgeVoxyInstance.INSTANCE.getGpuGeometryVisualizationCache().clear();
+        ForgeVoxyInstance.INSTANCE.getGpuGeometryReadbackDebugRenderer().clearStats();
         ForgeVoxyInstance.INSTANCE.getGpuMeshCache().clear();
     }
 
@@ -1590,7 +1715,9 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getBuiltSectionBuildManager().clear();
         ForgeVoxyInstance.INSTANCE.getGpuMeshUploadManager().clear();
         ForgeVoxyInstance.INSTANCE.getGpuGeometryUploadManager().clear();
-        source.sendSuccess(() -> Component.literal("Voxy: cleared CPU mesh cache, CPU-only BuiltSection cache, CPU-only section geometry manager, simple GPU mesh cache, upload-only GL geometry heap, auto mesh build record, and auto BuiltSection build record."), false);
+        ForgeVoxyInstance.INSTANCE.getGpuGeometryVisualizationCache().clear();
+        ForgeVoxyInstance.INSTANCE.getGpuGeometryReadbackDebugRenderer().clearStats();
+        source.sendSuccess(() -> Component.literal("Voxy: cleared CPU mesh cache, CPU-only BuiltSection cache, CPU-only section geometry manager, simple GPU mesh cache, upload-only GL geometry heap, GL heap readback visualization cache, auto mesh build record, and auto BuiltSection build record."), false);
         return 1;
     }
 
@@ -1615,7 +1742,9 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getSectionGeometryConsumeManager().clear();
         ForgeVoxyInstance.INSTANCE.getGpuMeshUploadManager().clear();
         ForgeVoxyInstance.INSTANCE.getGpuGeometryUploadManager().clear();
-        source.sendSuccess(() -> Component.literal("Voxy: cleared debug pipeline ingest records, mesh build records, BuiltSection build records, CPU mesh cache, CPU-only BuiltSection cache, CPU-only section geometry manager, simple GPU mesh cache, and upload-only GL geometry heap."), false);
+        ForgeVoxyInstance.INSTANCE.getGpuGeometryVisualizationCache().clear();
+        ForgeVoxyInstance.INSTANCE.getGpuGeometryReadbackDebugRenderer().clearStats();
+        source.sendSuccess(() -> Component.literal("Voxy: cleared debug pipeline ingest records, mesh build records, BuiltSection build records, CPU mesh cache, CPU-only BuiltSection cache, CPU-only section geometry manager, simple GPU mesh cache, upload-only GL geometry heap, and GL heap readback visualization cache."), false);
         return 1;
     }
 

@@ -71,6 +71,14 @@ public final class ForgeGpuGeometryUploadManager {
         return this.lastStatus;
     }
 
+    ForgeGpuGeometryHeap getHeapForDebugReadback() {
+        return this.heap;
+    }
+
+    List<Integer> createUploadedSectionIdSnapshot() {
+        return new ArrayList<>(this.uploadedMetadataHashes.keySet());
+    }
+
     public ForgeGpuGeometryStats createStatusSnapshot() {
         IntentCounts counts = this.countPendingIntents();
         return new ForgeGpuGeometryStats(
@@ -185,6 +193,8 @@ public final class ForgeGpuGeometryUploadManager {
         this.lastAuditDurationMs = 0.0D;
         this.releasedBuffers += this.closeHeapSafely();
         this.lastStatus = ForgeGpuGeometryStats.disabled();
+        this.instance.getGpuGeometryVisualizationCache().clear();
+        this.instance.getGpuGeometryReadbackDebugRenderer().clearStats();
     }
 
     public ForgeGpuGeometryStressStats stressOnce() {

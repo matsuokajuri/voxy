@@ -15,6 +15,10 @@ public final class ForgeVoxyRuntimeOverrides {
     private static Boolean enableAutoBuiltSectionBuild;
     private static Boolean enableAutoGeometryManagerConsume;
     private static Boolean enableGeometryGpuUpload;
+    private static Boolean enableGeometryGpuVisualization;
+    private static Double geometryGpuVisualizationAlpha;
+    private static Boolean geometryGpuVisualizationIgnoreDepth;
+    private static Boolean geometryGpuVisualizationDoubleSided;
     private static Boolean enableSimpleGpuMeshRenderer;
     private static Boolean enableDebugMeshRenderer;
     private static SimpleGpuMeshSource simpleGpuMeshSource;
@@ -42,6 +46,7 @@ public final class ForgeVoxyRuntimeOverrides {
         enableAutoBuiltSectionBuild = false;
         enableAutoGeometryManagerConsume = false;
         enableGeometryGpuUpload = false;
+        enableGeometryGpuVisualization = false;
         enableSimpleGpuMeshRenderer = false;
         enableDebugMeshRenderer = false;
     }
@@ -121,9 +126,31 @@ public final class ForgeVoxyRuntimeOverrides {
         enableGeometryGpuUpload = false;
     }
 
+    public static synchronized void applyGlHeapVisualizePreset() {
+        clearInternal();
+        presetName = "gl_heap_visualize";
+        enableWorldEngineSkeleton = true;
+        enableAutoChunkIngest = true;
+        enableAutoCpuMeshBuild = false;
+        enableAutoBuiltSectionBuild = true;
+        enableAutoGeometryManagerConsume = true;
+        enableGeometryGpuUpload = true;
+        enableGeometryGpuVisualization = true;
+        geometryGpuVisualizationAlpha = 0.85D;
+        geometryGpuVisualizationIgnoreDepth = true;
+        geometryGpuVisualizationDoubleSided = true;
+        enableSimpleGpuMeshRenderer = false;
+        enableDebugMeshRenderer = false;
+    }
+
     public static synchronized void setGeometryGpuUpload(boolean enabled) {
         presetName = "custom";
         enableGeometryGpuUpload = enabled;
+    }
+
+    public static synchronized void setGeometryGpuVisualization(boolean enabled) {
+        presetName = "custom";
+        enableGeometryGpuVisualization = enabled;
     }
 
     public static synchronized void clear() {
@@ -138,6 +165,10 @@ public final class ForgeVoxyRuntimeOverrides {
         enableAutoBuiltSectionBuild = null;
         enableAutoGeometryManagerConsume = null;
         enableGeometryGpuUpload = null;
+        enableGeometryGpuVisualization = null;
+        geometryGpuVisualizationAlpha = null;
+        geometryGpuVisualizationIgnoreDepth = null;
+        geometryGpuVisualizationDoubleSided = null;
         enableSimpleGpuMeshRenderer = null;
         enableDebugMeshRenderer = null;
         simpleGpuMeshSource = null;
@@ -170,6 +201,14 @@ public final class ForgeVoxyRuntimeOverrides {
                 source(enableAutoGeometryManagerConsume),
                 enableGeometryGpuUpload(),
                 source(enableGeometryGpuUpload),
+                enableGeometryGpuVisualization(),
+                source(enableGeometryGpuVisualization),
+                geometryGpuVisualizationAlpha(),
+                source(geometryGpuVisualizationAlpha),
+                geometryGpuVisualizationIgnoreDepth(),
+                source(geometryGpuVisualizationIgnoreDepth),
+                geometryGpuVisualizationDoubleSided(),
+                source(geometryGpuVisualizationDoubleSided),
                 enableSimpleGpuMeshRenderer(),
                 source(enableSimpleGpuMeshRenderer),
                 enableDebugMeshRenderer(),
@@ -231,6 +270,22 @@ public final class ForgeVoxyRuntimeOverrides {
 
     public static synchronized boolean enableGeometryGpuUpload() {
         return value(enableGeometryGpuUpload, ForgeVoxyConfig.ENABLE_GEOMETRY_GPU_UPLOAD.get());
+    }
+
+    public static synchronized boolean enableGeometryGpuVisualization() {
+        return value(enableGeometryGpuVisualization, ForgeVoxyConfig.ENABLE_GEOMETRY_GPU_VISUALIZATION.get());
+    }
+
+    public static synchronized double geometryGpuVisualizationAlpha() {
+        return Math.max(0.05D, Math.min(1.0D, value(geometryGpuVisualizationAlpha, ForgeVoxyConfig.GEOMETRY_GPU_VISUALIZATION_ALPHA.get())));
+    }
+
+    public static synchronized boolean geometryGpuVisualizationIgnoreDepth() {
+        return value(geometryGpuVisualizationIgnoreDepth, ForgeVoxyConfig.GEOMETRY_GPU_VISUALIZATION_IGNORE_DEPTH.get());
+    }
+
+    public static synchronized boolean geometryGpuVisualizationDoubleSided() {
+        return value(geometryGpuVisualizationDoubleSided, ForgeVoxyConfig.GEOMETRY_GPU_VISUALIZATION_DOUBLE_SIDED.get());
     }
 
     public static synchronized boolean enableSimpleGpuMeshRenderer() {
@@ -301,6 +356,10 @@ public final class ForgeVoxyRuntimeOverrides {
                 || enableAutoBuiltSectionBuild != null
                 || enableAutoGeometryManagerConsume != null
                 || enableGeometryGpuUpload != null
+                || enableGeometryGpuVisualization != null
+                || geometryGpuVisualizationAlpha != null
+                || geometryGpuVisualizationIgnoreDepth != null
+                || geometryGpuVisualizationDoubleSided != null
                 || enableSimpleGpuMeshRenderer != null
                 || enableDebugMeshRenderer != null
                 || simpleGpuMeshSource != null
@@ -352,6 +411,14 @@ public final class ForgeVoxyRuntimeOverrides {
             String enableAutoGeometryManagerConsumeSource,
             boolean enableGeometryGpuUpload,
             String enableGeometryGpuUploadSource,
+            boolean enableGeometryGpuVisualization,
+            String enableGeometryGpuVisualizationSource,
+            double geometryGpuVisualizationAlpha,
+            String geometryGpuVisualizationAlphaSource,
+            boolean geometryGpuVisualizationIgnoreDepth,
+            String geometryGpuVisualizationIgnoreDepthSource,
+            boolean geometryGpuVisualizationDoubleSided,
+            String geometryGpuVisualizationDoubleSidedSource,
             boolean enableSimpleGpuMeshRenderer,
             String enableSimpleGpuMeshRendererSource,
             boolean enableDebugMeshRenderer,

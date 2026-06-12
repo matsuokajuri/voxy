@@ -28,6 +28,12 @@ public final class ForgeVoxyConfig {
     public static final ForgeConfigSpec.IntValue GEOMETRY_GPU_MAX_UPLOADS_PER_TICK;
     public static final ForgeConfigSpec.IntValue GEOMETRY_GPU_MAX_METADATA_WRITES_PER_TICK;
     public static final ForgeConfigSpec.BooleanValue GEOMETRY_GPU_DEBUG_LOG;
+    public static final ForgeConfigSpec.BooleanValue ENABLE_GEOMETRY_GPU_VISUALIZATION;
+    public static final ForgeConfigSpec.IntValue GEOMETRY_GPU_VISUALIZATION_MAX_SECTIONS;
+    public static final ForgeConfigSpec.IntValue GEOMETRY_GPU_VISUALIZATION_MAX_RECORDS;
+    public static final ForgeConfigSpec.DoubleValue GEOMETRY_GPU_VISUALIZATION_ALPHA;
+    public static final ForgeConfigSpec.BooleanValue GEOMETRY_GPU_VISUALIZATION_IGNORE_DEPTH;
+    public static final ForgeConfigSpec.BooleanValue GEOMETRY_GPU_VISUALIZATION_DOUBLE_SIDED;
     public static final ForgeConfigSpec.IntValue CPU_MESH_CACHE_MAX_ENTRIES;
     public static final ForgeConfigSpec.IntValue BUILT_SECTION_CACHE_MAX_ENTRIES;
     public static final ForgeConfigSpec.BooleanValue ENABLE_DEBUG_MESH_RENDERER;
@@ -126,6 +132,24 @@ public final class ForgeVoxyConfig {
         GEOMETRY_GPU_DEBUG_LOG = builder
                 .comment("Logs upload-only GL geometry heap activity summaries. Useful while validating the future geometry heap migration.")
                 .define("geometryGpuDebugLog", false);
+        ENABLE_GEOMETRY_GPU_VISUALIZATION = builder
+                .comment("Draws a temporary debug visualization built from upload-only GL heap readback. This is a validation path only and is disabled by default.")
+                .define("enableGeometryGpuVisualization", false);
+        GEOMETRY_GPU_VISUALIZATION_MAX_SECTIONS = builder
+                .comment("Maximum uploaded sections read back by one geometry_gpu_visualize_sample command.")
+                .defineInRange("geometryGpuVisualizationMaxSections", 8, 1, 32);
+        GEOMETRY_GPU_VISUALIZATION_MAX_RECORDS = builder
+                .comment("Maximum quad records read back by one geometry_gpu_visualize_sample command.")
+                .defineInRange("geometryGpuVisualizationMaxRecords", 8192, 1, 65536);
+        GEOMETRY_GPU_VISUALIZATION_ALPHA = builder
+                .comment("Alpha used by the upload-only GL heap readback debug visualization.")
+                .defineInRange("geometryGpuVisualizationAlpha", 0.75D, 0.05D, 1.0D);
+        GEOMETRY_GPU_VISUALIZATION_IGNORE_DEPTH = builder
+                .comment("Draws the upload-only GL heap readback visualization through terrain.")
+                .define("geometryGpuVisualizationIgnoreDepth", false);
+        GEOMETRY_GPU_VISUALIZATION_DOUBLE_SIDED = builder
+                .comment("Disables culling for the upload-only GL heap readback visualization so debug quads remain visible while winding is still being audited.")
+                .define("geometryGpuVisualizationDoubleSided", true);
         CPU_MESH_CACHE_MAX_ENTRIES = builder
                 .comment("Maximum cached CPU mesh section/layer entries kept by the debug pipeline. Old entries are closed and evicted with LRU ordering.")
                 .defineInRange("cpuMeshCacheMaxEntries", 2048, 1, 8192);
