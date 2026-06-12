@@ -5,6 +5,7 @@ import me.cortex.voxy.config.ForgeVoxyConfig;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.TickEvent;
 
+import java.time.Instant;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -36,6 +37,18 @@ public final class ForgeGpuGeometryUploadManager {
     private int lastValidationGeometryPtr = -1;
     private boolean lastMetadataMatch;
     private boolean lastGeometryMatch;
+    private long stressRuns;
+    private long stressFailures;
+    private String lastStressError = "none";
+    private String lastStressStartedAt = "none";
+    private String lastStressFinishedAt = "none";
+    private double lastStressDurationMs;
+    private long lastBeforeClearUploadedSections;
+    private long lastAfterReenableUploadedSections;
+    private long lastBeforeClearGeometryBytes;
+    private long lastAfterReenableGeometryBytes;
+    private boolean lastValidationAfterReenableMetadataMatch;
+    private boolean lastValidationAfterReenableGeometryMatch;
     private int releasedBuffers;
     private boolean renderCallQueued;
     private boolean disabledByFailure;
@@ -84,6 +97,38 @@ public final class ForgeGpuGeometryUploadManager {
         );
     }
 
+    public ForgeGpuGeometryStressStats createStressStatusSnapshot() {
+        return new ForgeGpuGeometryStressStats(
+                this.stressRuns,
+                this.stressFailures,
+                this.lastStressError,
+                this.lastStressStartedAt,
+                this.lastStressFinishedAt,
+                this.lastStressDurationMs,
+                this.lastBeforeClearUploadedSections,
+                this.lastAfterReenableUploadedSections,
+                this.lastBeforeClearGeometryBytes,
+                this.lastAfterReenableGeometryBytes,
+                this.lastValidationAfterReenableMetadataMatch,
+                this.lastValidationAfterReenableGeometryMatch
+        );
+    }
+
+    public void clearStressStats() {
+        this.stressRuns = 0;
+        this.stressFailures = 0;
+        this.lastStressError = "none";
+        this.lastStressStartedAt = "none";
+        this.lastStressFinishedAt = "none";
+        this.lastStressDurationMs = 0.0D;
+        this.lastBeforeClearUploadedSections = 0;
+        this.lastAfterReenableUploadedSections = 0;
+        this.lastBeforeClearGeometryBytes = 0;
+        this.lastAfterReenableGeometryBytes = 0;
+        this.lastValidationAfterReenableMetadataMatch = false;
+        this.lastValidationAfterReenableGeometryMatch = false;
+    }
+
     public void clear() {
         this.uploadedGeometryHashes.clear();
         this.uploadedMetadataHashes.clear();
@@ -106,6 +151,62 @@ public final class ForgeGpuGeometryUploadManager {
         this.lastGeometryMatch = false;
         this.releasedBuffers += this.closeHeapSafely();
         this.lastStatus = ForgeGpuGeometryStats.disabled();
+    }
+
+    public ForgeGpuGeometryStressStats stressOnce() {
+        this.stressRuns++;
+        long startedNanos = System.nanoTime();
+        this.lastStressStartedAt = Instant.now().toString();
+        this.lastStressFinishedAt = "running";
+        this.lastStressDurationMs = 0.0D;
+        this.lastStressError = "running";
+        this.lastBeforeClearUploadedSections = 0;
+        this.lastAfterReenableUploadedSections = 0;
+        this.lastBeforeClearGeometryBytes = 0;
+        this.lastAfterReenableGeometryBytes = 0;
+        this.lastValidationAfterReenableMetadataMatch = false;
+        this.lastValidationAfterReenableGeometryMatch = false;
+
+        if (!RenderSystem.isOnRenderThread()) {
+            return this.finishStressFailure(startedNanos, "not-render-thread");
+        }
+        ForgeVoxyRuntimeOverrides.setGeometryGpuUpload(true);
+        if (!isEnabled()) {
+            return this.finishStressFailure(startedNanos, "geometry-gpu-upload-disabled");
+        }
+        if (this.instance.getCurrentEngineOptional().isEmpty()) {
+            return this.finishStressFailure(startedNanos, "no-engine");
+        }
+
+        try {
+            this.disabledByFailure = false;
+            ForgeGpuGeometryValidationResult beforeValidation = this.processAndValidateStressSample(4);
+            this.lastBeforeClearUploadedSections = this.uploadedSections;
+            this.lastBeforeClearGeometryBytes = this.uploadedGeometryBytes;
+            if (!beforeValidation.success()) {
+                return this.finishStressFailure(startedNanos, "before-clear-validation-" + beforeValidation.reason());
+            }
+
+            this.clear();
+            if (this.heap.isCreated()) {
+                return this.finishStressFailure(startedNanos, "heap-still-created-after-clear");
+            }
+
+            ForgeVoxyRuntimeOverrides.setGeometryGpuUpload(true);
+            this.disabledByFailure = false;
+            ForgeGpuGeometryValidationResult afterValidation = this.processAndValidateStressSample(4);
+            this.lastAfterReenableUploadedSections = this.uploadedSections;
+            this.lastAfterReenableGeometryBytes = this.uploadedGeometryBytes;
+            this.lastValidationAfterReenableMetadataMatch = afterValidation.metadataMatch();
+            this.lastValidationAfterReenableGeometryMatch = afterValidation.geometryMatch();
+            if (!afterValidation.success()) {
+                return this.finishStressFailure(startedNanos, "after-reenable-validation-" + afterValidation.reason());
+            }
+            return this.finishStressSuccess(startedNanos);
+        } catch (RuntimeException e) {
+            this.recordFailure("stress " + e.getClass().getSimpleName() + ": " + e.getMessage());
+            return this.finishStressFailure(startedNanos, e.getClass().getSimpleName() + ": " + e.getMessage());
+        }
     }
 
     public ForgeGpuGeometryValidationResult validateSample(int maxRecords) {
@@ -371,6 +472,37 @@ public final class ForgeGpuGeometryUploadManager {
         }
         this.lastStatus = this.createStatusSnapshot();
         return result;
+    }
+
+    private ForgeGpuGeometryValidationResult processAndValidateStressSample(int passes) {
+        ForgeGpuGeometryValidationResult result = ForgeGpuGeometryValidationResult.failure("no-validation-attempt");
+        int attempts = Math.max(1, passes);
+        for (int i = 0; i < attempts; i++) {
+            this.processOnRenderThread();
+            result = this.validateSample(8);
+            if (result.success()) {
+                return result;
+            }
+            if (!"no-uploaded-sample".equals(result.reason()) && !"heap-not-created".equals(result.reason())) {
+                return result;
+            }
+        }
+        return result;
+    }
+
+    private ForgeGpuGeometryStressStats finishStressSuccess(long startedNanos) {
+        this.lastStressError = "none";
+        this.lastStressFinishedAt = Instant.now().toString();
+        this.lastStressDurationMs = (System.nanoTime() - startedNanos) / 1_000_000.0D;
+        return this.createStressStatusSnapshot();
+    }
+
+    private ForgeGpuGeometryStressStats finishStressFailure(long startedNanos, String reason) {
+        this.stressFailures++;
+        this.lastStressError = reason == null ? "unknown" : reason;
+        this.lastStressFinishedAt = Instant.now().toString();
+        this.lastStressDurationMs = (System.nanoTime() - startedNanos) / 1_000_000.0D;
+        return this.createStressStatusSnapshot();
     }
 
     private double averageUploadMs() {

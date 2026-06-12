@@ -52,6 +52,12 @@ public final class ForgeVoxyCommands {
                         .executes(ctx -> geometryGpuUploadStatus(ctx.getSource())))
                 .then(Commands.literal("geometry_gpu_validate_sample")
                         .executes(ctx -> geometryGpuValidateSample(ctx.getSource())))
+                .then(Commands.literal("geometry_gpu_stress_status")
+                        .executes(ctx -> geometryGpuStressStatus(ctx.getSource())))
+                .then(Commands.literal("geometry_gpu_stress_clear")
+                        .executes(ctx -> geometryGpuStressClear(ctx.getSource())))
+                .then(Commands.literal("geometry_gpu_stress_once")
+                        .executes(ctx -> geometryGpuStressOnce(ctx.getSource())))
                 .then(Commands.literal("geometry_gpu_upload_enable")
                         .executes(ctx -> setGeometryGpuUpload(ctx.getSource(), true)))
                 .then(Commands.literal("geometry_gpu_upload_disable")
@@ -757,6 +763,66 @@ public final class ForgeVoxyCommands {
                 result.actualGeometryRecords()
         );
         if (result.success()) {
+            source.sendSuccess(() -> Component.literal(message), false);
+            return 1;
+        }
+        source.sendFailure(Component.literal(message));
+        return 0;
+    }
+
+    private static int geometryGpuStressStatus(CommandSourceStack source) {
+        ForgeGpuGeometryStressStats stress = ForgeVoxyInstance.INSTANCE.getGpuGeometryUploadManager().createStressStatusSnapshot();
+        ForgeGpuGeometryStats upload = ForgeVoxyInstance.INSTANCE.getGpuGeometryUploadManager().createStatusSnapshot();
+        String message = String.format(
+                "Voxy upload-only GL geometry stress: stressRuns=%d stressFailures=%d lastStressError=%s lastStressStartedAt=%s lastStressFinishedAt=%s lastStressDurationMs=%.2f lastBeforeClearUploadedSections=%d lastAfterReenableUploadedSections=%d lastBeforeClearGeometryBytes=%d lastAfterReenableGeometryBytes=%d lastValidationAfterReenableMetadataMatch=%s lastValidationAfterReenableGeometryMatch=%s uploadEnabled=%s heapCreated=%s uploadedSections=%d uploadedGeometryBytes=%d validationRuns=%d validationFailures=%d renderThreadOnly=true draws=false",
+                stress.stressRuns(),
+                stress.stressFailures(),
+                stress.lastStressError(),
+                stress.lastStressStartedAt(),
+                stress.lastStressFinishedAt(),
+                stress.lastStressDurationMs(),
+                stress.lastBeforeClearUploadedSections(),
+                stress.lastAfterReenableUploadedSections(),
+                stress.lastBeforeClearGeometryBytes(),
+                stress.lastAfterReenableGeometryBytes(),
+                stress.lastValidationAfterReenableMetadataMatch(),
+                stress.lastValidationAfterReenableGeometryMatch(),
+                upload.enabled(),
+                upload.heapCreated(),
+                upload.uploadedSections(),
+                upload.uploadedGeometryBytes(),
+                upload.validationRuns(),
+                upload.validationFailures()
+        );
+        source.sendSuccess(() -> Component.literal(message), false);
+        return 1;
+    }
+
+    private static int geometryGpuStressClear(CommandSourceStack source) {
+        ForgeVoxyInstance.INSTANCE.getGpuGeometryUploadManager().clearStressStats();
+        source.sendSuccess(() -> Component.literal("Voxy: cleared upload-only GL geometry heap stress counters and last-run lifetime stats. GL buffers and CPU geometry intents were left intact."), false);
+        return 1;
+    }
+
+    private static int geometryGpuStressOnce(CommandSourceStack source) {
+        ForgeGpuGeometryStressStats stress = ForgeVoxyInstance.INSTANCE.getGpuGeometryUploadManager().stressOnce();
+        String message = String.format(
+                "Voxy upload-only GL geometry stress once: success=%s stressRuns=%d stressFailures=%d lastStressError=%s lastStressDurationMs=%.2f beforeSections=%d afterSections=%d beforeGeometryBytes=%d afterGeometryBytes=%d validationAfterReenableMetadataMatch=%s validationAfterReenableGeometryMatch=%s enabledAfterRun=%s heapCreatedAfterRun=%s draws=false rendererUsesHeap=false",
+                stress.stressFailures() == 0 || "none".equals(stress.lastStressError()),
+                stress.stressRuns(),
+                stress.stressFailures(),
+                stress.lastStressError(),
+                stress.lastStressDurationMs(),
+                stress.lastBeforeClearUploadedSections(),
+                stress.lastAfterReenableUploadedSections(),
+                stress.lastBeforeClearGeometryBytes(),
+                stress.lastAfterReenableGeometryBytes(),
+                stress.lastValidationAfterReenableMetadataMatch(),
+                stress.lastValidationAfterReenableGeometryMatch(),
+                ForgeGpuGeometryUploadManager.isEnabled(),
+                ForgeVoxyInstance.INSTANCE.getGpuGeometryUploadManager().createStatusSnapshot().heapCreated()
+        );
+        if ("none".equals(stress.lastStressError())) {
             source.sendSuccess(() -> Component.literal(message), false);
             return 1;
         }
