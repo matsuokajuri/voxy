@@ -22,6 +22,12 @@ public final class ForgeVoxyConfig {
     public static final ForgeConfigSpec.IntValue AUTO_GEOMETRY_CONSUME_RADIUS;
     public static final ForgeConfigSpec.IntValue AUTO_GEOMETRY_CONSUME_MAX_SECTIONS_PER_TICK;
     public static final ForgeConfigSpec.IntValue AUTO_GEOMETRY_CONSUME_COOLDOWN_TICKS;
+    public static final ForgeConfigSpec.BooleanValue ENABLE_GEOMETRY_GPU_UPLOAD;
+    public static final ForgeConfigSpec.IntValue GEOMETRY_GPU_HEAP_BYTES;
+    public static final ForgeConfigSpec.IntValue GEOMETRY_GPU_METADATA_BYTES;
+    public static final ForgeConfigSpec.IntValue GEOMETRY_GPU_MAX_UPLOADS_PER_TICK;
+    public static final ForgeConfigSpec.IntValue GEOMETRY_GPU_MAX_METADATA_WRITES_PER_TICK;
+    public static final ForgeConfigSpec.BooleanValue GEOMETRY_GPU_DEBUG_LOG;
     public static final ForgeConfigSpec.IntValue CPU_MESH_CACHE_MAX_ENTRIES;
     public static final ForgeConfigSpec.IntValue BUILT_SECTION_CACHE_MAX_ENTRIES;
     public static final ForgeConfigSpec.BooleanValue ENABLE_DEBUG_MESH_RENDERER;
@@ -102,6 +108,24 @@ public final class ForgeVoxyConfig {
         AUTO_GEOMETRY_CONSUME_COOLDOWN_TICKS = builder
                 .comment("Ticks between nearby BuiltSection cache scans for auto geometry-manager consume. Queued sections may still be processed every tick.")
                 .defineInRange("autoGeometryConsumeCooldownTicks", 20, 0, 200);
+        ENABLE_GEOMETRY_GPU_UPLOAD = builder
+                .comment("Upload-only GL geometry heap proof of concept. It copies CPU-only section geometry manager intents into small GL buffers but does not render from them.")
+                .define("enableGeometryGpuUpload", false);
+        GEOMETRY_GPU_HEAP_BYTES = builder
+                .comment("Byte capacity for the upload-only GL geometry heap PoC. Keep this small; the final Voxy heap is not connected here.")
+                .defineInRange("geometryGpuHeapBytes", 16 * 1024 * 1024, 1024 * 1024, 256 * 1024 * 1024);
+        GEOMETRY_GPU_METADATA_BYTES = builder
+                .comment("Byte capacity for the upload-only GL section metadata buffer PoC.")
+                .defineInRange("geometryGpuMetadataBytes", 8 * 1024 * 1024, 1024 * 1024, 64 * 1024 * 1024);
+        GEOMETRY_GPU_MAX_UPLOADS_PER_TICK = builder
+                .comment("Maximum CPU geometry upload intents copied into the upload-only GL heap per client tick.")
+                .defineInRange("geometryGpuMaxUploadsPerTick", 4, 1, 64);
+        GEOMETRY_GPU_MAX_METADATA_WRITES_PER_TICK = builder
+                .comment("Maximum dirty 32-byte section metadata samples copied into the upload-only GL metadata buffer per client tick.")
+                .defineInRange("geometryGpuMaxMetadataWritesPerTick", 256, 1, 4096);
+        GEOMETRY_GPU_DEBUG_LOG = builder
+                .comment("Logs upload-only GL geometry heap activity summaries. Useful while validating the future geometry heap migration.")
+                .define("geometryGpuDebugLog", false);
         CPU_MESH_CACHE_MAX_ENTRIES = builder
                 .comment("Maximum cached CPU mesh section/layer entries kept by the debug pipeline. Old entries are closed and evicted with LRU ordering.")
                 .defineInRange("cpuMeshCacheMaxEntries", 2048, 1, 8192);

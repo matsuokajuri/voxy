@@ -133,6 +133,26 @@ public final class ForgeSectionGeometryManager {
         return this.positionToId.containsKey(new Key(dimension, position));
     }
 
+    public synchronized List<ForgeSectionGeometryUploadIntent> createUploadIntentSnapshot() {
+        return new ArrayList<>(this.uploadIntents.values());
+    }
+
+    public synchronized List<ForgeSectionGeometryRemoveIntent> createRemoveIntentSnapshot() {
+        return new ArrayList<>(this.removeIntents.values());
+    }
+
+    public synchronized List<Integer> createDirtyMetadataIdSnapshot() {
+        return new ArrayList<>(this.dirtyMetadataIds);
+    }
+
+    public synchronized int[] createMetadataWordsSnapshot(int sectionId) {
+        if (sectionId < 0 || sectionId >= this.metadataById.size()) {
+            return new int[ForgeSectionGeometryMetadata.METADATA_WORDS];
+        }
+        ForgeSectionGeometryMetadata metadata = this.metadataById.get(sectionId);
+        return metadata == null ? new int[ForgeSectionGeometryMetadata.METADATA_WORDS] : metadata.metadataWords();
+    }
+
     public synchronized ForgeSectionGeometryStats createStatusSnapshot() {
         int sampleSectionId = -1;
         ForgeSectionGeometryMetadata sampleMetadata = null;

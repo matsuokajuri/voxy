@@ -14,6 +14,7 @@ public final class ForgeVoxyRuntimeOverrides {
     private static Boolean enableAutoCpuMeshBuild;
     private static Boolean enableAutoBuiltSectionBuild;
     private static Boolean enableAutoGeometryManagerConsume;
+    private static Boolean enableGeometryGpuUpload;
     private static Boolean enableSimpleGpuMeshRenderer;
     private static Boolean enableDebugMeshRenderer;
     private static SimpleGpuMeshSource simpleGpuMeshSource;
@@ -40,6 +41,7 @@ public final class ForgeVoxyRuntimeOverrides {
         enableAutoCpuMeshBuild = false;
         enableAutoBuiltSectionBuild = false;
         enableAutoGeometryManagerConsume = false;
+        enableGeometryGpuUpload = false;
         enableSimpleGpuMeshRenderer = false;
         enableDebugMeshRenderer = false;
     }
@@ -116,6 +118,12 @@ public final class ForgeVoxyRuntimeOverrides {
         enableAutoCpuMeshBuild = false;
         enableAutoBuiltSectionBuild = true;
         enableAutoGeometryManagerConsume = true;
+        enableGeometryGpuUpload = false;
+    }
+
+    public static synchronized void setGeometryGpuUpload(boolean enabled) {
+        presetName = "custom";
+        enableGeometryGpuUpload = enabled;
     }
 
     public static synchronized void clear() {
@@ -129,6 +137,7 @@ public final class ForgeVoxyRuntimeOverrides {
         enableAutoCpuMeshBuild = null;
         enableAutoBuiltSectionBuild = null;
         enableAutoGeometryManagerConsume = null;
+        enableGeometryGpuUpload = null;
         enableSimpleGpuMeshRenderer = null;
         enableDebugMeshRenderer = null;
         simpleGpuMeshSource = null;
@@ -159,6 +168,8 @@ public final class ForgeVoxyRuntimeOverrides {
                 source(enableAutoBuiltSectionBuild),
                 enableAutoGeometryManagerConsume(),
                 source(enableAutoGeometryManagerConsume),
+                enableGeometryGpuUpload(),
+                source(enableGeometryGpuUpload),
                 enableSimpleGpuMeshRenderer(),
                 source(enableSimpleGpuMeshRenderer),
                 enableDebugMeshRenderer(),
@@ -216,6 +227,10 @@ public final class ForgeVoxyRuntimeOverrides {
 
     public static synchronized boolean enableAutoGeometryManagerConsume() {
         return value(enableAutoGeometryManagerConsume, ForgeVoxyConfig.ENABLE_AUTO_GEOMETRY_MANAGER_CONSUME.get());
+    }
+
+    public static synchronized boolean enableGeometryGpuUpload() {
+        return value(enableGeometryGpuUpload, ForgeVoxyConfig.ENABLE_GEOMETRY_GPU_UPLOAD.get());
     }
 
     public static synchronized boolean enableSimpleGpuMeshRenderer() {
@@ -285,6 +300,7 @@ public final class ForgeVoxyRuntimeOverrides {
                 || enableAutoCpuMeshBuild != null
                 || enableAutoBuiltSectionBuild != null
                 || enableAutoGeometryManagerConsume != null
+                || enableGeometryGpuUpload != null
                 || enableSimpleGpuMeshRenderer != null
                 || enableDebugMeshRenderer != null
                 || simpleGpuMeshSource != null
@@ -334,6 +350,8 @@ public final class ForgeVoxyRuntimeOverrides {
             String enableAutoBuiltSectionBuildSource,
             boolean enableAutoGeometryManagerConsume,
             String enableAutoGeometryManagerConsumeSource,
+            boolean enableGeometryGpuUpload,
+            String enableGeometryGpuUploadSource,
             boolean enableSimpleGpuMeshRenderer,
             String enableSimpleGpuMeshRendererSource,
             boolean enableDebugMeshRenderer,
