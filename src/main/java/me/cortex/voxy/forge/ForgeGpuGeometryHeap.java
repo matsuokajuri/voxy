@@ -31,6 +31,10 @@ public final class ForgeGpuGeometryHeap {
         return this.metadataCapacityBytes;
     }
 
+    int geometryBufferIdForDirectRenderer() {
+        return this.geometryBufferId;
+    }
+
     public void ensureCreated(long geometryCapacityBytes, long metadataCapacityBytes) {
         requireRenderThread("create upload-only geometry heap");
         if (geometryCapacityBytes <= 0 || metadataCapacityBytes <= 0) {

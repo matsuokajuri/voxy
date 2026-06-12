@@ -18,6 +18,7 @@ public final class ForgeVoxyRuntimeOverrides {
     private static Boolean enableGeometryGpuVisualization;
     private static Boolean enableGeometryGpuReadbackMeshAutoRefresh;
     private static Boolean enableDirectGpuGeometryRenderer;
+    private static Boolean directGpuGeometryRendererActualDraw;
     private static Double geometryGpuVisualizationAlpha;
     private static Boolean geometryGpuVisualizationIgnoreDepth;
     private static Boolean geometryGpuVisualizationDoubleSided;
@@ -51,6 +52,7 @@ public final class ForgeVoxyRuntimeOverrides {
         enableGeometryGpuVisualization = false;
         enableGeometryGpuReadbackMeshAutoRefresh = false;
         enableDirectGpuGeometryRenderer = false;
+        directGpuGeometryRendererActualDraw = false;
         enableSimpleGpuMeshRenderer = false;
         enableDebugMeshRenderer = false;
     }
@@ -190,6 +192,7 @@ public final class ForgeVoxyRuntimeOverrides {
         enableGeometryGpuVisualization = false;
         enableGeometryGpuReadbackMeshAutoRefresh = false;
         enableDirectGpuGeometryRenderer = true;
+        directGpuGeometryRendererActualDraw = false;
         enableSimpleGpuMeshRenderer = false;
         enableDebugMeshRenderer = false;
     }
@@ -229,6 +232,15 @@ public final class ForgeVoxyRuntimeOverrides {
     public static synchronized void setDirectGpuGeometryRenderer(boolean enabled) {
         presetName = "custom";
         enableDirectGpuGeometryRenderer = enabled;
+        if (!enabled) {
+            directGpuGeometryRendererActualDraw = false;
+        }
+    }
+
+    public static synchronized void setDirectGpuGeometryRendererActualDraw(boolean enabled) {
+        presetName = "custom";
+        enableDirectGpuGeometryRenderer = enabled ? true : enableDirectGpuGeometryRenderer;
+        directGpuGeometryRendererActualDraw = enabled;
     }
 
     public static synchronized void clear() {
@@ -246,6 +258,7 @@ public final class ForgeVoxyRuntimeOverrides {
         enableGeometryGpuVisualization = null;
         enableGeometryGpuReadbackMeshAutoRefresh = null;
         enableDirectGpuGeometryRenderer = null;
+        directGpuGeometryRendererActualDraw = null;
         geometryGpuVisualizationAlpha = null;
         geometryGpuVisualizationIgnoreDepth = null;
         geometryGpuVisualizationDoubleSided = null;
@@ -287,6 +300,8 @@ public final class ForgeVoxyRuntimeOverrides {
                 source(enableGeometryGpuReadbackMeshAutoRefresh),
                 enableDirectGpuGeometryRenderer(),
                 source(enableDirectGpuGeometryRenderer),
+                directGpuGeometryRendererActualDraw(),
+                source(directGpuGeometryRendererActualDraw),
                 geometryGpuVisualizationAlpha(),
                 source(geometryGpuVisualizationAlpha),
                 geometryGpuVisualizationIgnoreDepth(),
@@ -366,6 +381,10 @@ public final class ForgeVoxyRuntimeOverrides {
 
     public static synchronized boolean enableDirectGpuGeometryRenderer() {
         return value(enableDirectGpuGeometryRenderer, ForgeVoxyConfig.ENABLE_DIRECT_GPU_GEOMETRY_RENDERER.get());
+    }
+
+    public static synchronized boolean directGpuGeometryRendererActualDraw() {
+        return value(directGpuGeometryRendererActualDraw, ForgeVoxyConfig.DIRECT_GPU_GEOMETRY_RENDERER_ACTUAL_DRAW.get());
     }
 
     public static synchronized double geometryGpuVisualizationAlpha() {
@@ -451,6 +470,7 @@ public final class ForgeVoxyRuntimeOverrides {
                 || enableGeometryGpuVisualization != null
                 || enableGeometryGpuReadbackMeshAutoRefresh != null
                 || enableDirectGpuGeometryRenderer != null
+                || directGpuGeometryRendererActualDraw != null
                 || geometryGpuVisualizationAlpha != null
                 || geometryGpuVisualizationIgnoreDepth != null
                 || geometryGpuVisualizationDoubleSided != null
@@ -511,6 +531,8 @@ public final class ForgeVoxyRuntimeOverrides {
             String enableGeometryGpuReadbackMeshAutoRefreshSource,
             boolean enableDirectGpuGeometryRenderer,
             String enableDirectGpuGeometryRendererSource,
+            boolean directGpuGeometryRendererActualDraw,
+            String directGpuGeometryRendererActualDrawSource,
             double geometryGpuVisualizationAlpha,
             String geometryGpuVisualizationAlphaSource,
             boolean geometryGpuVisualizationIgnoreDepth,
