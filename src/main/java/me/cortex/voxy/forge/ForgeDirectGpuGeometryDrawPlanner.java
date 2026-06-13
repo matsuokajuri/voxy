@@ -37,11 +37,18 @@ final class ForgeDirectGpuGeometryDrawPlanner {
         int recordLimit = Math.max(1, maxRecords);
         int plannedSections = 0;
         long plannedRecords = 0;
+        long plannedVertices = 0;
+        int skippedSections = 0;
+        long skippedRecords = 0;
         int invalidMetadata = 0;
         String lastError = "none";
+        String selectionMode = "SECTION_ID_ORDER";
 
         for (Integer sectionId : sectionIds) {
             if (sectionId == null || plannedSections >= sectionLimit || plannedRecords >= recordLimit) {
+                if (sectionId != null) {
+                    skippedSections++;
+                }
                 break;
             }
             try {
@@ -56,7 +63,11 @@ final class ForgeDirectGpuGeometryDrawPlanner {
 
                 int remainingRecords = recordLimit - (int) Math.min(Integer.MAX_VALUE, plannedRecords);
                 int recordsForSection = Math.min(metadata.itemCount(), Math.max(0, remainingRecords));
+                if (metadata.itemCount() > recordsForSection) {
+                    skippedRecords += metadata.itemCount() - recordsForSection;
+                }
                 plannedRecords += recordsForSection;
+                plannedVertices += (long) recordsForSection * 6L;
                 plannedSections++;
             } catch (RuntimeException e) {
                 invalidMetadata++;
@@ -65,7 +76,7 @@ final class ForgeDirectGpuGeometryDrawPlanner {
         }
 
         double durationMs = elapsedMs(start);
-        boolean success = plannedSections > 0 && invalidMetadata == 0;
+        boolean success = plannedSections > 0;
         String skippedReason = plannedSections == 0 ? "NO_VALID_METADATA" : "none";
         String error = success ? "none" : lastError;
         return new PlanResult(
@@ -75,6 +86,10 @@ final class ForgeDirectGpuGeometryDrawPlanner {
                 sectionIds.size(),
                 plannedSections,
                 plannedRecords,
+                plannedVertices,
+                skippedSections,
+                skippedRecords,
+                selectionMode,
                 invalidMetadata,
                 durationMs
         );
@@ -88,6 +103,10 @@ final class ForgeDirectGpuGeometryDrawPlanner {
                 candidates,
                 0,
                 0,
+                0,
+                0,
+                0,
+                skippedReason,
                 invalidMetadata,
                 elapsedMs(start)
         );
@@ -104,6 +123,10 @@ final class ForgeDirectGpuGeometryDrawPlanner {
             int uploadedSectionCandidates,
             int plannedSections,
             long plannedRecords,
+            long plannedVertices,
+            int skippedSections,
+            long skippedRecords,
+            String selectionMode,
             int invalidMetadata,
             double durationMs
     ) {

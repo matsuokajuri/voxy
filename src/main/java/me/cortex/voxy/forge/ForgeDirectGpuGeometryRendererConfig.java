@@ -11,7 +11,7 @@ final class ForgeDirectGpuGeometryRendererConfig {
     }
 
     static int maxSections() {
-        return Math.min(128, Math.max(1, ForgeVoxyConfig.DIRECT_GPU_GEOMETRY_RENDERER_MAX_SECTIONS.get()));
+        return Math.min(512, Math.max(1, ForgeVoxyConfig.DIRECT_GPU_GEOMETRY_RENDERER_MAX_SECTIONS.get()));
     }
 
     static int maxRecords() {
@@ -19,11 +19,19 @@ final class ForgeDirectGpuGeometryRendererConfig {
     }
 
     static int maxDrawSections() {
-        return Math.min(8, Math.max(1, ForgeVoxyConfig.DIRECT_GPU_GEOMETRY_RENDERER_MAX_DRAW_SECTIONS.get()));
+        return ForgeVoxyRuntimeOverrides.directGpuGeometryRendererMaxDrawSections();
     }
 
     static int maxDrawRecords() {
-        return Math.min(65536, Math.max(1, ForgeVoxyConfig.DIRECT_GPU_GEOMETRY_RENDERER_MAX_DRAW_RECORDS.get()));
+        return ForgeVoxyRuntimeOverrides.directGpuGeometryRendererMaxDrawRecords();
+    }
+
+    static int maxRecordsPerSection() {
+        return ForgeVoxyRuntimeOverrides.directGpuGeometryRendererMaxRecordsPerSection();
+    }
+
+    static int renderDistanceChunks() {
+        return ForgeVoxyRuntimeOverrides.directGpuGeometryRendererRenderDistanceChunks();
     }
 
     static double debugAlpha() {

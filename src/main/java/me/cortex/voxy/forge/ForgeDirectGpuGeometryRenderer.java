@@ -2,6 +2,7 @@ package me.cortex.voxy.forge;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
+import me.cortex.voxy.common.world.WorldEngine;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.client.event.RenderLevelStageEvent;
@@ -78,6 +79,8 @@ public final class ForgeDirectGpuGeometryRenderer {
         ForgeGpuGeometryHeap heap = this.instance.getGpuGeometryUploadManager().getHeapForDebugReadback();
         boolean hasHeap = heap != null;
         boolean heapCreated = hasHeap && heap.isCreated();
+        long currentHeapGeneration = hasHeap ? heap.generation() : -1L;
+        boolean drawListStale = this.drawList.isStale(currentHeapGeneration);
         ForgeDirectGpuGeometryShader.ShaderStatus shaderStatus = this.shader.createStatusSnapshot();
         return new ForgeDirectGpuGeometryRendererStats(
                 ForgeDirectGpuGeometryRendererConfig.isEnabled(),
@@ -86,6 +89,10 @@ public final class ForgeDirectGpuGeometryRenderer {
                 heapCreated,
                 this.state.plannedSections(),
                 this.state.plannedRecords(),
+                this.state.plannedVertices(),
+                this.state.skippedSections(),
+                this.state.skippedRecords(),
+                this.state.selectionMode(),
                 this.state.uploadedSectionCandidates(),
                 this.state.invalidMetadata(),
                 this.state.lastPlanDurationMs(),
@@ -98,6 +105,8 @@ public final class ForgeDirectGpuGeometryRenderer {
                 ForgeDirectGpuGeometryRendererConfig.maxRecords(),
                 ForgeDirectGpuGeometryRendererConfig.maxDrawSections(),
                 ForgeDirectGpuGeometryRendererConfig.maxDrawRecords(),
+                ForgeDirectGpuGeometryRendererConfig.maxRecordsPerSection(),
+                ForgeDirectGpuGeometryRendererConfig.renderDistanceChunks(),
                 ForgeDirectGpuGeometryRendererConfig.debugAlpha(),
                 ForgeDirectGpuGeometryRendererConfig.ignoreDepth(),
                 ForgeDirectGpuGeometryRendererConfig.doubleSided(),
@@ -109,7 +118,10 @@ public final class ForgeDirectGpuGeometryRenderer {
                 shaderStatus.glVersion(),
                 shaderStatus.glslVersion(),
                 shaderStatus.usesSsbo(),
-                this.drawList.isValid() && this.state.drawListValid(),
+                this.drawList.isValid() && this.state.drawListValid() && !drawListStale,
+                drawListStale,
+                this.drawList.heapGeneration(),
+                currentHeapGeneration,
                 this.state.drawItems(),
                 this.state.drawListRecords(),
                 this.state.drawListVertices(),
@@ -121,6 +133,7 @@ public final class ForgeDirectGpuGeometryRenderer {
                 this.state.drawCallsIssued(),
                 this.state.verticesDrawn(),
                 this.state.lastFrameDrawCalls(),
+                this.state.lastFrameDrawItems(),
                 this.state.lastFrameVertices(),
                 this.state.lastDrawDurationMs(),
                 this.state.lastDrawError(),
@@ -153,14 +166,38 @@ public final class ForgeDirectGpuGeometryRenderer {
 
         int maxSections = ForgeDirectGpuGeometryRendererConfig.maxDrawSections();
         int remainingRecords = ForgeDirectGpuGeometryRendererConfig.maxDrawRecords();
+        int maxRecordsPerSection = ForgeDirectGpuGeometryRendererConfig.maxRecordsPerSection();
+        int renderDistanceChunks = ForgeDirectGpuGeometryRendererConfig.renderDistanceChunks();
+        int inspectLimit = ForgeDirectGpuGeometryRendererConfig.maxSections();
         int invalidMetadata = 0;
+        int skippedSections = 0;
+        long skippedRecords = 0;
         String lastError = "none";
-        ArrayList<ForgeDirectGpuGeometryDrawItem> items = new ArrayList<>();
+        ArrayList<DrawCandidate> candidates = new ArrayList<>();
 
+        Minecraft minecraft = Minecraft.getInstance();
+        boolean hasPlayerPosition = minecraft.level != null && minecraft.player != null;
+        int playerChunkX = 0;
+        int playerChunkZ = 0;
+        String selectionMode = "FALLBACK_FIRST_N";
+        if (hasPlayerPosition) {
+            var playerChunk = minecraft.player.chunkPosition();
+            playerChunkX = playerChunk.x;
+            playerChunkZ = playerChunk.z;
+            selectionMode = "NEAREST_PLAYER";
+        }
+
+        int inspected = 0;
         for (Integer sectionId : sectionIds) {
-            if (sectionId == null || sectionId < 0 || items.size() >= maxSections || remainingRecords <= 0) {
+            if (sectionId == null || sectionId < 0) {
+                skippedSections++;
+                continue;
+            }
+            if (inspected >= inspectLimit) {
+                skippedSections += Math.max(0, sectionIds.size() - inspected);
                 break;
             }
+            inspected++;
             try {
                 int[] words = heap.readbackMetadata(sectionId);
                 ForgeGpuGeometryDecodedMetadata metadata = ForgeGpuGeometryDecodedMetadata.decode(words);
@@ -170,20 +207,55 @@ public final class ForgeDirectGpuGeometryRenderer {
                     lastError = "sectionId=" + sectionId + ' ' + validation;
                     continue;
                 }
-                int recordCount = Math.min(metadata.itemCount(), remainingRecords);
-                if (recordCount <= 0) {
+                int distanceChunks = hasPlayerPosition ? distanceChunks(metadata.position(), playerChunkX, playerChunkZ) : 0;
+                if (hasPlayerPosition && distanceChunks > renderDistanceChunks) {
+                    skippedSections++;
                     continue;
                 }
-                items.add(ForgeDirectGpuGeometryDrawItem.create(sectionId, metadata, 0, recordCount));
-                remainingRecords -= recordCount;
+                candidates.add(new DrawCandidate(sectionId, metadata, distanceChunks));
             } catch (RuntimeException e) {
                 invalidMetadata++;
                 lastError = "sectionId=" + sectionId + ' ' + e.getClass().getSimpleName() + ": " + e.getMessage();
             }
         }
 
-        this.drawList = ForgeDirectGpuGeometryDrawList.of(items);
-        boolean success = this.drawList.isValid() && invalidMetadata == 0;
+        if (hasPlayerPosition) {
+            candidates.sort((left, right) -> {
+                int distanceCompare = Integer.compare(left.distanceChunks(), right.distanceChunks());
+                if (distanceCompare != 0) {
+                    return distanceCompare;
+                }
+                return Integer.compare(left.sectionId(), right.sectionId());
+            });
+        }
+
+        ArrayList<ForgeDirectGpuGeometryDrawItem> items = new ArrayList<>();
+        for (int i = 0; i < candidates.size(); i++) {
+            if (items.size() >= maxSections) {
+                skippedSections += candidates.size() - i;
+                break;
+            }
+            if (remainingRecords <= 0) {
+                skippedSections += candidates.size() - i;
+                break;
+            }
+            DrawCandidate candidate = candidates.get(i);
+            int itemCount = candidate.metadata().itemCount();
+            int recordCount = Math.min(itemCount, Math.min(maxRecordsPerSection, remainingRecords));
+            if (recordCount <= 0) {
+                skippedSections++;
+                continue;
+            }
+            if (itemCount > recordCount) {
+                skippedRecords += itemCount - recordCount;
+            }
+            items.add(ForgeDirectGpuGeometryDrawItem.create(candidate.sectionId(), candidate.metadata(), 0, recordCount, candidate.distanceChunks()));
+            remainingRecords -= recordCount;
+        }
+
+        long heapGeneration = heap.generation();
+        this.drawList = ForgeDirectGpuGeometryDrawList.of(items, heapGeneration, skippedSections, skippedRecords, selectionMode);
+        boolean success = this.drawList.isValid();
         String skippedReason = this.drawList.isValid() ? "none" : "NO_VALID_SECTIONS";
         return new DrawListBuildResult(
                 success,
@@ -193,6 +265,10 @@ public final class ForgeDirectGpuGeometryRenderer {
                 this.drawList.itemCount(),
                 this.drawList.recordCount(),
                 this.drawList.vertexCount(),
+                skippedSections,
+                skippedRecords,
+                selectionMode,
+                heapGeneration,
                 invalidMetadata,
                 elapsedMs(start)
         );
@@ -229,6 +305,10 @@ public final class ForgeDirectGpuGeometryRenderer {
             this.state.recordDrawSkip("heap-missing");
             return;
         }
+        if (this.drawList.isStale(heap.generation())) {
+            this.state.recordDrawListStale(heap.generation());
+            return;
+        }
         if (!RenderSystem.isOnRenderThread()) {
             this.state.recordDrawSkip("not-render-thread");
             return;
@@ -236,6 +316,7 @@ public final class ForgeDirectGpuGeometryRenderer {
 
         long start = System.nanoTime();
         int drawCalls = 0;
+        int drawItems = 0;
         long vertices = 0;
         String lastGlError = "none";
         try {
@@ -269,6 +350,7 @@ public final class ForgeDirectGpuGeometryRenderer {
                 float alpha = (float) ForgeDirectGpuGeometryRendererConfig.debugAlpha();
                 for (ForgeDirectGpuGeometryDrawItem item : this.drawList.items()) {
                     int glError = this.shader.drawItem(geometryBufferId, modelView, projection, item, alpha);
+                    drawItems++;
                     drawCalls++;
                     vertices += item.vertexCount();
                     if (glError != 0) {
@@ -291,7 +373,7 @@ public final class ForgeDirectGpuGeometryRenderer {
             RenderSystem.disableBlend();
         }
 
-        this.state.recordFrameDraws(drawCalls, vertices, elapsedMs(start), lastGlError);
+        this.state.recordFrameDraws(drawItems, drawCalls, vertices, elapsedMs(start), lastGlError);
     }
 
     private static double elapsedMs(long start) {
@@ -306,11 +388,26 @@ public final class ForgeDirectGpuGeometryRenderer {
             int drawItems,
             long drawRecords,
             long drawVertices,
+            int skippedSections,
+            long skippedRecords,
+            String selectionMode,
+            long heapGeneration,
             int invalidMetadata,
             double durationMs
     ) {
         private static DrawListBuildResult failure(long start, String skippedReason, String error, int candidates, int invalidMetadata) {
-            return new DrawListBuildResult(false, skippedReason, error, candidates, 0, 0, 0, invalidMetadata, elapsedMs(start));
+            return new DrawListBuildResult(false, skippedReason, error, candidates, 0, 0, 0, 0, 0, skippedReason, -1L, invalidMetadata, elapsedMs(start));
         }
+    }
+
+    private static int distanceChunks(long position, int playerChunkX, int playerChunkZ) {
+        int level = Math.max(0, WorldEngine.getLevel(position));
+        int scale = 1 << Math.min(12, level);
+        int sectionChunkX = WorldEngine.getX(position) * 2 * scale;
+        int sectionChunkZ = WorldEngine.getZ(position) * 2 * scale;
+        return Math.max(Math.abs(sectionChunkX - playerChunkX), Math.abs(sectionChunkZ - playerChunkZ));
+    }
+
+    private record DrawCandidate(int sectionId, ForgeGpuGeometryDecodedMetadata metadata, int distanceChunks) {
     }
 }

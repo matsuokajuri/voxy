@@ -18,6 +18,7 @@ public final class ForgeGpuGeometryHeap {
     private int metadataBufferId;
     private long geometryCapacityBytes;
     private long metadataCapacityBytes;
+    private long generation;
 
     public boolean isCreated() {
         return this.geometryBufferId != 0 && this.metadataBufferId != 0;
@@ -33,6 +34,10 @@ public final class ForgeGpuGeometryHeap {
 
     int geometryBufferIdForDirectRenderer() {
         return this.geometryBufferId;
+    }
+
+    long generation() {
+        return this.generation;
     }
 
     public void ensureCreated(long geometryCapacityBytes, long metadataCapacityBytes) {
@@ -58,6 +63,7 @@ public final class ForgeGpuGeometryHeap {
             this.metadataBufferId = metadata;
             this.geometryCapacityBytes = geometryCapacityBytes;
             this.metadataCapacityBytes = metadataCapacityBytes;
+            this.generation++;
         } catch (RuntimeException e) {
             if (geometry != 0) {
                 glDeleteBuffers(geometry);
@@ -187,6 +193,9 @@ public final class ForgeGpuGeometryHeap {
         }
         this.geometryCapacityBytes = 0;
         this.metadataCapacityBytes = 0;
+        if (released > 0) {
+            this.generation++;
+        }
         return released;
     }
 

@@ -1,11 +1,15 @@
 package me.cortex.voxy.forge;
 
 final class ForgeDirectGpuGeometryRenderState {
-    static final String STAGE = "G5_1_MINIMAL_DIRECT_DRAW";
+    static final String STAGE = "G5_2_MULTI_SECTION_DIRECT_DRAW";
 
     private boolean initialized;
     private int plannedSections;
     private long plannedRecords;
+    private long plannedVertices;
+    private int skippedSections;
+    private long skippedRecords;
+    private String selectionMode = "none";
     private int uploadedSectionCandidates;
     private int invalidMetadata;
     private double lastPlanDurationMs;
@@ -18,6 +22,9 @@ final class ForgeDirectGpuGeometryRenderState {
     private long drawListRecords;
     private long drawListVertices;
     private boolean drawListValid;
+    private boolean drawListStale;
+    private long drawListHeapGeneration = -1L;
+    private long currentHeapGeneration = -1L;
     private long drawListBuildRuns;
     private long drawListBuildFailures;
     private double lastDrawListBuildDurationMs;
@@ -26,6 +33,7 @@ final class ForgeDirectGpuGeometryRenderState {
     private long drawCallsIssued;
     private long verticesDrawn;
     private int lastFrameDrawCalls;
+    private int lastFrameDrawItems;
     private long lastFrameVertices;
     private double lastDrawDurationMs;
     private String lastDrawError = "none";
@@ -40,6 +48,10 @@ final class ForgeDirectGpuGeometryRenderState {
         this.planRuns++;
         this.plannedSections = result.plannedSections();
         this.plannedRecords = result.plannedRecords();
+        this.plannedVertices = result.plannedVertices();
+        this.skippedSections = result.skippedSections();
+        this.skippedRecords = result.skippedRecords();
+        this.selectionMode = result.selectionMode();
         this.uploadedSectionCandidates = result.uploadedSectionCandidates();
         this.invalidMetadata = result.invalidMetadata();
         this.lastPlanDurationMs = result.durationMs();
@@ -57,10 +69,17 @@ final class ForgeDirectGpuGeometryRenderState {
         this.invalidMetadata = result.invalidMetadata();
         this.plannedSections = result.drawItems();
         this.plannedRecords = result.drawRecords();
+        this.plannedVertices = result.drawVertices();
+        this.skippedSections = result.skippedSections();
+        this.skippedRecords = result.skippedRecords();
+        this.selectionMode = result.selectionMode();
         this.drawItems = result.drawItems();
         this.drawListRecords = result.drawRecords();
         this.drawListVertices = result.drawVertices();
         this.drawListValid = result.success();
+        this.drawListStale = false;
+        this.drawListHeapGeneration = result.heapGeneration();
+        this.currentHeapGeneration = result.heapGeneration();
         this.lastDrawListBuildDurationMs = result.durationMs();
         this.lastDrawListError = result.success() ? "none" : result.error();
         this.lastDrawListSkippedReason = result.skippedReason();
@@ -69,7 +88,8 @@ final class ForgeDirectGpuGeometryRenderState {
         }
     }
 
-    void recordFrameDraws(int drawCalls, long vertices, double durationMs, String glError) {
+    void recordFrameDraws(int drawItems, int drawCalls, long vertices, double durationMs, String glError) {
+        this.lastFrameDrawItems = Math.max(0, drawItems);
         this.lastFrameDrawCalls = Math.max(0, drawCalls);
         this.lastFrameVertices = Math.max(0, vertices);
         this.lastDrawDurationMs = Math.max(0.0D, durationMs);
@@ -80,6 +100,7 @@ final class ForgeDirectGpuGeometryRenderState {
     }
 
     void recordDrawSkip(String reason) {
+        this.lastFrameDrawItems = 0;
         this.lastFrameDrawCalls = 0;
         this.lastFrameVertices = 0;
         this.lastDrawDurationMs = 0.0D;
@@ -88,16 +109,27 @@ final class ForgeDirectGpuGeometryRenderState {
     }
 
     void recordDrawException(String error) {
+        this.lastFrameDrawItems = 0;
         this.lastFrameDrawCalls = 0;
         this.lastFrameVertices = 0;
         this.lastDrawDurationMs = 0.0D;
         this.lastDrawError = error == null ? "unknown" : error;
     }
 
+    void recordDrawListStale(long currentHeapGeneration) {
+        this.drawListStale = true;
+        this.currentHeapGeneration = currentHeapGeneration;
+        this.recordDrawSkip("draw-list-stale");
+    }
+
     void clear() {
         this.initialized = false;
         this.plannedSections = 0;
         this.plannedRecords = 0;
+        this.plannedVertices = 0;
+        this.skippedSections = 0;
+        this.skippedRecords = 0;
+        this.selectionMode = "none";
         this.uploadedSectionCandidates = 0;
         this.invalidMetadata = 0;
         this.lastPlanDurationMs = 0.0D;
@@ -109,6 +141,9 @@ final class ForgeDirectGpuGeometryRenderState {
         this.drawListRecords = 0;
         this.drawListVertices = 0;
         this.drawListValid = false;
+        this.drawListStale = false;
+        this.drawListHeapGeneration = -1L;
+        this.currentHeapGeneration = -1L;
         this.drawListBuildRuns = 0;
         this.drawListBuildFailures = 0;
         this.lastDrawListBuildDurationMs = 0.0D;
@@ -116,6 +151,7 @@ final class ForgeDirectGpuGeometryRenderState {
         this.lastDrawListSkippedReason = "none";
         this.drawCallsIssued = 0;
         this.verticesDrawn = 0;
+        this.lastFrameDrawItems = 0;
         this.lastFrameDrawCalls = 0;
         this.lastFrameVertices = 0;
         this.lastDrawDurationMs = 0.0D;
@@ -134,6 +170,22 @@ final class ForgeDirectGpuGeometryRenderState {
 
     long plannedRecords() {
         return this.plannedRecords;
+    }
+
+    long plannedVertices() {
+        return this.plannedVertices;
+    }
+
+    int skippedSections() {
+        return this.skippedSections;
+    }
+
+    long skippedRecords() {
+        return this.skippedRecords;
+    }
+
+    String selectionMode() {
+        return this.selectionMode;
     }
 
     int uploadedSectionCandidates() {
@@ -184,6 +236,18 @@ final class ForgeDirectGpuGeometryRenderState {
         return this.drawListValid;
     }
 
+    boolean drawListStale() {
+        return this.drawListStale;
+    }
+
+    long drawListHeapGeneration() {
+        return this.drawListHeapGeneration;
+    }
+
+    long currentHeapGeneration() {
+        return this.currentHeapGeneration;
+    }
+
     long drawListBuildRuns() {
         return this.drawListBuildRuns;
     }
@@ -214,6 +278,10 @@ final class ForgeDirectGpuGeometryRenderState {
 
     int lastFrameDrawCalls() {
         return this.lastFrameDrawCalls;
+    }
+
+    int lastFrameDrawItems() {
+        return this.lastFrameDrawItems;
     }
 
     long lastFrameVertices() {

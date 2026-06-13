@@ -19,6 +19,10 @@ public final class ForgeVoxyRuntimeOverrides {
     private static Boolean enableGeometryGpuReadbackMeshAutoRefresh;
     private static Boolean enableDirectGpuGeometryRenderer;
     private static Boolean directGpuGeometryRendererActualDraw;
+    private static Integer directGpuGeometryRendererMaxDrawSections;
+    private static Integer directGpuGeometryRendererMaxDrawRecords;
+    private static Integer directGpuGeometryRendererMaxRecordsPerSection;
+    private static Integer directGpuGeometryRendererRenderDistanceChunks;
     private static Double geometryGpuVisualizationAlpha;
     private static Boolean geometryGpuVisualizationIgnoreDepth;
     private static Boolean geometryGpuVisualizationDoubleSided;
@@ -53,6 +57,10 @@ public final class ForgeVoxyRuntimeOverrides {
         enableGeometryGpuReadbackMeshAutoRefresh = false;
         enableDirectGpuGeometryRenderer = false;
         directGpuGeometryRendererActualDraw = false;
+        directGpuGeometryRendererMaxDrawSections = null;
+        directGpuGeometryRendererMaxDrawRecords = null;
+        directGpuGeometryRendererMaxRecordsPerSection = null;
+        directGpuGeometryRendererRenderDistanceChunks = null;
         enableSimpleGpuMeshRenderer = false;
         enableDebugMeshRenderer = false;
     }
@@ -193,6 +201,10 @@ public final class ForgeVoxyRuntimeOverrides {
         enableGeometryGpuReadbackMeshAutoRefresh = false;
         enableDirectGpuGeometryRenderer = true;
         directGpuGeometryRendererActualDraw = false;
+        directGpuGeometryRendererMaxDrawSections = 8;
+        directGpuGeometryRendererMaxDrawRecords = 16384;
+        directGpuGeometryRendererMaxRecordsPerSection = 4096;
+        directGpuGeometryRendererRenderDistanceChunks = 8;
         enableSimpleGpuMeshRenderer = false;
         enableDebugMeshRenderer = false;
     }
@@ -259,6 +271,10 @@ public final class ForgeVoxyRuntimeOverrides {
         enableGeometryGpuReadbackMeshAutoRefresh = null;
         enableDirectGpuGeometryRenderer = null;
         directGpuGeometryRendererActualDraw = null;
+        directGpuGeometryRendererMaxDrawSections = null;
+        directGpuGeometryRendererMaxDrawRecords = null;
+        directGpuGeometryRendererMaxRecordsPerSection = null;
+        directGpuGeometryRendererRenderDistanceChunks = null;
         geometryGpuVisualizationAlpha = null;
         geometryGpuVisualizationIgnoreDepth = null;
         geometryGpuVisualizationDoubleSided = null;
@@ -387,6 +403,22 @@ public final class ForgeVoxyRuntimeOverrides {
         return value(directGpuGeometryRendererActualDraw, ForgeVoxyConfig.DIRECT_GPU_GEOMETRY_RENDERER_ACTUAL_DRAW.get());
     }
 
+    public static synchronized int directGpuGeometryRendererMaxDrawSections() {
+        return Math.min(64, Math.max(1, value(directGpuGeometryRendererMaxDrawSections, ForgeVoxyConfig.DIRECT_GPU_GEOMETRY_RENDERER_MAX_DRAW_SECTIONS.get())));
+    }
+
+    public static synchronized int directGpuGeometryRendererMaxDrawRecords() {
+        return Math.min(65536, Math.max(1, value(directGpuGeometryRendererMaxDrawRecords, ForgeVoxyConfig.DIRECT_GPU_GEOMETRY_RENDERER_MAX_DRAW_RECORDS.get())));
+    }
+
+    public static synchronized int directGpuGeometryRendererMaxRecordsPerSection() {
+        return Math.min(16384, Math.max(1, value(directGpuGeometryRendererMaxRecordsPerSection, ForgeVoxyConfig.DIRECT_GPU_GEOMETRY_RENDERER_MAX_RECORDS_PER_SECTION.get())));
+    }
+
+    public static synchronized int directGpuGeometryRendererRenderDistanceChunks() {
+        return Math.min(64, Math.max(1, value(directGpuGeometryRendererRenderDistanceChunks, ForgeVoxyConfig.DIRECT_GPU_GEOMETRY_RENDERER_RENDER_DISTANCE_CHUNKS.get())));
+    }
+
     public static synchronized double geometryGpuVisualizationAlpha() {
         return Math.max(0.05D, Math.min(1.0D, value(geometryGpuVisualizationAlpha, ForgeVoxyConfig.GEOMETRY_GPU_VISUALIZATION_ALPHA.get())));
     }
@@ -471,6 +503,10 @@ public final class ForgeVoxyRuntimeOverrides {
                 || enableGeometryGpuReadbackMeshAutoRefresh != null
                 || enableDirectGpuGeometryRenderer != null
                 || directGpuGeometryRendererActualDraw != null
+                || directGpuGeometryRendererMaxDrawSections != null
+                || directGpuGeometryRendererMaxDrawRecords != null
+                || directGpuGeometryRendererMaxRecordsPerSection != null
+                || directGpuGeometryRendererRenderDistanceChunks != null
                 || geometryGpuVisualizationAlpha != null
                 || geometryGpuVisualizationIgnoreDepth != null
                 || geometryGpuVisualizationDoubleSided != null

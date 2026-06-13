@@ -49,6 +49,8 @@ public final class ForgeVoxyConfig {
     public static final ForgeConfigSpec.IntValue DIRECT_GPU_GEOMETRY_RENDERER_MAX_RECORDS;
     public static final ForgeConfigSpec.IntValue DIRECT_GPU_GEOMETRY_RENDERER_MAX_DRAW_SECTIONS;
     public static final ForgeConfigSpec.IntValue DIRECT_GPU_GEOMETRY_RENDERER_MAX_DRAW_RECORDS;
+    public static final ForgeConfigSpec.IntValue DIRECT_GPU_GEOMETRY_RENDERER_MAX_RECORDS_PER_SECTION;
+    public static final ForgeConfigSpec.IntValue DIRECT_GPU_GEOMETRY_RENDERER_RENDER_DISTANCE_CHUNKS;
     public static final ForgeConfigSpec.DoubleValue DIRECT_GPU_GEOMETRY_RENDERER_DEBUG_ALPHA;
     public static final ForgeConfigSpec.BooleanValue DIRECT_GPU_GEOMETRY_RENDERER_IGNORE_DEPTH;
     public static final ForgeConfigSpec.BooleanValue DIRECT_GPU_GEOMETRY_RENDERER_DOUBLE_SIDED;
@@ -201,31 +203,37 @@ public final class ForgeVoxyConfig {
                 .comment("Requests a delayed GL_HEAP_READBACK refresh when the runtime gl_heap_readback preset is applied.")
                 .define("geometryGpuReadbackMeshRefreshOnPreset", true);
         ENABLE_DIRECT_GPU_GEOMETRY_RENDERER = builder
-                .comment("G5.0 skeleton-only direct GL geometry renderer flag. It plans against the upload-only GL heap but does not issue draw calls.")
+                .comment("G5.x direct GL geometry debug renderer flag. Disabled by default; actual drawing is controlled by a separate runtime-only command.")
                 .define("enableDirectGpuGeometryRenderer", false);
         DIRECT_GPU_GEOMETRY_RENDERER_MAX_SECTIONS = builder
-                .comment("Maximum uploaded section metadata entries inspected by one direct_gl_renderer_plan_sample command.")
-                .defineInRange("directGpuGeometryRendererMaxSections", 16, 1, 128);
+                .comment("Maximum uploaded section metadata entries inspected by one direct GL plan/build command.")
+                .defineInRange("directGpuGeometryRendererMaxSections", 128, 1, 512);
         DIRECT_GPU_GEOMETRY_RENDERER_MAX_RECORDS = builder
-                .comment("Maximum packed geometry records counted by one direct_gl_renderer_plan_sample command. No geometry draw is performed.")
+                .comment("Maximum packed geometry records counted by one direct_gl_renderer_plan_sample command.")
                 .defineInRange("directGpuGeometryRendererMaxRecords", 16384, 1, 131072);
         DIRECT_GPU_GEOMETRY_RENDERER_MAX_DRAW_SECTIONS = builder
-                .comment("Maximum uploaded sections drawn by the G5.1 minimal direct GL debug renderer. Keep this tiny while the path is experimental.")
-                .defineInRange("directGpuGeometryRendererMaxDrawSections", 1, 1, 8);
+                .comment("Maximum uploaded sections drawn by the G5.2 direct GL debug renderer. Keep this conservative while the path is experimental.")
+                .defineInRange("directGpuGeometryRendererMaxDrawSections", 8, 1, 64);
         DIRECT_GPU_GEOMETRY_RENDERER_MAX_DRAW_RECORDS = builder
-                .comment("Maximum packed quad records drawn by the G5.1 minimal direct GL debug renderer.")
-                .defineInRange("directGpuGeometryRendererMaxDrawRecords", 2048, 1, 65536);
+                .comment("Maximum packed quad records drawn by one G5.2 direct GL debug draw list.")
+                .defineInRange("directGpuGeometryRendererMaxDrawRecords", 16384, 1, 65536);
+        DIRECT_GPU_GEOMETRY_RENDERER_MAX_RECORDS_PER_SECTION = builder
+                .comment("Maximum packed quad records drawn from a single uploaded section by the G5.2 direct GL debug renderer.")
+                .defineInRange("directGpuGeometryRendererMaxRecordsPerSection", 4096, 1, 16384);
+        DIRECT_GPU_GEOMETRY_RENDERER_RENDER_DISTANCE_CHUNKS = builder
+                .comment("Maximum chunk distance used when selecting sections for G5.2 direct GL debug draw lists.")
+                .defineInRange("directGpuGeometryRendererRenderDistanceChunks", 8, 1, 64);
         DIRECT_GPU_GEOMETRY_RENDERER_DEBUG_ALPHA = builder
-                .comment("Alpha used by the G5.1 minimal direct GL debug renderer.")
+                .comment("Alpha used by the G5.x direct GL debug renderer.")
                 .defineInRange("directGpuGeometryRendererDebugAlpha", 0.75D, 0.05D, 1.0D);
         DIRECT_GPU_GEOMETRY_RENDERER_IGNORE_DEPTH = builder
-                .comment("Draws G5.1 minimal direct GL debug quads through terrain to make the first direct draw easier to see.")
+                .comment("Draws G5.x direct GL debug quads through terrain to make the debug draw easier to see.")
                 .define("directGpuGeometryRendererIgnoreDepth", true);
         DIRECT_GPU_GEOMETRY_RENDERER_DOUBLE_SIDED = builder
-                .comment("Disables culling for the G5.1 minimal direct GL debug renderer while winding is still being validated.")
+                .comment("Disables culling for the G5.x direct GL debug renderer while winding is still being validated.")
                 .define("directGpuGeometryRendererDoubleSided", true);
         DIRECT_GPU_GEOMETRY_RENDERER_ACTUAL_DRAW = builder
-                .comment("Actually issues G5.1 minimal direct GL debug draw calls. Disabled by default; use the runtime command for testing.")
+                .comment("Actually issues G5.x direct GL debug draw calls. Disabled by default; use the runtime command for testing.")
                 .define("directGpuGeometryRendererActualDraw", false);
         DIRECT_GPU_GEOMETRY_RENDERER_DEBUG_LOG = builder
                 .comment("Logs G5.x direct GL geometry renderer debug summaries.")
