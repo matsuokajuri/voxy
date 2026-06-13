@@ -45,6 +45,12 @@ import static org.lwjgl.opengl.GL30C.glGenVertexArrays;
 import static org.lwjgl.opengl.GL43C.GL_SHADER_STORAGE_BUFFER;
 
 final class ForgeDirectGpuGeometryShader {
+    static final String ERROR_STAGE_NONE = "none";
+    static final String ERROR_STAGE_BIND_SHADER = "BIND_SHADER";
+    static final String ERROR_STAGE_BIND_GEOMETRY_SSBO = "BIND_GEOMETRY_SSBO";
+    static final String ERROR_STAGE_SET_UNIFORMS = "SET_UNIFORMS";
+    static final String ERROR_STAGE_DRAW_ARRAYS = "DRAW_ARRAYS";
+
     private static final String VERTEX_SHADER = """
             #version 430 core
 
@@ -209,12 +215,26 @@ final class ForgeDirectGpuGeometryShader {
     }
 
     int drawItem(int geometryBufferId, Matrix4f modelView, Matrix4f projection, ForgeDirectGpuGeometryDrawItem item, float alpha) {
+        return this.drawItemWithDiagnostics(geometryBufferId, modelView, projection, item, alpha).glError();
+    }
+
+    DrawCallResult drawItemWithDiagnostics(int geometryBufferId, Matrix4f modelView, Matrix4f projection, ForgeDirectGpuGeometryDrawItem item, float alpha) {
         if (!this.ensureReady()) {
-            return 0;
+            return new DrawCallResult(GL_NO_ERROR, ERROR_STAGE_NONE);
         }
         glUseProgram(this.programId);
         glBindVertexArray(this.vaoId);
+        int glError = glGetError();
+        if (glError != GL_NO_ERROR) {
+            return new DrawCallResult(glError, ERROR_STAGE_BIND_SHADER);
+        }
+
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, geometryBufferId);
+        glError = glGetError();
+        if (glError != GL_NO_ERROR) {
+            return new DrawCallResult(glError, ERROR_STAGE_BIND_GEOMETRY_SSBO);
+        }
+
         try (MemoryStack stack = MemoryStack.stackPush()) {
             FloatBuffer matrixBuffer = stack.mallocFloat(16);
             modelView.get(matrixBuffer);
@@ -228,8 +248,17 @@ final class ForgeDirectGpuGeometryShader {
         glUniform1f(this.sectionScaleLocation, item.scale());
         glUniform1f(this.alphaLocation, alpha);
         glUniform1i(this.colorSeedLocation, item.sectionId());
+        glError = glGetError();
+        if (glError != GL_NO_ERROR) {
+            return new DrawCallResult(glError, ERROR_STAGE_SET_UNIFORMS);
+        }
+
         glDrawArrays(GL_TRIANGLES, 0, item.vertexCount());
-        return glGetError();
+        glError = glGetError();
+        if (glError != GL_NO_ERROR) {
+            return new DrawCallResult(glError, ERROR_STAGE_DRAW_ARRAYS);
+        }
+        return new DrawCallResult(GL_NO_ERROR, ERROR_STAGE_NONE);
     }
 
     void unbind() {
@@ -334,6 +363,16 @@ final class ForgeDirectGpuGeometryShader {
     ) {
         boolean ok() {
             return this.shaderSupported && this.shaderCompiled && this.programCreated;
+        }
+    }
+
+    record DrawCallResult(int glError, String stage) {
+        boolean ok() {
+            return this.glError == GL_NO_ERROR;
+        }
+
+        String formattedError() {
+            return formatGlError(this.glError);
         }
     }
 

@@ -57,6 +57,8 @@ public final class ForgeVoxyConfig {
     public static final ForgeConfigSpec.BooleanValue DIRECT_GPU_GEOMETRY_RENDERER_DOUBLE_SIDED;
     public static final ForgeConfigSpec.BooleanValue DIRECT_GPU_GEOMETRY_RENDERER_ACTUAL_DRAW;
     public static final ForgeConfigSpec.BooleanValue DIRECT_GPU_GEOMETRY_RENDERER_DEBUG_LOG;
+    public static final ForgeConfigSpec.DoubleValue DIRECT_GPU_GEOMETRY_RENDERER_FRAME_BUDGET_MS;
+    public static final ForgeConfigSpec.DoubleValue DIRECT_GPU_GEOMETRY_RENDERER_PLAN_BUDGET_MS;
     public static final ForgeConfigSpec.BooleanValue ENABLE_DIRECT_GPU_GEOMETRY_AUTO_PLAN;
     public static final ForgeConfigSpec.IntValue DIRECT_GPU_GEOMETRY_AUTO_PLAN_COOLDOWN_TICKS;
     public static final ForgeConfigSpec.IntValue DIRECT_GPU_GEOMETRY_AUTO_PLAN_MOVE_THRESHOLD_BLOCKS;
@@ -251,6 +253,12 @@ public final class ForgeVoxyConfig {
         DIRECT_GPU_GEOMETRY_RENDERER_DEBUG_LOG = builder
                 .comment("Logs G5.x direct GL geometry renderer debug summaries.")
                 .define("directGpuGeometryRendererDebugLog", false);
+        DIRECT_GPU_GEOMETRY_RENDERER_FRAME_BUDGET_MS = builder
+                .comment("Soft per-frame timing budget in milliseconds for the G5.x direct GL debug renderer.")
+                .defineInRange("directGpuGeometryRendererFrameBudgetMs", 4.0D, 0.1D, 100.0D);
+        DIRECT_GPU_GEOMETRY_RENDERER_PLAN_BUDGET_MS = builder
+                .comment("Soft draw-list planning timing budget in milliseconds for the G5.x direct GL debug renderer.")
+                .defineInRange("directGpuGeometryRendererPlanBudgetMs", 8.0D, 0.1D, 250.0D);
         ENABLE_DIRECT_GPU_GEOMETRY_AUTO_PLAN = builder
                 .comment("Automatically refreshes the direct GL debug renderer draw list when the camera moves enough. Disabled by default.")
                 .define("enableDirectGpuGeometryAutoPlan", false);

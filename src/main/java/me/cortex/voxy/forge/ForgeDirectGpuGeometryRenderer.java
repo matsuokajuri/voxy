@@ -14,6 +14,9 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+import static org.lwjgl.opengl.GL11C.GL_NO_ERROR;
+import static org.lwjgl.opengl.GL11C.glGetError;
+
 public final class ForgeDirectGpuGeometryRenderer {
     static final String REASON_MANUAL_COMMAND = "MANUAL_COMMAND";
     static final String REASON_PRESET = "PRESET";
@@ -39,6 +42,15 @@ public final class ForgeDirectGpuGeometryRenderer {
     private double lastAutoPlanY = Double.NaN;
     private double lastAutoPlanZ = Double.NaN;
     private long lastAutoPlanHeapGeneration = -1L;
+    private long stressRuns;
+    private long stressFailures;
+    private String lastStressError = "none";
+    private double lastStressDurationMs;
+    private int lastStressPlannedSections;
+    private long lastStressPlannedRecords;
+    private boolean lastStressDrawListValid;
+    private boolean lastStressShaderSupported;
+    private boolean lastStressSourceRegressionOk;
 
     ForgeDirectGpuGeometryRenderer(ForgeVoxyInstance instance) {
         this.instance = instance;
@@ -124,12 +136,40 @@ public final class ForgeDirectGpuGeometryRenderer {
         return this.shader.createStatusSnapshot();
     }
 
+    public void recordStressResult(StressResult result) {
+        this.stressRuns++;
+        this.lastStressDurationMs = result.durationMs();
+        this.lastStressPlannedSections = result.plannedSections();
+        this.lastStressPlannedRecords = result.plannedRecords();
+        this.lastStressDrawListValid = result.drawListValid();
+        this.lastStressShaderSupported = result.shaderSupported();
+        this.lastStressSourceRegressionOk = result.sourceRegressionOk();
+        this.lastStressError = result.success() ? "none" : result.error();
+        if (!result.success()) {
+            this.stressFailures++;
+        }
+    }
+
+    public void clearStressStats() {
+        this.stressRuns = 0;
+        this.stressFailures = 0;
+        this.lastStressError = "none";
+        this.lastStressDurationMs = 0.0D;
+        this.lastStressPlannedSections = 0;
+        this.lastStressPlannedRecords = 0;
+        this.lastStressDrawListValid = false;
+        this.lastStressShaderSupported = false;
+        this.lastStressSourceRegressionOk = false;
+    }
+
     public ForgeDirectGpuGeometryRendererStats createStatusSnapshot() {
         ForgeGpuGeometryHeap heap = this.instance.getGpuGeometryUploadManager().getHeapForDebugReadback();
         boolean hasHeap = heap != null;
         boolean heapCreated = hasHeap && heap.isCreated();
         long currentHeapGeneration = hasHeap ? heap.generation() : -1L;
         boolean drawListStale = this.drawList.isStale(currentHeapGeneration);
+        String currentDimension = currentDimensionId(Minecraft.getInstance());
+        boolean drawListDimensionMismatch = this.drawList.isDimensionMismatch(currentDimension);
         ForgeDirectGpuGeometryShader.ShaderStatus shaderStatus = this.shader.createStatusSnapshot();
         return new ForgeDirectGpuGeometryRendererStats(
                 ForgeDirectGpuGeometryRendererConfig.isEnabled(),
@@ -188,16 +228,19 @@ public final class ForgeDirectGpuGeometryRenderer {
                 shaderStatus.glVersion(),
                 shaderStatus.glslVersion(),
                 shaderStatus.usesSsbo(),
-                this.drawList.isValid() && this.state.drawListValid() && !drawListStale,
-                drawListStale,
+                this.drawList.isValid() && this.state.drawListValid() && !drawListStale && !drawListDimensionMismatch,
+                drawListStale || drawListDimensionMismatch,
                 this.drawList.heapGeneration(),
                 currentHeapGeneration,
+                this.drawList.dimensionId(),
+                currentDimension,
                 this.state.drawItems(),
                 this.state.drawListRecords(),
                 this.state.drawListVertices(),
                 this.state.drawListBuildRuns(),
                 this.state.drawListBuildFailures(),
                 this.state.lastDrawListBuildDurationMs(),
+                this.state.maxDrawListBuildDurationMs(),
                 this.state.lastDrawListError(),
                 this.state.lastDrawListSkippedReason(),
                 this.state.drawCallsIssued(),
@@ -206,8 +249,29 @@ public final class ForgeDirectGpuGeometryRenderer {
                 this.state.lastFrameDrawItems(),
                 this.state.lastFrameVertices(),
                 this.state.lastDrawDurationMs(),
+                this.state.maxFrameRenderMs(),
+                this.state.avgFrameRenderMs(),
+                this.state.lastFrameOverBudget(),
+                this.state.overBudgetFrames(),
                 this.state.lastDrawError(),
+                this.state.lastRenderSkippedReason(),
                 this.state.lastGlError(),
+                this.state.lastGlErrorStage(),
+                this.state.glErrorCount(),
+                this.state.lastPreExistingGlError(),
+                this.state.lastStateRestoreError(),
+                this.state.stateRestoreFailures(),
+                ForgeDirectGpuGeometryRendererConfig.frameBudgetMs(),
+                ForgeDirectGpuGeometryRendererConfig.planBudgetMs(),
+                this.stressRuns,
+                this.stressFailures,
+                this.lastStressError,
+                this.lastStressDurationMs,
+                this.lastStressPlannedSections,
+                this.lastStressPlannedRecords,
+                this.lastStressDrawListValid,
+                this.lastStressShaderSupported,
+                this.lastStressSourceRegressionOk,
                 ForgeDirectGpuGeometryRendererConfig.actualDrawEnabled(),
                 ForgeDirectGpuGeometryRenderState.STAGE
         );
@@ -446,7 +510,11 @@ public final class ForgeDirectGpuGeometryRenderer {
         }
 
         long heapGeneration = heap.generation();
-        this.drawList = ForgeDirectGpuGeometryDrawList.of(items, heapGeneration, skippedSections, skippedRecords, selectionMode);
+        String dimensionId = currentDimensionId(minecraft);
+        double cameraX = camera.available() ? camera.x() : Double.NaN;
+        double cameraY = camera.available() ? camera.y() : Double.NaN;
+        double cameraZ = camera.available() ? camera.z() : Double.NaN;
+        this.drawList = ForgeDirectGpuGeometryDrawList.of(items, heapGeneration, dimensionId, cameraX, cameraY, cameraZ, skippedSections, skippedRecords, selectionMode);
         boolean success = this.drawList.isValid();
         String skippedReason = this.drawList.isValid() ? "none" : "NO_VALID_SECTIONS";
         return new DrawListBuildResult(
@@ -469,6 +537,7 @@ public final class ForgeDirectGpuGeometryRenderer {
                 frustumAvailable,
                 camera.chunkLabel(),
                 camera.sectionLabel(),
+                dimensionId,
                 elapsedMs(start)
         );
     }
@@ -478,38 +547,49 @@ public final class ForgeDirectGpuGeometryRenderer {
             return;
         }
         if (!ForgeDirectGpuGeometryRendererConfig.isEnabled()) {
+            this.state.recordDrawSkip("DISABLED");
             return;
         }
         if (!ForgeDirectGpuGeometryRendererConfig.actualDrawEnabled()) {
-            this.state.recordDrawSkip("actual-draw-disabled");
+            this.state.recordDrawSkip("ACTUAL_DRAW_DISABLED");
             return;
         }
         if (!this.drawList.isValid()) {
-            this.state.recordDrawSkip("draw-list-invalid");
+            this.state.recordDrawSkip("NO_DRAW_LIST");
             return;
         }
         if (this.instance.getCurrentEngineOptional().isEmpty()) {
-            this.state.recordDrawSkip("engine-missing");
+            this.state.recordDrawSkip("ENGINE_MISSING");
             return;
         }
 
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.level == null || minecraft.player == null || event.getCamera() == null) {
-            this.state.recordDrawSkip("world-missing");
+            this.state.recordDrawSkip("WORLD_MISSING");
             return;
         }
+        String currentDimension = currentDimensionId(minecraft);
+        this.state.recordCurrentDimension(currentDimension);
 
         ForgeGpuGeometryHeap heap = this.instance.getGpuGeometryUploadManager().getHeapForDebugReadback();
         if (heap == null || !heap.isCreated() || heap.geometryBufferIdForDirectRenderer() == 0) {
-            this.state.recordDrawSkip("heap-missing");
+            this.state.recordDrawSkip("HEAP_MISSING");
             return;
         }
         if (this.drawList.isStale(heap.generation())) {
             this.state.recordDrawListStale(heap.generation());
             return;
         }
+        if (this.drawList.isDimensionMismatch(currentDimension)) {
+            this.state.recordDimensionMismatch(this.drawList.dimensionId(), currentDimension);
+            return;
+        }
         if (!RenderSystem.isOnRenderThread()) {
-            this.state.recordDrawSkip("not-render-thread");
+            this.state.recordDrawSkip("NOT_RENDER_THREAD");
+            return;
+        }
+        if (!this.shader.ensureReady()) {
+            this.state.recordDrawSkip("SHADER_UNAVAILABLE");
             return;
         }
 
@@ -518,11 +598,14 @@ public final class ForgeDirectGpuGeometryRenderer {
         int drawItems = 0;
         long vertices = 0;
         String lastGlError = "none";
+        String lastGlErrorStage = "none";
+        String preExistingGlError = drainGlErrors();
+        String stateRestoreError = "none";
+        boolean stateRestoreFailed = false;
+        String drawException = null;
+        ForgeDirectGpuGeometryRenderStateGuard guard = null;
         try {
-            if (!this.shader.ensureReady()) {
-                this.state.recordDrawSkip("shader-unavailable");
-                return;
-            }
+            guard = ForgeDirectGpuGeometryRenderStateGuard.capture();
 
             RenderSystem.enableBlend();
             RenderSystem.defaultBlendFunc();
@@ -548,12 +631,13 @@ public final class ForgeDirectGpuGeometryRenderer {
                 int geometryBufferId = heap.geometryBufferIdForDirectRenderer();
                 float alpha = (float) ForgeDirectGpuGeometryRendererConfig.debugAlpha();
                 for (ForgeDirectGpuGeometryDrawItem item : this.drawList.items()) {
-                    int glError = this.shader.drawItem(geometryBufferId, modelView, projection, item, alpha);
+                    ForgeDirectGpuGeometryShader.DrawCallResult drawResult = this.shader.drawItemWithDiagnostics(geometryBufferId, modelView, projection, item, alpha);
                     drawItems++;
                     drawCalls++;
                     vertices += item.vertexCount();
-                    if (glError != 0) {
-                        lastGlError = ForgeDirectGpuGeometryShader.formatGlError(glError);
+                    if (!drawResult.ok()) {
+                        lastGlError = drawResult.formattedError();
+                        lastGlErrorStage = drawResult.stage();
                         break;
                     }
                 }
@@ -561,22 +645,64 @@ public final class ForgeDirectGpuGeometryRenderer {
                 poseStack.popPose();
             }
         } catch (RuntimeException e) {
-            this.state.recordDrawException(e.getClass().getSimpleName() + ": " + e.getMessage());
-            VoxyForge.LOGGER.error("Failed during G5.3 direct GL geometry debug draw", e);
-            return;
+            drawException = e.getClass().getSimpleName() + ": " + e.getMessage();
+            VoxyForge.LOGGER.error("Failed during G5.4 direct GL geometry debug draw", e);
         } finally {
-            this.shader.unbind();
-            RenderSystem.enableCull();
-            RenderSystem.enableDepthTest();
-            RenderSystem.depthMask(true);
-            RenderSystem.disableBlend();
+            try {
+                this.shader.unbind();
+                if (guard != null) {
+                    ForgeDirectGpuGeometryRenderStateGuard.RestoreResult restoreResult = guard.restore();
+                    if (!restoreResult.success()) {
+                        stateRestoreError = restoreResult.error();
+                        stateRestoreFailed = true;
+                    }
+                }
+            } catch (RuntimeException e) {
+                stateRestoreError = e.getClass().getSimpleName() + ": " + e.getMessage();
+                stateRestoreFailed = true;
+            }
         }
 
-        this.state.recordFrameDraws(drawItems, drawCalls, vertices, elapsedMs(start), lastGlError);
+        if (drawException != null) {
+            this.state.recordDrawException(drawException);
+            return;
+        }
+
+        this.state.recordFrameDraws(
+                drawItems,
+                drawCalls,
+                vertices,
+                elapsedMs(start),
+                ForgeDirectGpuGeometryRendererConfig.frameBudgetMs(),
+                lastGlError,
+                lastGlErrorStage,
+                preExistingGlError,
+                stateRestoreError,
+                stateRestoreFailed
+        );
     }
 
     private static double elapsedMs(long start) {
         return (System.nanoTime() - start) / 1_000_000.0D;
+    }
+
+    private static String currentDimensionId(Minecraft minecraft) {
+        if (minecraft == null || minecraft.level == null) {
+            return "none";
+        }
+        return minecraft.level.dimension().location().toString();
+    }
+
+    private static String drainGlErrors() {
+        String last = "none";
+        for (int i = 0; i < 16; i++) {
+            int error = glGetError();
+            if (error == GL_NO_ERROR) {
+                break;
+            }
+            last = ForgeDirectGpuGeometryShader.formatGlError(error);
+        }
+        return last;
     }
 
     record DrawListBuildResult(
@@ -599,11 +725,24 @@ public final class ForgeDirectGpuGeometryRenderer {
             boolean frustumAvailable,
             String cameraChunk,
             String cameraSection,
+            String dimensionId,
             double durationMs
     ) {
         private static DrawListBuildResult failure(long start, String skippedReason, String error, int candidates, int invalidMetadata) {
-            return new DrawListBuildResult(false, skippedReason, error, candidates, 0, 0, 0, 0, 0, skippedReason, -1L, invalidMetadata, 0, 0, 0, 0, false, "none", "none", elapsedMs(start));
+            return new DrawListBuildResult(false, skippedReason, error, candidates, 0, 0, 0, 0, 0, skippedReason, -1L, invalidMetadata, 0, 0, 0, 0, false, "none", "none", "none", elapsedMs(start));
         }
+    }
+
+    record StressResult(
+            boolean success,
+            String error,
+            double durationMs,
+            int plannedSections,
+            long plannedRecords,
+            boolean drawListValid,
+            boolean shaderSupported,
+            boolean sourceRegressionOk
+    ) {
     }
 
     private static String normalizeReason(String reason) {

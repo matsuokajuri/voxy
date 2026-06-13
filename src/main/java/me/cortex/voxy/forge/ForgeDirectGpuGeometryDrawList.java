@@ -5,19 +5,40 @@ import java.util.Collections;
 import java.util.List;
 
 final class ForgeDirectGpuGeometryDrawList {
-    private static final ForgeDirectGpuGeometryDrawList EMPTY = new ForgeDirectGpuGeometryDrawList(Collections.emptyList(), -1L, 0, 0, "none");
+    private static final ForgeDirectGpuGeometryDrawList EMPTY = new ForgeDirectGpuGeometryDrawList(Collections.emptyList(), -1L, "none", 0L, Double.NaN, Double.NaN, Double.NaN, 0, 0, "none");
 
     private final List<ForgeDirectGpuGeometryDrawItem> items;
     private final long heapGeneration;
+    private final String dimensionId;
+    private final long buildTimeMillis;
+    private final double cameraX;
+    private final double cameraY;
+    private final double cameraZ;
     private final int skippedSections;
     private final long skippedRecords;
     private final String selectionMode;
     private final long recordCount;
     private final long vertexCount;
 
-    private ForgeDirectGpuGeometryDrawList(List<ForgeDirectGpuGeometryDrawItem> items, long heapGeneration, int skippedSections, long skippedRecords, String selectionMode) {
+    private ForgeDirectGpuGeometryDrawList(
+            List<ForgeDirectGpuGeometryDrawItem> items,
+            long heapGeneration,
+            String dimensionId,
+            long buildTimeMillis,
+            double cameraX,
+            double cameraY,
+            double cameraZ,
+            int skippedSections,
+            long skippedRecords,
+            String selectionMode
+    ) {
         this.items = Collections.unmodifiableList(new ArrayList<>(items));
         this.heapGeneration = heapGeneration;
+        this.dimensionId = dimensionId == null || dimensionId.isBlank() ? "none" : dimensionId;
+        this.buildTimeMillis = buildTimeMillis;
+        this.cameraX = cameraX;
+        this.cameraY = cameraY;
+        this.cameraZ = cameraZ;
         this.skippedSections = Math.max(0, skippedSections);
         this.skippedRecords = Math.max(0, skippedRecords);
         this.selectionMode = selectionMode == null ? "unknown" : selectionMode;
@@ -35,11 +56,21 @@ final class ForgeDirectGpuGeometryDrawList {
         return EMPTY;
     }
 
-    static ForgeDirectGpuGeometryDrawList of(List<ForgeDirectGpuGeometryDrawItem> items, long heapGeneration, int skippedSections, long skippedRecords, String selectionMode) {
+    static ForgeDirectGpuGeometryDrawList of(
+            List<ForgeDirectGpuGeometryDrawItem> items,
+            long heapGeneration,
+            String dimensionId,
+            double cameraX,
+            double cameraY,
+            double cameraZ,
+            int skippedSections,
+            long skippedRecords,
+            String selectionMode
+    ) {
         if (items == null || items.isEmpty()) {
             return EMPTY;
         }
-        return new ForgeDirectGpuGeometryDrawList(items, heapGeneration, skippedSections, skippedRecords, selectionMode);
+        return new ForgeDirectGpuGeometryDrawList(items, heapGeneration, dimensionId, System.currentTimeMillis(), cameraX, cameraY, cameraZ, skippedSections, skippedRecords, selectionMode);
     }
 
     boolean isValid() {
@@ -48,6 +79,10 @@ final class ForgeDirectGpuGeometryDrawList {
 
     boolean isStale(long currentHeapGeneration) {
         return this.isValid() && this.heapGeneration != currentHeapGeneration;
+    }
+
+    boolean isDimensionMismatch(String currentDimension) {
+        return this.isValid() && currentDimension != null && !this.dimensionId.equals(currentDimension);
     }
 
     List<ForgeDirectGpuGeometryDrawItem> items() {
@@ -68,6 +103,26 @@ final class ForgeDirectGpuGeometryDrawList {
 
     long heapGeneration() {
         return this.heapGeneration;
+    }
+
+    String dimensionId() {
+        return this.dimensionId;
+    }
+
+    long buildTimeMillis() {
+        return this.buildTimeMillis;
+    }
+
+    double cameraX() {
+        return this.cameraX;
+    }
+
+    double cameraY() {
+        return this.cameraY;
+    }
+
+    double cameraZ() {
+        return this.cameraZ;
     }
 
     int skippedSections() {

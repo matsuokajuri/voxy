@@ -1,7 +1,7 @@
 package me.cortex.voxy.forge;
 
 final class ForgeDirectGpuGeometryRenderState {
-    static final String STAGE = "G5_3_CAMERA_AWARE_DIRECT_DRAW";
+    static final String STAGE = "G5_4_DIRECT_GL_HARDENED_DEBUG_DRAW";
 
     private boolean initialized;
     private int plannedSections;
@@ -32,9 +32,12 @@ final class ForgeDirectGpuGeometryRenderState {
     private boolean drawListStale;
     private long drawListHeapGeneration = -1L;
     private long currentHeapGeneration = -1L;
+    private String drawListDimension = "none";
+    private String currentDimension = "none";
     private long drawListBuildRuns;
     private long drawListBuildFailures;
     private double lastDrawListBuildDurationMs;
+    private double maxDrawListBuildDurationMs;
     private String lastDrawListError = "none";
     private String lastDrawListSkippedReason = "none";
     private long drawCallsIssued;
@@ -43,8 +46,19 @@ final class ForgeDirectGpuGeometryRenderState {
     private int lastFrameDrawItems;
     private long lastFrameVertices;
     private double lastDrawDurationMs;
+    private double maxFrameRenderMs;
+    private double totalFrameRenderMs;
+    private long frameRenderSamples;
+    private boolean lastFrameOverBudget;
+    private long overBudgetFrames;
     private String lastDrawError = "none";
+    private String lastRenderSkippedReason = "none";
     private String lastGlError = "none";
+    private String lastGlErrorStage = "none";
+    private long glErrorCount;
+    private String lastPreExistingGlError = "none";
+    private String lastStateRestoreError = "none";
+    private long stateRestoreFailures;
 
     void markInitialized() {
         this.initialized = true;
@@ -101,7 +115,10 @@ final class ForgeDirectGpuGeometryRenderState {
         this.drawListStale = false;
         this.drawListHeapGeneration = result.heapGeneration();
         this.currentHeapGeneration = result.heapGeneration();
+        this.drawListDimension = result.dimensionId();
+        this.currentDimension = result.dimensionId();
         this.lastDrawListBuildDurationMs = result.durationMs();
+        this.maxDrawListBuildDurationMs = Math.max(this.maxDrawListBuildDurationMs, result.durationMs());
         this.lastDrawListError = result.success() ? "none" : result.error();
         this.lastDrawListSkippedReason = result.skippedReason();
         if (!result.success()) {
@@ -109,13 +126,44 @@ final class ForgeDirectGpuGeometryRenderState {
         }
     }
 
-    void recordFrameDraws(int drawItems, int drawCalls, long vertices, double durationMs, String glError) {
+    void recordFrameDraws(
+            int drawItems,
+            int drawCalls,
+            long vertices,
+            double durationMs,
+            double frameBudgetMs,
+            String glError,
+            String glErrorStage,
+            String preExistingGlError,
+            String stateRestoreError,
+            boolean stateRestoreFailed
+    ) {
         this.lastFrameDrawItems = Math.max(0, drawItems);
         this.lastFrameDrawCalls = Math.max(0, drawCalls);
         this.lastFrameVertices = Math.max(0, vertices);
         this.lastDrawDurationMs = Math.max(0.0D, durationMs);
+        this.maxFrameRenderMs = Math.max(this.maxFrameRenderMs, this.lastDrawDurationMs);
+        this.totalFrameRenderMs += this.lastDrawDurationMs;
+        this.frameRenderSamples++;
+        this.lastFrameOverBudget = this.lastDrawDurationMs > frameBudgetMs;
+        if (this.lastFrameOverBudget) {
+            this.overBudgetFrames++;
+        }
         this.lastDrawError = "none";
+        this.lastRenderSkippedReason = "none";
         this.lastGlError = glError == null ? "none" : glError;
+        this.lastGlErrorStage = glErrorStage == null ? "none" : glErrorStage;
+        if (!"none".equals(this.lastGlError)) {
+            this.glErrorCount++;
+        }
+        this.lastPreExistingGlError = preExistingGlError == null ? "none" : preExistingGlError;
+        if (!"none".equals(this.lastPreExistingGlError)) {
+            this.glErrorCount++;
+        }
+        this.lastStateRestoreError = stateRestoreError == null ? "none" : stateRestoreError;
+        if (stateRestoreFailed) {
+            this.stateRestoreFailures++;
+        }
         this.drawCallsIssued += this.lastFrameDrawCalls;
         this.verticesDrawn += this.lastFrameVertices;
     }
@@ -126,7 +174,9 @@ final class ForgeDirectGpuGeometryRenderState {
         this.lastFrameVertices = 0;
         this.lastDrawDurationMs = 0.0D;
         this.lastDrawError = reason == null ? "skipped" : reason;
+        this.lastRenderSkippedReason = this.lastDrawError;
         this.lastGlError = "none";
+        this.lastGlErrorStage = "none";
     }
 
     void recordDrawException(String error) {
@@ -135,12 +185,24 @@ final class ForgeDirectGpuGeometryRenderState {
         this.lastFrameVertices = 0;
         this.lastDrawDurationMs = 0.0D;
         this.lastDrawError = error == null ? "unknown" : error;
+        this.lastRenderSkippedReason = "DRAW_EXCEPTION";
     }
 
     void recordDrawListStale(long currentHeapGeneration) {
         this.drawListStale = true;
         this.currentHeapGeneration = currentHeapGeneration;
-        this.recordDrawSkip("draw-list-stale");
+        this.recordDrawSkip("STALE_HEAP_GENERATION");
+    }
+
+    void recordDimensionMismatch(String drawListDimension, String currentDimension) {
+        this.drawListStale = true;
+        this.drawListDimension = drawListDimension == null ? "none" : drawListDimension;
+        this.currentDimension = currentDimension == null ? "none" : currentDimension;
+        this.recordDrawSkip("DIMENSION_MISMATCH");
+    }
+
+    void recordCurrentDimension(String currentDimension) {
+        this.currentDimension = currentDimension == null ? "none" : currentDimension;
     }
 
     void clear() {
@@ -172,9 +234,12 @@ final class ForgeDirectGpuGeometryRenderState {
         this.drawListStale = false;
         this.drawListHeapGeneration = -1L;
         this.currentHeapGeneration = -1L;
+        this.drawListDimension = "none";
+        this.currentDimension = "none";
         this.drawListBuildRuns = 0;
         this.drawListBuildFailures = 0;
         this.lastDrawListBuildDurationMs = 0.0D;
+        this.maxDrawListBuildDurationMs = 0.0D;
         this.lastDrawListError = "none";
         this.lastDrawListSkippedReason = "none";
         this.drawCallsIssued = 0;
@@ -183,8 +248,19 @@ final class ForgeDirectGpuGeometryRenderState {
         this.lastFrameDrawCalls = 0;
         this.lastFrameVertices = 0;
         this.lastDrawDurationMs = 0.0D;
+        this.maxFrameRenderMs = 0.0D;
+        this.totalFrameRenderMs = 0.0D;
+        this.frameRenderSamples = 0;
+        this.lastFrameOverBudget = false;
+        this.overBudgetFrames = 0;
         this.lastDrawError = "none";
+        this.lastRenderSkippedReason = "none";
         this.lastGlError = "none";
+        this.lastGlErrorStage = "none";
+        this.glErrorCount = 0;
+        this.lastPreExistingGlError = "none";
+        this.lastStateRestoreError = "none";
+        this.stateRestoreFailures = 0;
         this.clearCount++;
     }
 
@@ -304,6 +380,14 @@ final class ForgeDirectGpuGeometryRenderState {
         return this.currentHeapGeneration;
     }
 
+    String drawListDimension() {
+        return this.drawListDimension;
+    }
+
+    String currentDimension() {
+        return this.currentDimension;
+    }
+
     long drawListBuildRuns() {
         return this.drawListBuildRuns;
     }
@@ -314,6 +398,10 @@ final class ForgeDirectGpuGeometryRenderState {
 
     double lastDrawListBuildDurationMs() {
         return this.lastDrawListBuildDurationMs;
+    }
+
+    double maxDrawListBuildDurationMs() {
+        return this.maxDrawListBuildDurationMs;
     }
 
     String lastDrawListError() {
@@ -348,11 +436,51 @@ final class ForgeDirectGpuGeometryRenderState {
         return this.lastDrawDurationMs;
     }
 
+    double maxFrameRenderMs() {
+        return this.maxFrameRenderMs;
+    }
+
+    double avgFrameRenderMs() {
+        return this.frameRenderSamples == 0 ? 0.0D : this.totalFrameRenderMs / this.frameRenderSamples;
+    }
+
+    boolean lastFrameOverBudget() {
+        return this.lastFrameOverBudget;
+    }
+
+    long overBudgetFrames() {
+        return this.overBudgetFrames;
+    }
+
     String lastDrawError() {
         return this.lastDrawError;
     }
 
+    String lastRenderSkippedReason() {
+        return this.lastRenderSkippedReason;
+    }
+
     String lastGlError() {
         return this.lastGlError;
+    }
+
+    String lastGlErrorStage() {
+        return this.lastGlErrorStage;
+    }
+
+    long glErrorCount() {
+        return this.glErrorCount;
+    }
+
+    String lastPreExistingGlError() {
+        return this.lastPreExistingGlError;
+    }
+
+    String lastStateRestoreError() {
+        return this.lastStateRestoreError;
+    }
+
+    long stateRestoreFailures() {
+        return this.stateRestoreFailures;
     }
 }

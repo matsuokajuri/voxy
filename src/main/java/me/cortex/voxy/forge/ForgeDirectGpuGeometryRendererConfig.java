@@ -58,6 +58,14 @@ final class ForgeDirectGpuGeometryRendererConfig {
         return ForgeVoxyConfig.DIRECT_GPU_GEOMETRY_RENDERER_DEBUG_LOG.get();
     }
 
+    static double frameBudgetMs() {
+        return Math.max(0.1D, Math.min(100.0D, ForgeVoxyConfig.DIRECT_GPU_GEOMETRY_RENDERER_FRAME_BUDGET_MS.get()));
+    }
+
+    static double planBudgetMs() {
+        return Math.max(0.1D, Math.min(250.0D, ForgeVoxyConfig.DIRECT_GPU_GEOMETRY_RENDERER_PLAN_BUDGET_MS.get()));
+    }
+
     static boolean autoPlanEnabled() {
         return ForgeVoxyRuntimeOverrides.enableDirectGpuGeometryAutoPlan();
     }
