@@ -184,6 +184,9 @@ public final class ForgeVoxyInstance {
         if (ForgeGpuGeometryReadbackMeshRefreshManager.refreshOnDimensionChange()) {
             this.gpuGeometryReadbackMeshRefreshManager.requestRefresh(ForgeGpuGeometryReadbackMeshRefreshManager.REASON_DIMENSION_CHANGE);
         }
+        if (ForgeDirectGpuGeometryRendererConfig.autoPlanOnDimensionChange()) {
+            this.directGpuGeometryRenderer.requestAutoPlan(ForgeDirectGpuGeometryRenderer.REASON_DIMENSION_CHANGE);
+        }
         VoxyForge.LOGGER.info("Cleared Voxy debug pipeline state after client dimension switch to {}.", dimension);
     }
 

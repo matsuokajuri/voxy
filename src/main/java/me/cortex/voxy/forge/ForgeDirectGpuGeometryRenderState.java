@@ -1,7 +1,7 @@
 package me.cortex.voxy.forge;
 
 final class ForgeDirectGpuGeometryRenderState {
-    static final String STAGE = "G5_2_MULTI_SECTION_DIRECT_DRAW";
+    static final String STAGE = "G5_3_CAMERA_AWARE_DIRECT_DRAW";
 
     private boolean initialized;
     private int plannedSections;
@@ -11,6 +11,13 @@ final class ForgeDirectGpuGeometryRenderState {
     private long skippedRecords;
     private String selectionMode = "none";
     private int uploadedSectionCandidates;
+    private int candidateSections;
+    private int acceptedSections;
+    private int rejectedByRadius;
+    private int rejectedByFrustum;
+    private boolean frustumAvailable;
+    private String cameraChunk = "none";
+    private String cameraSection = "none";
     private int invalidMetadata;
     private double lastPlanDurationMs;
     private String lastPlanError = "none";
@@ -53,6 +60,13 @@ final class ForgeDirectGpuGeometryRenderState {
         this.skippedRecords = result.skippedRecords();
         this.selectionMode = result.selectionMode();
         this.uploadedSectionCandidates = result.uploadedSectionCandidates();
+        this.candidateSections = result.uploadedSectionCandidates();
+        this.acceptedSections = result.plannedSections();
+        this.rejectedByRadius = 0;
+        this.rejectedByFrustum = 0;
+        this.frustumAvailable = false;
+        this.cameraChunk = "none";
+        this.cameraSection = "none";
         this.invalidMetadata = result.invalidMetadata();
         this.lastPlanDurationMs = result.durationMs();
         this.lastPlanError = result.success() ? "none" : result.error();
@@ -73,6 +87,13 @@ final class ForgeDirectGpuGeometryRenderState {
         this.skippedSections = result.skippedSections();
         this.skippedRecords = result.skippedRecords();
         this.selectionMode = result.selectionMode();
+        this.candidateSections = result.candidateSections();
+        this.acceptedSections = result.acceptedSections();
+        this.rejectedByRadius = result.rejectedByRadius();
+        this.rejectedByFrustum = result.rejectedByFrustum();
+        this.frustumAvailable = result.frustumAvailable();
+        this.cameraChunk = result.cameraChunk();
+        this.cameraSection = result.cameraSection();
         this.drawItems = result.drawItems();
         this.drawListRecords = result.drawRecords();
         this.drawListVertices = result.drawVertices();
@@ -131,6 +152,13 @@ final class ForgeDirectGpuGeometryRenderState {
         this.skippedRecords = 0;
         this.selectionMode = "none";
         this.uploadedSectionCandidates = 0;
+        this.candidateSections = 0;
+        this.acceptedSections = 0;
+        this.rejectedByRadius = 0;
+        this.rejectedByFrustum = 0;
+        this.frustumAvailable = false;
+        this.cameraChunk = "none";
+        this.cameraSection = "none";
         this.invalidMetadata = 0;
         this.lastPlanDurationMs = 0.0D;
         this.lastPlanError = "none";
@@ -190,6 +218,34 @@ final class ForgeDirectGpuGeometryRenderState {
 
     int uploadedSectionCandidates() {
         return this.uploadedSectionCandidates;
+    }
+
+    int candidateSections() {
+        return this.candidateSections;
+    }
+
+    int acceptedSections() {
+        return this.acceptedSections;
+    }
+
+    int rejectedByRadius() {
+        return this.rejectedByRadius;
+    }
+
+    int rejectedByFrustum() {
+        return this.rejectedByFrustum;
+    }
+
+    boolean frustumAvailable() {
+        return this.frustumAvailable;
+    }
+
+    String cameraChunk() {
+        return this.cameraChunk;
+    }
+
+    String cameraSection() {
+        return this.cameraSection;
     }
 
     int invalidMetadata() {

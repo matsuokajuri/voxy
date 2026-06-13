@@ -18,7 +18,9 @@ public final class ForgeVoxyRuntimeOverrides {
     private static Boolean enableGeometryGpuVisualization;
     private static Boolean enableGeometryGpuReadbackMeshAutoRefresh;
     private static Boolean enableDirectGpuGeometryRenderer;
+    private static Boolean enableDirectGpuGeometryAutoPlan;
     private static Boolean directGpuGeometryRendererActualDraw;
+    private static Integer directGpuGeometryRendererMaxPlanCandidates;
     private static Integer directGpuGeometryRendererMaxDrawSections;
     private static Integer directGpuGeometryRendererMaxDrawRecords;
     private static Integer directGpuGeometryRendererMaxRecordsPerSection;
@@ -56,7 +58,9 @@ public final class ForgeVoxyRuntimeOverrides {
         enableGeometryGpuVisualization = false;
         enableGeometryGpuReadbackMeshAutoRefresh = false;
         enableDirectGpuGeometryRenderer = false;
+        enableDirectGpuGeometryAutoPlan = false;
         directGpuGeometryRendererActualDraw = false;
+        directGpuGeometryRendererMaxPlanCandidates = null;
         directGpuGeometryRendererMaxDrawSections = null;
         directGpuGeometryRendererMaxDrawRecords = null;
         directGpuGeometryRendererMaxRecordsPerSection = null;
@@ -200,11 +204,13 @@ public final class ForgeVoxyRuntimeOverrides {
         enableGeometryGpuVisualization = false;
         enableGeometryGpuReadbackMeshAutoRefresh = false;
         enableDirectGpuGeometryRenderer = true;
+        enableDirectGpuGeometryAutoPlan = true;
         directGpuGeometryRendererActualDraw = false;
-        directGpuGeometryRendererMaxDrawSections = 8;
-        directGpuGeometryRendererMaxDrawRecords = 16384;
+        directGpuGeometryRendererMaxPlanCandidates = 256;
+        directGpuGeometryRendererMaxDrawSections = 16;
+        directGpuGeometryRendererMaxDrawRecords = 32768;
         directGpuGeometryRendererMaxRecordsPerSection = 4096;
-        directGpuGeometryRendererRenderDistanceChunks = 8;
+        directGpuGeometryRendererRenderDistanceChunks = 12;
         enableSimpleGpuMeshRenderer = false;
         enableDebugMeshRenderer = false;
     }
@@ -249,6 +255,14 @@ public final class ForgeVoxyRuntimeOverrides {
         }
     }
 
+    public static synchronized void setDirectGpuGeometryAutoPlan(boolean enabled) {
+        presetName = "custom";
+        enableDirectGpuGeometryAutoPlan = enabled;
+        if (enabled) {
+            enableDirectGpuGeometryRenderer = true;
+        }
+    }
+
     public static synchronized void setDirectGpuGeometryRendererActualDraw(boolean enabled) {
         presetName = "custom";
         enableDirectGpuGeometryRenderer = enabled ? true : enableDirectGpuGeometryRenderer;
@@ -270,7 +284,9 @@ public final class ForgeVoxyRuntimeOverrides {
         enableGeometryGpuVisualization = null;
         enableGeometryGpuReadbackMeshAutoRefresh = null;
         enableDirectGpuGeometryRenderer = null;
+        enableDirectGpuGeometryAutoPlan = null;
         directGpuGeometryRendererActualDraw = null;
+        directGpuGeometryRendererMaxPlanCandidates = null;
         directGpuGeometryRendererMaxDrawSections = null;
         directGpuGeometryRendererMaxDrawRecords = null;
         directGpuGeometryRendererMaxRecordsPerSection = null;
@@ -316,6 +332,8 @@ public final class ForgeVoxyRuntimeOverrides {
                 source(enableGeometryGpuReadbackMeshAutoRefresh),
                 enableDirectGpuGeometryRenderer(),
                 source(enableDirectGpuGeometryRenderer),
+                enableDirectGpuGeometryAutoPlan(),
+                source(enableDirectGpuGeometryAutoPlan),
                 directGpuGeometryRendererActualDraw(),
                 source(directGpuGeometryRendererActualDraw),
                 geometryGpuVisualizationAlpha(),
@@ -399,8 +417,16 @@ public final class ForgeVoxyRuntimeOverrides {
         return value(enableDirectGpuGeometryRenderer, ForgeVoxyConfig.ENABLE_DIRECT_GPU_GEOMETRY_RENDERER.get());
     }
 
+    public static synchronized boolean enableDirectGpuGeometryAutoPlan() {
+        return value(enableDirectGpuGeometryAutoPlan, ForgeVoxyConfig.ENABLE_DIRECT_GPU_GEOMETRY_AUTO_PLAN.get());
+    }
+
     public static synchronized boolean directGpuGeometryRendererActualDraw() {
         return value(directGpuGeometryRendererActualDraw, ForgeVoxyConfig.DIRECT_GPU_GEOMETRY_RENDERER_ACTUAL_DRAW.get());
+    }
+
+    public static synchronized int directGpuGeometryRendererMaxPlanCandidates() {
+        return Math.min(2048, Math.max(1, value(directGpuGeometryRendererMaxPlanCandidates, ForgeVoxyConfig.DIRECT_GPU_GEOMETRY_RENDERER_MAX_PLAN_CANDIDATES.get())));
     }
 
     public static synchronized int directGpuGeometryRendererMaxDrawSections() {
@@ -502,7 +528,9 @@ public final class ForgeVoxyRuntimeOverrides {
                 || enableGeometryGpuVisualization != null
                 || enableGeometryGpuReadbackMeshAutoRefresh != null
                 || enableDirectGpuGeometryRenderer != null
+                || enableDirectGpuGeometryAutoPlan != null
                 || directGpuGeometryRendererActualDraw != null
+                || directGpuGeometryRendererMaxPlanCandidates != null
                 || directGpuGeometryRendererMaxDrawSections != null
                 || directGpuGeometryRendererMaxDrawRecords != null
                 || directGpuGeometryRendererMaxRecordsPerSection != null
@@ -567,6 +595,8 @@ public final class ForgeVoxyRuntimeOverrides {
             String enableGeometryGpuReadbackMeshAutoRefreshSource,
             boolean enableDirectGpuGeometryRenderer,
             String enableDirectGpuGeometryRendererSource,
+            boolean enableDirectGpuGeometryAutoPlan,
+            String enableDirectGpuGeometryAutoPlanSource,
             boolean directGpuGeometryRendererActualDraw,
             String directGpuGeometryRendererActualDrawSource,
             double geometryGpuVisualizationAlpha,

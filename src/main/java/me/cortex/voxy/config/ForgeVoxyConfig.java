@@ -47,6 +47,7 @@ public final class ForgeVoxyConfig {
     public static final ForgeConfigSpec.BooleanValue ENABLE_DIRECT_GPU_GEOMETRY_RENDERER;
     public static final ForgeConfigSpec.IntValue DIRECT_GPU_GEOMETRY_RENDERER_MAX_SECTIONS;
     public static final ForgeConfigSpec.IntValue DIRECT_GPU_GEOMETRY_RENDERER_MAX_RECORDS;
+    public static final ForgeConfigSpec.IntValue DIRECT_GPU_GEOMETRY_RENDERER_MAX_PLAN_CANDIDATES;
     public static final ForgeConfigSpec.IntValue DIRECT_GPU_GEOMETRY_RENDERER_MAX_DRAW_SECTIONS;
     public static final ForgeConfigSpec.IntValue DIRECT_GPU_GEOMETRY_RENDERER_MAX_DRAW_RECORDS;
     public static final ForgeConfigSpec.IntValue DIRECT_GPU_GEOMETRY_RENDERER_MAX_RECORDS_PER_SECTION;
@@ -56,6 +57,15 @@ public final class ForgeVoxyConfig {
     public static final ForgeConfigSpec.BooleanValue DIRECT_GPU_GEOMETRY_RENDERER_DOUBLE_SIDED;
     public static final ForgeConfigSpec.BooleanValue DIRECT_GPU_GEOMETRY_RENDERER_ACTUAL_DRAW;
     public static final ForgeConfigSpec.BooleanValue DIRECT_GPU_GEOMETRY_RENDERER_DEBUG_LOG;
+    public static final ForgeConfigSpec.BooleanValue ENABLE_DIRECT_GPU_GEOMETRY_AUTO_PLAN;
+    public static final ForgeConfigSpec.IntValue DIRECT_GPU_GEOMETRY_AUTO_PLAN_COOLDOWN_TICKS;
+    public static final ForgeConfigSpec.IntValue DIRECT_GPU_GEOMETRY_AUTO_PLAN_MOVE_THRESHOLD_BLOCKS;
+    public static final ForgeConfigSpec.BooleanValue DIRECT_GPU_GEOMETRY_AUTO_PLAN_ONLY_WHEN_ENABLED;
+    public static final ForgeConfigSpec.BooleanValue DIRECT_GPU_GEOMETRY_AUTO_PLAN_ONLY_WHEN_ACTUAL_DRAW_ENABLED;
+    public static final ForgeConfigSpec.BooleanValue DIRECT_GPU_GEOMETRY_AUTO_PLAN_ON_DIMENSION_CHANGE;
+    public static final ForgeConfigSpec.IntValue DIRECT_GPU_GEOMETRY_AUTO_PLAN_MAX_CANDIDATES;
+    public static final ForgeConfigSpec.IntValue DIRECT_GPU_GEOMETRY_AUTO_PLAN_MAX_SECTIONS;
+    public static final ForgeConfigSpec.IntValue DIRECT_GPU_GEOMETRY_AUTO_PLAN_MAX_RECORDS;
     public static final ForgeConfigSpec.IntValue CPU_MESH_CACHE_MAX_ENTRIES;
     public static final ForgeConfigSpec.IntValue BUILT_SECTION_CACHE_MAX_ENTRIES;
     public static final ForgeConfigSpec.BooleanValue ENABLE_DEBUG_MESH_RENDERER;
@@ -211,18 +221,21 @@ public final class ForgeVoxyConfig {
         DIRECT_GPU_GEOMETRY_RENDERER_MAX_RECORDS = builder
                 .comment("Maximum packed geometry records counted by one direct_gl_renderer_plan_sample command.")
                 .defineInRange("directGpuGeometryRendererMaxRecords", 16384, 1, 131072);
+        DIRECT_GPU_GEOMETRY_RENDERER_MAX_PLAN_CANDIDATES = builder
+                .comment("Maximum uploaded section metadata entries considered by one G5.3 camera-aware direct GL draw-list build.")
+                .defineInRange("directGpuGeometryRendererMaxPlanCandidates", 256, 1, 2048);
         DIRECT_GPU_GEOMETRY_RENDERER_MAX_DRAW_SECTIONS = builder
-                .comment("Maximum uploaded sections drawn by the G5.2 direct GL debug renderer. Keep this conservative while the path is experimental.")
-                .defineInRange("directGpuGeometryRendererMaxDrawSections", 8, 1, 64);
+                .comment("Maximum uploaded sections drawn by the G5.3 direct GL debug renderer. Keep this conservative while the path is experimental.")
+                .defineInRange("directGpuGeometryRendererMaxDrawSections", 16, 1, 64);
         DIRECT_GPU_GEOMETRY_RENDERER_MAX_DRAW_RECORDS = builder
-                .comment("Maximum packed quad records drawn by one G5.2 direct GL debug draw list.")
-                .defineInRange("directGpuGeometryRendererMaxDrawRecords", 16384, 1, 65536);
+                .comment("Maximum packed quad records drawn by one G5.3 direct GL debug draw list.")
+                .defineInRange("directGpuGeometryRendererMaxDrawRecords", 32768, 1, 131072);
         DIRECT_GPU_GEOMETRY_RENDERER_MAX_RECORDS_PER_SECTION = builder
-                .comment("Maximum packed quad records drawn from a single uploaded section by the G5.2 direct GL debug renderer.")
+                .comment("Maximum packed quad records drawn from a single uploaded section by the G5.3 direct GL debug renderer.")
                 .defineInRange("directGpuGeometryRendererMaxRecordsPerSection", 4096, 1, 16384);
         DIRECT_GPU_GEOMETRY_RENDERER_RENDER_DISTANCE_CHUNKS = builder
-                .comment("Maximum chunk distance used when selecting sections for G5.2 direct GL debug draw lists.")
-                .defineInRange("directGpuGeometryRendererRenderDistanceChunks", 8, 1, 64);
+                .comment("Maximum chunk distance used when selecting sections for G5.3 direct GL debug draw lists.")
+                .defineInRange("directGpuGeometryRendererRenderDistanceChunks", 12, 1, 64);
         DIRECT_GPU_GEOMETRY_RENDERER_DEBUG_ALPHA = builder
                 .comment("Alpha used by the G5.x direct GL debug renderer.")
                 .defineInRange("directGpuGeometryRendererDebugAlpha", 0.75D, 0.05D, 1.0D);
@@ -238,6 +251,33 @@ public final class ForgeVoxyConfig {
         DIRECT_GPU_GEOMETRY_RENDERER_DEBUG_LOG = builder
                 .comment("Logs G5.x direct GL geometry renderer debug summaries.")
                 .define("directGpuGeometryRendererDebugLog", false);
+        ENABLE_DIRECT_GPU_GEOMETRY_AUTO_PLAN = builder
+                .comment("Automatically refreshes the direct GL debug renderer draw list when the camera moves enough. Disabled by default.")
+                .define("enableDirectGpuGeometryAutoPlan", false);
+        DIRECT_GPU_GEOMETRY_AUTO_PLAN_COOLDOWN_TICKS = builder
+                .comment("Ticks between automatic direct GL draw-list planning attempts.")
+                .defineInRange("directGpuGeometryAutoPlanCooldownTicks", 40, 1, 400);
+        DIRECT_GPU_GEOMETRY_AUTO_PLAN_MOVE_THRESHOLD_BLOCKS = builder
+                .comment("Camera movement threshold in blocks before automatic direct GL draw-list planning may refresh.")
+                .defineInRange("directGpuGeometryAutoPlanMoveThresholdBlocks", 32, 1, 1024);
+        DIRECT_GPU_GEOMETRY_AUTO_PLAN_ONLY_WHEN_ENABLED = builder
+                .comment("When true, automatic direct GL planning only runs while the direct renderer is enabled.")
+                .define("directGpuGeometryAutoPlanOnlyWhenEnabled", true);
+        DIRECT_GPU_GEOMETRY_AUTO_PLAN_ONLY_WHEN_ACTUAL_DRAW_ENABLED = builder
+                .comment("When true, automatic direct GL planning only runs while actual direct drawing is enabled.")
+                .define("directGpuGeometryAutoPlanOnlyWhenActualDrawEnabled", false);
+        DIRECT_GPU_GEOMETRY_AUTO_PLAN_ON_DIMENSION_CHANGE = builder
+                .comment("Requests a direct GL draw-list plan after dimension changes when auto planning is enabled.")
+                .define("directGpuGeometryAutoPlanOnDimensionChange", true);
+        DIRECT_GPU_GEOMETRY_AUTO_PLAN_MAX_CANDIDATES = builder
+                .comment("Maximum uploaded sections considered by one automatic direct GL planning pass.")
+                .defineInRange("directGpuGeometryAutoPlanMaxCandidates", 256, 1, 2048);
+        DIRECT_GPU_GEOMETRY_AUTO_PLAN_MAX_SECTIONS = builder
+                .comment("Maximum direct GL draw sections selected by one automatic planning pass.")
+                .defineInRange("directGpuGeometryAutoPlanMaxSections", 16, 1, 64);
+        DIRECT_GPU_GEOMETRY_AUTO_PLAN_MAX_RECORDS = builder
+                .comment("Maximum packed quad records selected by one automatic direct GL planning pass.")
+                .defineInRange("directGpuGeometryAutoPlanMaxRecords", 32768, 1, 131072);
         CPU_MESH_CACHE_MAX_ENTRIES = builder
                 .comment("Maximum cached CPU mesh section/layer entries kept by the debug pipeline. Old entries are closed and evicted with LRU ordering.")
                 .defineInRange("cpuMeshCacheMaxEntries", 2048, 1, 8192);
