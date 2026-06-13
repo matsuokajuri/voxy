@@ -20,6 +20,8 @@ import static org.lwjgl.opengl.GL30C.GL_VERTEX_ARRAY_BINDING;
 import static org.lwjgl.opengl.GL30C.glBindBufferBase;
 import static org.lwjgl.opengl.GL30C.glBindVertexArray;
 import static org.lwjgl.opengl.GL30C.glGetIntegeri;
+import static org.lwjgl.opengl.GL40C.GL_DRAW_INDIRECT_BUFFER;
+import static org.lwjgl.opengl.GL40C.GL_DRAW_INDIRECT_BUFFER_BINDING;
 import static org.lwjgl.opengl.GL43C.GL_SHADER_STORAGE_BUFFER;
 import static org.lwjgl.opengl.GL43C.GL_SHADER_STORAGE_BUFFER_BINDING;
 
@@ -27,6 +29,7 @@ final class ForgeDirectGpuGeometryRenderStateGuard {
     private final int currentProgram;
     private final int vertexArrayBinding;
     private final int arrayBufferBinding;
+    private final int drawIndirectBufferBinding;
     private final int shaderStorageBufferBinding0;
     private final int shaderStorageBufferBinding1;
     private final boolean depthTestEnabled;
@@ -38,6 +41,7 @@ final class ForgeDirectGpuGeometryRenderStateGuard {
         this.currentProgram = glGetInteger(GL_CURRENT_PROGRAM);
         this.vertexArrayBinding = glGetInteger(GL_VERTEX_ARRAY_BINDING);
         this.arrayBufferBinding = glGetInteger(GL_ARRAY_BUFFER_BINDING);
+        this.drawIndirectBufferBinding = glGetInteger(GL_DRAW_INDIRECT_BUFFER_BINDING);
         this.shaderStorageBufferBinding0 = glGetIntegeri(GL_SHADER_STORAGE_BUFFER_BINDING, 0);
         this.shaderStorageBufferBinding1 = glGetIntegeri(GL_SHADER_STORAGE_BUFFER_BINDING, ForgeDirectGpuGeometryDrawItemBuffer.BINDING_INDEX);
         this.depthTestEnabled = glIsEnabled(GL_DEPTH_TEST);
@@ -61,6 +65,7 @@ final class ForgeDirectGpuGeometryRenderStateGuard {
             glUseProgram(this.currentProgram);
             glBindVertexArray(this.vertexArrayBinding);
             glBindBuffer(GL_ARRAY_BUFFER, this.arrayBufferBinding);
+            glBindBuffer(GL_DRAW_INDIRECT_BUFFER, this.drawIndirectBufferBinding);
             glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, this.shaderStorageBufferBinding0);
             glBindBufferBase(GL_SHADER_STORAGE_BUFFER, ForgeDirectGpuGeometryDrawItemBuffer.BINDING_INDEX, this.shaderStorageBufferBinding1);
             restoreDepthTest();

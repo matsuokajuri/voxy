@@ -17,6 +17,7 @@ import static org.lwjgl.opengl.GL11C.glDrawArrays;
 import static org.lwjgl.opengl.GL11C.glGetError;
 import static org.lwjgl.opengl.GL11C.glGetString;
 import static org.lwjgl.opengl.GL14C.glMultiDrawArrays;
+import static org.lwjgl.opengl.GL15C.glBindBuffer;
 import static org.lwjgl.opengl.GL20C.GL_COMPILE_STATUS;
 import static org.lwjgl.opengl.GL20C.GL_FRAGMENT_SHADER;
 import static org.lwjgl.opengl.GL20C.GL_LINK_STATUS;
@@ -44,6 +45,8 @@ import static org.lwjgl.opengl.GL30C.glBindBufferBase;
 import static org.lwjgl.opengl.GL30C.glBindVertexArray;
 import static org.lwjgl.opengl.GL30C.glDeleteVertexArrays;
 import static org.lwjgl.opengl.GL30C.glGenVertexArrays;
+import static org.lwjgl.opengl.GL40C.GL_DRAW_INDIRECT_BUFFER;
+import static org.lwjgl.opengl.GL43C.glMultiDrawArraysIndirect;
 import static org.lwjgl.opengl.GL43C.GL_SHADER_STORAGE_BUFFER;
 
 final class ForgeDirectGpuGeometryShader {
@@ -52,9 +55,12 @@ final class ForgeDirectGpuGeometryShader {
     static final String ERROR_STAGE_BIND_GEOMETRY_SSBO = "BIND_GEOMETRY_SSBO";
     static final String ERROR_STAGE_BIND_DRAW_ITEM_SSBO = "BIND_DRAW_ITEM_SSBO";
     static final String ERROR_STAGE_DRAW_ITEM_SSBO_UPLOAD = "DRAW_ITEM_SSBO_UPLOAD";
+    static final String ERROR_STAGE_INDIRECT_COMMAND_BUFFER_UPLOAD = "INDIRECT_COMMAND_BUFFER_UPLOAD";
     static final String ERROR_STAGE_SET_UNIFORMS = "SET_UNIFORMS";
     static final String ERROR_STAGE_DRAW_ARRAYS = "DRAW_ARRAYS";
     static final String ERROR_STAGE_MULTI_DRAW_ARRAYS = "MULTI_DRAW_ARRAYS";
+    static final String ERROR_STAGE_BIND_INDIRECT_COMMAND_BUFFER = "BIND_INDIRECT_COMMAND_BUFFER";
+    static final String ERROR_STAGE_MULTI_DRAW_ARRAYS_INDIRECT = "MULTI_DRAW_ARRAYS_INDIRECT";
 
     private static final String VERTEX_SHADER = """
             #version 430 core
@@ -265,15 +271,23 @@ final class ForgeDirectGpuGeometryShader {
     private boolean supportChecked;
     private boolean shaderSupported;
     private boolean multiDrawSupported;
+    private boolean indirectSupported;
+    private boolean multiDrawIndirectSupported;
+    private boolean drawIndirectBufferSupported;
     private boolean drawIdSupported;
+    private boolean baseInstanceSupported;
     private boolean shaderCompiled;
     private boolean programCreated;
     private boolean multiDrawShaderCompiled;
     private boolean multiDrawProgramCreated;
+    private boolean indirectShaderCompiled;
+    private boolean indirectProgramCreated;
     private String lastShaderError = "none";
     private String lastMultiDrawShaderError = "none";
+    private String lastIndirectShaderError = "none";
     private String unsupportedReason = "none";
     private String multiDrawUnsupportedReason = "none";
+    private String indirectUnsupportedReason = "none";
     private String glVersion = "unknown";
     private String glslVersion = "unknown";
     private int programId;
@@ -284,6 +298,10 @@ final class ForgeDirectGpuGeometryShader {
     private int multiVertexShaderId;
     private int multiFragmentShaderId;
     private int multiVaoId;
+    private int indirectProgramId;
+    private int indirectVertexShaderId;
+    private int indirectFragmentShaderId;
+    private int indirectVaoId;
     private int modelViewLocation = -1;
     private int projectionLocation = -1;
     private int baseRecordLocation = -1;
@@ -294,6 +312,9 @@ final class ForgeDirectGpuGeometryShader {
     private int multiModelViewLocation = -1;
     private int multiProjectionLocation = -1;
     private int multiAlphaLocation = -1;
+    private int indirectModelViewLocation = -1;
+    private int indirectProjectionLocation = -1;
+    private int indirectAlphaLocation = -1;
 
     boolean ensureReady() {
         if (!RenderSystem.isOnRenderThread()) {
@@ -370,6 +391,44 @@ final class ForgeDirectGpuGeometryShader {
         } catch (RuntimeException e) {
             this.lastMultiDrawShaderError = e.getClass().getSimpleName() + ": " + e.getMessage();
             this.closeMultiDrawOnRenderThread();
+            return false;
+        }
+    }
+
+    boolean ensureIndirectReady() {
+        if (!RenderSystem.isOnRenderThread()) {
+            this.lastIndirectShaderError = "not-render-thread";
+            return false;
+        }
+        this.checkSupport();
+        if (!this.indirectSupported) {
+            this.lastIndirectShaderError = this.indirectUnsupportedReason;
+            return false;
+        }
+        if (this.indirectProgramCreated) {
+            return true;
+        }
+        try {
+            this.indirectVertexShaderId = compile(GL_VERTEX_SHADER, MULTI_DRAW_VERTEX_SHADER);
+            this.indirectFragmentShaderId = compile(GL_FRAGMENT_SHADER, FRAGMENT_SHADER);
+            this.indirectProgramId = glCreateProgram();
+            glAttachShader(this.indirectProgramId, this.indirectVertexShaderId);
+            glAttachShader(this.indirectProgramId, this.indirectFragmentShaderId);
+            glLinkProgram(this.indirectProgramId);
+            if (glGetProgrami(this.indirectProgramId, GL_LINK_STATUS) == GL_FALSE) {
+                throw new IllegalStateException("indirect program link failed: " + glGetProgramInfoLog(this.indirectProgramId));
+            }
+            this.indirectVaoId = glGenVertexArrays();
+            this.indirectModelViewLocation = glGetUniformLocation(this.indirectProgramId, "uModelView");
+            this.indirectProjectionLocation = glGetUniformLocation(this.indirectProgramId, "uProjection");
+            this.indirectAlphaLocation = glGetUniformLocation(this.indirectProgramId, "uAlpha");
+            this.indirectShaderCompiled = true;
+            this.indirectProgramCreated = true;
+            this.lastIndirectShaderError = "none";
+            return true;
+        } catch (RuntimeException e) {
+            this.lastIndirectShaderError = e.getClass().getSimpleName() + ": " + e.getMessage();
+            this.closeIndirectOnRenderThread();
             return false;
         }
     }
@@ -487,12 +546,77 @@ final class ForgeDirectGpuGeometryShader {
         return new DrawCallResult(GL_NO_ERROR, ERROR_STAGE_NONE);
     }
 
+    DrawCallResult drawIndirectWithDiagnostics(
+            int geometryBufferId,
+            int drawItemBufferId,
+            int indirectCommandBufferId,
+            Matrix4f modelView,
+            Matrix4f projection,
+            ForgeDirectGpuGeometryDrawList drawList,
+            float alpha
+    ) {
+        if (!this.ensureIndirectReady()) {
+            return new DrawCallResult(GL_NO_ERROR, ERROR_STAGE_NONE);
+        }
+        if (drawItemBufferId == 0 || indirectCommandBufferId == 0 || drawList == null || !drawList.isValid()) {
+            return new DrawCallResult(GL_NO_ERROR, ERROR_STAGE_NONE);
+        }
+
+        glUseProgram(this.indirectProgramId);
+        glBindVertexArray(this.indirectVaoId);
+        int glError = glGetError();
+        if (glError != GL_NO_ERROR) {
+            return new DrawCallResult(glError, ERROR_STAGE_BIND_SHADER);
+        }
+
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, geometryBufferId);
+        glError = glGetError();
+        if (glError != GL_NO_ERROR) {
+            return new DrawCallResult(glError, ERROR_STAGE_BIND_GEOMETRY_SSBO);
+        }
+
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, ForgeDirectGpuGeometryDrawItemBuffer.BINDING_INDEX, drawItemBufferId);
+        glError = glGetError();
+        if (glError != GL_NO_ERROR) {
+            return new DrawCallResult(glError, ERROR_STAGE_BIND_DRAW_ITEM_SSBO);
+        }
+
+        glBindBuffer(GL_DRAW_INDIRECT_BUFFER, indirectCommandBufferId);
+        glError = glGetError();
+        if (glError != GL_NO_ERROR) {
+            return new DrawCallResult(glError, ERROR_STAGE_BIND_INDIRECT_COMMAND_BUFFER);
+        }
+
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            FloatBuffer matrixBuffer = stack.mallocFloat(16);
+            modelView.get(matrixBuffer);
+            glUniformMatrix4fv(this.indirectModelViewLocation, false, matrixBuffer);
+            matrixBuffer.clear();
+            projection.get(matrixBuffer);
+            glUniformMatrix4fv(this.indirectProjectionLocation, false, matrixBuffer);
+            glUniform1f(this.indirectAlphaLocation, alpha);
+        }
+
+        glError = glGetError();
+        if (glError != GL_NO_ERROR) {
+            return new DrawCallResult(glError, ERROR_STAGE_SET_UNIFORMS);
+        }
+
+        glMultiDrawArraysIndirect(GL_TRIANGLES, 0L, drawList.itemCount(), 0);
+        glError = glGetError();
+        if (glError != GL_NO_ERROR) {
+            return new DrawCallResult(glError, ERROR_STAGE_MULTI_DRAW_ARRAYS_INDIRECT);
+        }
+        return new DrawCallResult(GL_NO_ERROR, ERROR_STAGE_NONE);
+    }
+
     void unbind() {
         if (!RenderSystem.isOnRenderThread()) {
             return;
         }
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, 0);
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, ForgeDirectGpuGeometryDrawItemBuffer.BINDING_INDEX, 0);
+        glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
         glBindVertexArray(0);
         glUseProgram(0);
     }
@@ -512,16 +636,24 @@ final class ForgeDirectGpuGeometryShader {
         return new ShaderStatus(
                 this.shaderSupported,
                 this.multiDrawSupported,
+                this.indirectSupported,
+                this.multiDrawIndirectSupported,
+                this.drawIndirectBufferSupported,
                 this.drawIdSupported,
+                this.baseInstanceSupported,
                 this.shaderCompiled,
                 this.programCreated,
                 this.shaderCompiled,
                 this.multiDrawShaderCompiled,
                 this.multiDrawProgramCreated,
+                this.indirectShaderCompiled,
+                this.indirectProgramCreated,
                 this.lastShaderError,
                 this.lastMultiDrawShaderError,
+                this.lastIndirectShaderError,
                 this.unsupportedReason,
                 this.multiDrawUnsupportedReason,
+                this.indirectUnsupportedReason,
                 this.glVersion,
                 this.glslVersion,
                 true
@@ -541,18 +673,37 @@ final class ForgeDirectGpuGeometryShader {
         if (!capabilities.OpenGL43) {
             this.shaderSupported = false;
             this.multiDrawSupported = false;
+            this.indirectSupported = false;
+            this.multiDrawIndirectSupported = false;
+            this.drawIndirectBufferSupported = false;
             this.drawIdSupported = false;
+            this.baseInstanceSupported = false;
             this.unsupportedReason = "OpenGL_4.3_required_for_SSBO";
             this.multiDrawUnsupportedReason = this.unsupportedReason;
+            this.indirectUnsupportedReason = this.unsupportedReason;
             this.lastShaderError = this.unsupportedReason;
             this.lastMultiDrawShaderError = this.multiDrawUnsupportedReason;
+            this.lastIndirectShaderError = this.indirectUnsupportedReason;
             return;
         }
         this.shaderSupported = true;
         this.unsupportedReason = "none";
         this.drawIdSupported = capabilities.GL_ARB_shader_draw_parameters;
+        this.baseInstanceSupported = capabilities.OpenGL42 || capabilities.GL_ARB_base_instance || capabilities.OpenGL43;
         this.multiDrawSupported = this.drawIdSupported;
         this.multiDrawUnsupportedReason = this.multiDrawSupported ? "none" : "GL_ARB_shader_draw_parameters_required_for_gl_DrawIDARB";
+        this.drawIndirectBufferSupported = capabilities.OpenGL40 || capabilities.GL_ARB_draw_indirect || capabilities.OpenGL43;
+        this.multiDrawIndirectSupported = capabilities.OpenGL43 || capabilities.GL_ARB_multi_draw_indirect;
+        this.indirectSupported = this.multiDrawSupported && this.drawIndirectBufferSupported && this.multiDrawIndirectSupported;
+        if (this.indirectSupported) {
+            this.indirectUnsupportedReason = "none";
+        } else if (!this.multiDrawSupported) {
+            this.indirectUnsupportedReason = this.multiDrawUnsupportedReason;
+        } else if (!this.drawIndirectBufferSupported) {
+            this.indirectUnsupportedReason = "GL_DRAW_INDIRECT_BUFFER_not_supported";
+        } else {
+            this.indirectUnsupportedReason = "glMultiDrawArraysIndirect_not_supported";
+        }
     }
 
     private static int compile(int type, String source) {
@@ -585,6 +736,7 @@ final class ForgeDirectGpuGeometryShader {
             this.vaoId = 0;
         }
         this.closeMultiDrawOnRenderThread();
+        this.closeIndirectOnRenderThread();
         this.shaderCompiled = false;
         this.programCreated = false;
         this.modelViewLocation = -1;
@@ -620,19 +772,51 @@ final class ForgeDirectGpuGeometryShader {
         this.multiAlphaLocation = -1;
     }
 
+    private void closeIndirectOnRenderThread() {
+        if (this.indirectProgramId != 0) {
+            glDeleteProgram(this.indirectProgramId);
+            this.indirectProgramId = 0;
+        }
+        if (this.indirectVertexShaderId != 0) {
+            glDeleteShader(this.indirectVertexShaderId);
+            this.indirectVertexShaderId = 0;
+        }
+        if (this.indirectFragmentShaderId != 0) {
+            glDeleteShader(this.indirectFragmentShaderId);
+            this.indirectFragmentShaderId = 0;
+        }
+        if (this.indirectVaoId != 0) {
+            glDeleteVertexArrays(this.indirectVaoId);
+            this.indirectVaoId = 0;
+        }
+        this.indirectShaderCompiled = false;
+        this.indirectProgramCreated = false;
+        this.indirectModelViewLocation = -1;
+        this.indirectProjectionLocation = -1;
+        this.indirectAlphaLocation = -1;
+    }
+
     record ShaderStatus(
             boolean shaderSupported,
             boolean multiDrawSupported,
+            boolean indirectSupported,
+            boolean multiDrawIndirectSupported,
+            boolean drawIndirectBufferSupported,
             boolean drawIdSupported,
+            boolean baseInstanceSupported,
             boolean shaderCompiled,
             boolean programCreated,
             boolean loopShaderCompiled,
             boolean multiDrawShaderCompiled,
             boolean multiDrawProgramCreated,
+            boolean indirectShaderCompiled,
+            boolean indirectProgramCreated,
             String lastShaderError,
             String lastMultiDrawShaderError,
+            String lastIndirectShaderError,
             String unsupportedReason,
             String multiDrawUnsupportedReason,
+            String indirectUnsupportedReason,
             String glVersion,
             String glslVersion,
             boolean usesSsbo
@@ -643,6 +827,10 @@ final class ForgeDirectGpuGeometryShader {
 
         boolean multiDrawOk() {
             return this.multiDrawSupported && this.multiDrawShaderCompiled && this.multiDrawProgramCreated;
+        }
+
+        boolean indirectOk() {
+            return this.indirectSupported && this.indirectShaderCompiled && this.indirectProgramCreated;
         }
     }
 

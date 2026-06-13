@@ -29,6 +29,7 @@ public final class ForgeDirectGpuGeometryRenderer {
     private final ForgeDirectGpuGeometryRenderState state = new ForgeDirectGpuGeometryRenderState();
     private final ForgeDirectGpuGeometryShader shader = new ForgeDirectGpuGeometryShader();
     private final ForgeDirectGpuGeometryDrawItemBuffer drawItemBuffer = new ForgeDirectGpuGeometryDrawItemBuffer();
+    private final ForgeDirectGpuGeometryIndirectCommandBuffer indirectCommandBuffer = new ForgeDirectGpuGeometryIndirectCommandBuffer();
     private ForgeDirectGpuGeometryDrawList drawList = ForgeDirectGpuGeometryDrawList.empty();
     private ForgeDirectGpuGeometryDrawMode configuredDrawMode = ForgeDirectGpuGeometryDrawMode.LOOP_PER_SECTION;
     private int ticksUntilNextAutoPlan;
@@ -72,6 +73,7 @@ public final class ForgeDirectGpuGeometryRenderer {
         this.state.clear();
         this.shader.close();
         this.drawItemBuffer.close();
+        this.indirectCommandBuffer.close();
         this.configuredDrawMode = ForgeDirectGpuGeometryDrawMode.LOOP_PER_SECTION;
         this.ticksUntilNextAutoPlan = ForgeDirectGpuGeometryRendererConfig.autoPlanCooldownTicks();
         this.requestedAutoPlanReason = null;
@@ -120,6 +122,7 @@ public final class ForgeDirectGpuGeometryRenderer {
         if (!result.success()) {
             this.drawList = ForgeDirectGpuGeometryDrawList.empty();
             this.drawItemBuffer.close();
+            this.indirectCommandBuffer.close();
         }
         return result;
     }
@@ -142,11 +145,12 @@ public final class ForgeDirectGpuGeometryRenderer {
     }
 
     public ForgeDirectGpuGeometryShader.ShaderStatus prepareShaderForConfiguredMode() {
-        if (this.configuredDrawMode == ForgeDirectGpuGeometryDrawMode.MULTI_DRAW_ARRAYS) {
+        if (this.configuredDrawMode == ForgeDirectGpuGeometryDrawMode.MULTI_DRAW_ARRAYS_INDIRECT) {
+            this.shader.ensureIndirectReady();
+        } else if (this.configuredDrawMode == ForgeDirectGpuGeometryDrawMode.MULTI_DRAW_ARRAYS) {
             this.shader.ensureMultiDrawReady();
         } else if (this.configuredDrawMode == ForgeDirectGpuGeometryDrawMode.AUTO) {
-            this.shader.ensureMultiDrawReady();
-            if (!this.shader.createStatusSnapshot().multiDrawSupported()) {
+            if (!this.shader.ensureIndirectReady() && !this.shader.ensureMultiDrawReady()) {
                 this.shader.ensureReady();
             }
         } else {
@@ -159,11 +163,17 @@ public final class ForgeDirectGpuGeometryRenderer {
         this.configuredDrawMode = mode == null ? ForgeDirectGpuGeometryDrawMode.LOOP_PER_SECTION : mode;
         if (this.configuredDrawMode == ForgeDirectGpuGeometryDrawMode.LOOP_PER_SECTION) {
             this.drawItemBuffer.close();
+            this.indirectCommandBuffer.close();
+        } else if (this.configuredDrawMode == ForgeDirectGpuGeometryDrawMode.MULTI_DRAW_ARRAYS) {
+            this.indirectCommandBuffer.close();
         }
     }
 
     private ForgeDirectGpuGeometryDrawMode effectiveDrawMode(ForgeDirectGpuGeometryShader.ShaderStatus shaderStatus) {
         if (this.configuredDrawMode == ForgeDirectGpuGeometryDrawMode.AUTO) {
+            if (shaderStatus.indirectSupported()) {
+                return ForgeDirectGpuGeometryDrawMode.MULTI_DRAW_ARRAYS_INDIRECT;
+            }
             return shaderStatus.multiDrawSupported() ? ForgeDirectGpuGeometryDrawMode.MULTI_DRAW_ARRAYS : ForgeDirectGpuGeometryDrawMode.LOOP_PER_SECTION;
         }
         return this.configuredDrawMode;
@@ -257,14 +267,22 @@ public final class ForgeDirectGpuGeometryRenderer {
                 shaderStatus.shaderSupported(),
                 shaderStatus.multiDrawSupported(),
                 shaderStatus.multiDrawUnsupportedReason(),
+                shaderStatus.indirectSupported(),
+                shaderStatus.multiDrawIndirectSupported(),
+                shaderStatus.drawIndirectBufferSupported(),
+                shaderStatus.baseInstanceSupported(),
+                shaderStatus.indirectUnsupportedReason(),
                 shaderStatus.drawIdSupported(),
                 shaderStatus.shaderCompiled(),
                 shaderStatus.programCreated(),
                 shaderStatus.loopShaderCompiled(),
                 shaderStatus.multiDrawShaderCompiled(),
                 shaderStatus.multiDrawProgramCreated(),
+                shaderStatus.indirectShaderCompiled(),
+                shaderStatus.indirectProgramCreated(),
                 shaderStatus.lastShaderError(),
                 shaderStatus.lastMultiDrawShaderError(),
+                shaderStatus.lastIndirectShaderError(),
                 shaderStatus.unsupportedReason(),
                 shaderStatus.glVersion(),
                 shaderStatus.glslVersion(),
@@ -273,6 +291,8 @@ public final class ForgeDirectGpuGeometryRenderer {
                 effectiveDrawMode.name(),
                 this.drawItemBuffer.isCreated(),
                 this.drawItemBuffer.bytes(),
+                this.indirectCommandBuffer.isCreated(),
+                this.indirectCommandBuffer.bytes(),
                 this.drawList.isValid() && this.state.drawListValid() && !drawListStale && !drawListDimensionMismatch,
                 drawListStale || drawListDimensionMismatch,
                 this.drawList.heapGeneration(),
@@ -382,6 +402,7 @@ public final class ForgeDirectGpuGeometryRenderer {
             this.autoPlanFailures++;
             this.drawList = ForgeDirectGpuGeometryDrawList.empty();
             this.drawItemBuffer.close();
+            this.indirectCommandBuffer.close();
         } else {
             this.rememberAutoPlanCameraAndHeap();
         }
@@ -564,9 +585,19 @@ public final class ForgeDirectGpuGeometryRenderer {
         this.drawList = ForgeDirectGpuGeometryDrawList.of(items, heapGeneration, dimensionId, cameraX, cameraY, cameraZ, skippedSections, skippedRecords, selectionMode);
         if (this.drawList.isValid() && this.configuredDrawMode != ForgeDirectGpuGeometryDrawMode.LOOP_PER_SECTION) {
             ForgeDirectGpuGeometryShader.ShaderStatus shaderStatus = this.prepareShaderForConfiguredMode();
-            if (shaderStatus.multiDrawSupported()) {
+            ForgeDirectGpuGeometryDrawMode effectiveDrawMode = this.effectiveDrawMode(shaderStatus);
+            if (effectiveDrawMode == ForgeDirectGpuGeometryDrawMode.MULTI_DRAW_ARRAYS
+                    || effectiveDrawMode == ForgeDirectGpuGeometryDrawMode.MULTI_DRAW_ARRAYS_INDIRECT) {
                 this.drawItemBuffer.upload(this.drawList);
             }
+            if (effectiveDrawMode == ForgeDirectGpuGeometryDrawMode.MULTI_DRAW_ARRAYS_INDIRECT) {
+                this.indirectCommandBuffer.upload(this.drawList);
+            } else {
+                this.indirectCommandBuffer.close();
+            }
+        } else if (this.configuredDrawMode == ForgeDirectGpuGeometryDrawMode.LOOP_PER_SECTION) {
+            this.drawItemBuffer.close();
+            this.indirectCommandBuffer.close();
         }
         boolean success = this.drawList.isValid();
         String skippedReason = this.drawList.isValid() ? "none" : "NO_VALID_SECTIONS";
@@ -683,7 +714,24 @@ public final class ForgeDirectGpuGeometryRenderer {
                 Matrix4f projection = event.getProjectionMatrix();
                 int geometryBufferId = heap.geometryBufferIdForDirectRenderer();
                 float alpha = (float) ForgeDirectGpuGeometryRendererConfig.debugAlpha();
-                if (effectiveDrawMode == ForgeDirectGpuGeometryDrawMode.MULTI_DRAW_ARRAYS) {
+                if (effectiveDrawMode == ForgeDirectGpuGeometryDrawMode.MULTI_DRAW_ARRAYS_INDIRECT) {
+                    if (!this.drawItemBuffer.matches(this.drawList) && !this.drawItemBuffer.upload(this.drawList)) {
+                        this.state.recordDrawFailure("DRAW_ITEM_SSBO_UPLOAD_FAILED:" + this.drawItemBuffer.lastUploadError(), ForgeDirectGpuGeometryShader.ERROR_STAGE_DRAW_ITEM_SSBO_UPLOAD);
+                        return;
+                    }
+                    if (!this.indirectCommandBuffer.matches(this.drawList) && !this.indirectCommandBuffer.upload(this.drawList)) {
+                        this.state.recordDrawFailure("INDIRECT_COMMAND_BUFFER_UPLOAD_FAILED:" + this.indirectCommandBuffer.lastUploadError(), ForgeDirectGpuGeometryShader.ERROR_STAGE_INDIRECT_COMMAND_BUFFER_UPLOAD);
+                        return;
+                    }
+                    ForgeDirectGpuGeometryShader.DrawCallResult drawResult = this.shader.drawIndirectWithDiagnostics(geometryBufferId, this.drawItemBuffer.bufferId(), this.indirectCommandBuffer.bufferId(), modelView, projection, this.drawList, alpha);
+                    drawItems = this.drawList.itemCount();
+                    drawCalls = drawItems == 0 ? 0 : 1;
+                    vertices = this.drawList.vertexCount();
+                    if (!drawResult.ok()) {
+                        lastGlError = drawResult.formattedError();
+                        lastGlErrorStage = drawResult.stage();
+                    }
+                } else if (effectiveDrawMode == ForgeDirectGpuGeometryDrawMode.MULTI_DRAW_ARRAYS) {
                     if (!this.drawItemBuffer.matches(this.drawList) && !this.drawItemBuffer.upload(this.drawList)) {
                         this.state.recordDrawFailure("DRAW_ITEM_SSBO_UPLOAD_FAILED:" + this.drawItemBuffer.lastUploadError(), ForgeDirectGpuGeometryShader.ERROR_STAGE_DRAW_ITEM_SSBO_UPLOAD);
                         return;
@@ -759,6 +807,9 @@ public final class ForgeDirectGpuGeometryRenderer {
             return ForgeDirectGpuGeometryDrawMode.LOOP_PER_SECTION;
         }
         if (this.configuredDrawMode == ForgeDirectGpuGeometryDrawMode.AUTO) {
+            if (this.shader.ensureIndirectReady()) {
+                return ForgeDirectGpuGeometryDrawMode.MULTI_DRAW_ARRAYS_INDIRECT;
+            }
             if (this.shader.ensureMultiDrawReady()) {
                 return ForgeDirectGpuGeometryDrawMode.MULTI_DRAW_ARRAYS;
             }
@@ -767,6 +818,14 @@ public final class ForgeDirectGpuGeometryRenderer {
                 return null;
             }
             return ForgeDirectGpuGeometryDrawMode.LOOP_PER_SECTION;
+        }
+        if (this.configuredDrawMode == ForgeDirectGpuGeometryDrawMode.MULTI_DRAW_ARRAYS_INDIRECT) {
+            if (!this.shader.ensureIndirectReady()) {
+                ForgeDirectGpuGeometryShader.ShaderStatus status = this.shader.createStatusSnapshot();
+                this.state.recordDrawFailure("INDIRECT_UNSUPPORTED:" + status.indirectUnsupportedReason(), ForgeDirectGpuGeometryShader.ERROR_STAGE_NONE);
+                return null;
+            }
+            return ForgeDirectGpuGeometryDrawMode.MULTI_DRAW_ARRAYS_INDIRECT;
         }
         if (!this.shader.ensureMultiDrawReady()) {
             ForgeDirectGpuGeometryShader.ShaderStatus status = this.shader.createStatusSnapshot();
