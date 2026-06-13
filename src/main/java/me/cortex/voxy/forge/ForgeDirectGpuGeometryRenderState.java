@@ -1,7 +1,7 @@
 package me.cortex.voxy.forge;
 
 final class ForgeDirectGpuGeometryRenderState {
-    static final String STAGE = "G5_6_INDIRECT_DRAW_PROTOTYPE";
+    static final String STAGE = "G5_7_INDIRECT_BUFFER_HARDENING";
 
     private boolean initialized;
     private int plannedSections;

@@ -6,6 +6,7 @@ import org.lwjgl.system.MemoryUtil;
 import static org.lwjgl.opengl.GL15C.GL_DYNAMIC_DRAW;
 import static org.lwjgl.opengl.GL15C.glDeleteBuffers;
 import static org.lwjgl.opengl.GL45C.glCreateBuffers;
+import static org.lwjgl.opengl.GL45C.nglGetNamedBufferSubData;
 import static org.lwjgl.opengl.GL45C.nglNamedBufferData;
 
 final class ForgeDirectGpuGeometryDrawItemBuffer {
@@ -81,6 +82,28 @@ final class ForgeDirectGpuGeometryDrawItemBuffer {
                 && this.drawListBuildTimeMillis == drawList.buildTimeMillis();
     }
 
+    int[] readbackWords() {
+        requireRenderThread("read back direct GL draw item buffer");
+        if (this.bufferId == 0 || this.itemCount <= 0 || this.bytes <= 0) {
+            throw new IllegalStateException("Direct GL draw item buffer is not created");
+        }
+        if (this.bytes > Integer.MAX_VALUE) {
+            throw new IllegalStateException("Direct GL draw item buffer is too large to audit: " + this.bytes);
+        }
+
+        int[] words = new int[this.itemCount * WORDS_PER_ITEM];
+        long ptr = MemoryUtil.nmemAlloc(this.bytes);
+        try {
+            nglGetNamedBufferSubData(this.bufferId, 0L, this.bytes, ptr);
+            for (int i = 0; i < words.length; i++) {
+                words[i] = MemoryUtil.memGetInt(ptr + i * (long) Integer.BYTES);
+            }
+            return words;
+        } finally {
+            MemoryUtil.nmemFree(ptr);
+        }
+    }
+
     void close() {
         if (RenderSystem.isOnRenderThread()) {
             this.closeOnRenderThread();
@@ -110,6 +133,18 @@ final class ForgeDirectGpuGeometryDrawItemBuffer {
 
     long bytes() {
         return this.bytes;
+    }
+
+    int itemCount() {
+        return this.itemCount;
+    }
+
+    long heapGeneration() {
+        return this.heapGeneration;
+    }
+
+    long drawListBuildTimeMillis() {
+        return this.drawListBuildTimeMillis;
     }
 
     String lastUploadError() {

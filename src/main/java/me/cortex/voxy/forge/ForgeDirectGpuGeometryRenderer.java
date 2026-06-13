@@ -54,6 +54,26 @@ public final class ForgeDirectGpuGeometryRenderer {
     private boolean lastStressDrawListValid;
     private boolean lastStressShaderSupported;
     private boolean lastStressSourceRegressionOk;
+    private boolean lastStressLoopOk;
+    private boolean lastStressMultiDrawOk;
+    private boolean lastStressIndirectOk;
+    private boolean lastStressIndirectAuditOk;
+    private long lastStressGlErrorCount;
+    private long lastStressStateRestoreFailures;
+    private long auditRuns;
+    private long auditFailures;
+    private String lastIndirectAuditError = "none";
+    private double lastIndirectAuditDurationMs;
+    private int lastAuditedDrawItems;
+    private long lastAuditedCommandBytes;
+    private long lastAuditedDrawItemBytes;
+    private boolean lastCommandBufferMatch;
+    private boolean lastDrawItemBufferMatch;
+    private long lastAuditHeapGeneration = -1L;
+    private String lastAuditDimension = "none";
+    private int lastInvalidCommands;
+    private int lastInvalidDrawItems;
+    private long lastAuditedVertices;
 
     ForgeDirectGpuGeometryRenderer(ForgeVoxyInstance instance) {
         this.instance = instance;
@@ -88,6 +108,7 @@ public final class ForgeDirectGpuGeometryRenderer {
         this.lastAutoPlanY = Double.NaN;
         this.lastAutoPlanZ = Double.NaN;
         this.lastAutoPlanHeapGeneration = -1L;
+        this.clearIndirectAuditStats();
     }
 
     public ForgeDirectGpuGeometryDrawPlanner.PlanResult planSample() {
@@ -179,6 +200,34 @@ public final class ForgeDirectGpuGeometryRenderer {
         return this.configuredDrawMode;
     }
 
+    private String autoModeSelectedReason(ForgeDirectGpuGeometryShader.ShaderStatus shaderStatus) {
+        if (this.configuredDrawMode != ForgeDirectGpuGeometryDrawMode.AUTO) {
+            return "configured:" + this.configuredDrawMode.name();
+        }
+        if (shaderStatus.indirectSupported()) {
+            return "indirect-supported";
+        }
+        if (shaderStatus.multiDrawSupported()) {
+            return "multi-draw-supported";
+        }
+        return "loop-fallback";
+    }
+
+    private String autoModeFallbackReason(ForgeDirectGpuGeometryShader.ShaderStatus shaderStatus) {
+        if (this.configuredDrawMode != ForgeDirectGpuGeometryDrawMode.AUTO) {
+            return "none";
+        }
+        if (shaderStatus.indirectSupported()) {
+            return "none";
+        }
+        String indirectReason = shaderStatus.indirectUnsupportedReason() == null ? "unknown" : shaderStatus.indirectUnsupportedReason();
+        if (shaderStatus.multiDrawSupported()) {
+            return "indirect:" + indirectReason;
+        }
+        String multiReason = shaderStatus.multiDrawUnsupportedReason() == null ? "unknown" : shaderStatus.multiDrawUnsupportedReason();
+        return "indirect:" + indirectReason + ",multi:" + multiReason;
+    }
+
     public void recordStressResult(StressResult result) {
         this.stressRuns++;
         this.lastStressDurationMs = result.durationMs();
@@ -187,6 +236,12 @@ public final class ForgeDirectGpuGeometryRenderer {
         this.lastStressDrawListValid = result.drawListValid();
         this.lastStressShaderSupported = result.shaderSupported();
         this.lastStressSourceRegressionOk = result.sourceRegressionOk();
+        this.lastStressLoopOk = result.loopOk();
+        this.lastStressMultiDrawOk = result.multiDrawOk();
+        this.lastStressIndirectOk = result.indirectOk();
+        this.lastStressIndirectAuditOk = result.indirectAuditOk();
+        this.lastStressGlErrorCount = result.glErrorCount();
+        this.lastStressStateRestoreFailures = result.stateRestoreFailures();
         this.lastStressError = result.success() ? "none" : result.error();
         if (!result.success()) {
             this.stressFailures++;
@@ -203,6 +258,152 @@ public final class ForgeDirectGpuGeometryRenderer {
         this.lastStressDrawListValid = false;
         this.lastStressShaderSupported = false;
         this.lastStressSourceRegressionOk = false;
+        this.lastStressLoopOk = false;
+        this.lastStressMultiDrawOk = false;
+        this.lastStressIndirectOk = false;
+        this.lastStressIndirectAuditOk = false;
+        this.lastStressGlErrorCount = 0L;
+        this.lastStressStateRestoreFailures = 0L;
+    }
+
+    public ForgeDirectGpuGeometryIndirectAuditResult auditIndirectBuffers() {
+        long start = System.nanoTime();
+        if (!RenderSystem.isOnRenderThread()) {
+            return this.recordIndirectAuditResult(ForgeDirectGpuGeometryIndirectAuditResult.failure("not-render-thread", elapsedMs(start)));
+        }
+        try {
+            ForgeGpuGeometryHeap heap = this.instance.getGpuGeometryUploadManager().getHeapForDebugReadback();
+            if (heap == null || !heap.isCreated()) {
+                return this.recordIndirectAuditResult(ForgeDirectGpuGeometryIndirectAuditResult.failure("heap-missing", elapsedMs(start)));
+            }
+            if (!this.drawList.isValid()) {
+                return this.recordIndirectAuditResult(ForgeDirectGpuGeometryIndirectAuditResult.failure("draw-list-invalid", elapsedMs(start)));
+            }
+            if (this.drawList.isStale(heap.generation())) {
+                return this.recordIndirectAuditResult(ForgeDirectGpuGeometryIndirectAuditResult.failure("draw-list-stale", elapsedMs(start)));
+            }
+            String currentDimension = currentDimensionId(Minecraft.getInstance());
+            if (this.drawList.isDimensionMismatch(currentDimension)) {
+                return this.recordIndirectAuditResult(ForgeDirectGpuGeometryIndirectAuditResult.failure("dimension-mismatch:" + this.drawList.dimensionId() + "!=" + currentDimension, elapsedMs(start)));
+            }
+            ForgeDirectGpuGeometryShader.ShaderStatus shaderStatus = this.prepareShaderForConfiguredMode();
+            ForgeDirectGpuGeometryDrawMode effectiveDrawMode = this.effectiveDrawMode(shaderStatus);
+            if (effectiveDrawMode != ForgeDirectGpuGeometryDrawMode.MULTI_DRAW_ARRAYS_INDIRECT) {
+                return this.recordIndirectAuditResult(ForgeDirectGpuGeometryIndirectAuditResult.failure("effective-mode-not-indirect:" + effectiveDrawMode.name(), elapsedMs(start)));
+            }
+            if (!this.drawItemBuffer.matches(this.drawList) && !this.drawItemBuffer.upload(this.drawList)) {
+                return this.recordIndirectAuditResult(ForgeDirectGpuGeometryIndirectAuditResult.failure("draw-item-buffer-upload-failed:" + this.drawItemBuffer.lastUploadError(), elapsedMs(start)));
+            }
+            if (!this.indirectCommandBuffer.matches(this.drawList) && !this.indirectCommandBuffer.upload(this.drawList)) {
+                return this.recordIndirectAuditResult(ForgeDirectGpuGeometryIndirectAuditResult.failure("indirect-command-buffer-upload-failed:" + this.indirectCommandBuffer.lastUploadError(), elapsedMs(start)));
+            }
+
+            int[] commandWords = this.indirectCommandBuffer.readbackWords();
+            int[] drawItemWords = this.drawItemBuffer.readbackWords();
+            AuditCounts counts = compareIndirectBuffers(commandWords, drawItemWords, this.drawList);
+            boolean commandMatch = counts.invalidCommands() == 0
+                    && commandWords.length == this.drawList.itemCount() * 4
+                    && this.indirectCommandBuffer.bytes() == this.drawList.itemCount() * 16L;
+            boolean drawItemMatch = counts.invalidDrawItems() == 0
+                    && drawItemWords.length == this.drawList.itemCount() * 8
+                    && this.drawItemBuffer.bytes() == this.drawList.itemCount() * 32L;
+            boolean success = commandMatch && drawItemMatch && counts.auditedVertices() == this.drawList.vertexCount();
+            String error = success ? "none" : "mismatch";
+            return this.recordIndirectAuditResult(new ForgeDirectGpuGeometryIndirectAuditResult(
+                    success,
+                    error,
+                    elapsedMs(start),
+                    this.drawList.itemCount(),
+                    this.indirectCommandBuffer.bytes(),
+                    this.drawItemBuffer.bytes(),
+                    commandMatch,
+                    drawItemMatch,
+                    this.drawList.heapGeneration(),
+                    this.drawList.dimensionId(),
+                    counts.invalidCommands(),
+                    counts.invalidDrawItems(),
+                    counts.auditedVertices()
+            ));
+        } catch (RuntimeException e) {
+            return this.recordIndirectAuditResult(ForgeDirectGpuGeometryIndirectAuditResult.failure(e.getClass().getSimpleName() + ": " + e.getMessage(), elapsedMs(start)));
+        }
+    }
+
+    public void clearIndirectAuditStats() {
+        this.auditRuns = 0L;
+        this.auditFailures = 0L;
+        this.lastIndirectAuditError = "none";
+        this.lastIndirectAuditDurationMs = 0.0D;
+        this.lastAuditedDrawItems = 0;
+        this.lastAuditedCommandBytes = 0L;
+        this.lastAuditedDrawItemBytes = 0L;
+        this.lastCommandBufferMatch = false;
+        this.lastDrawItemBufferMatch = false;
+        this.lastAuditHeapGeneration = -1L;
+        this.lastAuditDimension = "none";
+        this.lastInvalidCommands = 0;
+        this.lastInvalidDrawItems = 0;
+        this.lastAuditedVertices = 0L;
+    }
+
+    private ForgeDirectGpuGeometryIndirectAuditResult recordIndirectAuditResult(ForgeDirectGpuGeometryIndirectAuditResult result) {
+        this.auditRuns++;
+        this.lastIndirectAuditError = result.success() ? "none" : result.error();
+        this.lastIndirectAuditDurationMs = result.durationMs();
+        this.lastAuditedDrawItems = result.auditedDrawItems();
+        this.lastAuditedCommandBytes = result.commandBytes();
+        this.lastAuditedDrawItemBytes = result.drawItemBytes();
+        this.lastCommandBufferMatch = result.commandBufferMatch();
+        this.lastDrawItemBufferMatch = result.drawItemBufferMatch();
+        this.lastAuditHeapGeneration = result.heapGeneration();
+        this.lastAuditDimension = result.dimensionId();
+        this.lastInvalidCommands = result.invalidCommands();
+        this.lastInvalidDrawItems = result.invalidDrawItems();
+        this.lastAuditedVertices = result.auditedVertices();
+        if (!result.success()) {
+            this.auditFailures++;
+        }
+        return result;
+    }
+
+    private static AuditCounts compareIndirectBuffers(int[] commandWords, int[] drawItemWords, ForgeDirectGpuGeometryDrawList drawList) {
+        int invalidCommands = 0;
+        int invalidDrawItems = 0;
+        long auditedVertices = 0L;
+        int drawIndex = 0;
+        for (ForgeDirectGpuGeometryDrawItem item : drawList.items()) {
+            int commandBase = drawIndex * 4;
+            if (commandBase + 3 >= commandWords.length
+                    || commandWords[commandBase] != item.vertexCount()
+                    || commandWords[commandBase + 1] != 1
+                    || commandWords[commandBase + 2] != 0
+                    || commandWords[commandBase + 3] != drawIndex) {
+                invalidCommands++;
+            } else {
+                auditedVertices += Integer.toUnsignedLong(commandWords[commandBase]);
+            }
+
+            int itemBase = drawIndex * 8;
+            if (itemBase + 7 >= drawItemWords.length
+                    || drawItemWords[itemBase] != item.baseRecord()
+                    || drawItemWords[itemBase + 1] != item.recordCount()
+                    || drawItemWords[itemBase + 2] != item.sectionId()
+                    || drawItemWords[itemBase + 3] != item.bucketMask()
+                    || drawItemWords[itemBase + 4] != Float.floatToRawIntBits(item.originX())
+                    || drawItemWords[itemBase + 5] != Float.floatToRawIntBits(item.originY())
+                    || drawItemWords[itemBase + 6] != Float.floatToRawIntBits(item.originZ())
+                    || drawItemWords[itemBase + 7] != Float.floatToRawIntBits(item.scale())) {
+                invalidDrawItems++;
+            }
+            drawIndex++;
+        }
+        if (commandWords.length != drawList.itemCount() * 4) {
+            invalidCommands += Math.abs(commandWords.length - drawList.itemCount() * 4);
+        }
+        if (drawItemWords.length != drawList.itemCount() * 8) {
+            invalidDrawItems += Math.abs(drawItemWords.length - drawList.itemCount() * 8);
+        }
+        return new AuditCounts(invalidCommands, invalidDrawItems, auditedVertices);
     }
 
     public ForgeDirectGpuGeometryRendererStats createStatusSnapshot() {
@@ -289,10 +490,29 @@ public final class ForgeDirectGpuGeometryRenderer {
                 shaderStatus.usesSsbo(),
                 this.configuredDrawMode.name(),
                 effectiveDrawMode.name(),
+                this.autoModeSelectedReason(shaderStatus),
+                this.autoModeFallbackReason(shaderStatus),
                 this.drawItemBuffer.isCreated(),
                 this.drawItemBuffer.bytes(),
+                this.drawItemBuffer.drawListBuildTimeMillis(),
                 this.indirectCommandBuffer.isCreated(),
                 this.indirectCommandBuffer.bytes(),
+                this.indirectCommandBuffer.drawListBuildTimeMillis(),
+                this.lastCommandBufferMatch && this.lastDrawItemBufferMatch && this.lastInvalidCommands == 0 && this.lastInvalidDrawItems == 0 && this.auditRuns > 0 && "none".equals(this.lastIndirectAuditError),
+                this.auditRuns,
+                this.auditFailures,
+                this.lastIndirectAuditError,
+                this.lastIndirectAuditDurationMs,
+                this.lastAuditedDrawItems,
+                this.lastAuditedCommandBytes,
+                this.lastAuditedDrawItemBytes,
+                this.lastCommandBufferMatch,
+                this.lastDrawItemBufferMatch,
+                this.lastAuditHeapGeneration,
+                this.lastAuditDimension,
+                this.lastInvalidCommands,
+                this.lastInvalidDrawItems,
+                this.lastAuditedVertices,
                 this.drawList.isValid() && this.state.drawListValid() && !drawListStale && !drawListDimensionMismatch,
                 drawListStale || drawListDimensionMismatch,
                 this.drawList.heapGeneration(),
@@ -338,6 +558,12 @@ public final class ForgeDirectGpuGeometryRenderer {
                 this.lastStressDrawListValid,
                 this.lastStressShaderSupported,
                 this.lastStressSourceRegressionOk,
+                this.lastStressLoopOk,
+                this.lastStressMultiDrawOk,
+                this.lastStressIndirectOk,
+                this.lastStressIndirectAuditOk,
+                this.lastStressGlErrorCount,
+                this.lastStressStateRestoreFailures,
                 ForgeDirectGpuGeometryRendererConfig.actualDrawEnabled(),
                 ForgeDirectGpuGeometryRenderState.STAGE
         );
@@ -894,8 +1120,17 @@ public final class ForgeDirectGpuGeometryRenderer {
             long plannedRecords,
             boolean drawListValid,
             boolean shaderSupported,
-            boolean sourceRegressionOk
+            boolean sourceRegressionOk,
+            boolean loopOk,
+            boolean multiDrawOk,
+            boolean indirectOk,
+            boolean indirectAuditOk,
+            long glErrorCount,
+            long stateRestoreFailures
     ) {
+    }
+
+    private record AuditCounts(int invalidCommands, int invalidDrawItems, long auditedVertices) {
     }
 
     private static String normalizeReason(String reason) {
