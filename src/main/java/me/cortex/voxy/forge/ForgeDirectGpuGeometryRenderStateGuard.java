@@ -28,6 +28,7 @@ final class ForgeDirectGpuGeometryRenderStateGuard {
     private final int vertexArrayBinding;
     private final int arrayBufferBinding;
     private final int shaderStorageBufferBinding0;
+    private final int shaderStorageBufferBinding1;
     private final boolean depthTestEnabled;
     private final boolean depthMask;
     private final boolean blendEnabled;
@@ -38,6 +39,7 @@ final class ForgeDirectGpuGeometryRenderStateGuard {
         this.vertexArrayBinding = glGetInteger(GL_VERTEX_ARRAY_BINDING);
         this.arrayBufferBinding = glGetInteger(GL_ARRAY_BUFFER_BINDING);
         this.shaderStorageBufferBinding0 = glGetIntegeri(GL_SHADER_STORAGE_BUFFER_BINDING, 0);
+        this.shaderStorageBufferBinding1 = glGetIntegeri(GL_SHADER_STORAGE_BUFFER_BINDING, ForgeDirectGpuGeometryDrawItemBuffer.BINDING_INDEX);
         this.depthTestEnabled = glIsEnabled(GL_DEPTH_TEST);
         this.depthMask = glGetBoolean(GL_DEPTH_WRITEMASK);
         this.blendEnabled = glIsEnabled(GL_BLEND);
@@ -60,6 +62,7 @@ final class ForgeDirectGpuGeometryRenderStateGuard {
             glBindVertexArray(this.vertexArrayBinding);
             glBindBuffer(GL_ARRAY_BUFFER, this.arrayBufferBinding);
             glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, this.shaderStorageBufferBinding0);
+            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, ForgeDirectGpuGeometryDrawItemBuffer.BINDING_INDEX, this.shaderStorageBufferBinding1);
             restoreDepthTest();
             restoreBlend();
             restoreCull();

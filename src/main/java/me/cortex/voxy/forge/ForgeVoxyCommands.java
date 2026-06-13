@@ -109,6 +109,13 @@ public final class ForgeVoxyCommands {
                         .executes(ctx -> setDirectGlRendererDraw(ctx.getSource(), true)))
                 .then(Commands.literal("direct_gl_renderer_draw_disable")
                         .executes(ctx -> setDirectGlRendererDraw(ctx.getSource(), false)))
+                .then(Commands.literal("direct_gl_renderer_draw_mode")
+                        .then(Commands.literal("loop")
+                                .executes(ctx -> setDirectGlRendererDrawMode(ctx.getSource(), ForgeDirectGpuGeometryDrawMode.LOOP_PER_SECTION)))
+                        .then(Commands.literal("multi_draw_arrays")
+                                .executes(ctx -> setDirectGlRendererDrawMode(ctx.getSource(), ForgeDirectGpuGeometryDrawMode.MULTI_DRAW_ARRAYS)))
+                        .then(Commands.literal("auto")
+                                .executes(ctx -> setDirectGlRendererDrawMode(ctx.getSource(), ForgeDirectGpuGeometryDrawMode.AUTO))))
                 .then(Commands.literal("direct_gl_renderer_shader_status")
                         .executes(ctx -> directGlRendererShaderStatus(ctx.getSource())))
                 .then(Commands.literal("direct_gl_renderer_draw_list_status")
@@ -1216,14 +1223,26 @@ public final class ForgeVoxyCommands {
     private static int directGlRendererStatus(CommandSourceStack source) {
         var status = ForgeVoxyInstance.INSTANCE.getDirectGpuGeometryRenderer().createStatusSnapshot();
         String message = String.format(
-                "Voxy direct GL renderer: enabled=%s initialized=%s hasHeap=%s heapCreated=%s shaderSupported=%s shaderCompiled=%s programCreated=%s drawListValid=%s drawListStale=%s drawItems=%d drawListRecords=%d drawListVertices=%d plannedSections=%d plannedRecords=%d plannedVertices=%d candidateSections=%d acceptedSections=%d rejectedByRadius=%d rejectedByFrustum=%d frustumAvailable=%s cameraChunk=%s cameraSection=%s skippedSections=%d skippedRecords=%d selectionMode=%s uploadedSectionCandidates=%d invalidMetadata=%d lastPlanDurationMs=%.2f lastPlanError=%s lastSkippedReason=%s planRuns=%d planFailures=%d autoPlan=%s autoPlanCooldownTicks=%d ticksUntilNextAutoPlan=%d lastAutoPlanReason=%s lastAutoPlanSkippedReason=%s lastAutoPlanDurationMs=%.2f autoPlanRuns=%d autoPlanSkipped=%d lastAutoPlanFailures=%d autoPlanMaxCandidates=%d autoPlanMaxSections=%d autoPlanMaxRecords=%d autoPlanMoveThresholdBlocks=%d drawListRuns=%d drawListFailures=%d lastDrawListMs=%.2f maxDrawListMs=%.2f lastDrawListError=%s lastDrawListSkippedReason=%s drawListHeapGeneration=%d currentHeapGeneration=%d drawListDimension=%s currentDimension=%s clears=%d maxSections=%d maxRecords=%d maxPlanCandidates=%d maxDrawSections=%d maxDrawRecords=%d maxRecordsPerSection=%d renderDistanceChunks=%d alpha=%.2f ignoreDepth=%s doubleSided=%s actualDrawEnabled=%s drawCallsIssued=%d verticesDrawn=%d lastFrameDrawCalls=%d lastFrameDrawItems=%d lastFrameVertices=%d lastFrameRenderMs=%.2f maxFrameRenderMs=%.2f avgFrameRenderMs=%.2f lastFrameOverBudget=%s overBudgetFrames=%d frameBudgetMs=%.2f planBudgetMs=%.2f lastDrawError=%s lastRenderSkippedReason=%s lastGlError=%s lastGlErrorStage=%s glErrorCount=%d lastPreExistingGlError=%s lastStateRestoreError=%s stateRestoreFailures=%d stressRuns=%d stressFailures=%d lastStressError=%s lastStressDurationMs=%.2f lastStressPlannedSections=%d lastStressPlannedRecords=%d lastStressDrawListValid=%s lastStressShaderSupported=%s lastStressSourceRegressionOk=%s stage=%s usesSsbo=%s mdic=false vboOwner=upload-only-heap",
+                "Voxy direct GL renderer: stage=%s enabled=%s initialized=%s hasHeap=%s heapCreated=%s configuredDrawMode=%s effectiveDrawMode=%s multiDrawSupported=%s multiDrawUnsupportedReason=%s drawIdSupported=%s shaderSupported=%s shaderCompiled=%s programCreated=%s loopShaderCompiled=%s multiDrawShaderCompiled=%s multiDrawProgramCreated=%s drawItemSsboCreated=%s drawItemSsboBytes=%d usesSsbo=%s drawListValid=%s drawListStale=%s drawItems=%d drawListRecords=%d drawListVertices=%d plannedSections=%d plannedRecords=%d plannedVertices=%d candidateSections=%d acceptedSections=%d rejectedByRadius=%d rejectedByFrustum=%d frustumAvailable=%s cameraChunk=%s cameraSection=%s skippedSections=%d skippedRecords=%d selectionMode=%s uploadedSectionCandidates=%d invalidMetadata=%d lastPlanDurationMs=%.2f lastPlanError=%s lastSkippedReason=%s planRuns=%d planFailures=%d autoPlan=%s autoPlanCooldownTicks=%d ticksUntilNextAutoPlan=%d lastAutoPlanReason=%s lastAutoPlanSkippedReason=%s lastAutoPlanDurationMs=%.2f autoPlanRuns=%d autoPlanSkipped=%d lastAutoPlanFailures=%d drawListRuns=%d drawListFailures=%d lastDrawListMs=%.2f maxDrawListMs=%.2f lastDrawListError=%s lastDrawListSkippedReason=%s drawListHeapGeneration=%d currentHeapGeneration=%d drawListDimension=%s currentDimension=%s clears=%d maxPlanCandidates=%d maxDrawSections=%d maxDrawRecords=%d maxRecordsPerSection=%d renderDistanceChunks=%d alpha=%.2f ignoreDepth=%s doubleSided=%s actualDrawEnabled=%s lastFrameApiDrawCalls=%d lastFrameLogicalDrawItems=%d lastFrameVertices=%d drawApiCallsIssued=%d logicalDrawItemsIssued=%d verticesDrawn=%d lastFrameRenderMs=%.2f maxFrameRenderMs=%.2f avgFrameRenderMs=%.2f lastFrameOverBudget=%s overBudgetFrames=%d frameBudgetMs=%.2f planBudgetMs=%.2f lastDrawError=%s lastRenderSkippedReason=%s lastGlError=%s lastGlErrorStage=%s glErrorCount=%d lastPreExistingGlError=%s lastStateRestoreError=%s stateRestoreFailures=%d stressRuns=%d stressFailures=%d lastStressError=%s lastStressDurationMs=%.2f lastStressPlannedSections=%d lastStressPlannedRecords=%d lastStressDrawListValid=%s lastStressShaderSupported=%s lastStressSourceRegressionOk=%s mdic=false vboOwner=upload-only-heap",
+                status.stage(),
                 status.enabled(),
                 status.initialized(),
                 status.hasHeap(),
                 status.heapCreated(),
+                status.configuredDrawMode(),
+                status.effectiveDrawMode(),
+                status.multiDrawSupported(),
+                status.multiDrawUnsupportedReason(),
+                status.drawIdSupported(),
                 status.shaderSupported(),
                 status.shaderCompiled(),
                 status.programCreated(),
+                status.loopShaderCompiled(),
+                status.multiDrawShaderCompiled(),
+                status.multiDrawProgramCreated(),
+                status.drawItemSsboCreated(),
+                status.drawItemSsboBytes(),
+                status.usesSsbo(),
                 status.drawListValid(),
                 status.drawListStale(),
                 status.drawItems(),
@@ -1258,10 +1277,6 @@ public final class ForgeVoxyCommands {
                 status.autoPlanRuns(),
                 status.autoPlanSkipped(),
                 status.lastAutoPlanFailures(),
-                status.autoPlanMaxCandidates(),
-                status.autoPlanMaxSections(),
-                status.autoPlanMaxRecords(),
-                status.autoPlanMoveThresholdBlocks(),
                 status.drawListBuildRuns(),
                 status.drawListBuildFailures(),
                 status.lastDrawListBuildDurationMs(),
@@ -1273,8 +1288,6 @@ public final class ForgeVoxyCommands {
                 status.drawListDimension(),
                 status.currentDimension(),
                 status.clearCount(),
-                status.maxSections(),
-                status.maxRecords(),
                 status.maxPlanCandidates(),
                 status.maxDrawSections(),
                 status.maxDrawRecords(),
@@ -1284,11 +1297,12 @@ public final class ForgeVoxyCommands {
                 status.ignoreDepth(),
                 status.doubleSided(),
                 status.actualDrawEnabled(),
-                status.drawCallsIssued(),
-                status.verticesDrawn(),
                 status.lastFrameDrawCalls(),
                 status.lastFrameDrawItems(),
                 status.lastFrameVertices(),
+                status.drawCallsIssued(),
+                status.logicalDrawItemsIssued(),
+                status.verticesDrawn(),
                 status.lastDrawDurationMs(),
                 status.maxFrameRenderMs(),
                 status.avgFrameRenderMs(),
@@ -1312,9 +1326,7 @@ public final class ForgeVoxyCommands {
                 status.lastStressPlannedRecords(),
                 status.lastStressDrawListValid(),
                 status.lastStressShaderSupported(),
-                status.lastStressSourceRegressionOk(),
-                status.stage(),
-                status.usesSsbo()
+                status.lastStressSourceRegressionOk()
         );
         source.sendSuccess(() -> Component.literal(message), false);
         return status.enabled() ? 1 : 0;
@@ -1328,7 +1340,7 @@ public final class ForgeVoxyCommands {
             ForgeVoxyInstance.INSTANCE.getDirectGpuGeometryRenderer().clear();
         }
         String message = enabled
-                ? "Voxy direct GL renderer: runtime-only enabled. G5.4 can build a camera/radius-aware hardened direct draw list, but actualDrawEnabled stays false until /voxy direct_gl_renderer_draw_enable."
+                ? "Voxy direct GL renderer: runtime-only enabled. G5.5 can build a camera/radius-aware direct draw list; actualDrawEnabled stays false until /voxy direct_gl_renderer_draw_enable, and drawMode defaults to LOOP_PER_SECTION."
                 : "Voxy direct GL renderer: runtime-only disabled, actual draw disabled, and direct renderer state was cleared. This was not written to toml.";
         source.sendSuccess(() -> Component.literal(message), false);
         return 1;
@@ -1460,6 +1472,25 @@ public final class ForgeVoxyCommands {
         return 0;
     }
 
+    private static int setDirectGlRendererDrawMode(CommandSourceStack source, ForgeDirectGpuGeometryDrawMode mode) {
+        ForgeDirectGpuGeometryRenderer renderer = ForgeVoxyInstance.INSTANCE.getDirectGpuGeometryRenderer();
+        ForgeVoxyRuntimeOverrides.setDirectGpuGeometryRenderer(true);
+        renderer.setDrawMode(mode);
+        renderer.markEnabledRuntime();
+        var status = renderer.createStatusSnapshot();
+        String message = String.format(
+                "Voxy direct GL renderer: configuredDrawMode=%s effectiveDrawMode=%s multiDrawSupported=%s multiDrawUnsupportedReason=%s drawIdSupported=%s drawItemSsboCreated=%s. This is runtime-only and was not written to toml.",
+                status.configuredDrawMode(),
+                status.effectiveDrawMode(),
+                status.multiDrawSupported(),
+                status.multiDrawUnsupportedReason(),
+                status.drawIdSupported(),
+                status.drawItemSsboCreated()
+        );
+        source.sendSuccess(() -> Component.literal(message), false);
+        return 1;
+    }
+
     private static int setDirectGlRendererDraw(CommandSourceStack source, boolean enabled) {
         ForgeVoxyRuntimeOverrides.setDirectGpuGeometryRendererActualDraw(enabled);
         if (!enabled) {
@@ -1469,15 +1500,23 @@ public final class ForgeVoxyCommands {
         }
 
         ForgeVoxyInstance.INSTANCE.getDirectGpuGeometryRenderer().markEnabledRuntime();
-        ForgeDirectGpuGeometryShader.ShaderStatus shader = ForgeVoxyInstance.INSTANCE.getDirectGpuGeometryRenderer().prepareShader();
-        if (!shader.ok()) {
+        ForgeDirectGpuGeometryShader.ShaderStatus shader = ForgeVoxyInstance.INSTANCE.getDirectGpuGeometryRenderer().prepareShaderForConfiguredMode();
+        ForgeDirectGpuGeometryRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getDirectGpuGeometryRenderer().createStatusSnapshot();
+        boolean shaderReady = "MULTI_DRAW_ARRAYS".equals(rendererStatus.effectiveDrawMode()) ? shader.multiDrawOk() : shader.ok();
+        if (!shaderReady) {
             String message = String.format(
-                    "Voxy direct GL renderer: actual draw requested, but shader is not ready. shaderSupported=%s shaderCompiled=%s programCreated=%s unsupportedReason=%s lastShaderError=%s glVersion=%s glslVersion=%s. No toml was written.",
+                    "Voxy direct GL renderer: actual draw requested, but shader is not ready. configuredDrawMode=%s effectiveDrawMode=%s shaderSupported=%s shaderCompiled=%s programCreated=%s multiDrawSupported=%s multiDrawShaderCompiled=%s unsupportedReason=%s multiDrawUnsupportedReason=%s lastShaderError=%s lastMultiDrawShaderError=%s glVersion=%s glslVersion=%s. No toml was written.",
+                    rendererStatus.configuredDrawMode(),
+                    rendererStatus.effectiveDrawMode(),
                     shader.shaderSupported(),
                     shader.shaderCompiled(),
                     shader.programCreated(),
+                    shader.multiDrawSupported(),
+                    shader.multiDrawShaderCompiled(),
                     shader.unsupportedReason(),
+                    shader.multiDrawUnsupportedReason(),
                     shader.lastShaderError(),
+                    shader.lastMultiDrawShaderError(),
                     shader.glVersion(),
                     shader.glslVersion()
             );
@@ -1485,26 +1524,36 @@ public final class ForgeVoxyCommands {
             return 0;
         }
 
-        source.sendSuccess(() -> Component.literal("Voxy direct GL renderer: actual draw enabled runtime-only. Build a draw list with /voxy direct_gl_renderer_build_draw_list or /voxy direct_gl_renderer_auto_plan_once; this still uses the isolated G5.4 hardened camera-aware debug path only."), false);
+        source.sendSuccess(() -> Component.literal("Voxy direct GL renderer: actual draw enabled runtime-only. Build a draw list with /voxy direct_gl_renderer_build_draw_list or /voxy direct_gl_renderer_auto_plan_once. configuredDrawMode=" + rendererStatus.configuredDrawMode() + " effectiveDrawMode=" + rendererStatus.effectiveDrawMode() + " stage=" + ForgeDirectGpuGeometryRenderState.STAGE + "."), false);
         return 1;
     }
 
     private static int directGlRendererShaderStatus(CommandSourceStack source) {
         ForgeDirectGpuGeometryShader.ShaderStatus status = ForgeVoxyInstance.INSTANCE.getDirectGpuGeometryRenderer().createShaderStatusSnapshot();
+        ForgeDirectGpuGeometryRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getDirectGpuGeometryRenderer().createStatusSnapshot();
         String message = String.format(
-                "Voxy direct GL shader: shaderSupported=%s shaderCompiled=%s programCreated=%s lastShaderError=%s unsupportedReason=%s glVersion=%s glslVersion=%s usesSsbo=%s stage=%s",
+                "Voxy direct GL shader: shaderSupported=%s shaderCompiled=%s programCreated=%s loopShaderCompiled=%s multiDrawSupported=%s drawIdSupported=%s multiDrawShaderCompiled=%s multiDrawProgramCreated=%s drawItemSsboCreated=%s drawItemSsboBytes=%d lastShaderError=%s lastMultiDrawShaderError=%s unsupportedReason=%s multiDrawUnsupportedReason=%s glVersion=%s glslVersion=%s usesSsbo=%s stage=%s",
                 status.shaderSupported(),
                 status.shaderCompiled(),
                 status.programCreated(),
+                status.loopShaderCompiled(),
+                status.multiDrawSupported(),
+                status.drawIdSupported(),
+                status.multiDrawShaderCompiled(),
+                status.multiDrawProgramCreated(),
+                rendererStatus.drawItemSsboCreated(),
+                rendererStatus.drawItemSsboBytes(),
                 status.lastShaderError(),
+                status.lastMultiDrawShaderError(),
                 status.unsupportedReason(),
+                status.multiDrawUnsupportedReason(),
                 status.glVersion(),
                 status.glslVersion(),
                 status.usesSsbo(),
                 ForgeDirectGpuGeometryRenderState.STAGE
         );
         source.sendSuccess(() -> Component.literal(message), false);
-        return status.ok() ? 1 : 0;
+        return status.ok() || status.multiDrawOk() ? 1 : 0;
     }
 
     private static int directGlRendererStressOnce(CommandSourceStack source) {
@@ -2063,12 +2112,13 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getGpuGeometryReadbackMeshRefreshManager().clear();
         ForgeVoxyInstance.INSTANCE.getGpuGeometryReadbackDebugRenderer().clearStats();
         ForgeVoxyInstance.INSTANCE.getDirectGpuGeometryRenderer().clear();
+        ForgeVoxyInstance.INSTANCE.getDirectGpuGeometryRenderer().setDrawMode(ForgeDirectGpuGeometryDrawMode.LOOP_PER_SECTION);
         ForgeVoxyInstance.INSTANCE.getDirectGpuGeometryRenderer().markEnabledRuntime();
         ForgeVoxyInstance.INSTANCE.getDirectGpuGeometryRenderer().requestAutoPlan(ForgeDirectGpuGeometryRenderer.REASON_PRESET);
         boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
-        String message = "Voxy preset direct_gl_debug: runtime-only G5.4 hardened direct GL debug renderer applied, not written to toml. "
+        String message = "Voxy preset direct_gl_debug: runtime-only G5.5 direct GL debug renderer applied, not written to toml. "
                 + "Effective values forced: engine=true autoIngest=true autoBuiltSection=true autoGeometryConsume=true geometryGpuUpload=true directGlRenderer=true directAutoPlan=true simpleGpu=false readbackAutoRefresh=false geometryGpuVisualization=false debugRenderer=false. "
-                + "actualDrawEnabled=false by default. Auto plan may build a camera/radius-aware draw list after upload status shows uploadedSections > 0; run /voxy direct_gl_renderer_draw_enable to draw it or /voxy direct_gl_renderer_auto_plan_once for a manual plan. "
+                + "actualDrawEnabled=false and configuredDrawMode=LOOP_PER_SECTION by default. Auto plan may build a camera/radius-aware draw list after upload status shows uploadedSections > 0; run /voxy direct_gl_renderer_draw_mode multi_draw_arrays and /voxy direct_gl_renderer_draw_enable to test the optional glMultiDrawArrays path. "
                 + "This does not enable MDIC, VoxyRenderSystem, shaderpack, or the simple renderer. "
                 + (engineReady ? "WorldEngine is active." : "No active client world was found; enter or re-enter a world to create the WorldEngine.");
         source.sendSuccess(() -> Component.literal(message), false);

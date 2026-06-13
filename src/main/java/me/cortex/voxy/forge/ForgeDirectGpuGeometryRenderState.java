@@ -1,7 +1,7 @@
 package me.cortex.voxy.forge;
 
 final class ForgeDirectGpuGeometryRenderState {
-    static final String STAGE = "G5_4_DIRECT_GL_HARDENED_DEBUG_DRAW";
+    static final String STAGE = "G5_5_MULTI_DRAW_ARRAYS_PROTOTYPE";
 
     private boolean initialized;
     private int plannedSections;
@@ -41,6 +41,7 @@ final class ForgeDirectGpuGeometryRenderState {
     private String lastDrawListError = "none";
     private String lastDrawListSkippedReason = "none";
     private long drawCallsIssued;
+    private long logicalDrawItemsIssued;
     private long verticesDrawn;
     private int lastFrameDrawCalls;
     private int lastFrameDrawItems;
@@ -165,6 +166,7 @@ final class ForgeDirectGpuGeometryRenderState {
             this.stateRestoreFailures++;
         }
         this.drawCallsIssued += this.lastFrameDrawCalls;
+        this.logicalDrawItemsIssued += this.lastFrameDrawItems;
         this.verticesDrawn += this.lastFrameVertices;
     }
 
@@ -186,6 +188,17 @@ final class ForgeDirectGpuGeometryRenderState {
         this.lastDrawDurationMs = 0.0D;
         this.lastDrawError = error == null ? "unknown" : error;
         this.lastRenderSkippedReason = "DRAW_EXCEPTION";
+    }
+
+    void recordDrawFailure(String error, String glErrorStage) {
+        this.lastFrameDrawItems = 0;
+        this.lastFrameDrawCalls = 0;
+        this.lastFrameVertices = 0;
+        this.lastDrawDurationMs = 0.0D;
+        this.lastDrawError = error == null ? "unknown" : error;
+        this.lastRenderSkippedReason = this.lastDrawError;
+        this.lastGlError = "none";
+        this.lastGlErrorStage = glErrorStage == null ? "none" : glErrorStage;
     }
 
     void recordDrawListStale(long currentHeapGeneration) {
@@ -243,6 +256,7 @@ final class ForgeDirectGpuGeometryRenderState {
         this.lastDrawListError = "none";
         this.lastDrawListSkippedReason = "none";
         this.drawCallsIssued = 0;
+        this.logicalDrawItemsIssued = 0;
         this.verticesDrawn = 0;
         this.lastFrameDrawItems = 0;
         this.lastFrameDrawCalls = 0;
@@ -414,6 +428,10 @@ final class ForgeDirectGpuGeometryRenderState {
 
     long drawCallsIssued() {
         return this.drawCallsIssued;
+    }
+
+    long logicalDrawItemsIssued() {
+        return this.logicalDrawItemsIssued;
     }
 
     long verticesDrawn() {
