@@ -33,6 +33,7 @@ public final class ForgeVoxyInstance {
     private final ForgeGpuGeometryUploadManager gpuGeometryUploadManager = new ForgeGpuGeometryUploadManager(this);
     private final ForgeSimpleGpuMeshRenderer simpleGpuMeshRenderer = new ForgeSimpleGpuMeshRenderer(this);
     private final ForgeDirectGpuGeometryRenderer directGpuGeometryRenderer = new ForgeDirectGpuGeometryRenderer(this);
+    private final ForgeMdicCommandManager mdicCommandManager = new ForgeMdicCommandManager(this);
     private final AtomicInteger storageWriteCount = new AtomicInteger();
     private String activeClientDimension;
 
@@ -139,6 +140,10 @@ public final class ForgeVoxyInstance {
         return this.directGpuGeometryRenderer;
     }
 
+    public ForgeMdicCommandManager getMdicCommandManager() {
+        return this.mdicCommandManager;
+    }
+
     private void onRegisterClientCommands(RegisterClientCommandsEvent event) {
         ForgeVoxyCommands.register(event.getDispatcher());
     }
@@ -176,6 +181,7 @@ public final class ForgeVoxyInstance {
         this.gpuGeometryReadbackMeshRefreshManager.clear();
         this.gpuGeometryReadbackDebugRenderer.clearStats();
         this.directGpuGeometryRenderer.clear();
+        this.mdicCommandManager.clear();
         this.gpuMeshCache.setActiveDimension(dimension);
         this.closeActiveWorld();
         if (ForgeVoxyRuntimeOverrides.enabledWorldEngineSkeleton()) {
@@ -250,6 +256,7 @@ public final class ForgeVoxyInstance {
         this.gpuGeometryReadbackMeshRefreshManager.clear();
         this.gpuGeometryReadbackDebugRenderer.clearStats();
         this.directGpuGeometryRenderer.clear();
+        this.mdicCommandManager.clear();
         this.gpuMeshCache.clear();
         this.activeClientDimension = null;
         this.closeActiveWorld();

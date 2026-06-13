@@ -68,6 +68,10 @@ public final class ForgeVoxyConfig {
     public static final ForgeConfigSpec.IntValue DIRECT_GPU_GEOMETRY_AUTO_PLAN_MAX_CANDIDATES;
     public static final ForgeConfigSpec.IntValue DIRECT_GPU_GEOMETRY_AUTO_PLAN_MAX_SECTIONS;
     public static final ForgeConfigSpec.IntValue DIRECT_GPU_GEOMETRY_AUTO_PLAN_MAX_RECORDS;
+    public static final ForgeConfigSpec.BooleanValue ENABLE_MDIC_COMMAND_SKELETON;
+    public static final ForgeConfigSpec.IntValue MDIC_COMMAND_MAX_SECTIONS;
+    public static final ForgeConfigSpec.IntValue MDIC_COMMAND_MAX_RECORDS;
+    public static final ForgeConfigSpec.BooleanValue MDIC_COMMAND_DEBUG_LOG;
     public static final ForgeConfigSpec.IntValue CPU_MESH_CACHE_MAX_ENTRIES;
     public static final ForgeConfigSpec.IntValue BUILT_SECTION_CACHE_MAX_ENTRIES;
     public static final ForgeConfigSpec.BooleanValue ENABLE_DEBUG_MESH_RENDERER;
@@ -286,6 +290,18 @@ public final class ForgeVoxyConfig {
         DIRECT_GPU_GEOMETRY_AUTO_PLAN_MAX_RECORDS = builder
                 .comment("Maximum packed quad records selected by one automatic direct GL planning pass.")
                 .defineInRange("directGpuGeometryAutoPlanMaxRecords", 32768, 1, 131072);
+        ENABLE_MDIC_COMMAND_SKELETON = builder
+                .comment("G5.8 MDIC command-buffer skeleton. This plans/uploads/audits a debug command buffer only and never issues MDIC draw calls.")
+                .define("enableMdicCommandSkeleton", false);
+        MDIC_COMMAND_MAX_SECTIONS = builder
+                .comment("Maximum uploaded sections selected by one MDIC skeleton plan command.")
+                .defineInRange("mdicCommandMaxSections", 16, 1, 64);
+        MDIC_COMMAND_MAX_RECORDS = builder
+                .comment("Maximum packed quad records referenced by one MDIC skeleton command list.")
+                .defineInRange("mdicCommandMaxRecords", 32768, 1, 131072);
+        MDIC_COMMAND_DEBUG_LOG = builder
+                .comment("Logs MDIC skeleton command planning/upload summaries.")
+                .define("mdicCommandDebugLog", false);
         CPU_MESH_CACHE_MAX_ENTRIES = builder
                 .comment("Maximum cached CPU mesh section/layer entries kept by the debug pipeline. Old entries are closed and evicted with LRU ordering.")
                 .defineInRange("cpuMeshCacheMaxEntries", 2048, 1, 8192);

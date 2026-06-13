@@ -144,6 +144,20 @@ public final class ForgeVoxyCommands {
                         .executes(ctx -> directGlRendererStressStatus(ctx.getSource())))
                 .then(Commands.literal("direct_gl_renderer_stress_clear")
                         .executes(ctx -> directGlRendererStressClear(ctx.getSource())))
+                .then(Commands.literal("direct_gl_mdic_plan_sample")
+                        .executes(ctx -> directGlMdicPlanSample(ctx.getSource())))
+                .then(Commands.literal("direct_gl_mdic_build_buffer")
+                        .executes(ctx -> directGlMdicBuildBuffer(ctx.getSource())))
+                .then(Commands.literal("direct_gl_mdic_status")
+                        .executes(ctx -> directGlMdicStatus(ctx.getSource())))
+                .then(Commands.literal("direct_gl_mdic_clear")
+                        .executes(ctx -> directGlMdicClear(ctx.getSource())))
+                .then(Commands.literal("direct_gl_mdic_audit")
+                        .executes(ctx -> directGlMdicAudit(ctx.getSource())))
+                .then(Commands.literal("direct_gl_mdic_audit_status")
+                        .executes(ctx -> directGlMdicAuditStatus(ctx.getSource())))
+                .then(Commands.literal("direct_gl_mdic_audit_clear")
+                        .executes(ctx -> directGlMdicAuditClear(ctx.getSource())))
                 .then(Commands.literal("mesh_cache_status")
                         .executes(ctx -> meshCacheStatus(ctx.getSource())))
                 .then(Commands.literal("mesh_cache_clear")
@@ -180,6 +194,8 @@ public final class ForgeVoxyCommands {
                                 .executes(ctx -> applyPresetGlHeapReadback(ctx.getSource())))
                         .then(Commands.literal("direct_gl_debug")
                                 .executes(ctx -> applyPresetDirectGlDebug(ctx.getSource())))
+                        .then(Commands.literal("mdic_skeleton")
+                                .executes(ctx -> applyPresetMdicSkeleton(ctx.getSource())))
                         .then(Commands.literal("clear")
                                 .executes(ctx -> clearPreset(ctx.getSource())))
                         .then(Commands.literal("status")
@@ -1222,7 +1238,7 @@ public final class ForgeVoxyCommands {
     private static int clearGeometryGpuUpload(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getGpuGeometryUploadManager().clear();
         ForgeVoxyInstance.INSTANCE.getDirectGpuGeometryRenderer().clear();
-        source.sendSuccess(() -> Component.literal("Voxy: released upload-only GL geometry heap buffers, cleared GPU upload processed-state, cleared direct GL renderer skeleton state, and cleared GL heap readback visualization/readback-mesh caches. CPU section geometry manager intents were left intact and can re-upload."), false);
+        source.sendSuccess(() -> Component.literal("Voxy: released upload-only GL geometry heap buffers, cleared GPU upload processed-state, cleared direct GL renderer skeleton state, cleared MDIC command skeleton state, and cleared GL heap readback visualization/readback-mesh caches. CPU section geometry manager intents were left intact and can re-upload."), false);
         if (ForgeGpuMeshUploadManager.getConfiguredSource() == SimpleGpuMeshSource.GL_HEAP_READBACK
                 && ForgeVoxyRuntimeOverrides.enableGeometryGpuReadbackMeshAutoRefresh()) {
             ForgeVoxyInstance.INSTANCE.getGpuGeometryReadbackMeshRefreshManager().requestRefresh(ForgeGpuGeometryReadbackMeshRefreshManager.REASON_UPLOAD_CLEAR_REBUILD);
@@ -1871,6 +1887,161 @@ public final class ForgeVoxyCommands {
         return 1;
     }
 
+    private static int directGlMdicPlanSample(CommandSourceStack source) {
+        ForgeMdicCommandPlanner.PlanResult result = ForgeVoxyInstance.INSTANCE.getMdicCommandManager().planSample();
+        ForgeMdicCommandStats status = ForgeVoxyInstance.INSTANCE.getMdicCommandManager().createStatusSnapshot();
+        String message = String.format(
+                "Voxy MDIC skeleton plan: success=%s skippedReason=%s error=%s uploadedSectionCandidates=%d candidateSections=%d invalidMetadata=%d skippedSections=%d skippedRecords=%d plannedCommands=%d plannedRecords=%d plannedVertices=%d bucketMask=per-command generation=%d dimension=%s selectionMode=%s durationMs=%.2f actualDrawEnabled=false stage=%s draw=false renderer=none",
+                result.success(),
+                result.skippedReason(),
+                result.error(),
+                result.uploadedSectionCandidates(),
+                result.candidateSections(),
+                result.invalidMetadata(),
+                result.skippedSections(),
+                result.skippedRecords(),
+                status.commandCount(),
+                status.commandRecords(),
+                status.commandVertices(),
+                status.currentHeapGeneration(),
+                status.commandListDimension(),
+                status.selectionMode(),
+                result.durationMs(),
+                status.stage()
+        );
+        if (result.success()) {
+            source.sendSuccess(() -> Component.literal(message), false);
+            return Math.max(1, status.commandCount());
+        }
+        source.sendFailure(Component.literal(message));
+        return 0;
+    }
+
+    private static int directGlMdicBuildBuffer(CommandSourceStack source) {
+        boolean success = ForgeVoxyInstance.INSTANCE.getMdicCommandManager().buildBuffer();
+        ForgeMdicCommandStats status = ForgeVoxyInstance.INSTANCE.getMdicCommandManager().createStatusSnapshot();
+        String message = String.format(
+                "Voxy MDIC skeleton buffer: success=%s commandListValid=%s commandListStale=%s commandCount=%d commandRecords=%d commandBufferCreated=%s commandBufferBytes=%d commandBufferGeneration=%d commandBufferDimension=%s lastBuildBufferDurationMs=%.2f lastError=%s actualDrawEnabled=false draw=false stage=%s",
+                success,
+                status.commandListValid(),
+                status.commandListStale(),
+                status.commandCount(),
+                status.commandRecords(),
+                status.commandBufferCreated(),
+                status.commandBufferBytes(),
+                status.commandBufferGeneration(),
+                status.commandBufferDimension(),
+                status.lastBuildBufferDurationMs(),
+                status.lastError(),
+                status.stage()
+        );
+        if (success) {
+            source.sendSuccess(() -> Component.literal(message), false);
+            return Math.max(1, status.commandCount());
+        }
+        source.sendFailure(Component.literal(message));
+        return 0;
+    }
+
+    private static int directGlMdicAudit(CommandSourceStack source) {
+        ForgeMdicCommandAuditResult result = ForgeVoxyInstance.INSTANCE.getMdicCommandManager().audit();
+        String message = String.format(
+                "Voxy MDIC skeleton audit: success=%s error=%s durationMs=%.2f commandBufferMatch=%s invalidCommands=%d auditedCommands=%d auditedBytes=%d heapGeneration=%d dimension=%s readbackApi=glGetNamedBufferSubData actualDrawEnabled=false draw=false stage=%s",
+                result.success(),
+                result.error(),
+                result.durationMs(),
+                result.commandBufferMatch(),
+                result.invalidCommands(),
+                result.auditedCommands(),
+                result.auditedBytes(),
+                result.heapGeneration(),
+                result.dimensionId(),
+                ForgeMdicCommandLayout.STAGE
+        );
+        if (result.success()) {
+            source.sendSuccess(() -> Component.literal(message), false);
+            return Math.max(1, result.auditedCommands());
+        }
+        source.sendFailure(Component.literal(message));
+        return 0;
+    }
+
+    private static int directGlMdicStatus(CommandSourceStack source) {
+        ForgeMdicCommandStats status = ForgeVoxyInstance.INSTANCE.getMdicCommandManager().createStatusSnapshot();
+        String message = String.format(
+                "Voxy MDIC skeleton: stage=%s enabled=%s actualDrawEnabled=%s hasHeap=%s heapCreated=%s currentHeapGeneration=%d commandListValid=%s commandListStale=%s commandCount=%d commandRecords=%d commandVertices=%d skippedSections=%d skippedRecords=%d selectionMode=%s commandListDimension=%s commandBufferCreated=%s commandBufferBytes=%d commandBufferGeneration=%d commandBufferDimension=%s lastPlanDurationMs=%.2f lastBuildBufferDurationMs=%.2f lastError=%s lastAuditOk=%s lastInvalidCommands=%d auditRuns=%d auditFailures=%d lastCommandBufferMatch=%s lastAuditedCommands=%d lastAuditedBytes=%d lastAuditHeapGeneration=%d lastAuditDimension=%s renderer=none draw=false mdicRenderer=false voxyRenderSystem=false",
+                status.stage(),
+                status.enabled(),
+                status.actualDrawEnabled(),
+                status.hasHeap(),
+                status.heapCreated(),
+                status.currentHeapGeneration(),
+                status.commandListValid(),
+                status.commandListStale(),
+                status.commandCount(),
+                status.commandRecords(),
+                status.commandVertices(),
+                status.skippedSections(),
+                status.skippedRecords(),
+                status.selectionMode(),
+                status.commandListDimension(),
+                status.commandBufferCreated(),
+                status.commandBufferBytes(),
+                status.commandBufferGeneration(),
+                status.commandBufferDimension(),
+                status.lastPlanDurationMs(),
+                status.lastBuildBufferDurationMs(),
+                status.lastError(),
+                status.lastAuditOk(),
+                status.lastInvalidCommands(),
+                status.auditRuns(),
+                status.auditFailures(),
+                status.lastCommandBufferMatch(),
+                status.lastAuditedCommands(),
+                status.lastAuditedBytes(),
+                status.lastAuditHeapGeneration(),
+                status.lastAuditDimension()
+        );
+        source.sendSuccess(() -> Component.literal(message), false);
+        return status.enabled() ? 1 : 0;
+    }
+
+    private static int directGlMdicAuditStatus(CommandSourceStack source) {
+        ForgeMdicCommandStats status = ForgeVoxyInstance.INSTANCE.getMdicCommandManager().createStatusSnapshot();
+        String message = String.format(
+                "Voxy MDIC skeleton audit: auditRuns=%d auditFailures=%d lastAuditError=%s lastAuditDurationMs=%.2f lastCommandBufferMatch=%s lastInvalidCommands=%d lastAuditedCommands=%d lastAuditedBytes=%d lastAuditHeapGeneration=%d lastAuditDimension=%s commandListValid=%s commandListStale=%s commandBufferCreated=%s commandBufferBytes=%d stage=%s",
+                status.auditRuns(),
+                status.auditFailures(),
+                status.lastAuditError(),
+                status.lastAuditDurationMs(),
+                status.lastCommandBufferMatch(),
+                status.lastInvalidCommands(),
+                status.lastAuditedCommands(),
+                status.lastAuditedBytes(),
+                status.lastAuditHeapGeneration(),
+                status.lastAuditDimension(),
+                status.commandListValid(),
+                status.commandListStale(),
+                status.commandBufferCreated(),
+                status.commandBufferBytes(),
+                status.stage()
+        );
+        source.sendSuccess(() -> Component.literal(message), false);
+        return status.auditFailures() == 0 ? 1 : 0;
+    }
+
+    private static int directGlMdicAuditClear(CommandSourceStack source) {
+        ForgeVoxyInstance.INSTANCE.getMdicCommandManager().clearAuditStats();
+        source.sendSuccess(() -> Component.literal("Voxy MDIC skeleton audit: audit counters cleared. Command list, command buffer, geometry heap, direct renderer, and simple renderer were left unchanged."), false);
+        return 1;
+    }
+
+    private static int directGlMdicClear(CommandSourceStack source) {
+        ForgeVoxyInstance.INSTANCE.getMdicCommandManager().clear();
+        source.sendSuccess(() -> Component.literal("Voxy MDIC skeleton: command list, command buffer, and audit state cleared. CPU caches, SectionGeometryManager, upload-only GL heap, direct renderer, and simple renderer were left intact."), false);
+        return 1;
+    }
+
     private static int meshCacheStatus(CommandSourceStack source) {
         var cache = ForgeVoxyInstance.INSTANCE.getCpuMeshCache();
         var status = cache.createStatusSnapshot();
@@ -2214,7 +2385,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyRuntimeOverrides.applyOffPreset();
         clearRuntimePipeline();
         ForgeVoxyInstance.INSTANCE.closeActiveWorld();
-        source.sendSuccess(() -> Component.literal("Voxy preset off: runtime overrides disabled engine, auto ingest, auto CPU mesh build, auto BuiltSection build, auto geometry-manager consume, upload-only GL geometry heap, direct GL renderer skeleton, simple GPU renderer, and debug renderer. Overrides are not written to toml."), false);
+        source.sendSuccess(() -> Component.literal("Voxy preset off: runtime overrides disabled engine, auto ingest, auto CPU mesh build, auto BuiltSection build, auto geometry-manager consume, upload-only GL geometry heap, direct GL renderer skeleton, MDIC command skeleton, simple GPU renderer, and debug renderer. Overrides are not written to toml."), false);
         return 1;
     }
 
@@ -2329,12 +2500,33 @@ public final class ForgeVoxyCommands {
         return 1;
     }
 
+    private static int applyPresetMdicSkeleton(CommandSourceStack source) {
+        ForgeVoxyRuntimeOverrides.applyMdicSkeletonPreset();
+        ForgeVoxyInstance.INSTANCE.getGpuMeshUploadManager().clear();
+        ForgeVoxyInstance.INSTANCE.getGpuMeshCache().clear();
+        ForgeVoxyInstance.INSTANCE.getGpuGeometryVisualizationCache().clear();
+        ForgeVoxyInstance.INSTANCE.getGpuGeometryReadbackMeshCache().clear();
+        ForgeVoxyInstance.INSTANCE.getGpuGeometryReadbackMeshRefreshManager().clear();
+        ForgeVoxyInstance.INSTANCE.getGpuGeometryReadbackDebugRenderer().clearStats();
+        ForgeVoxyInstance.INSTANCE.getDirectGpuGeometryRenderer().clear();
+        ForgeVoxyInstance.INSTANCE.getMdicCommandManager().clear();
+        boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
+        String message = "Voxy preset mdic_skeleton: runtime-only G5.8 MDIC command-buffer skeleton applied, not written to toml. "
+                + "Effective values forced: engine=true autoIngest=true autoBuiltSection=true autoGeometryConsume=true geometryGpuUpload=true mdicCommandSkeleton=true simpleGpu=false directGlRenderer=false directActualDraw=false readbackAutoRefresh=false geometryGpuVisualization=false debugRenderer=false. "
+                + "mdic_skeleton is command-buffer skeleton only; no renderer draw is issued. Use /voxy direct_gl_mdic_plan_sample, /voxy direct_gl_mdic_build_buffer, and /voxy direct_gl_mdic_audit after geometry_gpu_upload_status shows uploadedSections > 0. "
+                + "This does not enable MDICSectionRenderer, VoxyRenderSystem, shaderpack, Embeddium/Oculus/Sodium/Iris, or mixins. "
+                + (engineReady ? "WorldEngine is active." : "No active client world was found; enter or re-enter a world to create the WorldEngine.");
+        source.sendSuccess(() -> Component.literal(message), false);
+        return 1;
+    }
+
     private static int clearPreset(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.clear();
         ForgeVoxyInstance.INSTANCE.getGpuGeometryReadbackMeshCache().clear();
         ForgeVoxyInstance.INSTANCE.getGpuGeometryReadbackMeshRefreshManager().clear();
         ForgeVoxyInstance.INSTANCE.getGpuMeshUploadManager().clear();
         ForgeVoxyInstance.INSTANCE.getDirectGpuGeometryRenderer().clear();
+        ForgeVoxyInstance.INSTANCE.getMdicCommandManager().clear();
         if (!ForgeVoxyRuntimeOverrides.enabledWorldEngineSkeleton()) {
             clearRuntimePipeline();
             ForgeVoxyInstance.INSTANCE.closeActiveWorld();
@@ -2655,6 +2847,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getGpuGeometryReadbackMeshRefreshManager().clear();
         ForgeVoxyInstance.INSTANCE.getGpuGeometryReadbackDebugRenderer().clearStats();
         ForgeVoxyInstance.INSTANCE.getDirectGpuGeometryRenderer().clear();
+        ForgeVoxyInstance.INSTANCE.getMdicCommandManager().clear();
         ForgeVoxyInstance.INSTANCE.getGpuMeshCache().clear();
     }
 
@@ -2671,7 +2864,8 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getGpuGeometryReadbackMeshRefreshManager().clear();
         ForgeVoxyInstance.INSTANCE.getGpuGeometryReadbackDebugRenderer().clearStats();
         ForgeVoxyInstance.INSTANCE.getDirectGpuGeometryRenderer().clear();
-        source.sendSuccess(() -> Component.literal("Voxy: cleared CPU mesh cache, CPU-only BuiltSection cache, CPU-only section geometry manager, simple GPU mesh cache, upload-only GL geometry heap, direct GL renderer skeleton state, GL heap readback visualization/readback-mesh caches, readback mesh auto-refresh state, auto mesh build record, and auto BuiltSection build record."), false);
+        ForgeVoxyInstance.INSTANCE.getMdicCommandManager().clear();
+        source.sendSuccess(() -> Component.literal("Voxy: cleared CPU mesh cache, CPU-only BuiltSection cache, CPU-only section geometry manager, simple GPU mesh cache, upload-only GL geometry heap, direct GL renderer skeleton state, MDIC command skeleton state, GL heap readback visualization/readback-mesh caches, readback mesh auto-refresh state, auto mesh build record, and auto BuiltSection build record."), false);
         return 1;
     }
 
@@ -2701,7 +2895,8 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getGpuGeometryReadbackMeshRefreshManager().clear();
         ForgeVoxyInstance.INSTANCE.getGpuGeometryReadbackDebugRenderer().clearStats();
         ForgeVoxyInstance.INSTANCE.getDirectGpuGeometryRenderer().clear();
-        source.sendSuccess(() -> Component.literal("Voxy: cleared debug pipeline ingest records, mesh build records, BuiltSection build records, CPU mesh cache, CPU-only BuiltSection cache, CPU-only section geometry manager, simple GPU mesh cache, upload-only GL geometry heap, direct GL renderer skeleton state, GL heap readback visualization/readback-mesh caches, and readback mesh auto-refresh state."), false);
+        ForgeVoxyInstance.INSTANCE.getMdicCommandManager().clear();
+        source.sendSuccess(() -> Component.literal("Voxy: cleared debug pipeline ingest records, mesh build records, BuiltSection build records, CPU mesh cache, CPU-only BuiltSection cache, CPU-only section geometry manager, simple GPU mesh cache, upload-only GL geometry heap, direct GL renderer skeleton state, MDIC command skeleton state, GL heap readback visualization/readback-mesh caches, and readback mesh auto-refresh state."), false);
         return 1;
     }
 

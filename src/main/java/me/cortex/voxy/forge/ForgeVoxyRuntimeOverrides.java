@@ -19,6 +19,9 @@ public final class ForgeVoxyRuntimeOverrides {
     private static Boolean enableGeometryGpuReadbackMeshAutoRefresh;
     private static Boolean enableDirectGpuGeometryRenderer;
     private static Boolean enableDirectGpuGeometryAutoPlan;
+    private static Boolean enableMdicCommandSkeleton;
+    private static Integer mdicCommandMaxSections;
+    private static Integer mdicCommandMaxRecords;
     private static Boolean directGpuGeometryRendererActualDraw;
     private static Integer directGpuGeometryRendererMaxPlanCandidates;
     private static Integer directGpuGeometryRendererMaxDrawSections;
@@ -59,12 +62,34 @@ public final class ForgeVoxyRuntimeOverrides {
         enableGeometryGpuReadbackMeshAutoRefresh = false;
         enableDirectGpuGeometryRenderer = false;
         enableDirectGpuGeometryAutoPlan = false;
+        enableMdicCommandSkeleton = false;
         directGpuGeometryRendererActualDraw = false;
         directGpuGeometryRendererMaxPlanCandidates = null;
         directGpuGeometryRendererMaxDrawSections = null;
         directGpuGeometryRendererMaxDrawRecords = null;
         directGpuGeometryRendererMaxRecordsPerSection = null;
         directGpuGeometryRendererRenderDistanceChunks = null;
+        enableSimpleGpuMeshRenderer = false;
+        enableDebugMeshRenderer = false;
+    }
+
+    public static synchronized void applyMdicSkeletonPreset() {
+        clearInternal();
+        presetName = "mdic_skeleton";
+        enableWorldEngineSkeleton = true;
+        enableAutoChunkIngest = true;
+        enableAutoCpuMeshBuild = false;
+        enableAutoBuiltSectionBuild = true;
+        enableAutoGeometryManagerConsume = true;
+        enableGeometryGpuUpload = true;
+        enableGeometryGpuVisualization = false;
+        enableGeometryGpuReadbackMeshAutoRefresh = false;
+        enableDirectGpuGeometryRenderer = false;
+        enableDirectGpuGeometryAutoPlan = false;
+        enableMdicCommandSkeleton = true;
+        mdicCommandMaxSections = 16;
+        mdicCommandMaxRecords = 32768;
+        directGpuGeometryRendererActualDraw = false;
         enableSimpleGpuMeshRenderer = false;
         enableDebugMeshRenderer = false;
     }
@@ -285,6 +310,9 @@ public final class ForgeVoxyRuntimeOverrides {
         enableGeometryGpuReadbackMeshAutoRefresh = null;
         enableDirectGpuGeometryRenderer = null;
         enableDirectGpuGeometryAutoPlan = null;
+        enableMdicCommandSkeleton = null;
+        mdicCommandMaxSections = null;
+        mdicCommandMaxRecords = null;
         directGpuGeometryRendererActualDraw = null;
         directGpuGeometryRendererMaxPlanCandidates = null;
         directGpuGeometryRendererMaxDrawSections = null;
@@ -421,6 +449,22 @@ public final class ForgeVoxyRuntimeOverrides {
         return value(enableDirectGpuGeometryAutoPlan, ForgeVoxyConfig.ENABLE_DIRECT_GPU_GEOMETRY_AUTO_PLAN.get());
     }
 
+    public static synchronized boolean enableMdicCommandSkeleton() {
+        return value(enableMdicCommandSkeleton, ForgeVoxyConfig.ENABLE_MDIC_COMMAND_SKELETON.get());
+    }
+
+    public static synchronized int mdicCommandMaxSections() {
+        return Math.min(64, Math.max(1, value(mdicCommandMaxSections, ForgeVoxyConfig.MDIC_COMMAND_MAX_SECTIONS.get())));
+    }
+
+    public static synchronized int mdicCommandMaxRecords() {
+        return Math.min(131072, Math.max(1, value(mdicCommandMaxRecords, ForgeVoxyConfig.MDIC_COMMAND_MAX_RECORDS.get())));
+    }
+
+    public static synchronized boolean mdicCommandDebugLog() {
+        return ForgeVoxyConfig.MDIC_COMMAND_DEBUG_LOG.get();
+    }
+
     public static synchronized boolean directGpuGeometryRendererActualDraw() {
         return value(directGpuGeometryRendererActualDraw, ForgeVoxyConfig.DIRECT_GPU_GEOMETRY_RENDERER_ACTUAL_DRAW.get());
     }
@@ -529,6 +573,9 @@ public final class ForgeVoxyRuntimeOverrides {
                 || enableGeometryGpuReadbackMeshAutoRefresh != null
                 || enableDirectGpuGeometryRenderer != null
                 || enableDirectGpuGeometryAutoPlan != null
+                || enableMdicCommandSkeleton != null
+                || mdicCommandMaxSections != null
+                || mdicCommandMaxRecords != null
                 || directGpuGeometryRendererActualDraw != null
                 || directGpuGeometryRendererMaxPlanCandidates != null
                 || directGpuGeometryRendererMaxDrawSections != null

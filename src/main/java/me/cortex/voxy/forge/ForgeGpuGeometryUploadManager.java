@@ -200,6 +200,7 @@ public final class ForgeGpuGeometryUploadManager {
             this.instance.getGpuMeshUploadManager().clear();
         }
         this.instance.getGpuGeometryReadbackDebugRenderer().clearStats();
+        this.instance.getMdicCommandManager().clear();
     }
 
     public ForgeGpuGeometryStressStats stressOnce() {

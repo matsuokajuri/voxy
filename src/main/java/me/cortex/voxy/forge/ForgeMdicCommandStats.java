@@ -1,0 +1,38 @@
+package me.cortex.voxy.forge;
+
+record ForgeMdicCommandStats(
+        String stage,
+        boolean enabled,
+        boolean actualDrawEnabled,
+        boolean hasHeap,
+        boolean heapCreated,
+        long currentHeapGeneration,
+        boolean commandListValid,
+        boolean commandListStale,
+        int commandCount,
+        long commandRecords,
+        long commandVertices,
+        int skippedSections,
+        long skippedRecords,
+        String selectionMode,
+        String commandListDimension,
+        boolean commandBufferCreated,
+        long commandBufferBytes,
+        long commandBufferGeneration,
+        String commandBufferDimension,
+        double lastPlanDurationMs,
+        double lastBuildBufferDurationMs,
+        String lastError,
+        boolean lastAuditOk,
+        long auditRuns,
+        long auditFailures,
+        String lastAuditError,
+        double lastAuditDurationMs,
+        boolean lastCommandBufferMatch,
+        int lastInvalidCommands,
+        int lastAuditedCommands,
+        long lastAuditedBytes,
+        long lastAuditHeapGeneration,
+        String lastAuditDimension
+) {
+}
