@@ -121,3 +121,96 @@ G6.1 bucket-aware draw planning
 G6.2 renderer lifecycle hardening
 G6.x original renderer alignment
 ```
+
+## G5.9 Hardening Notes
+
+G5.9 keeps the same no-draw boundary but makes the command buffer easier to trust before any renderer consumes it.
+
+Current layout version:
+
+```text
+layoutVersion=G5_9_MDIC_COMMAND_V1
+wordsPerCommand=12
+bytesPerCommand=48
+stage=G5_9_MDIC_COMMAND_BUFFER_HARDENING
+```
+
+The command field table remains:
+
+```text
+word0  sectionId
+word1  geometryPtr
+word2  recordStart
+word3  recordCount
+word4  sectionOriginX raw float bits
+word5  sectionOriginY raw float bits
+word6  sectionOriginZ raw float bits
+word7  bucketMask
+word8  metadataIndex
+word9  lodLevel
+word10 flags
+word11 heap generation low 32 bits
+```
+
+Audit rules:
+
+```text
+command count matches CPU-side list
+buffer bytes match commandCount * bytesPerCommand
+CPU encode/decode round-trips through ForgeMdicCommandLayout
+readback commands match CPU commands field-for-field
+recordCount is non-negative
+geometryPtr is 128-item aligned
+bucketMask is non-zero for non-empty commands
+generation matches the active upload-only GL heap
+dimension matches the active client dimension
+audited record total equals CPU-side commandRecords
+```
+
+The status path now reports diagnostic summaries for future G6 work:
+
+```text
+minRecordCount / maxRecordCount / avgRecordCount
+nonEmptyBucketCommands / emptyBucketCommands
+bucketMaskOr / bucketMaskAnd
+minGeometryPtr / maxGeometryPtr
+lastPlanCandidateSections / lastPlanAcceptedSections
+lastInvalidLayoutCommands / lastInvalidGenerationCommands
+lastInvalidDimensionCommands
+lastInvalidBucketMaskCommands / lastInvalidGeometryPtrCommands
+```
+
+Lifecycle rules:
+
+```text
+heap clear
+heap generation change
+dimension switch
+world unload
+debug pipeline clear
+preset off / preset clear
+```
+
+all make the MDIC command list and GL command buffer stale or cleared. `direct_gl_mdic_clear` clears the CPU command list, GL command buffer copy, and audit state without clearing the geometry heap, CPU SectionGeometryManager, BuiltSection cache, direct renderer draw data, or simple renderer buffers.
+
+Stress rules:
+
+```text
+plan -> build buffer -> audit
+clear -> rebuild -> re-audit
+geometry heap clear -> re-enable upload -> rebuild -> audit
+source regression through BUILT_SECTION and GL_HEAP_READBACK
+return to mdic_skeleton runtime state
+```
+
+G5.9 still does not draw from the MDIC command buffer. The reason is deliberate: G6.0 should start from a command buffer whose layout, generation, dimension, readback audit, and clear/rebuild lifecycle are already proven. The G6.0 minimum entry condition is:
+
+```text
+lastAuditOk=true
+lastCommandBufferMatch=true
+lastLayoutMatch=true
+lastGenerationMatch=true
+lastDimensionMatch=true
+lastInvalidCommands=0
+stressFailures=0
+```

@@ -417,6 +417,17 @@ public final class ForgeGpuGeometryUploadManager {
         this.lastStatus = this.createStatusSnapshot();
     }
 
+    void processForDebugCommand(int passes) {
+        if (!RenderSystem.isOnRenderThread()) {
+            this.recordFailure("debug command process called off render thread");
+            return;
+        }
+        int boundedPasses = Math.max(1, Math.min(8, passes));
+        for (int pass = 0; pass < boundedPasses; pass++) {
+            this.processOnRenderThread();
+        }
+    }
+
     private int processUploadIntents(int maxUploads) {
         List<ForgeSectionGeometryUploadIntent> uploads = this.instance.getSectionGeometryManager().createUploadIntentSnapshot();
         int uploaded = 0;

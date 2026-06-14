@@ -14,6 +14,8 @@ record ForgeMdicCommand(
         int flags,
         int generation
 ) {
+    private static final int GEOMETRY_PTR_ALIGNMENT_ITEMS = 128;
+
     long vertexCount() {
         return (long) this.recordCount * 6L;
     }
@@ -53,6 +55,44 @@ record ForgeMdicCommand(
                 words[offset + ForgeMdicCommandLayout.WORD_FLAGS],
                 words[offset + ForgeMdicCommandLayout.WORD_GENERATION]
         );
+    }
+
+    boolean encodeDecodeMatches() {
+        return this.matches(fromWords(this.toWords(), 0));
+    }
+
+    String validate(long expectedHeapGeneration) {
+        if (!this.encodeDecodeMatches()) {
+            return "encode-decode-mismatch";
+        }
+        if (this.sectionId < 0) {
+            return "negative-section-id";
+        }
+        if (this.geometryPtr < 0) {
+            return "negative-geometry-ptr";
+        }
+        if (this.geometryPtr % GEOMETRY_PTR_ALIGNMENT_ITEMS != 0) {
+            return "geometry-ptr-not-128-item-aligned";
+        }
+        if (this.recordStart < 0) {
+            return "negative-record-start";
+        }
+        if (this.recordCount < 0) {
+            return "negative-record-count";
+        }
+        if (this.recordCount > 0 && this.bucketMask == 0) {
+            return "non-empty-command-with-empty-bucket-mask";
+        }
+        if (this.metadataIndex < 0) {
+            return "negative-metadata-index";
+        }
+        if (this.lodLevel < 0) {
+            return "negative-lod-level";
+        }
+        if (this.generation != (int) expectedHeapGeneration) {
+            return "generation-mismatch";
+        }
+        return "none";
     }
 
     boolean matches(ForgeMdicCommand other) {

@@ -121,7 +121,7 @@ final class ForgeMdicCommandPlanner {
         }
 
         String dimension = currentDimensionId(minecraft);
-        ForgeMdicCommandList commandList = ForgeMdicCommandList.of(commands, heap.generation(), dimension, commandRecords, selectionMode, skippedSections, skippedRecords);
+        ForgeMdicCommandList commandList = ForgeMdicCommandList.of(commands, heap.generation(), dimension, commandRecords, selectionMode, skippedSections, skippedRecords, candidates.size(), commands.size());
         boolean success = commandList.isValid();
         return new PlanResult(
                 success,

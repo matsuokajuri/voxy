@@ -77,6 +77,13 @@ final class ForgeMdicCommandBuffer {
                 && this.dimensionId.equals(commandList.dimensionId());
     }
 
+    boolean isStale(long currentHeapGeneration, String currentDimension) {
+        return this.isCreated()
+                && (this.heapGeneration != currentHeapGeneration
+                || currentDimension == null
+                || !this.dimensionId.equals(currentDimension));
+    }
+
     int[] readbackWords() {
         requireRenderThread("read back MDIC skeleton command buffer");
         if (this.bufferId == 0 || this.commandCount <= 0 || this.bytes <= 0) {
@@ -129,6 +136,14 @@ final class ForgeMdicCommandBuffer {
 
     long heapGeneration() {
         return this.heapGeneration;
+    }
+
+    int commandCount() {
+        return this.commandCount;
+    }
+
+    long commandListBuildTimeMillis() {
+        return this.commandListBuildTimeMillis;
     }
 
     String dimensionId() {
