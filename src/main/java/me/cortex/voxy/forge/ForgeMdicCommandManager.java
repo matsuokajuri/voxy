@@ -394,6 +394,14 @@ final class ForgeMdicCommandManager {
         );
     }
 
+    ForgeMdicCommandList commandListForDebugDraw() {
+        return this.commandList;
+    }
+
+    ForgeMdicCommandBuffer commandBufferForDebugDraw() {
+        return this.commandBuffer;
+    }
+
     private String staleReason(boolean heapCreated, long currentGeneration, String currentDimension, boolean commandListValid, boolean listStale, boolean bufferStale) {
         if (!heapCreated) {
             return "HEAP_MISSING";

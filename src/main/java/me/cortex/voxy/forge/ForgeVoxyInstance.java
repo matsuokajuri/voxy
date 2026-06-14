@@ -34,6 +34,7 @@ public final class ForgeVoxyInstance {
     private final ForgeSimpleGpuMeshRenderer simpleGpuMeshRenderer = new ForgeSimpleGpuMeshRenderer(this);
     private final ForgeDirectGpuGeometryRenderer directGpuGeometryRenderer = new ForgeDirectGpuGeometryRenderer(this);
     private final ForgeMdicCommandManager mdicCommandManager = new ForgeMdicCommandManager(this);
+    private final ForgeMdicDebugRenderer mdicDebugRenderer = new ForgeMdicDebugRenderer(this);
     private final AtomicInteger storageWriteCount = new AtomicInteger();
     private String activeClientDimension;
 
@@ -56,6 +57,7 @@ public final class ForgeVoxyInstance {
         this.gpuGeometryReadbackMeshRefreshManager.register();
         this.simpleGpuMeshRenderer.register();
         this.directGpuGeometryRenderer.register();
+        this.mdicDebugRenderer.register();
     }
 
     public WorldEngine getActiveWorld() {
@@ -144,6 +146,10 @@ public final class ForgeVoxyInstance {
         return this.mdicCommandManager;
     }
 
+    public ForgeMdicDebugRenderer getMdicDebugRenderer() {
+        return this.mdicDebugRenderer;
+    }
+
     private void onRegisterClientCommands(RegisterClientCommandsEvent event) {
         ForgeVoxyCommands.register(event.getDispatcher());
     }
@@ -182,6 +188,7 @@ public final class ForgeVoxyInstance {
         this.gpuGeometryReadbackDebugRenderer.clearStats();
         this.directGpuGeometryRenderer.clear();
         this.mdicCommandManager.clear();
+        this.mdicDebugRenderer.clear();
         this.gpuMeshCache.setActiveDimension(dimension);
         this.closeActiveWorld();
         if (ForgeVoxyRuntimeOverrides.enabledWorldEngineSkeleton()) {
@@ -257,6 +264,7 @@ public final class ForgeVoxyInstance {
         this.gpuGeometryReadbackDebugRenderer.clearStats();
         this.directGpuGeometryRenderer.clear();
         this.mdicCommandManager.clear();
+        this.mdicDebugRenderer.clear();
         this.gpuMeshCache.clear();
         this.activeClientDimension = null;
         this.closeActiveWorld();

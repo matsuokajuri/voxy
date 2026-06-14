@@ -72,6 +72,13 @@ public final class ForgeVoxyConfig {
     public static final ForgeConfigSpec.IntValue MDIC_COMMAND_MAX_SECTIONS;
     public static final ForgeConfigSpec.IntValue MDIC_COMMAND_MAX_RECORDS;
     public static final ForgeConfigSpec.BooleanValue MDIC_COMMAND_DEBUG_LOG;
+    public static final ForgeConfigSpec.BooleanValue ENABLE_MDIC_DEBUG_DRAW;
+    public static final ForgeConfigSpec.IntValue MDIC_DEBUG_DRAW_MAX_COMMANDS;
+    public static final ForgeConfigSpec.IntValue MDIC_DEBUG_DRAW_MAX_RECORDS;
+    public static final ForgeConfigSpec.DoubleValue MDIC_DEBUG_DRAW_ALPHA;
+    public static final ForgeConfigSpec.BooleanValue MDIC_DEBUG_DRAW_IGNORE_DEPTH;
+    public static final ForgeConfigSpec.BooleanValue MDIC_DEBUG_DRAW_DOUBLE_SIDED;
+    public static final ForgeConfigSpec.BooleanValue MDIC_DEBUG_DRAW_DEBUG_LOG;
     public static final ForgeConfigSpec.IntValue CPU_MESH_CACHE_MAX_ENTRIES;
     public static final ForgeConfigSpec.IntValue BUILT_SECTION_CACHE_MAX_ENTRIES;
     public static final ForgeConfigSpec.BooleanValue ENABLE_DEBUG_MESH_RENDERER;
@@ -302,6 +309,27 @@ public final class ForgeVoxyConfig {
         MDIC_COMMAND_DEBUG_LOG = builder
                 .comment("Logs MDIC skeleton command planning/upload summaries.")
                 .define("mdicCommandDebugLog", false);
+        ENABLE_MDIC_DEBUG_DRAW = builder
+                .comment("G6.0 minimal MDIC command-buffer debug draw. This reads the Forge MDIC skeleton command buffer and upload-only GL geometry heap only; it is not the real MDIC renderer.")
+                .define("enableMdicDebugDraw", false);
+        MDIC_DEBUG_DRAW_MAX_COMMANDS = builder
+                .comment("Maximum MDIC skeleton commands drawn by the G6.0 minimal MDIC debug renderer.")
+                .defineInRange("mdicDebugDrawMaxCommands", 16, 1, 64);
+        MDIC_DEBUG_DRAW_MAX_RECORDS = builder
+                .comment("Maximum packed quad records drawn by one G6.0 minimal MDIC debug frame.")
+                .defineInRange("mdicDebugDrawMaxRecords", 32768, 1, 131072);
+        MDIC_DEBUG_DRAW_ALPHA = builder
+                .comment("Alpha used by the G6.0 minimal MDIC command-buffer debug renderer.")
+                .defineInRange("mdicDebugDrawAlpha", 0.75D, 0.05D, 1.0D);
+        MDIC_DEBUG_DRAW_IGNORE_DEPTH = builder
+                .comment("Draws G6.0 MDIC debug quads through terrain to make the debug draw easier to see.")
+                .define("mdicDebugDrawIgnoreDepth", true);
+        MDIC_DEBUG_DRAW_DOUBLE_SIDED = builder
+                .comment("Disables culling for the G6.0 MDIC debug renderer while winding remains debug-only.")
+                .define("mdicDebugDrawDoubleSided", true);
+        MDIC_DEBUG_DRAW_DEBUG_LOG = builder
+                .comment("Logs G6.0 minimal MDIC debug draw summaries.")
+                .define("mdicDebugDrawDebugLog", false);
         CPU_MESH_CACHE_MAX_ENTRIES = builder
                 .comment("Maximum cached CPU mesh section/layer entries kept by the debug pipeline. Old entries are closed and evicted with LRU ordering.")
                 .defineInRange("cpuMeshCacheMaxEntries", 2048, 1, 8192);
