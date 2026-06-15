@@ -21,6 +21,7 @@ final class ForgeModelStoreSkeleton {
     private long clearRuns;
     private long generation = -1L;
     private String dimensionId = "none";
+    private String staleReason = "none";
     private String lastBuildError = "none";
     private double lastBuildDurationMs;
     private long auditRuns;
@@ -61,6 +62,7 @@ final class ForgeModelStoreSkeleton {
         if (uploaded) {
             this.generation = nextGeneration;
             this.dimensionId = dimension;
+            this.staleReason = "none";
             this.lastBuildError = "none";
         } else {
             this.lastBuildError = this.dataBuffer.lastUploadError();
@@ -103,6 +105,14 @@ final class ForgeModelStoreSkeleton {
                 STAGE,
                 ForgeModelStoreLayout.LAYOUT_VERSION,
                 ForgeModelStoreLayout.FORMAL_LAYOUT_COMPATIBLE,
+                ForgeModelStoreLayout.LAYOUT_VERSION,
+                ForgeModelStoreFormalLayout.LAYOUT_VERSION,
+                ForgeModelStoreFormalLayout.MODEL_RECORD_BYTES,
+                ForgeModelStoreFormalLayout.FORMAL_LAYOUT_KNOWN,
+                ForgeModelStoreFormalLayout.FIELD_MAPPING_READY,
+                ForgeModelStoreFormalLayout.FACE_DATA_MAPPING_READY,
+                ForgeModelStoreFormalLayout.ATLAS_UV_MAPPING_READY,
+                ForgeModelStoreFormalLayout.MATERIAL_MAPPING_READY,
                 this.buildRuns,
                 this.clearRuns,
                 this.lastBuildError,
@@ -176,11 +186,22 @@ final class ForgeModelStoreSkeleton {
         this.records = List.of();
         this.generation = -1L;
         this.dimensionId = "none";
+        this.staleReason = "none";
         this.lastBuildError = "none";
         this.lastBuildDurationMs = 0.0D;
         this.auditRuns = 0L;
         this.auditFailures = 0L;
         this.lastAudit = ForgeModelStoreAuditResult.failure("none", 0.0D);
+        this.dataBuffer.close();
+    }
+
+    void markStale(String reason) {
+        this.records = List.of();
+        this.generation = -1L;
+        this.dimensionId = "none";
+        this.staleReason = reason == null || reason.isBlank() ? "stale" : reason;
+        this.lastBuildError = this.staleReason;
+        this.lastAudit = ForgeModelStoreAuditResult.failure(this.staleReason, 0.0D);
         this.dataBuffer.close();
     }
 

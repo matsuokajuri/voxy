@@ -394,3 +394,174 @@ skeleton is therefore audit-only.
 - G6.11 minimal atlas ownership skeleton, still no real upload.
 - G6.11 resource reload lifecycle skeleton for model buffers and atlas.
 - G7.0 tiny textured debug quad prototype after ownership and reload are clear.
+
+## G6.11 formal ModelStore layout mapping
+
+G6.11 records the original Voxy `ModelStore` shader-facing record layout as a
+Forge-side no-draw mapping. The mapping is read-only design data for status and
+audit commands; it does not generate real model data, does not upload a real
+atlas, and does not bind anything to the MDIC debug renderer.
+
+The original formal record is confirmed from
+`src/main/resources/assets/voxy/shaders/lod/block_model.glsl` and
+`src/main/java/me/cortex/voxy/client/core/model/ModelFactory.java`:
+
+| Word | Field | Known | Source | Semantics |
+| --- | --- | --- | --- | --- |
+| 0..5 | `faceData[0..5]` | yes | `BlockModel.faceData[6]`, `ModelFactory.processTextureBakeResult` | Per-face packed UV bounds, face depth, alpha cutout bits, and tint state. |
+| 6 | `flagsA` | yes | `block_model.glsl`, `quad_util.glsl`, `ModelFactory` | Bit0 has tint source, bit1 biome LUT, bit2 translucent, bit3 shaded/AO. Remaining bits are currently unused/unknown. |
+| 7 | `colourTint` | yes | `quad_util.glsl`, `ModelFactory` | `-1` for no tint, constant ARGB for fixed tint, or base index into `modelColourBuffer` for biome tint. |
+| 8 | `customId` | yes | `quads.frag` patched shader path, `ModelFactory.customBlockStateIdMapping` | Optional custom blockstate/model id for patched shader output. Defaults to zero. |
+| 9..15 | `_pad[0..6]` | yes | `BlockModel._pad[7]` | Reserved padding to keep the record at `MODEL_SIZE=64`. |
+| external | atlas tile | yes | `quads.frag getBaseUV`, `ModelBakeResultUpload.upload` | Not stored in modelData; the model id selects a 256x256 atlas tile grid and the face selects a 3x2 tile. |
+| external | material record | no | no separate formal material record found in this layout | Layer/translucent/shaded state is represented, but there is no standalone material record equivalent to a future renderer material table. |
+
+The `faceData` bit layout used by `quad_util.glsl` is:
+
+```text
+bits 0..3   minU
+bits 4..7   maxU
+bits 8..11  minV
+bits 12..15 maxV
+bits 16..21 face indentation in 1/64 units
+bit 22      alpha cutout
+bit 23      alpha cutout override
+bits 24..25 tint state
+bits 26..31 currently unused/unknown
+```
+
+The atlas tile is intentionally modeled as an external mapping rather than a
+modelData word. `quads.frag` derives the atlas base from `modelId`:
+
+```text
+tileX = modelId & 0xFF
+tileY = modelId >> 8
+baseU = tileX / 256
+baseV = tileY / 256
+```
+
+`ModelFactory.ModelBakeResultUpload.upload(...)` writes texture data to:
+
+```text
+X = (modelId & 0xFF) * MODEL_TEXTURE_SIZE * 3
+Y = ((modelId >> 8) & 0xFF) * MODEL_TEXTURE_SIZE * 2
+```
+
+This means Forge can know the atlas addressing rule before it owns a real atlas,
+but `atlasUvMappingReady=false` until a Forge-owned atlas allocation and upload
+path exists.
+
+### Placeholder versus formal record
+
+The G6.10 placeholder record remains:
+
+```text
+word0 modelId
+word1 blockStateId
+word2 placeholder flags
+word3 debug colour
+word4 placeholder layout marker
+word5..15 reserved zero
+```
+
+The placeholder record and formal record are both 64 bytes, but they are not
+layout-compatible:
+
+```text
+formalModelRecordBytes=64
+placeholderRecordBytes=64
+formalLayoutCompatible=false
+fieldMappingReady=false
+faceDataMappingReady=true
+atlasUvMappingReady=false
+materialMappingReady=false
+```
+
+`faceDataMappingReady=true` only means the original bit layout is documented.
+It does not mean Forge can build real per-face data yet. A real bridge still
+needs `ModelFactory` / `ModelBakerySubsystem` semantics, real texture uploads,
+tint data, and resource reload ownership.
+
+### Layout audit commands
+
+G6.11 adds no-draw layout audit commands:
+
+```text
+/voxy model_store_layout_audit
+/voxy model_store_layout_audit_status
+/voxy model_store_layout_audit_clear
+```
+
+The audit checks static readiness only:
+
+```text
+formalModelRecordBytes=64
+formalLayoutKnown=true
+faceDataLayoutKnown=true
+flagsLayoutKnown=true
+colourTintLayoutKnown=true
+customIdLayoutKnown=true
+atlasUvLayoutKnown=true
+materialLayoutKnown=false
+fieldMappingReady=false
+formalLayoutCompatible=false
+formalModelBridgeReady=false
+```
+
+The expected audit result is successful because the known layout facts are
+internally consistent, while the readiness flags remain false where Forge does
+not yet own real formal data.
+
+### Resource reload lifecycle skeleton
+
+G6.11 also adds a no-draw resource reload lifecycle skeleton. The command-driven
+simulation path is:
+
+```text
+/voxy model_bridge_resource_reload_status
+/voxy model_bridge_simulate_resource_reload
+```
+
+The simulation marks model bridge resources stale and clears placeholder buffers:
+
+```text
+reloadLifecycleSkeletonReady=true
+resourceReloadReady=false
+placeholderBuffersStale=true
+realModelStoreStale=true
+textureAtlasStale=true
+formalShaderInputsStale=true
+formalModelBridgeReady=false
+```
+
+It deliberately leaves unrelated systems alone:
+
+```text
+GL geometry heap unchanged
+MDIC command buffers unchanged
+MDIC debug renderer unchanged
+simple renderer unchanged
+CPU SectionGeometryManager unchanged
+```
+
+This provides the lifecycle seam needed before a real atlas or formal model
+buffers are introduced. It is still command-driven; a real Forge resource reload
+event integration remains future work.
+
+### Why still no atlas or textured draw
+
+The original renderer couples model records, biome colour data, atlas texture
+ownership, sampler state, and shader input bindings. Uploading any one of those
+without the reload contract would create stale-resource risks on resource pack
+reload, world unload, dimension switch, and preset clear. G6.11 therefore keeps
+the work to field mapping and lifecycle readiness.
+
+### G6.12 candidates
+
+- Minimal atlas ownership skeleton with allocation/status only and no texture
+  uploads.
+- Minimal real ModelStore CPU record builder for one safe block, still no formal
+  renderer hook.
+- Model colour / biome tint skeleton with explicit non-ready formal flags.
+- Resource reload real event integration that invalidates model buffers and
+  atlas ownership without touching the MDIC debug renderer.
