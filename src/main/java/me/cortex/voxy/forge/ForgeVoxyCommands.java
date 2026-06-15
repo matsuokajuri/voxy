@@ -219,6 +219,14 @@ public final class ForgeVoxyCommands {
                         .executes(ctx -> directGlMdicDrawStressStatus(ctx.getSource())))
                 .then(Commands.literal("direct_gl_mdic_draw_stress_clear")
                         .executes(ctx -> directGlMdicDrawStressClear(ctx.getSource())))
+                .then(Commands.literal("model_bridge_check")
+                        .executes(ctx -> modelBridgeCheck(ctx.getSource())))
+                .then(Commands.literal("model_bridge_status")
+                        .executes(ctx -> modelBridgeStatus(ctx.getSource())))
+                .then(Commands.literal("model_bridge_clear")
+                        .executes(ctx -> modelBridgeClear(ctx.getSource())))
+                .then(Commands.literal("model_bridge_dump_sample")
+                        .executes(ctx -> modelBridgeDumpSample(ctx.getSource())))
                 .then(Commands.literal("mesh_cache_status")
                         .executes(ctx -> meshCacheStatus(ctx.getSource())))
                 .then(Commands.literal("mesh_cache_clear")
@@ -2978,6 +2986,101 @@ public final class ForgeVoxyCommands {
         return 1;
     }
 
+    private static int modelBridgeCheck(CommandSourceStack source) {
+        ForgeModelBridgeAuditResult result = ForgeVoxyInstance.INSTANCE.getModelBridgeReadiness().check();
+        ForgeModelBridgeReadinessStats status = result.stats();
+        String message = String.format(
+                "Voxy model bridge check: success=%s error=%s stage=%s checkRuns=%d durationMs=%.2f placeholderModelIdsPresent=%s stablePlaceholderModelIds=%s canMapModelIdToBlockState=%s realModelStoreReady=%s realModelFactoryReady=%s modelBakeryBridgeReady=%s textureAtlasReady=%s modelDataBufferReady=%s modelColourBufferReady=%s biomeTintReady=%s lightmapReady=%s resourceReloadReady=%s formalShaderInputsReady=%s formalModelBridgeReady=%s placeholderModelIdCount=%d builtSectionUniqueModelIds=%d missingModelRecords=%d currentDimension=%s activeWorldEnginePresent=%s blockStateIdSource=%s sampleModelId=%d sampleBlockStateId=%d sampleBlockState=\"%s\" sampleIsPlaceholder=%s sampleHasRealModelMetadata=%s sampleHasTextureMetadata=%s sampleNote=%s draw=false textureAtlasUpload=false formalRenderer=false",
+                result.success(),
+                result.error(),
+                status.stage(),
+                status.checkRuns(),
+                result.durationMs(),
+                status.placeholderModelIdsPresent(),
+                status.stablePlaceholderModelIds(),
+                status.canMapModelIdToBlockState(),
+                status.realModelStoreReady(),
+                status.realModelFactoryReady(),
+                status.modelBakeryBridgeReady(),
+                status.textureAtlasReady(),
+                status.modelDataBufferReady(),
+                status.modelColourBufferReady(),
+                status.biomeTintReady(),
+                status.lightmapReady(),
+                status.resourceReloadReady(),
+                status.formalShaderInputsReady(),
+                status.formalModelBridgeReady(),
+                status.placeholderModelIdCount(),
+                status.builtSectionUniqueModelIds(),
+                status.missingModelRecords(),
+                status.currentDimension(),
+                status.activeWorldEnginePresent(),
+                status.blockStateIdSource(),
+                status.sampleModelId(),
+                status.sampleBlockStateId(),
+                status.sampleBlockState(),
+                status.sampleIsPlaceholder(),
+                status.sampleHasRealModelMetadata(),
+                status.sampleHasTextureMetadata(),
+                status.sampleNote()
+        );
+        source.sendSuccess(() -> Component.literal(message), false);
+        return result.success() ? 1 : 0;
+    }
+
+    private static int modelBridgeStatus(CommandSourceStack source) {
+        ForgeModelBridgeReadinessStats status = ForgeVoxyInstance.INSTANCE.getModelBridgeReadiness().createStatusSnapshot();
+        String message = String.format(
+                "Voxy model bridge status: stage=%s checkRuns=%d clearRuns=%d lastCheckError=%s lastCheckDurationMs=%.2f placeholderModelIdsPresent=%s stablePlaceholderModelIds=%s canMapModelIdToBlockState=%s realModelStoreReady=%s realModelFactoryReady=%s modelBakeryBridgeReady=%s textureAtlasReady=%s modelDataBufferReady=%s modelColourBufferReady=%s biomeTintReady=%s lightmapReady=%s resourceReloadReady=%s formalShaderInputsReady=%s formalModelBridgeReady=%s placeholderModelIdCount=%d builtSectionUniqueModelIds=%d missingModelRecords=%d currentDimension=%s activeWorldEnginePresent=%s blockStateIdSource=%s sampleModelId=%d sampleBlockStateId=%d sampleBlockState=\"%s\" sampleIsPlaceholder=%s sampleHasRealModelMetadata=%s sampleHasTextureMetadata=%s sampleNote=%s modelStoreBlocker=missing-real-ModelStore textureAtlasBlocker=no-atlas-upload formalShaderInputBlocker=debug-shader-only draw=false formalRenderer=false",
+                status.stage(),
+                status.checkRuns(),
+                status.clearRuns(),
+                status.lastCheckError(),
+                status.lastCheckDurationMs(),
+                status.placeholderModelIdsPresent(),
+                status.stablePlaceholderModelIds(),
+                status.canMapModelIdToBlockState(),
+                status.realModelStoreReady(),
+                status.realModelFactoryReady(),
+                status.modelBakeryBridgeReady(),
+                status.textureAtlasReady(),
+                status.modelDataBufferReady(),
+                status.modelColourBufferReady(),
+                status.biomeTintReady(),
+                status.lightmapReady(),
+                status.resourceReloadReady(),
+                status.formalShaderInputsReady(),
+                status.formalModelBridgeReady(),
+                status.placeholderModelIdCount(),
+                status.builtSectionUniqueModelIds(),
+                status.missingModelRecords(),
+                status.currentDimension(),
+                status.activeWorldEnginePresent(),
+                status.blockStateIdSource(),
+                status.sampleModelId(),
+                status.sampleBlockStateId(),
+                status.sampleBlockState(),
+                status.sampleIsPlaceholder(),
+                status.sampleHasRealModelMetadata(),
+                status.sampleHasTextureMetadata(),
+                status.sampleNote()
+        );
+        source.sendSuccess(() -> Component.literal(message), false);
+        return status.checkRuns() > 0 ? 1 : 0;
+    }
+
+    private static int modelBridgeClear(CommandSourceStack source) {
+        ForgeVoxyInstance.INSTANCE.getModelBridgeReadiness().clear();
+        source.sendSuccess(() -> Component.literal("Voxy model bridge readiness: cleared no-draw readiness stats and sample state. Placeholder mapper entries, BuiltSection cache, upload-only GL heap, MDIC debug renderer, simple renderer, and CPU caches were left unchanged."), false);
+        return 1;
+    }
+
+    private static int modelBridgeDumpSample(CommandSourceStack source) {
+        String message = ForgeVoxyInstance.INSTANCE.getModelBridgeReadiness().dumpSample();
+        source.sendSuccess(() -> Component.literal(message), false);
+        return ForgeVoxyInstance.INSTANCE.getModelBridgeReadiness().createStatusSnapshot().sampleModelId() >= 0 ? 1 : 0;
+    }
+
     private static int meshCacheStatus(CommandSourceStack source) {
         var cache = ForgeVoxyInstance.INSTANCE.getCpuMeshCache();
         var status = cache.createStatusSnapshot();
@@ -3487,6 +3590,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getDirectGpuGeometryRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getMdicCommandManager().clear();
         ForgeVoxyInstance.INSTANCE.getMdicDebugRenderer().clear();
+        ForgeVoxyInstance.INSTANCE.getModelBridgeReadiness().clear();
         if (!ForgeVoxyRuntimeOverrides.enabledWorldEngineSkeleton()) {
             clearRuntimePipeline();
             ForgeVoxyInstance.INSTANCE.closeActiveWorld();
@@ -3809,6 +3913,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getDirectGpuGeometryRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getMdicCommandManager().clear();
         ForgeVoxyInstance.INSTANCE.getMdicDebugRenderer().clear();
+        ForgeVoxyInstance.INSTANCE.getModelBridgeReadiness().clear();
         ForgeVoxyInstance.INSTANCE.getGpuMeshCache().clear();
     }
 
@@ -3827,6 +3932,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getDirectGpuGeometryRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getMdicCommandManager().clear();
         ForgeVoxyInstance.INSTANCE.getMdicDebugRenderer().clear();
+        ForgeVoxyInstance.INSTANCE.getModelBridgeReadiness().clear();
         source.sendSuccess(() -> Component.literal("Voxy: cleared CPU mesh cache, CPU-only BuiltSection cache, CPU-only section geometry manager, simple GPU mesh cache, upload-only GL geometry heap, direct GL renderer skeleton state, MDIC command skeleton/debug draw state, GL heap readback visualization/readback-mesh caches, readback mesh auto-refresh state, auto mesh build record, and auto BuiltSection build record."), false);
         return 1;
     }
@@ -3859,6 +3965,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getDirectGpuGeometryRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getMdicCommandManager().clear();
         ForgeVoxyInstance.INSTANCE.getMdicDebugRenderer().clear();
+        ForgeVoxyInstance.INSTANCE.getModelBridgeReadiness().clear();
         source.sendSuccess(() -> Component.literal("Voxy: cleared debug pipeline ingest records, mesh build records, BuiltSection build records, CPU mesh cache, CPU-only BuiltSection cache, CPU-only section geometry manager, simple GPU mesh cache, upload-only GL geometry heap, direct GL renderer skeleton state, MDIC command skeleton/debug draw state, GL heap readback visualization/readback-mesh caches, and readback mesh auto-refresh state."), false);
         return 1;
     }
