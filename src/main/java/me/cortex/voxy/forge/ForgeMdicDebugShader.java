@@ -50,6 +50,8 @@ import static org.lwjgl.opengl.GL40C.GL_DRAW_INDIRECT_BUFFER;
 import static org.lwjgl.opengl.GL43C.GL_SHADER_STORAGE_BUFFER;
 import static org.lwjgl.opengl.GL43C.glMultiDrawArraysIndirect;
 import static org.lwjgl.opengl.GL43C.glMultiDrawElementsIndirect;
+import static org.lwjgl.opengl.ARBIndirectParameters.GL_PARAMETER_BUFFER_ARB;
+import static org.lwjgl.opengl.ARBIndirectParameters.glMultiDrawElementsIndirectCountARB;
 
 final class ForgeMdicDebugShader {
     static final int COMMAND_BINDING_INDEX = 2;
@@ -68,6 +70,9 @@ final class ForgeMdicDebugShader {
     static final String ERROR_STAGE_BIND_ELEMENT_ARRAY_BUFFER = "MDIC_BIND_ELEMENT_ARRAY_BUFFER";
     static final String ERROR_STAGE_BIND_ELEMENTS_INDIRECT_BUFFER = "MDIC_BIND_ELEMENTS_INDIRECT_BUFFER";
     static final String ERROR_STAGE_MULTI_DRAW_ELEMENTS_INDIRECT = "MDIC_MULTI_DRAW_ELEMENTS_INDIRECT";
+    static final String ERROR_STAGE_DRAW_COUNT_BUFFER_UPLOAD = "MDIC_DRAW_COUNT_BUFFER_UPLOAD";
+    static final String ERROR_STAGE_BIND_PARAMETER_BUFFER = "MDIC_BIND_PARAMETER_BUFFER";
+    static final String ERROR_STAGE_MULTI_DRAW_ELEMENTS_INDIRECT_COUNT = "MDIC_MULTI_DRAW_ELEMENTS_INDIRECT_COUNT";
 
     private static final String DRAW_ID_EXTENSION_PLACEHOLDER = "${DRAW_ID_EXTENSION}";
     private static final String COMMAND_INDEX_UNIFORM_PLACEHOLDER = "${COMMAND_INDEX_UNIFORM}";
@@ -224,20 +229,27 @@ final class ForgeMdicDebugShader {
     private boolean multiDrawSupported;
     private boolean indirectSupported;
     private boolean elementsIndirectSupported;
+    private boolean elementsIndirectCountSupported;
     private boolean multiDrawIndirectSupported;
     private boolean drawIndirectBufferSupported;
+    private boolean indirectParametersSupported;
+    private boolean parameterBufferSupported;
+    private boolean multiDrawElementsIndirectCountSupported;
+    private boolean drawCountBufferSupported;
     private boolean drawIdSupported;
     private boolean baseInstanceSupported;
     private String unsupportedReason = "none";
     private String multiDrawUnsupportedReason = "unknown";
     private String indirectUnsupportedReason = "unknown";
     private String elementsIndirectUnsupportedReason = "unknown";
+    private String elementsIndirectCountUnsupportedReason = "unknown";
     private String glVersion = "unknown";
     private String glslVersion = "unknown";
     private String lastShaderError = "none";
     private String lastMultiDrawShaderError = "none";
     private String lastIndirectShaderError = "none";
     private String lastElementsIndirectShaderError = "none";
+    private String lastElementsIndirectCountShaderError = "none";
     private final ProgramHandle loopProgram = new ProgramHandle();
     private final ProgramHandle multiDrawProgram = new ProgramHandle();
     private final ProgramHandle indirectProgram = new ProgramHandle();
@@ -272,6 +284,15 @@ final class ForgeMdicDebugShader {
             return false;
         }
         return this.ensureProgram(this.elementsIndirectProgram, elementsIndirectVertexShader(), false, "elements-indirect");
+    }
+
+    boolean ensureElementsIndirectCountReady() {
+        this.checkSupport();
+        if (!this.elementsIndirectCountSupported) {
+            this.lastElementsIndirectCountShaderError = this.elementsIndirectCountUnsupportedReason;
+            return false;
+        }
+        return this.ensureProgram(this.elementsIndirectProgram, elementsIndirectVertexShader(), false, "elements-indirect-count");
     }
 
     DrawCallResult drawCommandWithDiagnostics(
@@ -462,6 +483,68 @@ final class ForgeMdicDebugShader {
         return new DrawCallResult(GL_NO_ERROR, ERROR_STAGE_NONE, budget.logicalCommands, budget.vertices);
     }
 
+    DrawCallResult drawElementsIndirectCountWithDiagnostics(
+            int geometryBufferId,
+            int commandBufferId,
+            int sharedIndexBufferId,
+            int elementsIndirectCommandBufferId,
+            int drawCountBufferId,
+            int drawCountValue,
+            int maxDrawCount,
+            Matrix4f modelView,
+            Matrix4f projection,
+            ForgeMdicCommandList commandList,
+            int maxCommands,
+            int maxRecords,
+            float alpha
+    ) {
+        if (!this.ensureElementsIndirectCountReady()) {
+            return DrawCallResult.empty();
+        }
+        if (commandBufferId == 0 || sharedIndexBufferId == 0 || elementsIndirectCommandBufferId == 0 || drawCountBufferId == 0 || commandList == null || !commandList.isValid()) {
+            return DrawCallResult.empty();
+        }
+        int clampedDrawCount = Math.min(Math.max(0, drawCountValue), Math.max(0, maxDrawCount));
+        DrawBudget budget = DrawBudget.from(commandList, Math.min(maxCommands, clampedDrawCount), maxRecords);
+        if (budget.logicalCommands <= 0 || budget.vertices <= 0L || clampedDrawCount <= 0) {
+            return DrawCallResult.empty();
+        }
+
+        DrawCallResult bindResult = this.bindProgramAndBuffers(this.elementsIndirectProgram, geometryBufferId, commandBufferId);
+        if (!bindResult.ok()) {
+            return bindResult;
+        }
+        DrawCallResult uniformResult = this.setCommonUniforms(this.elementsIndirectProgram, modelView, projection, alpha);
+        if (!uniformResult.ok()) {
+            return uniformResult;
+        }
+
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sharedIndexBufferId);
+        int glError = glGetError();
+        if (glError != GL_NO_ERROR) {
+            return new DrawCallResult(glError, ERROR_STAGE_BIND_ELEMENT_ARRAY_BUFFER, budget.logicalCommands, budget.vertices);
+        }
+
+        glBindBuffer(GL_DRAW_INDIRECT_BUFFER, elementsIndirectCommandBufferId);
+        glError = glGetError();
+        if (glError != GL_NO_ERROR) {
+            return new DrawCallResult(glError, ERROR_STAGE_BIND_ELEMENTS_INDIRECT_BUFFER, budget.logicalCommands, budget.vertices);
+        }
+
+        glBindBuffer(GL_PARAMETER_BUFFER_ARB, drawCountBufferId);
+        glError = glGetError();
+        if (glError != GL_NO_ERROR) {
+            return new DrawCallResult(glError, ERROR_STAGE_BIND_PARAMETER_BUFFER, budget.logicalCommands, budget.vertices);
+        }
+
+        glMultiDrawElementsIndirectCountARB(GL_TRIANGLES, GL_UNSIGNED_INT, 0L, 0L, maxDrawCount, 0);
+        glError = glGetError();
+        if (glError != GL_NO_ERROR) {
+            return new DrawCallResult(glError, ERROR_STAGE_MULTI_DRAW_ELEMENTS_INDIRECT_COUNT, budget.logicalCommands, budget.vertices);
+        }
+        return new DrawCallResult(GL_NO_ERROR, ERROR_STAGE_NONE, budget.logicalCommands, budget.vertices);
+    }
+
     void unbind() {
         if (!RenderSystem.isOnRenderThread()) {
             return;
@@ -470,6 +553,7 @@ final class ForgeMdicDebugShader {
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, COMMAND_BINDING_INDEX, 0);
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
         glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
+        glBindBuffer(GL_PARAMETER_BUFFER_ARB, 0);
         glBindVertexArray(0);
         glUseProgram(0);
     }
@@ -491,8 +575,13 @@ final class ForgeMdicDebugShader {
                 this.multiDrawSupported,
                 this.indirectSupported,
                 this.elementsIndirectSupported,
+                this.elementsIndirectCountSupported,
                 this.multiDrawIndirectSupported,
                 this.drawIndirectBufferSupported,
+                this.indirectParametersSupported,
+                this.parameterBufferSupported,
+                this.multiDrawElementsIndirectCountSupported,
+                this.drawCountBufferSupported,
                 this.drawIdSupported,
                 this.baseInstanceSupported,
                 this.loopProgram.compiled,
@@ -503,14 +592,18 @@ final class ForgeMdicDebugShader {
                 this.indirectProgram.created,
                 this.elementsIndirectProgram.compiled,
                 this.elementsIndirectProgram.created,
+                this.elementsIndirectProgram.compiled,
+                this.elementsIndirectProgram.created,
                 this.lastShaderError,
                 this.lastMultiDrawShaderError,
                 this.lastIndirectShaderError,
                 this.lastElementsIndirectShaderError,
+                this.lastElementsIndirectCountShaderError,
                 this.unsupportedReason,
                 this.multiDrawUnsupportedReason,
                 this.indirectUnsupportedReason,
                 this.elementsIndirectUnsupportedReason,
+                this.elementsIndirectCountUnsupportedReason,
                 this.glVersion,
                 this.glslVersion,
                 true,
@@ -602,6 +695,9 @@ final class ForgeMdicDebugShader {
             this.lastIndirectShaderError = error;
         } else if ("elements-indirect".equals(label)) {
             this.lastElementsIndirectShaderError = error;
+        } else if ("elements-indirect-count".equals(label)) {
+            this.lastElementsIndirectCountShaderError = error;
+            this.lastElementsIndirectShaderError = error;
         } else {
             this.lastShaderError = error;
         }
@@ -623,10 +719,12 @@ final class ForgeMdicDebugShader {
             this.multiDrawUnsupportedReason = this.unsupportedReason;
             this.indirectUnsupportedReason = this.unsupportedReason;
             this.elementsIndirectUnsupportedReason = this.unsupportedReason;
+            this.elementsIndirectCountUnsupportedReason = this.unsupportedReason;
             this.lastShaderError = this.unsupportedReason;
             this.lastMultiDrawShaderError = this.unsupportedReason;
             this.lastIndirectShaderError = this.unsupportedReason;
             this.lastElementsIndirectShaderError = this.unsupportedReason;
+            this.lastElementsIndirectCountShaderError = this.unsupportedReason;
             return;
         }
         this.shaderSupported = true;
@@ -635,9 +733,14 @@ final class ForgeMdicDebugShader {
         this.baseInstanceSupported = capabilities.OpenGL42 || capabilities.GL_ARB_base_instance || capabilities.OpenGL43;
         this.drawIndirectBufferSupported = capabilities.OpenGL40 || capabilities.GL_ARB_draw_indirect || capabilities.OpenGL43;
         this.multiDrawIndirectSupported = capabilities.OpenGL43 || capabilities.GL_ARB_multi_draw_indirect;
+        this.indirectParametersSupported = capabilities.GL_ARB_indirect_parameters;
+        this.parameterBufferSupported = this.indirectParametersSupported;
+        this.multiDrawElementsIndirectCountSupported = capabilities.glMultiDrawElementsIndirectCountARB != 0L;
+        this.drawCountBufferSupported = this.parameterBufferSupported;
         this.multiDrawSupported = this.drawIdSupported;
         this.indirectSupported = this.multiDrawSupported && this.drawIndirectBufferSupported && this.multiDrawIndirectSupported;
         this.elementsIndirectSupported = this.indirectSupported && this.baseInstanceSupported;
+        this.elementsIndirectCountSupported = this.elementsIndirectSupported && this.indirectParametersSupported && this.parameterBufferSupported && this.multiDrawElementsIndirectCountSupported && this.drawCountBufferSupported;
         this.multiDrawUnsupportedReason = this.multiDrawSupported ? "none" : "ARB_shader_draw_parameters_required_for_gl_DrawID";
         if (this.indirectSupported) {
             this.indirectUnsupportedReason = "none";
@@ -654,6 +757,19 @@ final class ForgeMdicDebugShader {
             this.elementsIndirectUnsupportedReason = this.indirectUnsupportedReason;
         } else {
             this.elementsIndirectUnsupportedReason = "baseInstance_not_supported_for_indexed_indirect_debug_path";
+        }
+        if (this.elementsIndirectCountSupported) {
+            this.elementsIndirectCountUnsupportedReason = "none";
+        } else if (!this.elementsIndirectSupported) {
+            this.elementsIndirectCountUnsupportedReason = this.elementsIndirectUnsupportedReason;
+        } else if (!this.indirectParametersSupported) {
+            this.elementsIndirectCountUnsupportedReason = "ARB_indirect_parameters_not_supported";
+        } else if (!this.parameterBufferSupported) {
+            this.elementsIndirectCountUnsupportedReason = "GL_PARAMETER_BUFFER_ARB_not_supported";
+        } else if (!this.multiDrawElementsIndirectCountSupported) {
+            this.elementsIndirectCountUnsupportedReason = "glMultiDrawElementsIndirectCountARB_not_available";
+        } else {
+            this.elementsIndirectCountUnsupportedReason = "draw_count_buffer_not_supported";
         }
     }
 
@@ -767,8 +883,13 @@ final class ForgeMdicDebugShader {
             boolean multiDrawSupported,
             boolean indirectSupported,
             boolean elementsIndirectSupported,
+            boolean elementsIndirectCountSupported,
             boolean multiDrawIndirectSupported,
             boolean drawIndirectBufferSupported,
+            boolean indirectParametersSupported,
+            boolean parameterBufferSupported,
+            boolean multiDrawElementsIndirectCountSupported,
+            boolean drawCountBufferSupported,
             boolean drawIdSupported,
             boolean baseInstanceSupported,
             boolean shaderCompiled,
@@ -779,14 +900,18 @@ final class ForgeMdicDebugShader {
             boolean indirectProgramCreated,
             boolean elementsIndirectShaderCompiled,
             boolean elementsIndirectProgramCreated,
+            boolean elementsIndirectCountShaderCompiled,
+            boolean elementsIndirectCountProgramCreated,
             String lastShaderError,
             String lastMultiDrawShaderError,
             String lastIndirectShaderError,
             String lastElementsIndirectShaderError,
+            String lastElementsIndirectCountShaderError,
             String unsupportedReason,
             String multiDrawUnsupportedReason,
             String indirectUnsupportedReason,
             String elementsIndirectUnsupportedReason,
+            String elementsIndirectCountUnsupportedReason,
             String glVersion,
             String glslVersion,
             boolean usesSsbo,
@@ -802,7 +927,9 @@ final class ForgeMdicDebugShader {
                 case MULTI_DRAW_ARRAYS -> this.multiDrawShaderCompiled;
                 case MULTI_DRAW_ARRAYS_INDIRECT -> this.indirectShaderCompiled;
                 case MULTI_DRAW_ELEMENTS_INDIRECT -> this.elementsIndirectShaderCompiled;
-                case AUTO -> this.elementsIndirectSupported ? this.elementsIndirectShaderCompiled
+                case MULTI_DRAW_ELEMENTS_INDIRECT_COUNT -> this.elementsIndirectCountShaderCompiled;
+                case AUTO -> this.elementsIndirectCountSupported ? this.elementsIndirectCountShaderCompiled
+                        : this.elementsIndirectSupported ? this.elementsIndirectShaderCompiled
                         : this.indirectSupported ? this.indirectShaderCompiled
                         : this.multiDrawSupported ? this.multiDrawShaderCompiled
                         : this.shaderCompiled;
@@ -815,7 +942,9 @@ final class ForgeMdicDebugShader {
                 case MULTI_DRAW_ARRAYS -> this.multiDrawProgramCreated;
                 case MULTI_DRAW_ARRAYS_INDIRECT -> this.indirectProgramCreated;
                 case MULTI_DRAW_ELEMENTS_INDIRECT -> this.elementsIndirectProgramCreated;
-                case AUTO -> this.elementsIndirectSupported ? this.elementsIndirectProgramCreated
+                case MULTI_DRAW_ELEMENTS_INDIRECT_COUNT -> this.elementsIndirectCountProgramCreated;
+                case AUTO -> this.elementsIndirectCountSupported ? this.elementsIndirectCountProgramCreated
+                        : this.elementsIndirectSupported ? this.elementsIndirectProgramCreated
                         : this.indirectSupported ? this.indirectProgramCreated
                         : this.multiDrawSupported ? this.multiDrawProgramCreated
                         : this.programCreated;

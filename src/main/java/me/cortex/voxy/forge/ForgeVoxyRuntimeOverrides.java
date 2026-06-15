@@ -40,6 +40,7 @@ public final class ForgeVoxyRuntimeOverrides {
     private static Integer mdicDebugDrawMaxCommands;
     private static Integer mdicDebugDrawMaxRecords;
     private static Integer mdicDebugDrawMaxIndexedRecords;
+    private static Integer mdicDebugDrawMaxDrawCount;
     private static Boolean directGpuGeometryRendererActualDraw;
     private static Integer directGpuGeometryRendererMaxPlanCandidates;
     private static Integer directGpuGeometryRendererMaxDrawSections;
@@ -127,6 +128,7 @@ public final class ForgeVoxyRuntimeOverrides {
         mdicDebugDrawMaxCommands = 256;
         mdicDebugDrawMaxRecords = 65536;
         mdicDebugDrawMaxIndexedRecords = 65536;
+        mdicDebugDrawMaxDrawCount = 256;
         directGpuGeometryRendererActualDraw = false;
         enableSimpleGpuMeshRenderer = false;
         enableDebugMeshRenderer = false;
@@ -391,6 +393,7 @@ public final class ForgeVoxyRuntimeOverrides {
         mdicDebugDrawMaxCommands = null;
         mdicDebugDrawMaxRecords = null;
         mdicDebugDrawMaxIndexedRecords = null;
+        mdicDebugDrawMaxDrawCount = null;
         directGpuGeometryRendererActualDraw = null;
         directGpuGeometryRendererMaxPlanCandidates = null;
         directGpuGeometryRendererMaxDrawSections = null;
@@ -619,6 +622,10 @@ public final class ForgeVoxyRuntimeOverrides {
         return Math.min(131072, Math.max(1, value(mdicDebugDrawMaxIndexedRecords, ForgeVoxyConfig.MDIC_DEBUG_DRAW_MAX_INDEXED_RECORDS.get())));
     }
 
+    public static synchronized int mdicDebugDrawMaxDrawCount() {
+        return Math.min(512, Math.max(1, value(mdicDebugDrawMaxDrawCount, ForgeVoxyConfig.MDIC_DEBUG_DRAW_MAX_DRAW_COUNT.get())));
+    }
+
     public static synchronized double mdicDebugDrawAlpha() {
         return Math.max(0.05D, Math.min(1.0D, ForgeVoxyConfig.MDIC_DEBUG_DRAW_ALPHA.get()));
     }
@@ -768,6 +775,7 @@ public final class ForgeVoxyRuntimeOverrides {
                 || mdicDebugDrawMaxCommands != null
                 || mdicDebugDrawMaxRecords != null
                 || mdicDebugDrawMaxIndexedRecords != null
+                || mdicDebugDrawMaxDrawCount != null
                 || directGpuGeometryRendererActualDraw != null
                 || directGpuGeometryRendererMaxPlanCandidates != null
                 || directGpuGeometryRendererMaxDrawSections != null

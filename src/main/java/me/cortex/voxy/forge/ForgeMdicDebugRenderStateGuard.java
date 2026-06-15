@@ -26,6 +26,8 @@ import static org.lwjgl.opengl.GL40C.GL_DRAW_INDIRECT_BUFFER_BINDING;
 import static org.lwjgl.opengl.GL30C.glGetIntegeri;
 import static org.lwjgl.opengl.GL43C.GL_SHADER_STORAGE_BUFFER;
 import static org.lwjgl.opengl.GL43C.GL_SHADER_STORAGE_BUFFER_BINDING;
+import static org.lwjgl.opengl.ARBIndirectParameters.GL_PARAMETER_BUFFER_ARB;
+import static org.lwjgl.opengl.ARBIndirectParameters.GL_PARAMETER_BUFFER_BINDING_ARB;
 
 final class ForgeMdicDebugRenderStateGuard {
     private final int currentProgram;
@@ -33,6 +35,7 @@ final class ForgeMdicDebugRenderStateGuard {
     private final int arrayBufferBinding;
     private final int elementArrayBufferBinding;
     private final int drawIndirectBufferBinding;
+    private final int parameterBufferBinding;
     private final int geometryStorageBinding;
     private final int directDrawItemStorageBinding;
     private final int mdicCommandStorageBinding;
@@ -47,6 +50,7 @@ final class ForgeMdicDebugRenderStateGuard {
         this.arrayBufferBinding = glGetInteger(GL_ARRAY_BUFFER_BINDING);
         this.elementArrayBufferBinding = glGetInteger(GL_ELEMENT_ARRAY_BUFFER_BINDING);
         this.drawIndirectBufferBinding = glGetInteger(GL_DRAW_INDIRECT_BUFFER_BINDING);
+        this.parameterBufferBinding = glGetInteger(GL_PARAMETER_BUFFER_BINDING_ARB);
         this.geometryStorageBinding = glGetIntegeri(GL_SHADER_STORAGE_BUFFER_BINDING, 0);
         this.directDrawItemStorageBinding = glGetIntegeri(GL_SHADER_STORAGE_BUFFER_BINDING, ForgeDirectGpuGeometryDrawItemBuffer.BINDING_INDEX);
         this.mdicCommandStorageBinding = glGetIntegeri(GL_SHADER_STORAGE_BUFFER_BINDING, ForgeMdicDebugShader.COMMAND_BINDING_INDEX);
@@ -73,6 +77,7 @@ final class ForgeMdicDebugRenderStateGuard {
             glBindBuffer(GL_ARRAY_BUFFER, this.arrayBufferBinding);
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, this.elementArrayBufferBinding);
             glBindBuffer(GL_DRAW_INDIRECT_BUFFER, this.drawIndirectBufferBinding);
+            glBindBuffer(GL_PARAMETER_BUFFER_ARB, this.parameterBufferBinding);
             glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, this.geometryStorageBinding);
             glBindBufferBase(GL_SHADER_STORAGE_BUFFER, ForgeDirectGpuGeometryDrawItemBuffer.BINDING_INDEX, this.directDrawItemStorageBinding);
             glBindBufferBase(GL_SHADER_STORAGE_BUFFER, ForgeMdicDebugShader.COMMAND_BINDING_INDEX, this.mdicCommandStorageBinding);
