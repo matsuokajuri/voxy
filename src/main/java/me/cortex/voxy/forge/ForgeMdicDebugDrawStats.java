@@ -7,10 +7,24 @@ record ForgeMdicDebugDrawStats(
         boolean shaderSupported,
         boolean shaderCompiled,
         boolean programCreated,
+        boolean multiDrawSupported,
+        boolean indirectSupported,
+        boolean drawIdSupported,
+        boolean baseInstanceSupported,
+        String configuredDrawMode,
+        String effectiveDrawMode,
+        String autoModeSelectedReason,
+        String autoModeFallbackReason,
+        boolean loopShaderCompiled,
+        boolean multiDrawShaderCompiled,
+        boolean indirectShaderCompiled,
         boolean commandBufferCreated,
         boolean commandListValid,
         boolean commandListStale,
         boolean commandBufferStale,
+        boolean derivedIndirectCommandBufferCreated,
+        long derivedIndirectCommandBufferBytes,
+        boolean derivedIndirectCommandBufferStale,
         boolean hasHeap,
         boolean heapCreated,
         long currentHeapGeneration,
@@ -26,11 +40,11 @@ record ForgeMdicDebugDrawStats(
         double alpha,
         boolean ignoreDepth,
         boolean doubleSided,
-        int lastFrameDrawCalls,
-        int lastFrameCommands,
+        int lastFrameApiDrawCalls,
+        int lastFrameLogicalCommands,
         long lastFrameVertices,
-        long drawCallsIssued,
-        long commandsDrawn,
+        long drawApiCallsIssued,
+        long logicalCommandsDrawn,
         long verticesDrawn,
         double lastFrameRenderMs,
         double maxFrameRenderMs,
@@ -45,7 +59,16 @@ record ForgeMdicDebugDrawStats(
         String lastStateRestoreError,
         String lastRenderSkippedReason,
         String lastDrawError,
-        String debugDrawMode,
+        boolean lastIndirectAuditOk,
+        long indirectAuditRuns,
+        long indirectAuditFailures,
+        String lastIndirectAuditError,
+        double lastIndirectAuditDurationMs,
+        int lastAuditedIndirectCommands,
+        long lastAuditedIndirectBytes,
+        int lastInvalidIndirectCommands,
+        boolean lastIndirectCommandBufferMatch,
+        long lastIndirectAuditVertices,
         long stressRuns,
         long stressFailures,
         String lastStressError,
@@ -60,8 +83,32 @@ record ForgeMdicDebugDrawStats(
         boolean lastStressHeapClearOk,
         boolean lastStressRebuildOk,
         boolean lastStressRedrawOk,
+        boolean lastStressLoopOk,
+        boolean lastStressMultiDrawOk,
+        boolean lastStressIndirectOk,
+        boolean lastStressAutoOk,
+        boolean lastStressDerivedIndirectAuditOk,
         boolean lastStressSourceRegressionOk,
         long lastStressGlErrorCount,
         long lastStressStateRestoreFailures
 ) {
+    int lastFrameDrawCalls() {
+        return this.lastFrameApiDrawCalls;
+    }
+
+    int lastFrameCommands() {
+        return this.lastFrameLogicalCommands;
+    }
+
+    long drawCallsIssued() {
+        return this.drawApiCallsIssued;
+    }
+
+    long commandsDrawn() {
+        return this.logicalCommandsDrawn;
+    }
+
+    String debugDrawMode() {
+        return this.effectiveDrawMode;
+    }
 }

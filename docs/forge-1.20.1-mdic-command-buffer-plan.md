@@ -290,3 +290,86 @@ return to mdic_debug runtime state
 ```
 
 G6.1 still does not make this path a renderer replacement. G6.2 can prototype a bounded multi / indirect MDIC debug draw only after this lifecycle contract stays stable. G6.x remains the place to align toward formal renderer ownership, bucket-aware planning, material/atlas work, and original renderer compatibility.
+
+## G6.2 Multi / Indirect Debug Draw Notes
+
+G6.2 keeps the same ownership boundary as G6.1, but adds draw-mode variants for the MDIC debug renderer:
+
+```text
+LOOP_PER_COMMAND
+MULTI_DRAW_ARRAYS
+MULTI_DRAW_ARRAYS_INDIRECT
+AUTO
+```
+
+`LOOP_PER_COMMAND` remains the default and the fallback. `AUTO` prefers:
+
+```text
+MULTI_DRAW_ARRAYS_INDIRECT
+ -> MULTI_DRAW_ARRAYS
+ -> LOOP_PER_COMMAND
+```
+
+The multi-draw path still reads the same MDIC command buffer SSBO and the same upload-only geometry heap SSBO. The only difference is command selection:
+
+```text
+loop:
+  uniform commandIndex
+  glDrawArrays per command
+
+multi:
+  gl_DrawIDARB selects command
+  glMultiDrawArrays once for the bounded command list
+
+indirect:
+  gl_DrawIDARB selects command
+  derived DrawArraysIndirectCommand buffer drives glMultiDrawArraysIndirect
+```
+
+The derived indirect command buffer is intentionally not the MDIC command buffer. It is a debug-only OpenGL standard indirect buffer generated from the audited MDIC command list:
+
+```c
+typedef struct {
+    uint count;
+    uint instanceCount;
+    uint first;
+    uint baseInstance;
+} DrawArraysIndirectCommand;
+```
+
+For each MDIC command:
+
+```text
+count = recordCount * 6
+instanceCount = 1
+first = 0
+baseInstance = command index
+```
+
+This derived buffer exists only to exercise the indirect OpenGL call shape. It does not create the original Voxy MDIC command pipeline, does not connect to `MDICSectionRenderer`, and does not make the debug renderer a formal renderer.
+
+G6.2 status and audit commands expose:
+
+```text
+configuredDrawMode / effectiveDrawMode
+multiDrawSupported / indirectSupported
+drawIdSupported / baseInstanceSupported
+derivedIndirectCommandBufferCreated / derivedIndirectCommandBufferBytes / stale
+lastFrameApiDrawCalls / lastFrameLogicalCommands / lastFrameVertices
+lastIndirectCommandBufferMatch / lastInvalidIndirectCommands
+```
+
+The derived indirect audit is command-triggered only. It readbacks the standard indirect command buffer and compares it against the CPU-side MDIC command list. It checks command count, byte size, vertex count, instance count, first, base instance, total vertices, generation, and dimension through the surrounding command list and buffer state.
+
+Lifecycle rules remain strict. Any heap clear, heap generation change, dimension switch, world unload, debug pipeline clear, preset off, preset clear, or `direct_gl_mdic_draw_clear` invalidates or deletes the derived indirect buffer and audit state. It must not clear or pollute:
+
+```text
+G5 direct renderer draw list / indirect buffer
+GL_HEAP_READBACK debug source
+BUILT_SECTION source
+CPU_MESH source
+CPU BuiltSection cache
+CPU SectionGeometryManager
+```
+
+G6.2 still does not implement the formal MDIC renderer. The next useful step is a bucket-aware MDIC debug planning pass, then grouping and lifecycle hardening before any G7-era alignment with the original renderer, materials, atlas, shaderpack, or `VoxyRenderSystem`.

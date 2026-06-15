@@ -7,6 +7,7 @@ import org.lwjgl.opengl.GLCapabilities;
 import org.lwjgl.system.MemoryStack;
 
 import java.nio.FloatBuffer;
+import java.nio.IntBuffer;
 
 import static org.lwjgl.opengl.GL11C.GL_FALSE;
 import static org.lwjgl.opengl.GL11C.GL_NO_ERROR;
@@ -15,6 +16,8 @@ import static org.lwjgl.opengl.GL11C.GL_VERSION;
 import static org.lwjgl.opengl.GL11C.glDrawArrays;
 import static org.lwjgl.opengl.GL11C.glGetError;
 import static org.lwjgl.opengl.GL11C.glGetString;
+import static org.lwjgl.opengl.GL14C.glMultiDrawArrays;
+import static org.lwjgl.opengl.GL15C.glBindBuffer;
 import static org.lwjgl.opengl.GL20C.GL_COMPILE_STATUS;
 import static org.lwjgl.opengl.GL20C.GL_FRAGMENT_SHADER;
 import static org.lwjgl.opengl.GL20C.GL_LINK_STATUS;
@@ -41,7 +44,9 @@ import static org.lwjgl.opengl.GL30C.glBindBufferBase;
 import static org.lwjgl.opengl.GL30C.glBindVertexArray;
 import static org.lwjgl.opengl.GL30C.glDeleteVertexArrays;
 import static org.lwjgl.opengl.GL30C.glGenVertexArrays;
+import static org.lwjgl.opengl.GL40C.GL_DRAW_INDIRECT_BUFFER;
 import static org.lwjgl.opengl.GL43C.GL_SHADER_STORAGE_BUFFER;
+import static org.lwjgl.opengl.GL43C.glMultiDrawArraysIndirect;
 
 final class ForgeMdicDebugShader {
     static final int COMMAND_BINDING_INDEX = 2;
@@ -51,9 +56,18 @@ final class ForgeMdicDebugShader {
     static final String ERROR_STAGE_BIND_COMMAND_SSBO = "MDIC_BIND_COMMAND_SSBO";
     static final String ERROR_STAGE_SET_UNIFORMS = "MDIC_SET_UNIFORMS";
     static final String ERROR_STAGE_DRAW_ARRAYS = "MDIC_DRAW_ARRAYS";
+    static final String ERROR_STAGE_MULTI_DRAW_ARRAYS = "MDIC_MULTI_DRAW_ARRAYS";
+    static final String ERROR_STAGE_INDIRECT_COMMAND_BUFFER_UPLOAD = "MDIC_INDIRECT_COMMAND_BUFFER_UPLOAD";
+    static final String ERROR_STAGE_BIND_INDIRECT_COMMAND_BUFFER = "MDIC_BIND_INDIRECT_COMMAND_BUFFER";
+    static final String ERROR_STAGE_MULTI_DRAW_ARRAYS_INDIRECT = "MDIC_MULTI_DRAW_ARRAYS_INDIRECT";
 
-    private static final String VERTEX_SHADER = """
+    private static final String DRAW_ID_EXTENSION_PLACEHOLDER = "${DRAW_ID_EXTENSION}";
+    private static final String COMMAND_INDEX_UNIFORM_PLACEHOLDER = "${COMMAND_INDEX_UNIFORM}";
+    private static final String COMMAND_INDEX_EXPR_PLACEHOLDER = "${COMMAND_INDEX_EXPR}";
+
+    private static final String VERTEX_SHADER_TEMPLATE = """
             #version 430 core
+            ${DRAW_ID_EXTENSION}
 
             layout(std430, binding = 0) readonly buffer GeometryRecords {
                 uvec2 records[];
@@ -71,7 +85,7 @@ final class ForgeMdicDebugShader {
 
             uniform mat4 uModelView;
             uniform mat4 uProjection;
-            uniform int uCommandIndex;
+            ${COMMAND_INDEX_UNIFORM}
             uniform float uAlpha;
 
             out vec4 vColor;
@@ -95,7 +109,8 @@ final class ForgeMdicDebugShader {
             }
 
             void main() {
-                MdicCommand command = commands[uCommandIndex];
+                uint commandIndex = ${COMMAND_INDEX_EXPR};
+                MdicCommand command = commands[commandIndex];
                 uint sectionId = command.a.x;
                 uint geometryPtr = command.a.y;
                 uint recordStart = command.a.z;
@@ -154,7 +169,7 @@ final class ForgeMdicDebugShader {
                     local = p2;
                 }
 
-                uint colorSeed = sectionId ^ uint(uCommandIndex) ^ command.b.w ^ command.c.z;
+                uint colorSeed = sectionId ^ commandIndex ^ command.b.w ^ command.c.z;
                 vColor = vec4(colorFor(face, modelId, biomeId, lightId, colorSeed), uAlpha);
                 gl_Position = uProjection * uModelView * vec4(sectionOrigin + local, 1.0);
             }
@@ -173,57 +188,44 @@ final class ForgeMdicDebugShader {
 
     private boolean supportChecked;
     private boolean shaderSupported;
-    private boolean shaderCompiled;
-    private boolean programCreated;
-    private String lastShaderError = "none";
+    private boolean multiDrawSupported;
+    private boolean indirectSupported;
+    private boolean multiDrawIndirectSupported;
+    private boolean drawIndirectBufferSupported;
+    private boolean drawIdSupported;
+    private boolean baseInstanceSupported;
     private String unsupportedReason = "none";
+    private String multiDrawUnsupportedReason = "unknown";
+    private String indirectUnsupportedReason = "unknown";
     private String glVersion = "unknown";
     private String glslVersion = "unknown";
-    private int programId;
-    private int vertexShaderId;
-    private int fragmentShaderId;
-    private int vaoId;
-    private int modelViewLocation = -1;
-    private int projectionLocation = -1;
-    private int commandIndexLocation = -1;
-    private int alphaLocation = -1;
+    private String lastShaderError = "none";
+    private String lastMultiDrawShaderError = "none";
+    private String lastIndirectShaderError = "none";
+    private final ProgramHandle loopProgram = new ProgramHandle();
+    private final ProgramHandle multiDrawProgram = new ProgramHandle();
+    private final ProgramHandle indirectProgram = new ProgramHandle();
 
     boolean ensureReady() {
-        if (!RenderSystem.isOnRenderThread()) {
-            this.lastShaderError = "not-render-thread";
-            return false;
-        }
+        return this.ensureProgram(this.loopProgram, loopVertexShader(), true, "loop");
+    }
+
+    boolean ensureMultiDrawReady() {
         this.checkSupport();
-        if (!this.shaderSupported) {
+        if (!this.multiDrawSupported) {
+            this.lastMultiDrawShaderError = this.multiDrawUnsupportedReason;
             return false;
         }
-        if (this.programCreated) {
-            return true;
-        }
-        try {
-            this.vertexShaderId = compile(GL_VERTEX_SHADER, VERTEX_SHADER);
-            this.fragmentShaderId = compile(GL_FRAGMENT_SHADER, FRAGMENT_SHADER);
-            this.programId = glCreateProgram();
-            glAttachShader(this.programId, this.vertexShaderId);
-            glAttachShader(this.programId, this.fragmentShaderId);
-            glLinkProgram(this.programId);
-            if (glGetProgrami(this.programId, GL_LINK_STATUS) == GL_FALSE) {
-                throw new IllegalStateException("MDIC debug program link failed: " + glGetProgramInfoLog(this.programId));
-            }
-            this.vaoId = glGenVertexArrays();
-            this.modelViewLocation = glGetUniformLocation(this.programId, "uModelView");
-            this.projectionLocation = glGetUniformLocation(this.programId, "uProjection");
-            this.commandIndexLocation = glGetUniformLocation(this.programId, "uCommandIndex");
-            this.alphaLocation = glGetUniformLocation(this.programId, "uAlpha");
-            this.shaderCompiled = true;
-            this.programCreated = true;
-            this.lastShaderError = "none";
-            return true;
-        } catch (RuntimeException e) {
-            this.lastShaderError = e.getClass().getSimpleName() + ": " + e.getMessage();
-            this.closeOnRenderThread();
+        return this.ensureProgram(this.multiDrawProgram, drawIdVertexShader(), false, "multi-draw");
+    }
+
+    boolean ensureIndirectReady() {
+        this.checkSupport();
+        if (!this.indirectSupported) {
+            this.lastIndirectShaderError = this.indirectUnsupportedReason;
             return false;
         }
+        return this.ensureProgram(this.indirectProgram, drawIdVertexShader(), false, "indirect");
     }
 
     DrawCallResult drawCommandWithDiagnostics(
@@ -236,48 +238,130 @@ final class ForgeMdicDebugShader {
             float alpha
     ) {
         if (!this.ensureReady()) {
-            return new DrawCallResult(GL_NO_ERROR, ERROR_STAGE_NONE);
+            return DrawCallResult.empty();
         }
-        glUseProgram(this.programId);
-        glBindVertexArray(this.vaoId);
+        if (vertexCount <= 0) {
+            return DrawCallResult.empty();
+        }
+        DrawCallResult bindResult = this.bindProgramAndBuffers(this.loopProgram, geometryBufferId, commandBufferId);
+        if (!bindResult.ok()) {
+            return bindResult;
+        }
+        DrawCallResult uniformResult = this.setCommonUniforms(this.loopProgram, modelView, projection, alpha);
+        if (!uniformResult.ok()) {
+            return uniformResult;
+        }
+        glUniform1i(this.loopProgram.commandIndexLocation, commandIndex);
         int glError = glGetError();
         if (glError != GL_NO_ERROR) {
-            return new DrawCallResult(glError, ERROR_STAGE_BIND_SHADER);
-        }
-
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, geometryBufferId);
-        glError = glGetError();
-        if (glError != GL_NO_ERROR) {
-            return new DrawCallResult(glError, ERROR_STAGE_BIND_GEOMETRY_SSBO);
-        }
-
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, COMMAND_BINDING_INDEX, commandBufferId);
-        glError = glGetError();
-        if (glError != GL_NO_ERROR) {
-            return new DrawCallResult(glError, ERROR_STAGE_BIND_COMMAND_SSBO);
-        }
-
-        try (MemoryStack stack = MemoryStack.stackPush()) {
-            FloatBuffer matrixBuffer = stack.mallocFloat(16);
-            modelView.get(matrixBuffer);
-            glUniformMatrix4fv(this.modelViewLocation, false, matrixBuffer);
-            matrixBuffer.clear();
-            projection.get(matrixBuffer);
-            glUniformMatrix4fv(this.projectionLocation, false, matrixBuffer);
-        }
-        glUniform1i(this.commandIndexLocation, commandIndex);
-        glUniform1f(this.alphaLocation, alpha);
-        glError = glGetError();
-        if (glError != GL_NO_ERROR) {
-            return new DrawCallResult(glError, ERROR_STAGE_SET_UNIFORMS);
+            return new DrawCallResult(glError, ERROR_STAGE_SET_UNIFORMS, 0, 0L);
         }
 
         glDrawArrays(GL_TRIANGLES, 0, vertexCount);
         glError = glGetError();
         if (glError != GL_NO_ERROR) {
-            return new DrawCallResult(glError, ERROR_STAGE_DRAW_ARRAYS);
+            return new DrawCallResult(glError, ERROR_STAGE_DRAW_ARRAYS, 1, vertexCount);
         }
-        return new DrawCallResult(GL_NO_ERROR, ERROR_STAGE_NONE);
+        return new DrawCallResult(GL_NO_ERROR, ERROR_STAGE_NONE, 1, vertexCount);
+    }
+
+    DrawCallResult drawMultiWithDiagnostics(
+            int geometryBufferId,
+            int commandBufferId,
+            Matrix4f modelView,
+            Matrix4f projection,
+            ForgeMdicCommandList commandList,
+            int maxCommands,
+            int maxRecords,
+            float alpha
+    ) {
+        if (!this.ensureMultiDrawReady()) {
+            return DrawCallResult.empty();
+        }
+        if (commandBufferId == 0 || commandList == null || !commandList.isValid()) {
+            return DrawCallResult.empty();
+        }
+        DrawBudget budget = DrawBudget.from(commandList, maxCommands, maxRecords);
+        if (budget.logicalCommands <= 0 || budget.vertices <= 0L) {
+            return DrawCallResult.empty();
+        }
+
+        DrawCallResult bindResult = this.bindProgramAndBuffers(this.multiDrawProgram, geometryBufferId, commandBufferId);
+        if (!bindResult.ok()) {
+            return bindResult;
+        }
+        DrawCallResult uniformResult = this.setCommonUniforms(this.multiDrawProgram, modelView, projection, alpha);
+        if (!uniformResult.ok()) {
+            return uniformResult;
+        }
+
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            IntBuffer firsts = stack.mallocInt(budget.logicalCommands);
+            IntBuffer counts = stack.mallocInt(budget.logicalCommands);
+            long recordsLeft = Math.max(0, maxRecords);
+            for (int i = 0; i < budget.logicalCommands; i++) {
+                ForgeMdicCommand command = commandList.commands().get(i);
+                int records = Math.max(0, command.recordCount());
+                int drawnRecords = (int) Math.min(recordsLeft, records);
+                firsts.put(0);
+                counts.put(drawnRecords * 6);
+                recordsLeft -= drawnRecords;
+            }
+            firsts.flip();
+            counts.flip();
+            glMultiDrawArrays(GL_TRIANGLES, firsts, counts);
+        }
+
+        int glError = glGetError();
+        if (glError != GL_NO_ERROR) {
+            return new DrawCallResult(glError, ERROR_STAGE_MULTI_DRAW_ARRAYS, budget.logicalCommands, budget.vertices);
+        }
+        return new DrawCallResult(GL_NO_ERROR, ERROR_STAGE_NONE, budget.logicalCommands, budget.vertices);
+    }
+
+    DrawCallResult drawIndirectWithDiagnostics(
+            int geometryBufferId,
+            int commandBufferId,
+            int indirectCommandBufferId,
+            Matrix4f modelView,
+            Matrix4f projection,
+            ForgeMdicCommandList commandList,
+            int maxCommands,
+            int maxRecords,
+            float alpha
+    ) {
+        if (!this.ensureIndirectReady()) {
+            return DrawCallResult.empty();
+        }
+        if (commandBufferId == 0 || indirectCommandBufferId == 0 || commandList == null || !commandList.isValid()) {
+            return DrawCallResult.empty();
+        }
+        DrawBudget budget = DrawBudget.from(commandList, maxCommands, maxRecords);
+        if (budget.logicalCommands <= 0 || budget.vertices <= 0L) {
+            return DrawCallResult.empty();
+        }
+
+        DrawCallResult bindResult = this.bindProgramAndBuffers(this.indirectProgram, geometryBufferId, commandBufferId);
+        if (!bindResult.ok()) {
+            return bindResult;
+        }
+        DrawCallResult uniformResult = this.setCommonUniforms(this.indirectProgram, modelView, projection, alpha);
+        if (!uniformResult.ok()) {
+            return uniformResult;
+        }
+
+        glBindBuffer(GL_DRAW_INDIRECT_BUFFER, indirectCommandBufferId);
+        int glError = glGetError();
+        if (glError != GL_NO_ERROR) {
+            return new DrawCallResult(glError, ERROR_STAGE_BIND_INDIRECT_COMMAND_BUFFER, budget.logicalCommands, budget.vertices);
+        }
+
+        glMultiDrawArraysIndirect(GL_TRIANGLES, 0L, budget.logicalCommands, 0);
+        glError = glGetError();
+        if (glError != GL_NO_ERROR) {
+            return new DrawCallResult(glError, ERROR_STAGE_MULTI_DRAW_ARRAYS_INDIRECT, budget.logicalCommands, budget.vertices);
+        }
+        return new DrawCallResult(GL_NO_ERROR, ERROR_STAGE_NONE, budget.logicalCommands, budget.vertices);
     }
 
     void unbind() {
@@ -286,6 +370,7 @@ final class ForgeMdicDebugShader {
         }
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, 0);
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, COMMAND_BINDING_INDEX, 0);
+        glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
         glBindVertexArray(0);
         glUseProgram(0);
     }
@@ -304,14 +389,115 @@ final class ForgeMdicDebugShader {
         }
         return new ShaderStatus(
                 this.shaderSupported,
-                this.shaderCompiled,
-                this.programCreated,
+                this.multiDrawSupported,
+                this.indirectSupported,
+                this.multiDrawIndirectSupported,
+                this.drawIndirectBufferSupported,
+                this.drawIdSupported,
+                this.baseInstanceSupported,
+                this.loopProgram.compiled,
+                this.loopProgram.created,
+                this.multiDrawProgram.compiled,
+                this.multiDrawProgram.created,
+                this.indirectProgram.compiled,
+                this.indirectProgram.created,
                 this.lastShaderError,
+                this.lastMultiDrawShaderError,
+                this.lastIndirectShaderError,
                 this.unsupportedReason,
+                this.multiDrawUnsupportedReason,
+                this.indirectUnsupportedReason,
                 this.glVersion,
                 this.glslVersion,
                 true
         );
+    }
+
+    private DrawCallResult bindProgramAndBuffers(ProgramHandle program, int geometryBufferId, int commandBufferId) {
+        glUseProgram(program.programId);
+        glBindVertexArray(program.vaoId);
+        int glError = glGetError();
+        if (glError != GL_NO_ERROR) {
+            return new DrawCallResult(glError, ERROR_STAGE_BIND_SHADER, 0, 0L);
+        }
+
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, geometryBufferId);
+        glError = glGetError();
+        if (glError != GL_NO_ERROR) {
+            return new DrawCallResult(glError, ERROR_STAGE_BIND_GEOMETRY_SSBO, 0, 0L);
+        }
+
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, COMMAND_BINDING_INDEX, commandBufferId);
+        glError = glGetError();
+        if (glError != GL_NO_ERROR) {
+            return new DrawCallResult(glError, ERROR_STAGE_BIND_COMMAND_SSBO, 0, 0L);
+        }
+        return DrawCallResult.empty();
+    }
+
+    private DrawCallResult setCommonUniforms(ProgramHandle program, Matrix4f modelView, Matrix4f projection, float alpha) {
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            FloatBuffer matrixBuffer = stack.mallocFloat(16);
+            modelView.get(matrixBuffer);
+            glUniformMatrix4fv(program.modelViewLocation, false, matrixBuffer);
+            matrixBuffer.clear();
+            projection.get(matrixBuffer);
+            glUniformMatrix4fv(program.projectionLocation, false, matrixBuffer);
+        }
+        glUniform1f(program.alphaLocation, alpha);
+        int glError = glGetError();
+        if (glError != GL_NO_ERROR) {
+            return new DrawCallResult(glError, ERROR_STAGE_SET_UNIFORMS, 0, 0L);
+        }
+        return DrawCallResult.empty();
+    }
+
+    private boolean ensureProgram(ProgramHandle program, String vertexShaderSource, boolean hasCommandIndexUniform, String label) {
+        if (!RenderSystem.isOnRenderThread()) {
+            this.recordShaderError(label, "not-render-thread");
+            return false;
+        }
+        this.checkSupport();
+        if (!this.shaderSupported) {
+            return false;
+        }
+        if (program.created) {
+            return true;
+        }
+        try {
+            program.vertexShaderId = compile(GL_VERTEX_SHADER, vertexShaderSource);
+            program.fragmentShaderId = compile(GL_FRAGMENT_SHADER, FRAGMENT_SHADER);
+            program.programId = glCreateProgram();
+            glAttachShader(program.programId, program.vertexShaderId);
+            glAttachShader(program.programId, program.fragmentShaderId);
+            glLinkProgram(program.programId);
+            if (glGetProgrami(program.programId, GL_LINK_STATUS) == GL_FALSE) {
+                throw new IllegalStateException("MDIC debug " + label + " program link failed: " + glGetProgramInfoLog(program.programId));
+            }
+            program.vaoId = glGenVertexArrays();
+            program.modelViewLocation = glGetUniformLocation(program.programId, "uModelView");
+            program.projectionLocation = glGetUniformLocation(program.programId, "uProjection");
+            program.alphaLocation = glGetUniformLocation(program.programId, "uAlpha");
+            program.commandIndexLocation = hasCommandIndexUniform ? glGetUniformLocation(program.programId, "uCommandIndex") : -1;
+            program.compiled = true;
+            program.created = true;
+            this.recordShaderError(label, "none");
+            return true;
+        } catch (RuntimeException e) {
+            this.recordShaderError(label, e.getClass().getSimpleName() + ": " + e.getMessage());
+            program.close();
+            return false;
+        }
+    }
+
+    private void recordShaderError(String label, String error) {
+        if ("multi-draw".equals(label)) {
+            this.lastMultiDrawShaderError = error;
+        } else if ("indirect".equals(label)) {
+            this.lastIndirectShaderError = error;
+        } else {
+            this.lastShaderError = error;
+        }
     }
 
     private void checkSupport() {
@@ -327,11 +513,45 @@ final class ForgeMdicDebugShader {
         if (!capabilities.OpenGL43) {
             this.shaderSupported = false;
             this.unsupportedReason = "OpenGL_4.3_required_for_SSBO";
+            this.multiDrawUnsupportedReason = this.unsupportedReason;
+            this.indirectUnsupportedReason = this.unsupportedReason;
             this.lastShaderError = this.unsupportedReason;
+            this.lastMultiDrawShaderError = this.unsupportedReason;
+            this.lastIndirectShaderError = this.unsupportedReason;
             return;
         }
         this.shaderSupported = true;
         this.unsupportedReason = "none";
+        this.drawIdSupported = capabilities.GL_ARB_shader_draw_parameters;
+        this.baseInstanceSupported = capabilities.OpenGL42 || capabilities.GL_ARB_base_instance || capabilities.OpenGL43;
+        this.drawIndirectBufferSupported = capabilities.OpenGL40 || capabilities.GL_ARB_draw_indirect || capabilities.OpenGL43;
+        this.multiDrawIndirectSupported = capabilities.OpenGL43 || capabilities.GL_ARB_multi_draw_indirect;
+        this.multiDrawSupported = this.drawIdSupported;
+        this.indirectSupported = this.multiDrawSupported && this.drawIndirectBufferSupported && this.multiDrawIndirectSupported;
+        this.multiDrawUnsupportedReason = this.multiDrawSupported ? "none" : "ARB_shader_draw_parameters_required_for_gl_DrawID";
+        if (this.indirectSupported) {
+            this.indirectUnsupportedReason = "none";
+        } else if (!this.multiDrawSupported) {
+            this.indirectUnsupportedReason = this.multiDrawUnsupportedReason;
+        } else if (!this.drawIndirectBufferSupported) {
+            this.indirectUnsupportedReason = "GL_DRAW_INDIRECT_BUFFER_not_supported";
+        } else {
+            this.indirectUnsupportedReason = "glMultiDrawArraysIndirect_not_supported";
+        }
+    }
+
+    private static String loopVertexShader() {
+        return VERTEX_SHADER_TEMPLATE
+                .replace(DRAW_ID_EXTENSION_PLACEHOLDER, "")
+                .replace(COMMAND_INDEX_UNIFORM_PLACEHOLDER, "uniform int uCommandIndex;")
+                .replace(COMMAND_INDEX_EXPR_PLACEHOLDER, "uint(uCommandIndex)");
+    }
+
+    private static String drawIdVertexShader() {
+        return VERTEX_SHADER_TEMPLATE
+                .replace(DRAW_ID_EXTENSION_PLACEHOLDER, "#extension GL_ARB_shader_draw_parameters : require")
+                .replace(COMMAND_INDEX_UNIFORM_PLACEHOLDER, "")
+                .replace(COMMAND_INDEX_EXPR_PLACEHOLDER, "uint(gl_DrawIDARB)");
     }
 
     private static int compile(int type, String source) {
@@ -347,36 +567,87 @@ final class ForgeMdicDebugShader {
     }
 
     private void closeOnRenderThread() {
-        if (this.programId != 0) {
-            glDeleteProgram(this.programId);
-            this.programId = 0;
+        this.loopProgram.close();
+        this.multiDrawProgram.close();
+        this.indirectProgram.close();
+    }
+
+    private static final class ProgramHandle {
+        private int programId;
+        private int vertexShaderId;
+        private int fragmentShaderId;
+        private int vaoId;
+        private int modelViewLocation = -1;
+        private int projectionLocation = -1;
+        private int commandIndexLocation = -1;
+        private int alphaLocation = -1;
+        private boolean compiled;
+        private boolean created;
+
+        private void close() {
+            if (this.programId != 0) {
+                glDeleteProgram(this.programId);
+                this.programId = 0;
+            }
+            if (this.vertexShaderId != 0) {
+                glDeleteShader(this.vertexShaderId);
+                this.vertexShaderId = 0;
+            }
+            if (this.fragmentShaderId != 0) {
+                glDeleteShader(this.fragmentShaderId);
+                this.fragmentShaderId = 0;
+            }
+            if (this.vaoId != 0) {
+                glDeleteVertexArrays(this.vaoId);
+                this.vaoId = 0;
+            }
+            this.modelViewLocation = -1;
+            this.projectionLocation = -1;
+            this.commandIndexLocation = -1;
+            this.alphaLocation = -1;
+            this.compiled = false;
+            this.created = false;
         }
-        if (this.vertexShaderId != 0) {
-            glDeleteShader(this.vertexShaderId);
-            this.vertexShaderId = 0;
+    }
+
+    private record DrawBudget(int logicalCommands, long vertices) {
+        private static DrawBudget from(ForgeMdicCommandList commandList, int maxCommands, int maxRecords) {
+            int commandLimit = Math.min(Math.max(0, maxCommands), commandList.commandCount());
+            long recordsLeft = Math.max(0, maxRecords);
+            int logicalCommands = 0;
+            long vertices = 0L;
+            for (int i = 0; i < commandLimit && recordsLeft > 0L; i++) {
+                ForgeMdicCommand command = commandList.commands().get(i);
+                int records = Math.max(0, command.recordCount());
+                int drawnRecords = (int) Math.min(recordsLeft, records);
+                logicalCommands++;
+                vertices += (long) drawnRecords * 6L;
+                recordsLeft -= drawnRecords;
+            }
+            return new DrawBudget(logicalCommands, vertices);
         }
-        if (this.fragmentShaderId != 0) {
-            glDeleteShader(this.fragmentShaderId);
-            this.fragmentShaderId = 0;
-        }
-        if (this.vaoId != 0) {
-            glDeleteVertexArrays(this.vaoId);
-            this.vaoId = 0;
-        }
-        this.shaderCompiled = false;
-        this.programCreated = false;
-        this.modelViewLocation = -1;
-        this.projectionLocation = -1;
-        this.commandIndexLocation = -1;
-        this.alphaLocation = -1;
     }
 
     record ShaderStatus(
             boolean shaderSupported,
+            boolean multiDrawSupported,
+            boolean indirectSupported,
+            boolean multiDrawIndirectSupported,
+            boolean drawIndirectBufferSupported,
+            boolean drawIdSupported,
+            boolean baseInstanceSupported,
             boolean shaderCompiled,
             boolean programCreated,
+            boolean multiDrawShaderCompiled,
+            boolean multiDrawProgramCreated,
+            boolean indirectShaderCompiled,
+            boolean indirectProgramCreated,
             String lastShaderError,
+            String lastMultiDrawShaderError,
+            String lastIndirectShaderError,
             String unsupportedReason,
+            String multiDrawUnsupportedReason,
+            String indirectUnsupportedReason,
             String glVersion,
             String glslVersion,
             boolean usesSsbo
@@ -384,9 +655,39 @@ final class ForgeMdicDebugShader {
         boolean ok() {
             return this.shaderSupported && this.shaderCompiled && this.programCreated;
         }
+
+        boolean shaderCompiledFor(ForgeMdicDebugDrawMode mode) {
+            return switch (mode) {
+                case LOOP_PER_COMMAND -> this.shaderCompiled;
+                case MULTI_DRAW_ARRAYS -> this.multiDrawShaderCompiled;
+                case MULTI_DRAW_ARRAYS_INDIRECT -> this.indirectShaderCompiled;
+                case AUTO -> this.indirectSupported ? this.indirectShaderCompiled
+                        : this.multiDrawSupported ? this.multiDrawShaderCompiled
+                        : this.shaderCompiled;
+            };
+        }
+
+        boolean programCreatedFor(ForgeMdicDebugDrawMode mode) {
+            return switch (mode) {
+                case LOOP_PER_COMMAND -> this.programCreated;
+                case MULTI_DRAW_ARRAYS -> this.multiDrawProgramCreated;
+                case MULTI_DRAW_ARRAYS_INDIRECT -> this.indirectProgramCreated;
+                case AUTO -> this.indirectSupported ? this.indirectProgramCreated
+                        : this.multiDrawSupported ? this.multiDrawProgramCreated
+                        : this.programCreated;
+            };
+        }
+
+        boolean readyFor(ForgeMdicDebugDrawMode mode) {
+            return this.shaderSupported && this.shaderCompiledFor(mode) && this.programCreatedFor(mode);
+        }
     }
 
-    record DrawCallResult(int glError, String stage) {
+    record DrawCallResult(int glError, String stage, int logicalCommands, long vertices) {
+        static DrawCallResult empty() {
+            return new DrawCallResult(GL_NO_ERROR, ERROR_STAGE_NONE, 0, 0L);
+        }
+
         boolean ok() {
             return this.glError == GL_NO_ERROR;
         }
