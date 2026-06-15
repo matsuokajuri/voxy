@@ -249,6 +249,18 @@ public final class ForgeVoxyCommands {
                         .executes(ctx -> modelBridgeResourceReloadStatus(ctx.getSource())))
                 .then(Commands.literal("model_bridge_simulate_resource_reload")
                         .executes(ctx -> modelBridgeSimulateResourceReload(ctx.getSource())))
+                .then(Commands.literal("baked_model_bridge_check")
+                        .executes(ctx -> bakedModelBridgeCheck(ctx.getSource())))
+                .then(Commands.literal("baked_model_bridge_status")
+                        .executes(ctx -> bakedModelBridgeStatus(ctx.getSource())))
+                .then(Commands.literal("baked_model_bridge_audit")
+                        .executes(ctx -> bakedModelBridgeAudit(ctx.getSource())))
+                .then(Commands.literal("baked_model_bridge_audit_status")
+                        .executes(ctx -> bakedModelBridgeAuditStatus(ctx.getSource())))
+                .then(Commands.literal("baked_model_bridge_dump_sample")
+                        .executes(ctx -> bakedModelBridgeDumpSample(ctx.getSource())))
+                .then(Commands.literal("baked_model_bridge_clear")
+                        .executes(ctx -> bakedModelBridgeClear(ctx.getSource())))
                 .then(Commands.literal("mesh_cache_status")
                         .executes(ctx -> meshCacheStatus(ctx.getSource())))
                 .then(Commands.literal("mesh_cache_clear")
@@ -747,7 +759,7 @@ public final class ForgeVoxyCommands {
         String message = "Voxy: cleared CPU-only BuiltSection cache, closed all partial geometry buffers, and cleared auto BuiltSection build records."
                 + " CPU-only section geometry manager state and upload-only GL geometry heap were also cleared because they are derived from BuiltSection cache."
                 + (clearedGpuBuffers ? " Current source is BUILT_SECTION, so simple GPU buffers were also cleared to avoid orphan renders." : " Simple GPU buffers were left intact because the active source is not BUILT_SECTION.");
-        message = message + modelStoreFormalLayoutStatusSuffix() + modelBridgeResourceReloadStatusSuffix();
+        message = message + modelStoreFormalLayoutStatusSuffix() + bakedModelBridgeStatusSuffix() + modelBridgeResourceReloadStatusSuffix();
         String displayMessage = message;
         source.sendSuccess(() -> Component.literal(displayMessage), false);
         return 1;
@@ -3053,7 +3065,7 @@ public final class ForgeVoxyCommands {
                 status.sampleHasTextureMetadata(),
                 status.sampleNote()
         );
-        message = message + modelStoreFormalLayoutStatusSuffix() + modelBridgeResourceReloadStatusSuffix();
+        message = message + modelStoreFormalLayoutStatusSuffix() + bakedModelBridgeStatusSuffix() + modelBridgeResourceReloadStatusSuffix();
         String displayMessage = message;
         source.sendSuccess(() -> Component.literal(displayMessage), false);
         return result.success() ? 1 : 0;
@@ -3100,7 +3112,7 @@ public final class ForgeVoxyCommands {
                 status.sampleNote(),
                 status.placeholderModelStoreReady()
         );
-        message = message + modelStoreFormalLayoutStatusSuffix() + modelBridgeResourceReloadStatusSuffix();
+        message = message + modelStoreFormalLayoutStatusSuffix() + bakedModelBridgeStatusSuffix() + modelBridgeResourceReloadStatusSuffix();
         String displayMessage = message;
         source.sendSuccess(() -> Component.literal(displayMessage), false);
         return status.checkRuns() > 0 ? 1 : 0;
@@ -3108,7 +3120,8 @@ public final class ForgeVoxyCommands {
 
     private static int modelBridgeClear(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getModelBridgeReadiness().clear();
-        source.sendSuccess(() -> Component.literal("Voxy model bridge readiness: cleared no-draw readiness stats and sample state. Placeholder mapper entries, BuiltSection cache, upload-only GL heap, MDIC debug renderer, simple renderer, and CPU caches were left unchanged."), false);
+        ForgeVoxyInstance.INSTANCE.getBakedModelBridge().clear();
+        source.sendSuccess(() -> Component.literal("Voxy model bridge readiness: cleared no-draw readiness stats, base model sample state, and baked model bridge samples. Placeholder mapper entries, BuiltSection cache, upload-only GL heap, MDIC debug renderer, simple renderer, and CPU caches were left unchanged."), false);
         return 1;
     }
 
@@ -3334,6 +3347,86 @@ public final class ForgeVoxyCommands {
         return status.reloadLifecycleSkeletonReady() ? 1 : 0;
     }
 
+    private static int bakedModelBridgeCheck(CommandSourceStack source) {
+        ForgeBakedModelBridgeStats status = ForgeVoxyInstance.INSTANCE.getBakedModelBridge().check();
+        String message = "Voxy baked model bridge check: " + formatBakedModelBridgeStatus(status);
+        source.sendSuccess(() -> Component.literal(message), false);
+        return status.bakedModelBridgeReady() ? 1 : 0;
+    }
+
+    private static int bakedModelBridgeStatus(CommandSourceStack source) {
+        ForgeBakedModelBridgeStats status = ForgeVoxyInstance.INSTANCE.getBakedModelBridge().createStatusSnapshot();
+        source.sendSuccess(() -> Component.literal("Voxy baked model bridge status: " + formatBakedModelBridgeStatus(status)), false);
+        return status.checkRuns() > 0L ? 1 : 0;
+    }
+
+    private static int bakedModelBridgeAudit(CommandSourceStack source) {
+        ForgeBakedModelBridgeAuditResult result = ForgeVoxyInstance.INSTANCE.getBakedModelBridge().audit();
+        ForgeBakedModelBridgeStats status = result.stats();
+        String message = String.format(
+                "Voxy baked model bridge audit: success=%s error=%s durationMs=%.2f sampledModelIds=%d sampledBlockStates=%d sampledBakedModels=%d sampledQuads=%d sampledSprites=%d missingBakedModels=%d missingSprites=%d fluidLikeSamples=%d emptyModelSamples=%d unsupportedSamples=%d renderLayerReadable=%s spriteAtlasReadable=%s spriteUvReadable=%s minecraftBlockAtlasAccessible=%s blockAtlasLocation=%s customAtlasUploadReady=false formalTextureAtlasReady=false formalModelBridgeReady=false draw=false atlasUpload=false renderer=none",
+                result.success(),
+                result.error(),
+                result.durationMs(),
+                status.sampledModelIds(),
+                status.sampledBlockStates(),
+                status.sampledBakedModels(),
+                status.sampledQuads(),
+                status.sampledSprites(),
+                status.missingBakedModels(),
+                status.missingSprites(),
+                status.fluidLikeSamples(),
+                status.emptyModelSamples(),
+                status.unsupportedSamples(),
+                status.renderLayerReadable(),
+                status.spriteAtlasReadable(),
+                status.spriteUvReadable(),
+                status.minecraftBlockAtlasAccessible(),
+                status.blockAtlasLocation()
+        );
+        source.sendSuccess(() -> Component.literal(message), false);
+        return result.success() ? 1 : 0;
+    }
+
+    private static int bakedModelBridgeAuditStatus(CommandSourceStack source) {
+        ForgeBakedModelBridgeAuditResult result = ForgeVoxyInstance.INSTANCE.getBakedModelBridge().createAuditStatusSnapshot();
+        ForgeBakedModelBridgeStats status = result.stats();
+        String message = String.format(
+                "Voxy baked model bridge audit: auditRuns=%d auditFailures=%d lastAuditOk=%s lastAuditError=%s lastAuditDurationMs=%.2f sampledModelIds=%d sampledBlockStates=%d sampledBakedModels=%d sampledQuads=%d sampledSprites=%d missingBakedModels=%d missingSprites=%d fluidLikeSamples=%d emptyModelSamples=%d unsupportedSamples=%d bakedModelSamplesStale=%s spriteSamplesStale=%s formalModelBridgeReady=false",
+                status.auditRuns(),
+                status.auditFailures(),
+                status.lastAuditOk(),
+                status.lastAuditError(),
+                status.lastAuditDurationMs(),
+                status.sampledModelIds(),
+                status.sampledBlockStates(),
+                status.sampledBakedModels(),
+                status.sampledQuads(),
+                status.sampledSprites(),
+                status.missingBakedModels(),
+                status.missingSprites(),
+                status.fluidLikeSamples(),
+                status.emptyModelSamples(),
+                status.unsupportedSamples(),
+                status.bakedModelSamplesStale(),
+                status.spriteSamplesStale()
+        );
+        source.sendSuccess(() -> Component.literal(message), false);
+        return result.success() ? 1 : 0;
+    }
+
+    private static int bakedModelBridgeDumpSample(CommandSourceStack source) {
+        String message = ForgeVoxyInstance.INSTANCE.getBakedModelBridge().dumpSample();
+        source.sendSuccess(() -> Component.literal(message), false);
+        return ForgeVoxyInstance.INSTANCE.getBakedModelBridge().createStatusSnapshot().sampleModelId() >= 0 ? 1 : 0;
+    }
+
+    private static int bakedModelBridgeClear(CommandSourceStack source) {
+        ForgeVoxyInstance.INSTANCE.getBakedModelBridge().clear();
+        source.sendSuccess(() -> Component.literal("Voxy baked model bridge: cleared no-draw baked model, baked quad, sprite, audit, and reload-stale sample state. Placeholder mapper entries, placeholder ModelStore buffers, GL geometry heap, MDIC debug renderer, simple renderer, and CPU caches were left unchanged."), false);
+        return 1;
+    }
+
     private static String modelStoreFormalLayoutStatusSuffix() {
         return String.format(
                 " placeholderLayoutVersion=%s formalModelLayoutVersion=%s formalModelRecordBytes=%d formalLayoutKnown=%s knownFieldCount=%d unknownFieldCount=%d faceDataLayoutKnown=%s flagsLayoutKnown=%s colourTintLayoutKnown=%s customIdLayoutKnown=%s atlasUvLayoutKnown=%s materialLayoutKnown=%s fieldMappingReady=%s faceDataMappingReady=%s atlasUvMappingReady=%s materialMappingReady=%s formalLayoutCompatible=false formalModelBridgeReady=false",
@@ -3356,13 +3449,78 @@ public final class ForgeVoxyCommands {
         );
     }
 
+    private static String bakedModelBridgeStatusSuffix() {
+        return " " + formatBakedModelBridgeStatus(ForgeVoxyInstance.INSTANCE.getBakedModelBridge().createStatusSnapshot());
+    }
+
     private static String modelBridgeResourceReloadStatusSuffix() {
         return " " + formatModelBridgeResourceReloadStatus(ForgeVoxyInstance.INSTANCE.getModelBridgeResourceReloadTracker().createStatusSnapshot());
     }
 
+    private static String formatBakedModelBridgeStatus(ForgeBakedModelBridgeStats status) {
+        return String.format(
+                "bakedModelStage=%s checkRuns=%d clearRuns=%d auditRuns=%d auditFailures=%d lastCheckError=%s lastCheckDurationMs=%.2f lastAuditOk=%s lastAuditError=%s lastAuditDurationMs=%.2f placeholderModelIdsPresent=%s canMapModelIdToBlockState=%s bakedModelBridgeReady=%s bakedModelSamplesReady=%s sampledModelIds=%d sampledBlockStates=%d sampledBakedModels=%d sampledQuads=%d sampledSprites=%d missingBakedModels=%d missingSprites=%d fluidLikeSamples=%d emptyModelSamples=%d unsupportedSamples=%d renderLayerReadable=%s spriteAtlasReadable=%s spriteUvReadable=%s minecraftBlockAtlasAccessible=%s blockAtlasLocation=%s customAtlasOwnershipReady=%s customAtlasUploadReady=%s formalTextureAtlasReady=%s formalModelBridgeReady=%s bakedModelSamplesStale=%s spriteSamplesStale=%s lastReloadInvalidatedBakedModelSamples=%s sampleModelId=%d sampleBlockStateId=%d sampleBlockState=\"%s\" fluidLike=%s bakedModelClass=%s renderLayer=%s quadCount=%d quadDirection=%s quadTintIndex=%d quadHasTint=%s quadSpriteName=%s quadSpriteAtlas=%s quadUvMin=%s quadUvMax=%s quadCullDirection=%s quadVerticesLength=%d hasRealModelMetadata=%s hasAtlasSprite=%s hasAtlasUpload=%s draw=false atlasUpload=false renderer=none",
+                status.stage(),
+                status.checkRuns(),
+                status.clearRuns(),
+                status.auditRuns(),
+                status.auditFailures(),
+                status.lastCheckError(),
+                status.lastCheckDurationMs(),
+                status.lastAuditOk(),
+                status.lastAuditError(),
+                status.lastAuditDurationMs(),
+                status.placeholderModelIdsPresent(),
+                status.canMapModelIdToBlockState(),
+                status.bakedModelBridgeReady(),
+                status.bakedModelSamplesReady(),
+                status.sampledModelIds(),
+                status.sampledBlockStates(),
+                status.sampledBakedModels(),
+                status.sampledQuads(),
+                status.sampledSprites(),
+                status.missingBakedModels(),
+                status.missingSprites(),
+                status.fluidLikeSamples(),
+                status.emptyModelSamples(),
+                status.unsupportedSamples(),
+                status.renderLayerReadable(),
+                status.spriteAtlasReadable(),
+                status.spriteUvReadable(),
+                status.minecraftBlockAtlasAccessible(),
+                status.blockAtlasLocation(),
+                status.customAtlasOwnershipReady(),
+                status.customAtlasUploadReady(),
+                status.formalTextureAtlasReady(),
+                status.formalModelBridgeReady(),
+                status.bakedModelSamplesStale(),
+                status.spriteSamplesStale(),
+                status.lastReloadInvalidatedBakedModelSamples(),
+                status.sampleModelId(),
+                status.sampleBlockStateId(),
+                status.sampleBlockState(),
+                status.sampleFluidLike(),
+                status.sampleBakedModelClass(),
+                status.sampleRenderLayer(),
+                status.sampleQuadCount(),
+                status.sampleQuadDirection(),
+                status.sampleQuadTintIndex(),
+                status.sampleQuadHasTint(),
+                status.sampleQuadSpriteName(),
+                status.sampleQuadSpriteAtlas(),
+                status.sampleQuadUvMin(),
+                status.sampleQuadUvMax(),
+                status.sampleQuadCullDirection(),
+                status.sampleQuadVerticesLength(),
+                status.sampleHasRealModelMetadata(),
+                status.sampleHasAtlasSprite(),
+                status.sampleHasAtlasUpload()
+        );
+    }
+
     private static String formatModelBridgeResourceReloadStatus(ForgeModelBridgeResourceReloadStats status) {
         return String.format(
-                "reloadLifecycleSkeletonReady=%s resourceReloadReady=%s reloadEventsSeen=%d lastReloadSimulationRuns=%d lastReloadStartedAt=%s lastReloadFinishedAt=%s modelBridgeInvalidatedOnReload=%s placeholderBuffersInvalidatedOnReload=%s placeholderBuffersStale=%s realModelStoreStale=%s textureAtlasStale=%s formalShaderInputsStale=%s lastReloadReason=%s formalModelBridgeReady=false realTextureAtlasUpload=false",
+                "reloadLifecycleSkeletonReady=%s resourceReloadReady=%s reloadEventsSeen=%d lastReloadSimulationRuns=%d lastReloadStartedAt=%s lastReloadFinishedAt=%s modelBridgeInvalidatedOnReload=%s placeholderBuffersInvalidatedOnReload=%s placeholderBuffersStale=%s realModelStoreStale=%s textureAtlasStale=%s formalShaderInputsStale=%s bakedModelSamplesStale=%s spriteSamplesStale=%s lastReloadInvalidatedBakedModelSamples=%s lastReloadReason=%s formalModelBridgeReady=false realTextureAtlasUpload=false",
                 status.reloadLifecycleSkeletonReady(),
                 status.resourceReloadReady(),
                 status.reloadEventsSeen(),
@@ -3375,6 +3533,9 @@ public final class ForgeVoxyCommands {
                 status.realModelStoreStale(),
                 status.textureAtlasStale(),
                 status.formalShaderInputsStale(),
+                status.bakedModelSamplesStale(),
+                status.spriteSamplesStale(),
+                status.lastReloadInvalidatedBakedModelSamples(),
                 status.lastReloadReason()
         );
     }
@@ -3892,6 +4053,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getModelStoreSkeleton().clear();
         ForgeVoxyInstance.INSTANCE.getModelStoreLayoutAuditor().clear();
         ForgeVoxyInstance.INSTANCE.getModelBridgeResourceReloadTracker().clear();
+        ForgeVoxyInstance.INSTANCE.getBakedModelBridge().clear();
         if (!ForgeVoxyRuntimeOverrides.enabledWorldEngineSkeleton()) {
             clearRuntimePipeline();
             ForgeVoxyInstance.INSTANCE.closeActiveWorld();
@@ -4218,6 +4380,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getModelStoreSkeleton().clear();
         ForgeVoxyInstance.INSTANCE.getModelStoreLayoutAuditor().clear();
         ForgeVoxyInstance.INSTANCE.getModelBridgeResourceReloadTracker().clear();
+        ForgeVoxyInstance.INSTANCE.getBakedModelBridge().clear();
         ForgeVoxyInstance.INSTANCE.getGpuMeshCache().clear();
     }
 
@@ -4240,6 +4403,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getModelStoreSkeleton().clear();
         ForgeVoxyInstance.INSTANCE.getModelStoreLayoutAuditor().clear();
         ForgeVoxyInstance.INSTANCE.getModelBridgeResourceReloadTracker().clear();
+        ForgeVoxyInstance.INSTANCE.getBakedModelBridge().clear();
         source.sendSuccess(() -> Component.literal("Voxy: cleared CPU mesh cache, CPU-only BuiltSection cache, CPU-only section geometry manager, simple GPU mesh cache, upload-only GL geometry heap, direct GL renderer skeleton state, MDIC command skeleton/debug draw state, GL heap readback visualization/readback-mesh caches, readback mesh auto-refresh state, auto mesh build record, and auto BuiltSection build record."), false);
         return 1;
     }
@@ -4276,6 +4440,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getModelStoreSkeleton().clear();
         ForgeVoxyInstance.INSTANCE.getModelStoreLayoutAuditor().clear();
         ForgeVoxyInstance.INSTANCE.getModelBridgeResourceReloadTracker().clear();
+        ForgeVoxyInstance.INSTANCE.getBakedModelBridge().clear();
         source.sendSuccess(() -> Component.literal("Voxy: cleared debug pipeline ingest records, mesh build records, BuiltSection build records, CPU mesh cache, CPU-only BuiltSection cache, CPU-only section geometry manager, simple GPU mesh cache, upload-only GL geometry heap, direct GL renderer skeleton state, MDIC command skeleton/debug draw state, GL heap readback visualization/readback-mesh caches, and readback mesh auto-refresh state."), false);
         return 1;
     }

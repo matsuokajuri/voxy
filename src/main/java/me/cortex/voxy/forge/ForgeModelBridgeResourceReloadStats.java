@@ -13,6 +13,9 @@ record ForgeModelBridgeResourceReloadStats(
         boolean realModelStoreStale,
         boolean textureAtlasStale,
         boolean formalShaderInputsStale,
+        boolean bakedModelSamplesStale,
+        boolean spriteSamplesStale,
+        boolean lastReloadInvalidatedBakedModelSamples,
         String lastReloadReason
 ) {
     static ForgeModelBridgeResourceReloadStats empty() {
@@ -23,6 +26,9 @@ record ForgeModelBridgeResourceReloadStats(
                 0L,
                 "none",
                 "none",
+                false,
+                false,
+                false,
                 false,
                 false,
                 false,

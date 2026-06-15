@@ -565,3 +565,151 @@ the work to field mapping and lifecycle readiness.
 - Model colour / biome tint skeleton with explicit non-ready formal flags.
 - Resource reload real event integration that invalidates model buffers and
   atlas ownership without touching the MDIC debug renderer.
+
+## G6.12 Forge baked model / sprite atlas bridge audit
+
+G6.12 adds a no-draw bridge from the current Forge placeholder model ids back to
+Minecraft's baked model system:
+
+```text
+placeholder modelId
+ -> blockStateId
+ -> BlockState
+ -> BlockRenderDispatcher / BakedModel
+ -> BakedQuad
+ -> TextureAtlasSprite / UV sample
+ -> render-layer sample
+```
+
+This is a read-only audit path. It does not create a Forge-owned Voxy atlas, does
+not upload texture data, does not build real `ModelStore` records, and does not
+bind any new shader input to the MDIC debug renderer.
+
+### Forge API route
+
+The existing Forge CPU mesh path already proves the safe API surface:
+
+- `ForgeCpuMeshBuilder` gets `Minecraft.getInstance().getBlockRenderer()`.
+- `BlockRenderDispatcher.getBlockModel(BlockState)` resolves a `BakedModel`.
+- `BakedModel.getQuads(state, null, RandomSource.create(blockId))` returns
+  general quads.
+- `BakedModel.getQuads(state, direction, RandomSource.create(blockId))` returns
+  direction/cull-face quads.
+- `BakedQuad.getVertices()` exposes the baked vertex payload. The current Forge
+  mesh path treats the stride as `vertices.length / 4`, reads position from
+  words 0..2 and UV from words 4..5.
+- `BakedQuad.getSprite()` returns the `TextureAtlasSprite`.
+- `TextureAtlasSprite.contents().name()` gives the sprite resource id.
+- `TextureAtlasSprite.atlasLocation()` gives the Minecraft atlas location.
+- `TextureAtlasSprite.getU0/getU1/getV0/getV1` and baked vertex UV words are
+  readable, but G6.12 samples only; it does not translate them to original Voxy
+  atlas tiles.
+- `ItemBlockRenderTypes.getChunkRenderType(state)` identifies the block render
+  layer for normal block states.
+- `ItemBlockRenderTypes.getRenderLayer(state.getFluidState())` can describe a
+  fluid-like sample's layer, but fluid meshing is still not a normal baked block
+  quad path.
+
+### New no-draw commands
+
+G6.12 adds:
+
+```text
+/voxy baked_model_bridge_check
+/voxy baked_model_bridge_status
+/voxy baked_model_bridge_audit
+/voxy baked_model_bridge_audit_status
+/voxy baked_model_bridge_dump_sample
+/voxy baked_model_bridge_clear
+```
+
+`baked_model_bridge_check` seeds the placeholder model-id mapper from nearby
+client-world blocks when possible, then samples up to a small fixed set of
+placeholder mappings. For each sample it records:
+
+```text
+modelId
+blockStateId
+blockState string
+fluidLike
+bakedModelClass
+renderLayer
+quadCount
+quadDirection
+quadTintIndex
+quadHasTint
+quadSpriteName
+quadSpriteAtlas
+quadUvMin / quadUvMax
+quadCullDirection
+quadVerticesLength
+```
+
+If a fluid-like block such as water has no ordinary baked quads, the bridge
+records `fluidLike=true` and `quadCount=0` instead of reporting a false
+readiness failure. It also tries to seed a nearby non-fluid block sample so a
+solid baked quad can be inspected when the world around the player provides one.
+
+### Readiness distinction
+
+The bridge deliberately separates Minecraft's readable atlas metadata from a
+formal Voxy atlas:
+
+```text
+minecraftBlockAtlasAccessible=true/false
+spriteAtlasReadable=true/false
+spriteUvReadable=true/false
+
+customAtlasOwnershipReady=false
+customAtlasUploadReady=false
+formalTextureAtlasReady=false
+formalModelBridgeReady=false
+```
+
+`minecraftBlockAtlasAccessible=true` only means the client has a loaded block
+atlas and sampled sprites can report their atlas/sprite ids. It does not mean the
+Forge PoC owns an atlas texture with original Voxy's 3-by-2-per-model packing,
+and it does not mean formal shader inputs are ready.
+
+### Resource reload interaction
+
+The G6.11 command-driven reload simulation now invalidates baked model bridge
+samples:
+
+```text
+/voxy model_bridge_simulate_resource_reload
+ -> bakedModelSamplesStale=true
+ -> spriteSamplesStale=true
+ -> lastReloadInvalidatedBakedModelSamples=true
+```
+
+The simulation still leaves unrelated systems alone: GL geometry heap, MDIC
+command buffers, MDIC debug renderer, simple renderer, and CPU section geometry
+state are not cleared by this model bridge reload skeleton.
+
+### Why still no atlas upload or textured draw
+
+The sampled `TextureAtlasSprite` and baked UVs are Minecraft renderer data, not
+the original Voxy `ModelStore` atlas layout. Formal Voxy shaders expect:
+
+```text
+modelData[modelId]
+modelColourBuffer
+blockModelAtlas with 3x2 face tiles per model id
+lightmap / tint / material metadata
+resource-reload ownership
+```
+
+G6.12 proves Forge can inspect real baked model and sprite metadata, but it does
+not prove that data has been repacked into Voxy's formal model buffers. The
+formal flags therefore remain false.
+
+### G6.13 candidates
+
+- Minimal real ModelStore CPU record builder for one solid block, still no
+  renderer hook.
+- Atlas ownership skeleton with allocation/status only and no texture upload.
+- Model colour / biome tint skeleton using `BlockColors` and explicit non-ready
+  formal flags.
+- Real Forge resource reload event integration that invalidates model bridge
+  samples, placeholder buffers, and future atlas ownership.
