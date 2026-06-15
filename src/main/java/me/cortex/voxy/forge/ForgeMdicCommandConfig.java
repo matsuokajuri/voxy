@@ -32,6 +32,18 @@ final class ForgeMdicCommandConfig {
         return ForgeVoxyRuntimeOverrides.mdicCommandIncludeDirectional();
     }
 
+    static boolean directionalFaceMask() {
+        return ForgeVoxyRuntimeOverrides.mdicCommandDirectionalFaceMask();
+    }
+
+    static boolean directionalFaceMaskFallbackAllWhenInside() {
+        return ForgeVoxyRuntimeOverrides.mdicCommandDirectionalFaceMaskFallbackAllWhenInside();
+    }
+
+    static boolean directionalFaceMaskDebugLog() {
+        return ForgeVoxyRuntimeOverrides.mdicCommandDirectionalFaceMaskDebugLog();
+    }
+
     static int maxCommands() {
         return ForgeVoxyRuntimeOverrides.mdicCommandMaxCommands();
     }

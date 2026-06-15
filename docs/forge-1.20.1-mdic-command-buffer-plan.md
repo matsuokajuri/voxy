@@ -487,3 +487,86 @@ RenderDataFactory / ModelStore / texture metadata bridge
 ```
 
 G6.3 remains a debug renderer and command-buffer migration checkpoint. It should not be treated as a formal renderer replacement.
+
+## G6.4 Directional Face-Mask MDIC Bucket Commands
+
+G6.4 keeps the G6.3 bucket-aware command layout, but adds conservative directional filtering for buckets 2..7 during CPU-side debug command planning:
+
+```text
+layoutVersion=G6_4_MDIC_BUCKET_FACE_MASK_COMMAND_V1
+stage=G6_4_DIRECTIONAL_FACE_MASK_MDIC_DEBUG_DRAW
+```
+
+The bucket semantics remain aligned with the current Forge metadata offsets and the original Voxy `cmdgen.comp` shape:
+
+```text
+bucket 0: translucent
+bucket 1: double-sided
+bucket 2: directional_y_minus
+bucket 3: directional_y_plus
+bucket 4: directional_z_minus
+bucket 5: directional_z_plus
+bucket 6: directional_x_minus
+bucket 7: directional_x_plus
+```
+
+Planning still skips translucent bucket 0 by default and keeps double-sided bucket 1 when present. For directional buckets, the planner compares the current camera position against the decoded uploaded section AABB:
+
+```text
+cameraY < sectionMinY -> bucket 2
+cameraY > sectionMaxY -> bucket 3
+cameraZ < sectionMinZ -> bucket 4
+cameraZ > sectionMaxZ -> bucket 5
+cameraX < sectionMinX -> bucket 6
+cameraX > sectionMaxX -> bucket 7
+```
+
+When the camera is inside an axis range, the planner conservatively includes both directions for that axis. When the camera is inside the full section AABB, the default behavior is to keep all directional buckets:
+
+```text
+mdicCommandDirectionalFaceMask=true
+mdicCommandDirectionalFaceMaskFallbackAllWhenInside=true
+```
+
+If camera or AABB data is unavailable, G6.4 also falls back to all directional buckets and reports the reason in status:
+
+```text
+faceMaskFallbackReason=MISSING_CAMERA / MISSING_AABB / INSIDE_SECTION / EMPTY_MASK / mixed / none
+```
+
+The audit path now checks that generated directional bucket commands obey the active face mask unless a conservative fallback-all reason applies. Status and audit expose:
+
+```text
+directionalFaceMask
+faceMaskCommandsAccepted
+faceMaskCommandsRejected
+rejectedDirectionalBuckets
+insideSectionFallbacks
+missingCameraFallbacks
+missingAabbFallbacks
+bucket2RejectedByFaceMask .. bucket7RejectedByFaceMask
+invalidFaceMaskCommands
+lastFaceMaskAuditOk
+```
+
+This is closer to the original Voxy command generation idea because directional buckets can now be omitted when they face away from the camera. It is still deliberately smaller than the original renderer:
+
+```text
+no occlusion culling
+no LOD traversal
+no frustum hierarchy
+no translucent sorting
+no texture atlas / ModelStore
+no MDICSectionRenderer / VoxyRenderSystem
+```
+
+G6.5 candidates:
+
+```text
+frustum/radius visibility alignment
+bucket command stats hardening
+formal DrawElementsIndirect layout design
+RenderData / ModelStore bridge
+```
+
+G6.4 remains a debug renderer checkpoint. It proves command grouping and conservative face-mask filtering without changing ownership or calling the formal Voxy render path.

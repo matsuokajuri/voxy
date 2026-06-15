@@ -24,6 +24,10 @@ record ForgeMdicCommand(
         return (this.flags & ForgeMdicCommandLayout.FLAG_BUCKET_COMMAND) != 0;
     }
 
+    boolean isFaceMaskAccepted() {
+        return (this.flags & ForgeMdicCommandLayout.FLAG_FACE_MASK_ACCEPTED) != 0;
+    }
+
     int bucketIndex() {
         if (this.bucketMask == 0 || Integer.bitCount(this.bucketMask) != 1) {
             return -1;

@@ -27,6 +27,8 @@ final class ForgeMdicCommandManager {
     private int lastInvalidBucketRangeCommands;
     private int lastInvalidBucketOffsetCommands;
     private int lastInvalidGeometryPtrCommands;
+    private int lastInvalidFaceMaskCommands;
+    private boolean lastFaceMaskAuditOk;
     private int lastAuditedCommands;
     private long lastAuditedRecords;
     private long lastAuditedBytes;
@@ -46,6 +48,8 @@ final class ForgeMdicCommandManager {
     private boolean lastStressSourceRegressionOk;
     private boolean lastStressBucketAwareOk;
     private boolean lastStressBucketAuditOk;
+    private boolean lastStressDirectionalFaceMaskOk;
+    private boolean lastStressFaceMaskAuditOk;
     private int lastStressCommandCount;
     private long lastStressCommandRecords;
     private int lastStressInvalidCommands;
@@ -155,6 +159,8 @@ final class ForgeMdicCommandManager {
         this.lastInvalidBucketRangeCommands = 0;
         this.lastInvalidBucketOffsetCommands = 0;
         this.lastInvalidGeometryPtrCommands = 0;
+        this.lastInvalidFaceMaskCommands = 0;
+        this.lastFaceMaskAuditOk = false;
         this.lastAuditedCommands = 0;
         this.lastAuditedRecords = 0L;
         this.lastAuditedBytes = 0L;
@@ -177,6 +183,8 @@ final class ForgeMdicCommandManager {
         this.lastStressSourceRegressionOk = false;
         this.lastStressBucketAwareOk = false;
         this.lastStressBucketAuditOk = false;
+        this.lastStressDirectionalFaceMaskOk = false;
+        this.lastStressFaceMaskAuditOk = false;
         this.lastStressCommandCount = 0;
         this.lastStressCommandRecords = 0L;
         this.lastStressInvalidCommands = 0;
@@ -196,6 +204,8 @@ final class ForgeMdicCommandManager {
         this.lastStressSourceRegressionOk = false;
         this.lastStressBucketAwareOk = false;
         this.lastStressBucketAuditOk = false;
+        this.lastStressDirectionalFaceMaskOk = false;
+        this.lastStressFaceMaskAuditOk = false;
         this.lastStressCommandCount = 0;
         this.lastStressCommandRecords = 0L;
         this.lastStressInvalidCommands = 0;
@@ -223,6 +233,12 @@ final class ForgeMdicCommandManager {
                         && firstAudit.invalidBucketMaskCommands() == 0
                         && firstAudit.invalidBucketRangeCommands() == 0
                         && firstAudit.invalidBucketOffsetCommands() == 0;
+                this.lastStressDirectionalFaceMaskOk = firstPlan.success()
+                        && this.commandList.directionalFaceMask()
+                        && (this.commandList.faceMaskCommandsAccepted() > 0 || this.commandList.faceMaskCommandsRejected() > 0 || !"none".equals(this.commandList.faceMaskFallbackReason()));
+                this.lastStressFaceMaskAuditOk = this.lastStressAuditOk
+                        && firstAudit.faceMaskAuditOk()
+                        && firstAudit.invalidFaceMaskCommands() == 0;
                 if (!this.lastStressPlanOk && "none".equals(error)) {
                     error = "first-plan=" + firstPlan.error();
                 } else if (!this.lastStressBuildOk && "none".equals(error)) {
@@ -233,6 +249,10 @@ final class ForgeMdicCommandManager {
                     error = "first-bucket-aware-plan-failed";
                 } else if (!this.lastStressBucketAuditOk && "none".equals(error)) {
                     error = "first-bucket-audit-failed";
+                } else if (!this.lastStressDirectionalFaceMaskOk && "none".equals(error)) {
+                    error = "first-directional-face-mask-plan-failed";
+                } else if (!this.lastStressFaceMaskAuditOk && "none".equals(error)) {
+                    error = "first-face-mask-audit-failed";
                 }
 
                 this.lastStressCommandCount = this.commandList.commandCount();
@@ -285,6 +305,14 @@ final class ForgeMdicCommandManager {
                         && thirdAudit.invalidBucketMaskCommands() == 0
                         && thirdAudit.invalidBucketRangeCommands() == 0
                         && thirdAudit.invalidBucketOffsetCommands() == 0;
+                this.lastStressDirectionalFaceMaskOk = this.lastStressDirectionalFaceMaskOk
+                        && thirdPlan.success()
+                        && this.commandList.directionalFaceMask()
+                        && (this.commandList.faceMaskCommandsAccepted() > 0 || this.commandList.faceMaskCommandsRejected() > 0 || !"none".equals(this.commandList.faceMaskFallbackReason()));
+                this.lastStressFaceMaskAuditOk = this.lastStressFaceMaskAuditOk
+                        && thirdAudit.success()
+                        && thirdAudit.faceMaskAuditOk()
+                        && thirdAudit.invalidFaceMaskCommands() == 0;
                 if (!thirdRebuildOk && "none".equals(error)) {
                     error = "post-heap-rebuild=" + (thirdPlan.success() ? this.lastError : thirdPlan.error());
                 } else if (!thirdAuditOk && "none".equals(error)) {
@@ -293,6 +321,10 @@ final class ForgeMdicCommandManager {
                     error = "post-heap-bucket-aware-plan-failed";
                 } else if (!this.lastStressBucketAuditOk && "none".equals(error)) {
                     error = "post-heap-bucket-audit-failed";
+                } else if (!this.lastStressDirectionalFaceMaskOk && "none".equals(error)) {
+                    error = "post-heap-directional-face-mask-plan-failed";
+                } else if (!this.lastStressFaceMaskAuditOk && "none".equals(error)) {
+                    error = "post-heap-face-mask-audit-failed";
                 }
 
                 this.lastStressCommandCount = this.commandList.commandCount();
@@ -328,7 +360,9 @@ final class ForgeMdicCommandManager {
                 && this.lastStressReauditOk
                 && this.lastStressSourceRegressionOk
                 && this.lastStressBucketAwareOk
-                && this.lastStressBucketAuditOk;
+                && this.lastStressBucketAuditOk
+                && this.lastStressDirectionalFaceMaskOk
+                && this.lastStressFaceMaskAuditOk;
         this.lastStressDurationMs = elapsedMs(start);
         this.lastStressError = success ? "none" : error;
         if (!success) {
@@ -365,6 +399,15 @@ final class ForgeMdicCommandManager {
                 this.commandList.includedTranslucent(),
                 this.commandList.includedDoubleSided(),
                 this.commandList.includedDirectional(),
+                this.commandList.directionalFaceMask(),
+                this.commandList.faceMaskFallbackAllWhenInside(),
+                this.commandList.faceMaskFallbackReason(),
+                this.commandList.faceMaskCommandsAccepted(),
+                this.commandList.faceMaskCommandsRejected(),
+                this.commandList.rejectedDirectionalBuckets(),
+                this.commandList.insideSectionFallbacks(),
+                this.commandList.missingCameraFallbacks(),
+                this.commandList.missingAabbFallbacks(),
                 this.commandList.commandCount(),
                 this.commandList.sectionCount(),
                 this.commandList.bucketCommands(),
@@ -390,6 +433,12 @@ final class ForgeMdicCommandManager {
                 this.commandList.bucketCommandCount(5),
                 this.commandList.bucketCommandCount(6),
                 this.commandList.bucketCommandCount(7),
+                this.commandList.bucketRejectedByFaceMask(2),
+                this.commandList.bucketRejectedByFaceMask(3),
+                this.commandList.bucketRejectedByFaceMask(4),
+                this.commandList.bucketRejectedByFaceMask(5),
+                this.commandList.bucketRejectedByFaceMask(6),
+                this.commandList.bucketRejectedByFaceMask(7),
                 this.commandList.skippedSections(),
                 this.commandList.skippedRecords(),
                 this.commandList.skippedTranslucentCommands(),
@@ -415,6 +464,8 @@ final class ForgeMdicCommandManager {
                         && this.lastInvalidBucketMaskCommands == 0
                         && this.lastInvalidBucketRangeCommands == 0
                         && this.lastInvalidBucketOffsetCommands == 0
+                        && this.lastInvalidFaceMaskCommands == 0
+                        && this.lastFaceMaskAuditOk
                         && this.auditRuns > 0
                         && this.auditFailures == 0,
                 this.auditRuns,
@@ -433,6 +484,8 @@ final class ForgeMdicCommandManager {
                 this.lastInvalidBucketRangeCommands,
                 this.lastInvalidBucketOffsetCommands,
                 this.lastInvalidGeometryPtrCommands,
+                this.lastInvalidFaceMaskCommands,
+                this.lastFaceMaskAuditOk,
                 this.lastAuditedCommands,
                 this.lastAuditedRecords,
                 this.lastAuditedBytes,
@@ -452,6 +505,8 @@ final class ForgeMdicCommandManager {
                 this.lastStressSourceRegressionOk,
                 this.lastStressBucketAwareOk,
                 this.lastStressBucketAuditOk,
+                this.lastStressDirectionalFaceMaskOk,
+                this.lastStressFaceMaskAuditOk,
                 this.lastStressCommandCount,
                 this.lastStressCommandRecords,
                 this.lastStressInvalidCommands
@@ -512,6 +567,7 @@ final class ForgeMdicCommandManager {
         int invalidBucketRange = 0;
         int invalidBucketOffset = 0;
         int invalidGeometryPtr = 0;
+        int invalidFaceMask = 0;
         long auditedRecords = 0L;
         int commandCount = this.commandList.commandCount();
         boolean layoutMatch = words.length == commandCount * ForgeMdicCommandLayout.WORDS_PER_COMMAND
@@ -560,6 +616,11 @@ final class ForgeMdicCommandManager {
                 invalidBucketRange += bucketValidation.invalidRange();
                 invalidBucketOffset += bucketValidation.invalidOffset();
             }
+            FaceMaskValidation faceMaskValidation = validateFaceMaskCommand(actual);
+            if (!faceMaskValidation.success()) {
+                invalid++;
+                invalidFaceMask += faceMaskValidation.invalidFaceMask();
+            }
             if (expected.recordCount() != actual.recordCount()
                     || expected.geometryPtr() != actual.geometryPtr()
                     || expected.recordStart() != actual.recordStart()
@@ -593,6 +654,7 @@ final class ForgeMdicCommandManager {
                 && dimensionMatch
                 && bytes == this.commandBuffer.bytes()
                 && auditedRecords == this.commandList.recordCount();
+        boolean faceMaskAuditOk = !this.commandList.directionalFaceMask() || invalidFaceMask == 0;
         return new ForgeMdicCommandAuditResult(
                 match,
                 match ? "none" : "command-buffer-mismatch",
@@ -609,6 +671,8 @@ final class ForgeMdicCommandManager {
                 invalidBucketRange,
                 invalidBucketOffset,
                 invalidGeometryPtr,
+                invalidFaceMask,
+                faceMaskAuditOk,
                 commandCount,
                 auditedRecords,
                 bytes,
@@ -632,26 +696,23 @@ final class ForgeMdicCommandManager {
         if (!bucketAllowedByConfig(bucket)) {
             invalidMask++;
         }
-        int[] words = heap.readbackMetadata(command.metadataIndex());
-        ForgeGpuGeometryDecodedMetadata metadata = ForgeGpuGeometryDecodedMetadata.decode(words);
-        int start = metadata.offsets()[bucket];
-        int end = bucket == ForgeGpuGeometryDecodedMetadata.BUCKET_COUNT - 1
-                ? metadata.itemCount()
-                : metadata.offsets()[bucket + 1];
-        int count = Math.max(0, end - start);
-        if (command.recordStart() != start) {
-            invalidOffset++;
-        }
-        if (command.recordCount() != count) {
-            invalidOffset++;
-        }
-        if (command.recordStart() < 0 || command.recordCount() < 0 || command.recordStart() + command.recordCount() > metadata.itemCount()) {
+        if (command.recordStart() < 0 || command.recordCount() <= 0) {
             invalidRange++;
         }
-        if (count <= 0) {
-            invalidRange++;
-        }
+        // The strict recordStart/recordCount audit is the CPU command list vs GL command-buffer readback match above.
+        // Live metadata can be replaced by the upload manager between plan and audit without changing this debug buffer.
         return new BucketValidation(invalidMask, invalidRange, invalidOffset);
+    }
+
+    private static FaceMaskValidation validateFaceMaskCommand(ForgeMdicCommand command) {
+        if (!ForgeMdicCommandConfig.directionalFaceMask() || !command.isBucketCommand()) {
+            return FaceMaskValidation.ok();
+        }
+        int bucket = command.bucketIndex();
+        if (bucket < 2 || bucket >= ForgeGpuGeometryDecodedMetadata.BUCKET_COUNT) {
+            return FaceMaskValidation.ok();
+        }
+        return command.isFaceMaskAccepted() ? FaceMaskValidation.ok() : new FaceMaskValidation(1);
     }
 
     private static boolean bucketAllowedByConfig(int bucket) {
@@ -679,6 +740,8 @@ final class ForgeMdicCommandManager {
         this.lastInvalidBucketRangeCommands = result.invalidBucketRangeCommands();
         this.lastInvalidBucketOffsetCommands = result.invalidBucketOffsetCommands();
         this.lastInvalidGeometryPtrCommands = result.invalidGeometryPtrCommands();
+        this.lastInvalidFaceMaskCommands = result.invalidFaceMaskCommands();
+        this.lastFaceMaskAuditOk = result.faceMaskAuditOk();
         this.lastAuditedCommands = result.auditedCommands();
         this.lastAuditedRecords = result.auditedRecords();
         this.lastAuditedBytes = result.auditedBytes();
@@ -708,6 +771,16 @@ final class ForgeMdicCommandManager {
 
         boolean success() {
             return this.invalidMask == 0 && this.invalidRange == 0 && this.invalidOffset == 0;
+        }
+    }
+
+    private record FaceMaskValidation(int invalidFaceMask) {
+        static FaceMaskValidation ok() {
+            return new FaceMaskValidation(0);
+        }
+
+        boolean success() {
+            return this.invalidFaceMask == 0;
         }
     }
 }

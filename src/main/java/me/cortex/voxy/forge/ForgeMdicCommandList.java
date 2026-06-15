@@ -9,7 +9,7 @@ import java.util.Map;
 import java.util.Set;
 
 final class ForgeMdicCommandList {
-    private static final ForgeMdicCommandList EMPTY = new ForgeMdicCommandList(Collections.emptyList(), -1L, "none", 0L, 0, "none", 0, 0, 0, 0, false, false, false, false, 0, 0, 0);
+    private static final ForgeMdicCommandList EMPTY = new ForgeMdicCommandList(Collections.emptyList(), -1L, "none", 0L, 0, "none", 0, 0, 0, 0, false, false, false, false, false, false, "none", 0, 0, 0, 0, 0, 0, new int[ForgeGpuGeometryDecodedMetadata.BUCKET_COUNT], 0, 0, 0);
 
     private final List<ForgeMdicCommand> commands;
     private final long heapGeneration;
@@ -25,6 +25,16 @@ final class ForgeMdicCommandList {
     private final boolean includedTranslucent;
     private final boolean includedDoubleSided;
     private final boolean includedDirectional;
+    private final boolean directionalFaceMask;
+    private final boolean faceMaskFallbackAllWhenInside;
+    private final String faceMaskFallbackReason;
+    private final int faceMaskCommandsAccepted;
+    private final int faceMaskCommandsRejected;
+    private final int rejectedDirectionalBuckets;
+    private final int insideSectionFallbacks;
+    private final int missingCameraFallbacks;
+    private final int missingAabbFallbacks;
+    private final int[] bucketRejectedByFaceMask;
     private final int minRecordCount;
     private final int maxRecordCount;
     private final double avgRecordCount;
@@ -59,6 +69,16 @@ final class ForgeMdicCommandList {
             boolean includedTranslucent,
             boolean includedDoubleSided,
             boolean includedDirectional,
+            boolean directionalFaceMask,
+            boolean faceMaskFallbackAllWhenInside,
+            String faceMaskFallbackReason,
+            int faceMaskCommandsAccepted,
+            int faceMaskCommandsRejected,
+            int rejectedDirectionalBuckets,
+            int insideSectionFallbacks,
+            int missingCameraFallbacks,
+            int missingAabbFallbacks,
+            int[] bucketRejectedByFaceMask,
             int skippedTranslucentCommands,
             int skippedEmptyBuckets,
             int skippedBucketCommands
@@ -77,6 +97,16 @@ final class ForgeMdicCommandList {
         this.includedTranslucent = includedTranslucent;
         this.includedDoubleSided = includedDoubleSided;
         this.includedDirectional = includedDirectional;
+        this.directionalFaceMask = directionalFaceMask;
+        this.faceMaskFallbackAllWhenInside = faceMaskFallbackAllWhenInside;
+        this.faceMaskFallbackReason = faceMaskFallbackReason == null || faceMaskFallbackReason.isBlank() ? "none" : faceMaskFallbackReason;
+        this.faceMaskCommandsAccepted = Math.max(0, faceMaskCommandsAccepted);
+        this.faceMaskCommandsRejected = Math.max(0, faceMaskCommandsRejected);
+        this.rejectedDirectionalBuckets = Math.max(0, rejectedDirectionalBuckets);
+        this.insideSectionFallbacks = Math.max(0, insideSectionFallbacks);
+        this.missingCameraFallbacks = Math.max(0, missingCameraFallbacks);
+        this.missingAabbFallbacks = Math.max(0, missingAabbFallbacks);
+        this.bucketRejectedByFaceMask = sanitizeBucketArray(bucketRejectedByFaceMask);
         this.skippedTranslucentCommands = Math.max(0, skippedTranslucentCommands);
         this.skippedEmptyBuckets = Math.max(0, skippedEmptyBuckets);
         this.skippedBucketCommands = Math.max(0, skippedBucketCommands);
@@ -147,7 +177,7 @@ final class ForgeMdicCommandList {
     }
 
     static ForgeMdicCommandList of(List<ForgeMdicCommand> commands, long heapGeneration, String dimensionId, long recordCount, String selectionMode, int skippedSections, long skippedRecords, int planCandidateSections, int planAcceptedSections) {
-        return of(commands, heapGeneration, dimensionId, recordCount, selectionMode, skippedSections, skippedRecords, planCandidateSections, planAcceptedSections, false, false, false, false, 0, 0, 0);
+        return of(commands, heapGeneration, dimensionId, recordCount, selectionMode, skippedSections, skippedRecords, planCandidateSections, planAcceptedSections, false, false, false, false, false, false, "none", 0, 0, 0, 0, 0, 0, new int[ForgeGpuGeometryDecodedMetadata.BUCKET_COUNT], 0, 0, 0);
     }
 
     static ForgeMdicCommandList of(
@@ -164,6 +194,16 @@ final class ForgeMdicCommandList {
             boolean includedTranslucent,
             boolean includedDoubleSided,
             boolean includedDirectional,
+            boolean directionalFaceMask,
+            boolean faceMaskFallbackAllWhenInside,
+            String faceMaskFallbackReason,
+            int faceMaskCommandsAccepted,
+            int faceMaskCommandsRejected,
+            int rejectedDirectionalBuckets,
+            int insideSectionFallbacks,
+            int missingCameraFallbacks,
+            int missingAabbFallbacks,
+            int[] bucketRejectedByFaceMask,
             int skippedTranslucentCommands,
             int skippedEmptyBuckets,
             int skippedBucketCommands
@@ -171,7 +211,19 @@ final class ForgeMdicCommandList {
         if (commands == null || commands.isEmpty()) {
             return EMPTY;
         }
-        return new ForgeMdicCommandList(commands, heapGeneration, dimensionId, System.currentTimeMillis(), recordCount, selectionMode, skippedSections, skippedRecords, planCandidateSections, planAcceptedSections, bucketAware, includedTranslucent, includedDoubleSided, includedDirectional, skippedTranslucentCommands, skippedEmptyBuckets, skippedBucketCommands);
+        return new ForgeMdicCommandList(commands, heapGeneration, dimensionId, System.currentTimeMillis(), recordCount, selectionMode, skippedSections, skippedRecords, planCandidateSections, planAcceptedSections, bucketAware, includedTranslucent, includedDoubleSided, includedDirectional, directionalFaceMask, faceMaskFallbackAllWhenInside, faceMaskFallbackReason, faceMaskCommandsAccepted, faceMaskCommandsRejected, rejectedDirectionalBuckets, insideSectionFallbacks, missingCameraFallbacks, missingAabbFallbacks, bucketRejectedByFaceMask, skippedTranslucentCommands, skippedEmptyBuckets, skippedBucketCommands);
+    }
+
+    private static int[] sanitizeBucketArray(int[] source) {
+        int[] result = new int[ForgeGpuGeometryDecodedMetadata.BUCKET_COUNT];
+        if (source == null) {
+            return result;
+        }
+        System.arraycopy(source, 0, result, 0, Math.min(source.length, result.length));
+        for (int i = 0; i < result.length; i++) {
+            result[i] = Math.max(0, result[i]);
+        }
+        return result;
     }
 
     boolean isValid() {
@@ -284,6 +336,46 @@ final class ForgeMdicCommandList {
 
     boolean includedDirectional() {
         return this.includedDirectional;
+    }
+
+    boolean directionalFaceMask() {
+        return this.directionalFaceMask;
+    }
+
+    boolean faceMaskFallbackAllWhenInside() {
+        return this.faceMaskFallbackAllWhenInside;
+    }
+
+    String faceMaskFallbackReason() {
+        return this.faceMaskFallbackReason;
+    }
+
+    int faceMaskCommandsAccepted() {
+        return this.faceMaskCommandsAccepted;
+    }
+
+    int faceMaskCommandsRejected() {
+        return this.faceMaskCommandsRejected;
+    }
+
+    int rejectedDirectionalBuckets() {
+        return this.rejectedDirectionalBuckets;
+    }
+
+    int insideSectionFallbacks() {
+        return this.insideSectionFallbacks;
+    }
+
+    int missingCameraFallbacks() {
+        return this.missingCameraFallbacks;
+    }
+
+    int missingAabbFallbacks() {
+        return this.missingAabbFallbacks;
+    }
+
+    int bucketRejectedByFaceMask(int bucket) {
+        return bucket < 0 || bucket >= this.bucketRejectedByFaceMask.length ? 0 : this.bucketRejectedByFaceMask[bucket];
     }
 
     int sectionCount() {

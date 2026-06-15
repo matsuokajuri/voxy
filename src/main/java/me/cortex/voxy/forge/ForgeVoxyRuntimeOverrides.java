@@ -28,6 +28,8 @@ public final class ForgeVoxyRuntimeOverrides {
     private static Boolean mdicCommandIncludeTranslucent;
     private static Boolean mdicCommandIncludeDoubleSided;
     private static Boolean mdicCommandIncludeDirectional;
+    private static Boolean mdicCommandDirectionalFaceMask;
+    private static Boolean mdicCommandDirectionalFaceMaskFallbackAllWhenInside;
     private static Integer mdicCommandMaxCommands;
     private static Integer mdicCommandMaxCommandsPerSection;
     private static Integer mdicDebugDrawMaxCommands;
@@ -107,6 +109,8 @@ public final class ForgeVoxyRuntimeOverrides {
         mdicCommandIncludeTranslucent = false;
         mdicCommandIncludeDoubleSided = true;
         mdicCommandIncludeDirectional = true;
+        mdicCommandDirectionalFaceMask = true;
+        mdicCommandDirectionalFaceMaskFallbackAllWhenInside = true;
         mdicCommandMaxCommands = 128;
         mdicCommandMaxCommandsPerSection = 8;
         mdicDebugDrawMaxCommands = 128;
@@ -363,6 +367,8 @@ public final class ForgeVoxyRuntimeOverrides {
         mdicCommandIncludeTranslucent = null;
         mdicCommandIncludeDoubleSided = null;
         mdicCommandIncludeDirectional = null;
+        mdicCommandDirectionalFaceMask = null;
+        mdicCommandDirectionalFaceMaskFallbackAllWhenInside = null;
         mdicCommandMaxCommands = null;
         mdicCommandMaxCommandsPerSection = null;
         mdicDebugDrawMaxCommands = null;
@@ -539,6 +545,18 @@ public final class ForgeVoxyRuntimeOverrides {
         return value(mdicCommandIncludeDirectional, ForgeVoxyConfig.MDIC_COMMAND_INCLUDE_DIRECTIONAL.get());
     }
 
+    public static synchronized boolean mdicCommandDirectionalFaceMask() {
+        return value(mdicCommandDirectionalFaceMask, ForgeVoxyConfig.MDIC_COMMAND_DIRECTIONAL_FACE_MASK.get());
+    }
+
+    public static synchronized boolean mdicCommandDirectionalFaceMaskFallbackAllWhenInside() {
+        return value(mdicCommandDirectionalFaceMaskFallbackAllWhenInside, ForgeVoxyConfig.MDIC_COMMAND_DIRECTIONAL_FACE_MASK_FALLBACK_ALL_WHEN_INSIDE.get());
+    }
+
+    public static synchronized boolean mdicCommandDirectionalFaceMaskDebugLog() {
+        return ForgeVoxyConfig.MDIC_COMMAND_DIRECTIONAL_FACE_MASK_DEBUG_LOG.get();
+    }
+
     public static synchronized int mdicCommandMaxCommands() {
         return Math.min(512, Math.max(1, value(mdicCommandMaxCommands, ForgeVoxyConfig.MDIC_COMMAND_MAX_COMMANDS.get())));
     }
@@ -696,6 +714,8 @@ public final class ForgeVoxyRuntimeOverrides {
                 || mdicCommandIncludeTranslucent != null
                 || mdicCommandIncludeDoubleSided != null
                 || mdicCommandIncludeDirectional != null
+                || mdicCommandDirectionalFaceMask != null
+                || mdicCommandDirectionalFaceMaskFallbackAllWhenInside != null
                 || mdicCommandMaxCommands != null
                 || mdicCommandMaxCommandsPerSection != null
                 || mdicDebugDrawMaxCommands != null

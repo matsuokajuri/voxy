@@ -13,7 +13,7 @@ import static org.lwjgl.opengl.GL11C.GL_NO_ERROR;
 import static org.lwjgl.opengl.GL11C.glGetError;
 
 final class ForgeMdicDebugRenderer {
-    static final String STAGE = "G6_3_BUCKET_AWARE_MDIC_DEBUG_DRAW";
+    static final String STAGE = "G6_4_DIRECTIONAL_FACE_MASK_MDIC_DEBUG_DRAW";
 
     private final ForgeVoxyInstance instance;
     private final ForgeMdicDebugShader shader = new ForgeMdicDebugShader();
@@ -71,6 +71,8 @@ final class ForgeMdicDebugRenderer {
     private boolean lastStressSourceRegressionOk;
     private boolean lastStressBucketDrawOk;
     private boolean lastStressBucketIndirectAuditOk;
+    private boolean lastStressDirectionalFaceMaskOk;
+    private boolean lastStressFaceMaskAuditOk;
     private long lastStressGlErrorCount;
     private long lastStressStateRestoreFailures;
 
@@ -150,6 +152,8 @@ final class ForgeMdicDebugRenderer {
         this.lastStressSourceRegressionOk = false;
         this.lastStressBucketDrawOk = false;
         this.lastStressBucketIndirectAuditOk = false;
+        this.lastStressDirectionalFaceMaskOk = false;
+        this.lastStressFaceMaskAuditOk = false;
         this.lastStressGlErrorCount = 0L;
         this.lastStressStateRestoreFailures = 0L;
     }
@@ -245,6 +249,8 @@ final class ForgeMdicDebugRenderer {
         this.lastStressSourceRegressionOk = false;
         this.lastStressBucketDrawOk = false;
         this.lastStressBucketIndirectAuditOk = false;
+        this.lastStressDirectionalFaceMaskOk = false;
+        this.lastStressFaceMaskAuditOk = false;
         this.lastStressGlErrorCount = this.glErrorCount;
         this.lastStressStateRestoreFailures = this.stateRestoreFailures;
 
@@ -289,6 +295,11 @@ final class ForgeMdicDebugRenderer {
                 this.lastStressBucketIndirectAuditOk = this.lastStressDerivedIndirectAuditOk
                         && derivedAudit.invalidCommands() == 0
                         && derivedAudit.commandBufferMatch();
+                this.lastStressDirectionalFaceMaskOk = stressCommandList.directionalFaceMask()
+                        && (stressCommandList.faceMaskCommandsAccepted() > 0 || stressCommandList.faceMaskCommandsRejected() > 0 || !"none".equals(stressCommandList.faceMaskFallbackReason()));
+                this.lastStressFaceMaskAuditOk = this.lastStressAuditOk
+                        && firstAudit.faceMaskAuditOk()
+                        && firstAudit.invalidFaceMaskCommands() == 0;
                 ForgeMdicDebugDrawStats autoStatus = this.createStatusSnapshot();
                 ForgeMdicDebugShader.ShaderStatus autoShaderStatus = this.shader.createStatusSnapshot();
                 ModeResolution autoMode = this.resolveEffectiveDrawMode(autoShaderStatus);
@@ -314,6 +325,10 @@ final class ForgeMdicDebugRenderer {
                     error = "bucket-draw-not-ready";
                 } else if (!this.lastStressBucketIndirectAuditOk && "none".equals(error)) {
                     error = "bucket-derived-indirect-audit-failed";
+                } else if (!this.lastStressDirectionalFaceMaskOk && "none".equals(error)) {
+                    error = "directional-face-mask-plan-failed";
+                } else if (!this.lastStressFaceMaskAuditOk && "none".equals(error)) {
+                    error = "face-mask-audit-failed";
                 } else if (!this.lastStressDrawStatusOk && "none".equals(error)) {
                     error = "draw-status-error:" + autoStatus.lastGlError();
                 }
@@ -424,7 +439,9 @@ final class ForgeMdicDebugRenderer {
                 && this.lastStressDerivedIndirectAuditOk
                 && this.lastStressSourceRegressionOk
                 && this.lastStressBucketDrawOk
-                && this.lastStressBucketIndirectAuditOk;
+                && this.lastStressBucketIndirectAuditOk
+                && this.lastStressDirectionalFaceMaskOk
+                && this.lastStressFaceMaskAuditOk;
         this.lastStressError = success ? "none" : error;
         if (!success) {
             this.stressFailures++;
@@ -539,6 +556,8 @@ final class ForgeMdicDebugRenderer {
                 this.lastStressSourceRegressionOk,
                 this.lastStressBucketDrawOk,
                 this.lastStressBucketIndirectAuditOk,
+                this.lastStressDirectionalFaceMaskOk,
+                this.lastStressFaceMaskAuditOk,
                 this.lastStressGlErrorCount,
                 this.lastStressStateRestoreFailures
         );
