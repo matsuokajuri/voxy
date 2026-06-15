@@ -570,3 +570,107 @@ RenderData / ModelStore bridge
 ```
 
 G6.4 remains a debug renderer checkpoint. It proves command grouping and conservative face-mask filtering without changing ownership or calling the formal Voxy render path.
+
+## G6.5 Visibility-Aware MDIC Command Planning
+
+G6.5 keeps the G6.4 bucket-aware and directional face-mask command layout, but changes how uploaded sections are selected before bucket commands are generated:
+
+```text
+stage=G6_5_VISIBILITY_AWARE_MDIC_DEBUG_DRAW
+layoutVersion=G6_4_MDIC_BUCKET_FACE_MASK_COMMAND_V1
+```
+
+The layout words are unchanged. The new work is planning policy and diagnostics:
+
+```text
+uploaded sections
+ -> selectionMode=AUTO
+ -> effectiveSelectionMode=FRUSTUM_RADIUS / RADIUS / NEAREST_CAMERA / FIRST_N
+ -> bucket-aware commands
+ -> directional face-mask filtering
+ -> loop / multi / indirect debug draw
+```
+
+The default runtime preset values are conservative but larger than G6.4:
+
+```text
+mdicCommandSelectionMode=AUTO
+mdicCommandRenderDistanceChunks=16
+mdicCommandMaxPlanCandidates=512
+mdicCommandMaxSections=32
+mdicCommandMaxCommands=256
+mdicCommandMaxRecords=65536
+mdicCommandUseFrustum=true
+mdicCommandFrustumFallbackToRadius=true
+```
+
+The current Forge command path can reliably capture camera position, chunk, and section at command planning time. It does not yet have a reliable frustum snapshot without adding renderer-specific integrations, mixins, or Sodium/Iris hooks. Therefore the expected default fallback is:
+
+```text
+selectionMode=AUTO
+frustumAvailable=false
+effectiveSelectionMode=RADIUS
+selectionFallbackReason=FRUSTUM_UNAVAILABLE
+```
+
+If a reliable frustum snapshot is added later, the same planning fields can report:
+
+```text
+frustumAvailable=true
+effectiveSelectionMode=FRUSTUM_RADIUS
+rejectedByFrustum>0 when applicable
+```
+
+Status and audit now expose the selection evidence:
+
+```text
+cameraPosition
+cameraChunk
+cameraSection
+renderDistanceChunks
+candidateSections
+acceptedSections
+rejectedByRadius
+rejectedByFrustum
+rejectedByBudget
+rejectedByMissingMetadata
+nearestAcceptedDistance
+farthestAcceptedDistance
+maxPlanCandidates
+maxSections
+maxCommands
+maxRecords
+lastSelectionAuditOk
+invalidSelectionCommands
+invalidRadiusCommands
+invalidFrustumCommands
+```
+
+The audit is intentionally tied to the CPU-side command list built during planning. It verifies that generated commands belong to the accepted selection result and that radius/frustum mode metadata is self-consistent. It does not recalculate command visibility from a later camera position, because command buffers may be audited after the camera moves.
+
+Relationship to original Voxy visibility systems:
+
+```text
+similar:
+  command planning is now camera/radius aware
+  bucket and face-mask filtering remain command-generation concerns
+  status explicitly distinguishes desired mode from effective fallback mode
+
+not yet similar:
+  no HierarchicalOcclusionTraverser
+  no RenderDistanceTracker integration
+  no HiZ occlusion
+  no full LOD traversal
+  no frustum hierarchy or renderer-owned view snapshot
+```
+
+G6.6 candidates:
+
+```text
+formal DrawElementsIndirect layout design
+visibility stats hardening
+LOD-level metadata skeleton
+RenderData / ModelStore bridge
+```
+
+G6.5 remains a debug renderer checkpoint. It improves which commands are generated and how that choice is audited, without making the Forge PoC a formal MDIC renderer.

@@ -93,6 +93,9 @@ record ForgeMdicDebugDrawStats(
         boolean lastStressBucketIndirectAuditOk,
         boolean lastStressDirectionalFaceMaskOk,
         boolean lastStressFaceMaskAuditOk,
+        boolean lastStressVisibilityPlanOk,
+        boolean lastStressSelectionAuditOk,
+        boolean lastStressFrustumFallbackOk,
         long lastStressGlErrorCount,
         long lastStressStateRestoreFailures
 ) {

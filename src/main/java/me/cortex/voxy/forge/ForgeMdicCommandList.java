@@ -9,7 +9,7 @@ import java.util.Map;
 import java.util.Set;
 
 final class ForgeMdicCommandList {
-    private static final ForgeMdicCommandList EMPTY = new ForgeMdicCommandList(Collections.emptyList(), -1L, "none", 0L, 0, "none", 0, 0, 0, 0, false, false, false, false, false, false, "none", 0, 0, 0, 0, 0, 0, new int[ForgeGpuGeometryDecodedMetadata.BUCKET_COUNT], 0, 0, 0);
+    private static final ForgeMdicCommandList EMPTY = new ForgeMdicCommandList(Collections.emptyList(), -1L, "none", 0L, 0, "none", 0, 0, 0, 0, false, false, false, false, false, false, "none", 0, 0, 0, 0, 0, 0, new int[ForgeGpuGeometryDecodedMetadata.BUCKET_COUNT], 0, 0, 0, "none", "none", false, 0.0D, "none", "none", "none", 0, 0, 0, 0, 0, 0.0D, 0.0D, 0, 0, 0, 0);
 
     private final List<ForgeMdicCommand> commands;
     private final long heapGeneration;
@@ -53,6 +53,24 @@ final class ForgeMdicCommandList {
     private final int skippedTranslucentCommands;
     private final int skippedEmptyBuckets;
     private final int skippedBucketCommands;
+    private final String effectiveSelectionMode;
+    private final String selectionFallbackReason;
+    private final boolean frustumAvailable;
+    private final double frustumAgeMs;
+    private final String cameraPosition;
+    private final String cameraChunk;
+    private final String cameraSection;
+    private final int renderDistanceChunks;
+    private final int rejectedByRadius;
+    private final int rejectedByFrustum;
+    private final int rejectedByBudget;
+    private final int rejectedByMissingMetadata;
+    private final double nearestAcceptedDistance;
+    private final double farthestAcceptedDistance;
+    private final int maxPlanCandidates;
+    private final int maxSections;
+    private final int maxCommands;
+    private final int maxRecords;
 
     private ForgeMdicCommandList(
             List<ForgeMdicCommand> commands,
@@ -81,7 +99,25 @@ final class ForgeMdicCommandList {
             int[] bucketRejectedByFaceMask,
             int skippedTranslucentCommands,
             int skippedEmptyBuckets,
-            int skippedBucketCommands
+            int skippedBucketCommands,
+            String effectiveSelectionMode,
+            String selectionFallbackReason,
+            boolean frustumAvailable,
+            double frustumAgeMs,
+            String cameraPosition,
+            String cameraChunk,
+            String cameraSection,
+            int renderDistanceChunks,
+            int rejectedByRadius,
+            int rejectedByFrustum,
+            int rejectedByBudget,
+            int rejectedByMissingMetadata,
+            double nearestAcceptedDistance,
+            double farthestAcceptedDistance,
+            int maxPlanCandidates,
+            int maxSections,
+            int maxCommands,
+            int maxRecords
     ) {
         this.commands = Collections.unmodifiableList(new ArrayList<>(commands));
         this.heapGeneration = heapGeneration;
@@ -110,9 +146,27 @@ final class ForgeMdicCommandList {
         this.skippedTranslucentCommands = Math.max(0, skippedTranslucentCommands);
         this.skippedEmptyBuckets = Math.max(0, skippedEmptyBuckets);
         this.skippedBucketCommands = Math.max(0, skippedBucketCommands);
+        this.effectiveSelectionMode = effectiveSelectionMode == null || effectiveSelectionMode.isBlank() ? this.selectionMode : effectiveSelectionMode;
+        this.selectionFallbackReason = selectionFallbackReason == null || selectionFallbackReason.isBlank() ? "none" : selectionFallbackReason;
+        this.frustumAvailable = frustumAvailable;
+        this.frustumAgeMs = Math.max(0.0D, frustumAgeMs);
+        this.cameraPosition = cameraPosition == null || cameraPosition.isBlank() ? "none" : cameraPosition;
+        this.cameraChunk = cameraChunk == null || cameraChunk.isBlank() ? "none" : cameraChunk;
+        this.cameraSection = cameraSection == null || cameraSection.isBlank() ? "none" : cameraSection;
+        this.renderDistanceChunks = Math.max(0, renderDistanceChunks);
+        this.rejectedByRadius = Math.max(0, rejectedByRadius);
+        this.rejectedByFrustum = Math.max(0, rejectedByFrustum);
+        this.rejectedByBudget = Math.max(0, rejectedByBudget);
+        this.rejectedByMissingMetadata = Math.max(0, rejectedByMissingMetadata);
+        this.nearestAcceptedDistance = Math.max(0.0D, nearestAcceptedDistance);
+        this.farthestAcceptedDistance = Math.max(0.0D, farthestAcceptedDistance);
+        this.maxPlanCandidates = Math.max(0, maxPlanCandidates);
+        this.maxSections = Math.max(0, maxSections);
+        this.maxCommands = Math.max(0, maxCommands);
+        this.maxRecords = Math.max(0, maxRecords);
 
         int minRecords = Integer.MAX_VALUE;
-        int maxRecords = 0;
+        int maxCommandRecords = 0;
         int nonEmptyBuckets = 0;
         int emptyBuckets = 0;
         int maskOr = 0;
@@ -128,7 +182,7 @@ final class ForgeMdicCommandList {
         for (ForgeMdicCommand command : this.commands) {
             int records = Math.max(0, command.recordCount());
             minRecords = Math.min(minRecords, records);
-            maxRecords = Math.max(maxRecords, records);
+            maxCommandRecords = Math.max(maxCommandRecords, records);
             totalRecords += records;
             sectionIds.add(command.sectionId());
             commandsBySection.merge(command.sectionId(), 1, Integer::sum);
@@ -150,7 +204,7 @@ final class ForgeMdicCommandList {
             maxPtr = Math.max(maxPtr, command.geometryPtr());
         }
         this.minRecordCount = this.commands.isEmpty() ? 0 : minRecords;
-        this.maxRecordCount = maxRecords;
+        this.maxRecordCount = maxCommandRecords;
         this.avgRecordCount = this.commands.isEmpty() ? 0.0D : (double) totalRecords / (double) this.commands.size();
         this.nonEmptyBucketCommands = nonEmptyBuckets;
         this.emptyBucketCommands = emptyBuckets;
@@ -177,7 +231,7 @@ final class ForgeMdicCommandList {
     }
 
     static ForgeMdicCommandList of(List<ForgeMdicCommand> commands, long heapGeneration, String dimensionId, long recordCount, String selectionMode, int skippedSections, long skippedRecords, int planCandidateSections, int planAcceptedSections) {
-        return of(commands, heapGeneration, dimensionId, recordCount, selectionMode, skippedSections, skippedRecords, planCandidateSections, planAcceptedSections, false, false, false, false, false, false, "none", 0, 0, 0, 0, 0, 0, new int[ForgeGpuGeometryDecodedMetadata.BUCKET_COUNT], 0, 0, 0);
+        return of(commands, heapGeneration, dimensionId, recordCount, selectionMode, skippedSections, skippedRecords, planCandidateSections, planAcceptedSections, false, false, false, false, false, false, "none", 0, 0, 0, 0, 0, 0, new int[ForgeGpuGeometryDecodedMetadata.BUCKET_COUNT], 0, 0, 0, selectionMode, "none", false, 0.0D, "none", "none", "none", 0, 0, 0, 0, 0, 0.0D, 0.0D, 0, 0, 0, 0);
     }
 
     static ForgeMdicCommandList of(
@@ -206,12 +260,30 @@ final class ForgeMdicCommandList {
             int[] bucketRejectedByFaceMask,
             int skippedTranslucentCommands,
             int skippedEmptyBuckets,
-            int skippedBucketCommands
+            int skippedBucketCommands,
+            String effectiveSelectionMode,
+            String selectionFallbackReason,
+            boolean frustumAvailable,
+            double frustumAgeMs,
+            String cameraPosition,
+            String cameraChunk,
+            String cameraSection,
+            int renderDistanceChunks,
+            int rejectedByRadius,
+            int rejectedByFrustum,
+            int rejectedByBudget,
+            int rejectedByMissingMetadata,
+            double nearestAcceptedDistance,
+            double farthestAcceptedDistance,
+            int maxPlanCandidates,
+            int maxSections,
+            int maxCommands,
+            int maxRecords
     ) {
         if (commands == null || commands.isEmpty()) {
             return EMPTY;
         }
-        return new ForgeMdicCommandList(commands, heapGeneration, dimensionId, System.currentTimeMillis(), recordCount, selectionMode, skippedSections, skippedRecords, planCandidateSections, planAcceptedSections, bucketAware, includedTranslucent, includedDoubleSided, includedDirectional, directionalFaceMask, faceMaskFallbackAllWhenInside, faceMaskFallbackReason, faceMaskCommandsAccepted, faceMaskCommandsRejected, rejectedDirectionalBuckets, insideSectionFallbacks, missingCameraFallbacks, missingAabbFallbacks, bucketRejectedByFaceMask, skippedTranslucentCommands, skippedEmptyBuckets, skippedBucketCommands);
+        return new ForgeMdicCommandList(commands, heapGeneration, dimensionId, System.currentTimeMillis(), recordCount, selectionMode, skippedSections, skippedRecords, planCandidateSections, planAcceptedSections, bucketAware, includedTranslucent, includedDoubleSided, includedDirectional, directionalFaceMask, faceMaskFallbackAllWhenInside, faceMaskFallbackReason, faceMaskCommandsAccepted, faceMaskCommandsRejected, rejectedDirectionalBuckets, insideSectionFallbacks, missingCameraFallbacks, missingAabbFallbacks, bucketRejectedByFaceMask, skippedTranslucentCommands, skippedEmptyBuckets, skippedBucketCommands, effectiveSelectionMode, selectionFallbackReason, frustumAvailable, frustumAgeMs, cameraPosition, cameraChunk, cameraSection, renderDistanceChunks, rejectedByRadius, rejectedByFrustum, rejectedByBudget, rejectedByMissingMetadata, nearestAcceptedDistance, farthestAcceptedDistance, maxPlanCandidates, maxSections, maxCommands, maxRecords);
     }
 
     private static int[] sanitizeBucketArray(int[] source) {
@@ -412,5 +484,77 @@ final class ForgeMdicCommandList {
 
     int skippedBucketCommands() {
         return this.skippedBucketCommands;
+    }
+
+    String effectiveSelectionMode() {
+        return this.effectiveSelectionMode;
+    }
+
+    String selectionFallbackReason() {
+        return this.selectionFallbackReason;
+    }
+
+    boolean frustumAvailable() {
+        return this.frustumAvailable;
+    }
+
+    double frustumAgeMs() {
+        return this.frustumAgeMs;
+    }
+
+    String cameraPosition() {
+        return this.cameraPosition;
+    }
+
+    String cameraChunk() {
+        return this.cameraChunk;
+    }
+
+    String cameraSection() {
+        return this.cameraSection;
+    }
+
+    int renderDistanceChunks() {
+        return this.renderDistanceChunks;
+    }
+
+    int rejectedByRadius() {
+        return this.rejectedByRadius;
+    }
+
+    int rejectedByFrustum() {
+        return this.rejectedByFrustum;
+    }
+
+    int rejectedByBudget() {
+        return this.rejectedByBudget;
+    }
+
+    int rejectedByMissingMetadata() {
+        return this.rejectedByMissingMetadata;
+    }
+
+    double nearestAcceptedDistance() {
+        return this.nearestAcceptedDistance;
+    }
+
+    double farthestAcceptedDistance() {
+        return this.farthestAcceptedDistance;
+    }
+
+    int maxPlanCandidates() {
+        return this.maxPlanCandidates;
+    }
+
+    int maxSections() {
+        return this.maxSections;
+    }
+
+    int maxCommands() {
+        return this.maxCommands;
+    }
+
+    int maxRecords() {
+        return this.maxRecords;
     }
 }

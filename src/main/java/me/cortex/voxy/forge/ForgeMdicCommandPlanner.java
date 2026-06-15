@@ -3,7 +3,6 @@ package me.cortex.voxy.forge;
 import com.mojang.blaze3d.systems.RenderSystem;
 import me.cortex.voxy.common.world.WorldEngine;
 import net.minecraft.client.Minecraft;
-import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -11,8 +10,6 @@ import java.util.List;
 
 final class ForgeMdicCommandPlanner {
     private static final int SECTION_SIZE = 32;
-    private static final int MAX_PLAN_CANDIDATES = 256;
-    private static final int RENDER_DISTANCE_CHUNKS = 12;
 
     private ForgeMdicCommandPlanner() {
     }
@@ -39,10 +36,15 @@ final class ForgeMdicCommandPlanner {
         }
 
         Minecraft minecraft = Minecraft.getInstance();
-        CameraContext camera = CameraContext.create(minecraft);
-        String selectionMode = camera.available() ? "RADIUS" : "FALLBACK_FIRST_N";
+        ForgeMdicCommandSelectionMode requestedMode = ForgeMdicCommandConfig.selectionMode();
+        ForgeMdicVisibilitySnapshot visibility = ForgeMdicVisibilityTracker.capture(minecraft, ForgeMdicCommandConfig.useFrustum());
+        SelectionResolution selection = resolveSelectionMode(requestedMode, visibility);
         ArrayList<Candidate> candidates = new ArrayList<>();
         int invalidMetadata = 0;
+        int rejectedByRadius = 0;
+        int rejectedByFrustum = 0;
+        int rejectedByBudget = 0;
+        int rejectedByMissingMetadata = 0;
         int skippedSections = 0;
         long skippedRecords = 0L;
         int skippedTranslucentCommands = 0;
@@ -59,14 +61,18 @@ final class ForgeMdicCommandPlanner {
         String lastError = "none";
 
         int inspected = 0;
-        int inspectLimit = Math.max(1, MAX_PLAN_CANDIDATES);
+        int inspectLimit = Math.max(1, ForgeMdicCommandConfig.maxPlanCandidates());
+        int renderDistanceChunks = Math.max(1, ForgeMdicCommandConfig.renderDistanceChunks());
         for (Integer sectionId : sectionIds) {
             if (sectionId == null || sectionId < 0) {
                 skippedSections++;
+                rejectedByMissingMetadata++;
                 continue;
             }
             if (inspected >= inspectLimit) {
-                skippedSections += Math.max(0, sectionIds.size() - inspected);
+                int remaining = Math.max(0, sectionIds.size() - inspected);
+                skippedSections += remaining;
+                rejectedByBudget += remaining;
                 break;
             }
             inspected++;
@@ -76,23 +82,31 @@ final class ForgeMdicCommandPlanner {
                 String validation = metadata.validate(heap, instance.getSectionGeometryManager(), sectionId, words);
                 if (!"none".equals(validation)) {
                     invalidMetadata++;
+                    rejectedByMissingMetadata++;
                     lastError = "sectionId=" + sectionId + ' ' + validation;
                     continue;
                 }
-                int distanceChunks = camera.available() ? distanceChunks(metadata.position(), camera.chunkX(), camera.chunkZ()) : 0;
-                if (camera.available() && distanceChunks > RENDER_DISTANCE_CHUNKS) {
+                int distanceChunks = visibility.cameraAvailable() ? distanceChunks(metadata.position(), visibility.cameraChunkX(), visibility.cameraChunkZ()) : 0;
+                if (usesRadius(selection.effectiveMode()) && visibility.cameraAvailable() && distanceChunks > renderDistanceChunks) {
                     skippedSections++;
+                    rejectedByRadius++;
                     continue;
                 }
-                double distanceSquared = camera.available() ? sectionDistanceSquared(metadata.position(), camera.x(), camera.y(), camera.z()) : sectionId;
-                candidates.add(new Candidate(sectionId, metadata, distanceSquared));
+                if (usesFrustum(selection.effectiveMode()) && !visibility.frustumAvailable()) {
+                    skippedSections++;
+                    rejectedByFrustum++;
+                    continue;
+                }
+                double distanceSquared = visibility.cameraAvailable() ? sectionDistanceSquared(metadata.position(), visibility.cameraX(), visibility.cameraY(), visibility.cameraZ()) : sectionId;
+                candidates.add(new Candidate(sectionId, metadata, distanceSquared, distanceChunks));
             } catch (RuntimeException e) {
                 invalidMetadata++;
+                rejectedByMissingMetadata++;
                 lastError = "sectionId=" + sectionId + ' ' + e.getClass().getSimpleName() + ": " + e.getMessage();
             }
         }
 
-        if (camera.available()) {
+        if (visibility.cameraAvailable() && selection.shouldSortByDistance()) {
             candidates.sort((left, right) -> {
                 int distanceCompare = Double.compare(left.distanceSquared(), right.distanceSquared());
                 if (distanceCompare != 0) {
@@ -116,13 +130,19 @@ final class ForgeMdicCommandPlanner {
         long commandRecords = 0L;
         int generation = (int) heap.generation();
         int acceptedSections = 0;
+        double nearestAcceptedDistance = Double.POSITIVE_INFINITY;
+        double farthestAcceptedDistance = 0.0D;
         for (int i = 0; i < candidates.size(); i++) {
             if (acceptedSections >= sectionLimit) {
-                skippedSections += candidates.size() - i;
+                int remaining = candidates.size() - i;
+                skippedSections += remaining;
+                rejectedByBudget += remaining;
                 break;
             }
             if (remainingRecords <= 0 || commands.size() >= commandLimit) {
-                skippedSections += candidates.size() - i;
+                int remaining = candidates.size() - i;
+                skippedSections += remaining;
+                rejectedByBudget += remaining;
                 break;
             }
 
@@ -140,7 +160,7 @@ final class ForgeMdicCommandPlanner {
                         includeDirectional,
                         directionalFaceMask,
                         faceMaskFallbackAllWhenInside,
-                        camera
+                        visibility
                 );
                 remainingRecords -= bucketPlan.acceptedRecords();
                 commandRecords += bucketPlan.acceptedRecords();
@@ -158,6 +178,8 @@ final class ForgeMdicCommandPlanner {
                 faceMaskFallbackReason = mergeFallbackReason(faceMaskFallbackReason, bucketPlan.faceMaskFallbackReason());
                 if (bucketPlan.acceptedCommands() > 0) {
                     acceptedSections++;
+                    nearestAcceptedDistance = Math.min(nearestAcceptedDistance, candidate.distanceChunks());
+                    farthestAcceptedDistance = Math.max(farthestAcceptedDistance, candidate.distanceChunks());
                 } else {
                     skippedSections++;
                 }
@@ -172,9 +194,14 @@ final class ForgeMdicCommandPlanner {
                 }
                 commands.add(createSectionCommand(candidate.sectionId(), candidate.metadata(), records, generation));
                 acceptedSections++;
+                nearestAcceptedDistance = Math.min(nearestAcceptedDistance, candidate.distanceChunks());
+                farthestAcceptedDistance = Math.max(farthestAcceptedDistance, candidate.distanceChunks());
                 commandRecords += records;
                 remainingRecords -= records;
             }
+        }
+        if (!Double.isFinite(nearestAcceptedDistance)) {
+            nearestAcceptedDistance = 0.0D;
         }
 
         String dimension = currentDimensionId(minecraft);
@@ -183,7 +210,7 @@ final class ForgeMdicCommandPlanner {
                 heap.generation(),
                 dimension,
                 commandRecords,
-                selectionMode,
+                requestedMode.name(),
                 skippedSections,
                 skippedRecords,
                 candidates.size(),
@@ -204,7 +231,25 @@ final class ForgeMdicCommandPlanner {
                 bucketRejectedByFaceMask,
                 skippedTranslucentCommands,
                 skippedEmptyBuckets,
-                skippedBucketCommands
+                skippedBucketCommands,
+                selection.effectiveMode().name(),
+                selection.fallbackReason(),
+                visibility.frustumAvailable(),
+                visibility.ageMs(),
+                visibility.cameraPositionString(),
+                visibility.cameraChunkString(),
+                visibility.cameraSectionString(),
+                renderDistanceChunks,
+                rejectedByRadius,
+                rejectedByFrustum,
+                rejectedByBudget,
+                rejectedByMissingMetadata,
+                nearestAcceptedDistance,
+                farthestAcceptedDistance,
+                inspectLimit,
+                sectionLimit,
+                commandLimit,
+                Math.max(1, maxRecords)
         );
         boolean success = commandList.isValid();
         return new PlanResult(
@@ -233,7 +278,7 @@ final class ForgeMdicCommandPlanner {
             boolean includeDirectional,
             boolean directionalFaceMask,
             boolean faceMaskFallbackAllWhenInside,
-            CameraContext camera
+            ForgeMdicVisibilitySnapshot visibility
     ) {
         int acceptedCommands = 0;
         int acceptedRecords = 0;
@@ -250,7 +295,7 @@ final class ForgeMdicCommandPlanner {
         String faceMaskFallbackReason = "none";
         long skippedRecords = 0L;
         FaceMaskPlan faceMaskPlan = directionalFaceMask
-                ? createFaceMaskPlan(candidate.metadata(), camera, faceMaskFallbackAllWhenInside)
+                ? createFaceMaskPlan(candidate.metadata(), visibility, faceMaskFallbackAllWhenInside)
                 : FaceMaskPlan.disabledPlan();
         if (faceMaskPlan.insideSectionFallback()) {
             insideSectionFallbacks++;
@@ -315,40 +360,40 @@ final class ForgeMdicCommandPlanner {
     }
 
     static FaceMaskPlan createFaceMaskPlanForAudit(ForgeGpuGeometryDecodedMetadata metadata) {
-        return createFaceMaskPlan(metadata, CameraContext.create(Minecraft.getInstance()), ForgeMdicCommandConfig.directionalFaceMaskFallbackAllWhenInside());
+        return createFaceMaskPlan(metadata, ForgeMdicVisibilityTracker.capture(Minecraft.getInstance(), ForgeMdicCommandConfig.useFrustum()), ForgeMdicCommandConfig.directionalFaceMaskFallbackAllWhenInside());
     }
 
-    private static FaceMaskPlan createFaceMaskPlan(ForgeGpuGeometryDecodedMetadata metadata, CameraContext camera, boolean fallbackAllWhenInside) {
+    private static FaceMaskPlan createFaceMaskPlan(ForgeGpuGeometryDecodedMetadata metadata, ForgeMdicVisibilitySnapshot visibility, boolean fallbackAllWhenInside) {
         int allDirectional = 0xFC;
-        if (camera == null || !camera.available()) {
+        if (visibility == null || !visibility.cameraAvailable()) {
             return new FaceMaskPlan(allDirectional, "MISSING_CAMERA", true, false, true, false, false);
         }
         SectionAabb aabb = SectionAabb.from(metadata);
         if (!aabb.valid()) {
             return new FaceMaskPlan(allDirectional, "MISSING_AABB", true, false, false, true, false);
         }
-        if (aabb.contains(camera.x(), camera.y(), camera.z()) && fallbackAllWhenInside) {
+        if (aabb.contains(visibility.cameraX(), visibility.cameraY(), visibility.cameraZ()) && fallbackAllWhenInside) {
             return new FaceMaskPlan(allDirectional, "INSIDE_SECTION", true, true, false, false, false);
         }
 
         int mask = 0;
-        if (camera.y() < aabb.minY()) {
+        if (visibility.cameraY() < aabb.minY()) {
             mask |= 1 << 2;
-        } else if (camera.y() > aabb.maxY()) {
+        } else if (visibility.cameraY() > aabb.maxY()) {
             mask |= 1 << 3;
         } else {
             mask |= (1 << 2) | (1 << 3);
         }
-        if (camera.z() < aabb.minZ()) {
+        if (visibility.cameraZ() < aabb.minZ()) {
             mask |= 1 << 4;
-        } else if (camera.z() > aabb.maxZ()) {
+        } else if (visibility.cameraZ() > aabb.maxZ()) {
             mask |= 1 << 5;
         } else {
             mask |= (1 << 4) | (1 << 5);
         }
-        if (camera.x() < aabb.minX()) {
+        if (visibility.cameraX() < aabb.minX()) {
             mask |= 1 << 6;
-        } else if (camera.x() > aabb.maxX()) {
+        } else if (visibility.cameraX() > aabb.maxX()) {
             mask |= 1 << 7;
         } else {
             mask |= (1 << 6) | (1 << 7);
@@ -432,6 +477,52 @@ final class ForgeMdicCommandPlanner {
         return mask;
     }
 
+    private static SelectionResolution resolveSelectionMode(ForgeMdicCommandSelectionMode requestedMode, ForgeMdicVisibilitySnapshot visibility) {
+        ForgeMdicCommandSelectionMode requested = requestedMode == null ? ForgeMdicCommandSelectionMode.AUTO : requestedMode;
+        boolean hasCamera = visibility != null && visibility.cameraAvailable();
+        boolean wantsFrustum = ForgeMdicCommandConfig.useFrustum();
+        boolean frustumAvailable = visibility != null && visibility.frustumAvailable();
+        boolean fallbackToRadius = ForgeMdicCommandConfig.frustumFallbackToRadius();
+        if (!hasCamera) {
+            return new SelectionResolution(requested, ForgeMdicCommandSelectionMode.FIRST_N, "CAMERA_UNAVAILABLE", false);
+        }
+        return switch (requested) {
+            case FIRST_N -> new SelectionResolution(requested, ForgeMdicCommandSelectionMode.FIRST_N, "none", false);
+            case NEAREST_CAMERA -> new SelectionResolution(requested, ForgeMdicCommandSelectionMode.NEAREST_CAMERA, "none", true);
+            case RADIUS -> new SelectionResolution(requested, ForgeMdicCommandSelectionMode.RADIUS, "none", true);
+            case FRUSTUM_RADIUS -> {
+                if (wantsFrustum && frustumAvailable) {
+                    yield new SelectionResolution(requested, ForgeMdicCommandSelectionMode.FRUSTUM_RADIUS, "none", true);
+                }
+                yield new SelectionResolution(requested, fallbackToRadius ? ForgeMdicCommandSelectionMode.RADIUS : ForgeMdicCommandSelectionMode.NEAREST_CAMERA, frustumFallbackReason(visibility, wantsFrustum), true);
+            }
+            case AUTO -> {
+                if (wantsFrustum && frustumAvailable) {
+                    yield new SelectionResolution(requested, ForgeMdicCommandSelectionMode.FRUSTUM_RADIUS, "none", true);
+                }
+                yield new SelectionResolution(requested, ForgeMdicCommandSelectionMode.RADIUS, wantsFrustum ? frustumFallbackReason(visibility, true) : "FRUSTUM_DISABLED", true);
+            }
+        };
+    }
+
+    private static String frustumFallbackReason(ForgeMdicVisibilitySnapshot visibility, boolean wantsFrustum) {
+        if (!wantsFrustum) {
+            return "FRUSTUM_DISABLED";
+        }
+        if (visibility == null || visibility.frustumUnavailableReason() == null || visibility.frustumUnavailableReason().isBlank()) {
+            return "FRUSTUM_UNAVAILABLE";
+        }
+        return visibility.frustumUnavailableReason();
+    }
+
+    private static boolean usesRadius(ForgeMdicCommandSelectionMode mode) {
+        return mode == ForgeMdicCommandSelectionMode.RADIUS || mode == ForgeMdicCommandSelectionMode.FRUSTUM_RADIUS;
+    }
+
+    private static boolean usesFrustum(ForgeMdicCommandSelectionMode mode) {
+        return mode == ForgeMdicCommandSelectionMode.FRUSTUM_RADIUS;
+    }
+
     private static PlanResult failure(long start, String skippedReason, String error, int candidates, int invalidMetadata) {
         return new PlanResult(false, skippedReason, error, ForgeMdicCommandList.empty(), candidates, 0, invalidMetadata, 0, 0L, elapsedMs(start));
     }
@@ -464,13 +555,6 @@ final class ForgeMdicCommandPlanner {
         return dx * dx + dy * dy + dz * dz;
     }
 
-    private static Vec3 cameraPositionOrPlayer(Minecraft minecraft) {
-        if (minecraft.gameRenderer != null && minecraft.gameRenderer.getMainCamera() != null) {
-            return minecraft.gameRenderer.getMainCamera().getPosition();
-        }
-        return minecraft.player == null ? Vec3.ZERO : minecraft.player.position();
-    }
-
     private static double elapsedMs(long start) {
         return (System.nanoTime() - start) / 1_000_000.0D;
     }
@@ -489,7 +573,10 @@ final class ForgeMdicCommandPlanner {
     ) {
     }
 
-    private record Candidate(int sectionId, ForgeGpuGeometryDecodedMetadata metadata, double distanceSquared) {
+    private record Candidate(int sectionId, ForgeGpuGeometryDecodedMetadata metadata, double distanceSquared, double distanceChunks) {
+    }
+
+    private record SelectionResolution(ForgeMdicCommandSelectionMode requestedMode, ForgeMdicCommandSelectionMode effectiveMode, String fallbackReason, boolean shouldSortByDistance) {
     }
 
     private record BucketPlan(
@@ -553,17 +640,4 @@ final class ForgeMdicCommandPlanner {
         }
     }
 
-    private record CameraContext(boolean available, double x, double y, double z, int chunkX, int chunkZ) {
-        private static CameraContext create(Minecraft minecraft) {
-            if (minecraft.level == null || minecraft.player == null) {
-                return new CameraContext(false, 0.0D, 0.0D, 0.0D, 0, 0);
-            }
-            Vec3 position = cameraPositionOrPlayer(minecraft);
-            return new CameraContext(true, position.x, position.y, position.z, floorDiv16(position.x), floorDiv16(position.z));
-        }
-
-        private static int floorDiv16(double value) {
-            return (int) Math.floor(value / 16.0D);
-        }
-    }
 }

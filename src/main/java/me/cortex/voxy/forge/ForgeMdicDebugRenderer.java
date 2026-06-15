@@ -13,7 +13,7 @@ import static org.lwjgl.opengl.GL11C.GL_NO_ERROR;
 import static org.lwjgl.opengl.GL11C.glGetError;
 
 final class ForgeMdicDebugRenderer {
-    static final String STAGE = "G6_4_DIRECTIONAL_FACE_MASK_MDIC_DEBUG_DRAW";
+    static final String STAGE = "G6_5_VISIBILITY_AWARE_MDIC_DEBUG_DRAW";
 
     private final ForgeVoxyInstance instance;
     private final ForgeMdicDebugShader shader = new ForgeMdicDebugShader();
@@ -73,6 +73,9 @@ final class ForgeMdicDebugRenderer {
     private boolean lastStressBucketIndirectAuditOk;
     private boolean lastStressDirectionalFaceMaskOk;
     private boolean lastStressFaceMaskAuditOk;
+    private boolean lastStressVisibilityPlanOk;
+    private boolean lastStressSelectionAuditOk;
+    private boolean lastStressFrustumFallbackOk;
     private long lastStressGlErrorCount;
     private long lastStressStateRestoreFailures;
 
@@ -154,6 +157,9 @@ final class ForgeMdicDebugRenderer {
         this.lastStressBucketIndirectAuditOk = false;
         this.lastStressDirectionalFaceMaskOk = false;
         this.lastStressFaceMaskAuditOk = false;
+        this.lastStressVisibilityPlanOk = false;
+        this.lastStressSelectionAuditOk = false;
+        this.lastStressFrustumFallbackOk = false;
         this.lastStressGlErrorCount = 0L;
         this.lastStressStateRestoreFailures = 0L;
     }
@@ -251,6 +257,9 @@ final class ForgeMdicDebugRenderer {
         this.lastStressBucketIndirectAuditOk = false;
         this.lastStressDirectionalFaceMaskOk = false;
         this.lastStressFaceMaskAuditOk = false;
+        this.lastStressVisibilityPlanOk = false;
+        this.lastStressSelectionAuditOk = false;
+        this.lastStressFrustumFallbackOk = false;
         this.lastStressGlErrorCount = this.glErrorCount;
         this.lastStressStateRestoreFailures = this.stateRestoreFailures;
 
@@ -300,6 +309,13 @@ final class ForgeMdicDebugRenderer {
                 this.lastStressFaceMaskAuditOk = this.lastStressAuditOk
                         && firstAudit.faceMaskAuditOk()
                         && firstAudit.invalidFaceMaskCommands() == 0;
+                this.lastStressVisibilityPlanOk = firstPlan.success() && visibilityPlanOk(stressCommandList);
+                this.lastStressSelectionAuditOk = this.lastStressAuditOk
+                        && firstAudit.selectionAuditOk()
+                        && firstAudit.invalidSelectionCommands() == 0
+                        && firstAudit.invalidRadiusCommands() == 0
+                        && firstAudit.invalidFrustumCommands() == 0;
+                this.lastStressFrustumFallbackOk = frustumFallbackOk(stressCommandList);
                 ForgeMdicDebugDrawStats autoStatus = this.createStatusSnapshot();
                 ForgeMdicDebugShader.ShaderStatus autoShaderStatus = this.shader.createStatusSnapshot();
                 ModeResolution autoMode = this.resolveEffectiveDrawMode(autoShaderStatus);
@@ -329,6 +345,12 @@ final class ForgeMdicDebugRenderer {
                     error = "directional-face-mask-plan-failed";
                 } else if (!this.lastStressFaceMaskAuditOk && "none".equals(error)) {
                     error = "face-mask-audit-failed";
+                } else if (!this.lastStressVisibilityPlanOk && "none".equals(error)) {
+                    error = "visibility-plan-failed";
+                } else if (!this.lastStressSelectionAuditOk && "none".equals(error)) {
+                    error = "selection-audit-failed";
+                } else if (!this.lastStressFrustumFallbackOk && "none".equals(error)) {
+                    error = "frustum-fallback-failed";
                 } else if (!this.lastStressDrawStatusOk && "none".equals(error)) {
                     error = "draw-status-error:" + autoStatus.lastGlError();
                 }
@@ -372,8 +394,24 @@ final class ForgeMdicDebugRenderer {
                 boolean secondBuild = secondPlan.success() && manager.buildBuffer();
                 ForgeMdicCommandAuditResult secondAudit = manager.audit();
                 this.lastStressRebuildOk = secondPlan.success() && secondBuild && secondAudit.success();
+                this.lastStressVisibilityPlanOk = this.lastStressVisibilityPlanOk
+                        && secondPlan.success()
+                        && visibilityPlanOk(manager.commandListForDebugDraw());
+                this.lastStressSelectionAuditOk = this.lastStressSelectionAuditOk
+                        && secondAudit.success()
+                        && secondAudit.selectionAuditOk()
+                        && secondAudit.invalidSelectionCommands() == 0
+                        && secondAudit.invalidRadiusCommands() == 0
+                        && secondAudit.invalidFrustumCommands() == 0;
+                this.lastStressFrustumFallbackOk = this.lastStressFrustumFallbackOk && frustumFallbackOk(manager.commandListForDebugDraw());
                 if (!this.lastStressRebuildOk && "none".equals(error)) {
                     error = "rebuild=" + (secondPlan.success() ? manager.createStatusSnapshot().lastError() : secondPlan.error());
+                } else if (!this.lastStressVisibilityPlanOk && "none".equals(error)) {
+                    error = "rebuild-visibility-plan-failed";
+                } else if (!this.lastStressSelectionAuditOk && "none".equals(error)) {
+                    error = "rebuild-selection-audit-failed";
+                } else if (!this.lastStressFrustumFallbackOk && "none".equals(error)) {
+                    error = "rebuild-frustum-fallback-failed";
                 }
 
                 this.setDrawMode(ForgeMdicDebugDrawMode.AUTO);
@@ -441,7 +479,10 @@ final class ForgeMdicDebugRenderer {
                 && this.lastStressBucketDrawOk
                 && this.lastStressBucketIndirectAuditOk
                 && this.lastStressDirectionalFaceMaskOk
-                && this.lastStressFaceMaskAuditOk;
+                && this.lastStressFaceMaskAuditOk
+                && this.lastStressVisibilityPlanOk
+                && this.lastStressSelectionAuditOk
+                && this.lastStressFrustumFallbackOk;
         this.lastStressError = success ? "none" : error;
         if (!success) {
             this.stressFailures++;
@@ -558,6 +599,9 @@ final class ForgeMdicDebugRenderer {
                 this.lastStressBucketIndirectAuditOk,
                 this.lastStressDirectionalFaceMaskOk,
                 this.lastStressFaceMaskAuditOk,
+                this.lastStressVisibilityPlanOk,
+                this.lastStressSelectionAuditOk,
+                this.lastStressFrustumFallbackOk,
                 this.lastStressGlErrorCount,
                 this.lastStressStateRestoreFailures
         );
@@ -798,6 +842,30 @@ final class ForgeMdicDebugRenderer {
         if (resolution.effectiveMode() == ForgeMdicDebugDrawMode.MULTI_DRAW_ARRAYS_INDIRECT) {
             ForgeMdicCommandList commandList = this.instance.getMdicCommandManager().commandListForDebugDraw();
             return this.ensureDerivedIndirectBuffer(commandList);
+        }
+        return true;
+    }
+
+    private static boolean visibilityPlanOk(ForgeMdicCommandList commandList) {
+        return commandList != null
+                && commandList.isValid()
+                && commandList.planCandidateSections() > 0
+                && commandList.planAcceptedSections() > 0
+                && commandList.commandCount() > 0
+                && !"none".equals(commandList.effectiveSelectionMode());
+    }
+
+    private static boolean frustumFallbackOk(ForgeMdicCommandList commandList) {
+        if (commandList == null || !commandList.isValid()) {
+            return false;
+        }
+        if (commandList.frustumAvailable()) {
+            return "FRUSTUM_RADIUS".equals(commandList.effectiveSelectionMode());
+        }
+        String reason = commandList.selectionFallbackReason();
+        if ("AUTO".equals(commandList.selectionMode()) || "FRUSTUM_RADIUS".equals(commandList.selectionMode())) {
+            return "RADIUS".equals(commandList.effectiveSelectionMode())
+                    && ("FRUSTUM_UNAVAILABLE".equals(reason) || "FRUSTUM_DISABLED".equals(reason));
         }
         return true;
     }

@@ -29,6 +29,10 @@ final class ForgeMdicCommandManager {
     private int lastInvalidGeometryPtrCommands;
     private int lastInvalidFaceMaskCommands;
     private boolean lastFaceMaskAuditOk;
+    private boolean lastSelectionAuditOk;
+    private int lastInvalidSelectionCommands;
+    private int lastInvalidRadiusCommands;
+    private int lastInvalidFrustumCommands;
     private int lastAuditedCommands;
     private long lastAuditedRecords;
     private long lastAuditedBytes;
@@ -50,6 +54,9 @@ final class ForgeMdicCommandManager {
     private boolean lastStressBucketAuditOk;
     private boolean lastStressDirectionalFaceMaskOk;
     private boolean lastStressFaceMaskAuditOk;
+    private boolean lastStressVisibilityPlanOk;
+    private boolean lastStressSelectionAuditOk;
+    private boolean lastStressFrustumFallbackOk;
     private int lastStressCommandCount;
     private long lastStressCommandRecords;
     private int lastStressInvalidCommands;
@@ -161,6 +168,10 @@ final class ForgeMdicCommandManager {
         this.lastInvalidGeometryPtrCommands = 0;
         this.lastInvalidFaceMaskCommands = 0;
         this.lastFaceMaskAuditOk = false;
+        this.lastSelectionAuditOk = false;
+        this.lastInvalidSelectionCommands = 0;
+        this.lastInvalidRadiusCommands = 0;
+        this.lastInvalidFrustumCommands = 0;
         this.lastAuditedCommands = 0;
         this.lastAuditedRecords = 0L;
         this.lastAuditedBytes = 0L;
@@ -185,6 +196,9 @@ final class ForgeMdicCommandManager {
         this.lastStressBucketAuditOk = false;
         this.lastStressDirectionalFaceMaskOk = false;
         this.lastStressFaceMaskAuditOk = false;
+        this.lastStressVisibilityPlanOk = false;
+        this.lastStressSelectionAuditOk = false;
+        this.lastStressFrustumFallbackOk = false;
         this.lastStressCommandCount = 0;
         this.lastStressCommandRecords = 0L;
         this.lastStressInvalidCommands = 0;
@@ -206,6 +220,9 @@ final class ForgeMdicCommandManager {
         this.lastStressBucketAuditOk = false;
         this.lastStressDirectionalFaceMaskOk = false;
         this.lastStressFaceMaskAuditOk = false;
+        this.lastStressVisibilityPlanOk = false;
+        this.lastStressSelectionAuditOk = false;
+        this.lastStressFrustumFallbackOk = false;
         this.lastStressCommandCount = 0;
         this.lastStressCommandRecords = 0L;
         this.lastStressInvalidCommands = 0;
@@ -239,6 +256,13 @@ final class ForgeMdicCommandManager {
                 this.lastStressFaceMaskAuditOk = this.lastStressAuditOk
                         && firstAudit.faceMaskAuditOk()
                         && firstAudit.invalidFaceMaskCommands() == 0;
+                this.lastStressVisibilityPlanOk = firstPlan.success() && visibilityPlanOk(this.commandList);
+                this.lastStressSelectionAuditOk = this.lastStressAuditOk
+                        && firstAudit.selectionAuditOk()
+                        && firstAudit.invalidSelectionCommands() == 0
+                        && firstAudit.invalidRadiusCommands() == 0
+                        && firstAudit.invalidFrustumCommands() == 0;
+                this.lastStressFrustumFallbackOk = frustumFallbackOk(this.commandList);
                 if (!this.lastStressPlanOk && "none".equals(error)) {
                     error = "first-plan=" + firstPlan.error();
                 } else if (!this.lastStressBuildOk && "none".equals(error)) {
@@ -253,6 +277,12 @@ final class ForgeMdicCommandManager {
                     error = "first-directional-face-mask-plan-failed";
                 } else if (!this.lastStressFaceMaskAuditOk && "none".equals(error)) {
                     error = "first-face-mask-audit-failed";
+                } else if (!this.lastStressVisibilityPlanOk && "none".equals(error)) {
+                    error = "first-visibility-plan-failed";
+                } else if (!this.lastStressSelectionAuditOk && "none".equals(error)) {
+                    error = "first-selection-audit-failed";
+                } else if (!this.lastStressFrustumFallbackOk && "none".equals(error)) {
+                    error = "first-frustum-fallback-failed";
                 }
 
                 this.lastStressCommandCount = this.commandList.commandCount();
@@ -313,6 +343,16 @@ final class ForgeMdicCommandManager {
                         && thirdAudit.success()
                         && thirdAudit.faceMaskAuditOk()
                         && thirdAudit.invalidFaceMaskCommands() == 0;
+                this.lastStressVisibilityPlanOk = this.lastStressVisibilityPlanOk
+                        && thirdPlan.success()
+                        && visibilityPlanOk(this.commandList);
+                this.lastStressSelectionAuditOk = this.lastStressSelectionAuditOk
+                        && thirdAudit.success()
+                        && thirdAudit.selectionAuditOk()
+                        && thirdAudit.invalidSelectionCommands() == 0
+                        && thirdAudit.invalidRadiusCommands() == 0
+                        && thirdAudit.invalidFrustumCommands() == 0;
+                this.lastStressFrustumFallbackOk = this.lastStressFrustumFallbackOk && frustumFallbackOk(this.commandList);
                 if (!thirdRebuildOk && "none".equals(error)) {
                     error = "post-heap-rebuild=" + (thirdPlan.success() ? this.lastError : thirdPlan.error());
                 } else if (!thirdAuditOk && "none".equals(error)) {
@@ -325,6 +365,12 @@ final class ForgeMdicCommandManager {
                     error = "post-heap-directional-face-mask-plan-failed";
                 } else if (!this.lastStressFaceMaskAuditOk && "none".equals(error)) {
                     error = "post-heap-face-mask-audit-failed";
+                } else if (!this.lastStressVisibilityPlanOk && "none".equals(error)) {
+                    error = "post-heap-visibility-plan-failed";
+                } else if (!this.lastStressSelectionAuditOk && "none".equals(error)) {
+                    error = "post-heap-selection-audit-failed";
+                } else if (!this.lastStressFrustumFallbackOk && "none".equals(error)) {
+                    error = "post-heap-frustum-fallback-failed";
                 }
 
                 this.lastStressCommandCount = this.commandList.commandCount();
@@ -362,7 +408,10 @@ final class ForgeMdicCommandManager {
                 && this.lastStressBucketAwareOk
                 && this.lastStressBucketAuditOk
                 && this.lastStressDirectionalFaceMaskOk
-                && this.lastStressFaceMaskAuditOk;
+                && this.lastStressFaceMaskAuditOk
+                && this.lastStressVisibilityPlanOk
+                && this.lastStressSelectionAuditOk
+                && this.lastStressFrustumFallbackOk;
         this.lastStressDurationMs = elapsedMs(start);
         this.lastStressError = success ? "none" : error;
         if (!success) {
@@ -445,8 +494,26 @@ final class ForgeMdicCommandManager {
                 this.commandList.skippedEmptyBuckets(),
                 this.commandList.skippedBucketCommands(),
                 this.commandList.selectionMode(),
+                this.commandList.effectiveSelectionMode(),
+                this.commandList.selectionFallbackReason(),
+                this.commandList.frustumAvailable(),
+                this.commandList.frustumAgeMs(),
+                this.commandList.cameraPosition(),
+                this.commandList.cameraChunk(),
+                this.commandList.cameraSection(),
+                this.commandList.renderDistanceChunks(),
                 this.commandList.planCandidateSections(),
                 this.commandList.planAcceptedSections(),
+                this.commandList.rejectedByRadius(),
+                this.commandList.rejectedByFrustum(),
+                this.commandList.rejectedByBudget(),
+                this.commandList.rejectedByMissingMetadata(),
+                this.commandList.nearestAcceptedDistance(),
+                this.commandList.farthestAcceptedDistance(),
+                this.commandList.maxPlanCandidates(),
+                this.commandList.maxSections(),
+                this.commandList.maxCommands(),
+                this.commandList.maxRecords(),
                 this.commandList.dimensionId(),
                 this.commandList.heapGeneration(),
                 this.commandBuffer.isCreated(),
@@ -466,6 +533,10 @@ final class ForgeMdicCommandManager {
                         && this.lastInvalidBucketOffsetCommands == 0
                         && this.lastInvalidFaceMaskCommands == 0
                         && this.lastFaceMaskAuditOk
+                        && this.lastInvalidSelectionCommands == 0
+                        && this.lastInvalidRadiusCommands == 0
+                        && this.lastInvalidFrustumCommands == 0
+                        && this.lastSelectionAuditOk
                         && this.auditRuns > 0
                         && this.auditFailures == 0,
                 this.auditRuns,
@@ -486,6 +557,10 @@ final class ForgeMdicCommandManager {
                 this.lastInvalidGeometryPtrCommands,
                 this.lastInvalidFaceMaskCommands,
                 this.lastFaceMaskAuditOk,
+                this.lastSelectionAuditOk,
+                this.lastInvalidSelectionCommands,
+                this.lastInvalidRadiusCommands,
+                this.lastInvalidFrustumCommands,
                 this.lastAuditedCommands,
                 this.lastAuditedRecords,
                 this.lastAuditedBytes,
@@ -507,6 +582,9 @@ final class ForgeMdicCommandManager {
                 this.lastStressBucketAuditOk,
                 this.lastStressDirectionalFaceMaskOk,
                 this.lastStressFaceMaskAuditOk,
+                this.lastStressVisibilityPlanOk,
+                this.lastStressSelectionAuditOk,
+                this.lastStressFrustumFallbackOk,
                 this.lastStressCommandCount,
                 this.lastStressCommandRecords,
                 this.lastStressInvalidCommands
@@ -519,6 +597,30 @@ final class ForgeMdicCommandManager {
 
     ForgeMdicCommandBuffer commandBufferForDebugDraw() {
         return this.commandBuffer;
+    }
+
+    private static boolean visibilityPlanOk(ForgeMdicCommandList commandList) {
+        return commandList != null
+                && commandList.isValid()
+                && commandList.planCandidateSections() > 0
+                && commandList.planAcceptedSections() > 0
+                && commandList.commandCount() > 0
+                && !"none".equals(commandList.effectiveSelectionMode());
+    }
+
+    private static boolean frustumFallbackOk(ForgeMdicCommandList commandList) {
+        if (commandList == null || !commandList.isValid()) {
+            return false;
+        }
+        if (commandList.frustumAvailable()) {
+            return "FRUSTUM_RADIUS".equals(commandList.effectiveSelectionMode());
+        }
+        String reason = commandList.selectionFallbackReason();
+        if ("AUTO".equals(commandList.selectionMode()) || "FRUSTUM_RADIUS".equals(commandList.selectionMode())) {
+            return "RADIUS".equals(commandList.effectiveSelectionMode())
+                    && ("FRUSTUM_UNAVAILABLE".equals(reason) || "FRUSTUM_DISABLED".equals(reason));
+        }
+        return true;
     }
 
     private String staleReason(boolean heapCreated, long currentGeneration, String currentDimension, boolean commandListValid, boolean listStale, boolean bufferStale) {
@@ -568,6 +670,9 @@ final class ForgeMdicCommandManager {
         int invalidBucketOffset = 0;
         int invalidGeometryPtr = 0;
         int invalidFaceMask = 0;
+        int invalidSelection = 0;
+        int invalidRadius = 0;
+        int invalidFrustum = 0;
         long auditedRecords = 0L;
         int commandCount = this.commandList.commandCount();
         boolean layoutMatch = words.length == commandCount * ForgeMdicCommandLayout.WORDS_PER_COMMAND
@@ -643,6 +748,13 @@ final class ForgeMdicCommandManager {
                 invalidGeometryPtr++;
             }
         }
+        SelectionValidation selectionValidation = validateSelection(this.commandList);
+        if (!selectionValidation.success()) {
+            invalid++;
+            invalidSelection += selectionValidation.invalidSelectionCommands();
+            invalidRadius += selectionValidation.invalidRadiusCommands();
+            invalidFrustum += selectionValidation.invalidFrustumCommands();
+        }
         long bytes = (long) words.length * Integer.BYTES;
         if (auditedRecords != this.commandList.recordCount()) {
             invalid++;
@@ -652,9 +764,11 @@ final class ForgeMdicCommandManager {
                 && layoutMatch
                 && generationMatch
                 && dimensionMatch
+                && selectionValidation.success()
                 && bytes == this.commandBuffer.bytes()
                 && auditedRecords == this.commandList.recordCount();
         boolean faceMaskAuditOk = !this.commandList.directionalFaceMask() || invalidFaceMask == 0;
+        boolean selectionAuditOk = selectionValidation.success();
         return new ForgeMdicCommandAuditResult(
                 match,
                 match ? "none" : "command-buffer-mismatch",
@@ -673,6 +787,10 @@ final class ForgeMdicCommandManager {
                 invalidGeometryPtr,
                 invalidFaceMask,
                 faceMaskAuditOk,
+                selectionAuditOk,
+                invalidSelection,
+                invalidRadius,
+                invalidFrustum,
                 commandCount,
                 auditedRecords,
                 bytes,
@@ -715,6 +833,28 @@ final class ForgeMdicCommandManager {
         return command.isFaceMaskAccepted() ? FaceMaskValidation.ok() : new FaceMaskValidation(1);
     }
 
+    private static SelectionValidation validateSelection(ForgeMdicCommandList commandList) {
+        if (commandList == null || !commandList.isValid()) {
+            return new SelectionValidation(1, 0, 0);
+        }
+        int invalidSelection = 0;
+        int invalidRadius = 0;
+        int invalidFrustum = 0;
+        if (commandList.planAcceptedSections() <= 0 || commandList.commandCount() <= 0) {
+            invalidSelection += Math.max(1, commandList.commandCount());
+        }
+        String effectiveMode = commandList.effectiveSelectionMode();
+        if (("RADIUS".equals(effectiveMode) || "FRUSTUM_RADIUS".equals(effectiveMode))
+                && commandList.renderDistanceChunks() > 0
+                && commandList.farthestAcceptedDistance() > commandList.renderDistanceChunks() + 0.001D) {
+            invalidRadius += Math.max(1, commandList.commandCount());
+        }
+        if ("FRUSTUM_RADIUS".equals(effectiveMode) && !commandList.frustumAvailable()) {
+            invalidFrustum += Math.max(1, commandList.commandCount());
+        }
+        return new SelectionValidation(invalidSelection, invalidRadius, invalidFrustum);
+    }
+
     private static boolean bucketAllowedByConfig(int bucket) {
         if (bucket == 0) {
             return ForgeMdicCommandConfig.includeTranslucent();
@@ -742,6 +882,10 @@ final class ForgeMdicCommandManager {
         this.lastInvalidGeometryPtrCommands = result.invalidGeometryPtrCommands();
         this.lastInvalidFaceMaskCommands = result.invalidFaceMaskCommands();
         this.lastFaceMaskAuditOk = result.faceMaskAuditOk();
+        this.lastSelectionAuditOk = result.selectionAuditOk();
+        this.lastInvalidSelectionCommands = result.invalidSelectionCommands();
+        this.lastInvalidRadiusCommands = result.invalidRadiusCommands();
+        this.lastInvalidFrustumCommands = result.invalidFrustumCommands();
         this.lastAuditedCommands = result.auditedCommands();
         this.lastAuditedRecords = result.auditedRecords();
         this.lastAuditedBytes = result.auditedBytes();
@@ -781,6 +925,12 @@ final class ForgeMdicCommandManager {
 
         boolean success() {
             return this.invalidFaceMask == 0;
+        }
+    }
+
+    private record SelectionValidation(int invalidSelectionCommands, int invalidRadiusCommands, int invalidFrustumCommands) {
+        boolean success() {
+            return this.invalidSelectionCommands == 0 && this.invalidRadiusCommands == 0 && this.invalidFrustumCommands == 0;
         }
     }
 }

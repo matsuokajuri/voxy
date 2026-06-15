@@ -44,6 +44,26 @@ final class ForgeMdicCommandConfig {
         return ForgeVoxyRuntimeOverrides.mdicCommandDirectionalFaceMaskDebugLog();
     }
 
+    static ForgeMdicCommandSelectionMode selectionMode() {
+        return ForgeVoxyRuntimeOverrides.mdicCommandSelectionMode();
+    }
+
+    static int renderDistanceChunks() {
+        return ForgeVoxyRuntimeOverrides.mdicCommandRenderDistanceChunks();
+    }
+
+    static int maxPlanCandidates() {
+        return ForgeVoxyRuntimeOverrides.mdicCommandMaxPlanCandidates();
+    }
+
+    static boolean useFrustum() {
+        return ForgeVoxyRuntimeOverrides.mdicCommandUseFrustum();
+    }
+
+    static boolean frustumFallbackToRadius() {
+        return ForgeVoxyRuntimeOverrides.mdicCommandFrustumFallbackToRadius();
+    }
+
     static int maxCommands() {
         return ForgeVoxyRuntimeOverrides.mdicCommandMaxCommands();
     }

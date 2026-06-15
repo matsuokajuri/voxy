@@ -18,6 +18,10 @@ record ForgeMdicCommandAuditResult(
         int invalidGeometryPtrCommands,
         int invalidFaceMaskCommands,
         boolean faceMaskAuditOk,
+        boolean selectionAuditOk,
+        int invalidSelectionCommands,
+        int invalidRadiusCommands,
+        int invalidFrustumCommands,
         int auditedCommands,
         long auditedRecords,
         long auditedBytes,
@@ -25,6 +29,6 @@ record ForgeMdicCommandAuditResult(
         String dimensionId
 ) {
     static ForgeMdicCommandAuditResult failure(String error, double durationMs) {
-        return new ForgeMdicCommandAuditResult(false, error == null ? "unknown" : error, durationMs, false, false, false, false, 0, 0, 0, 0, 0, 0, 0, 0, 0, false, 0, 0L, 0L, -1L, "none");
+        return new ForgeMdicCommandAuditResult(false, error == null ? "unknown" : error, durationMs, false, false, false, false, 0, 0, 0, 0, 0, 0, 0, 0, 0, false, false, 0, 0, 0, 0, 0L, 0L, -1L, "none");
     }
 }

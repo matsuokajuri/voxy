@@ -30,6 +30,11 @@ public final class ForgeVoxyRuntimeOverrides {
     private static Boolean mdicCommandIncludeDirectional;
     private static Boolean mdicCommandDirectionalFaceMask;
     private static Boolean mdicCommandDirectionalFaceMaskFallbackAllWhenInside;
+    private static String mdicCommandSelectionMode;
+    private static Integer mdicCommandRenderDistanceChunks;
+    private static Integer mdicCommandMaxPlanCandidates;
+    private static Boolean mdicCommandUseFrustum;
+    private static Boolean mdicCommandFrustumFallbackToRadius;
     private static Integer mdicCommandMaxCommands;
     private static Integer mdicCommandMaxCommandsPerSection;
     private static Integer mdicDebugDrawMaxCommands;
@@ -103,18 +108,23 @@ public final class ForgeVoxyRuntimeOverrides {
         enableMdicCommandSkeleton = true;
         enableMdicDebugDraw = false;
         mdicDebugDrawActualDraw = false;
-        mdicCommandMaxSections = 16;
-        mdicCommandMaxRecords = 32768;
+        mdicCommandMaxSections = 32;
+        mdicCommandMaxRecords = 65536;
         mdicCommandBucketAware = true;
         mdicCommandIncludeTranslucent = false;
         mdicCommandIncludeDoubleSided = true;
         mdicCommandIncludeDirectional = true;
         mdicCommandDirectionalFaceMask = true;
         mdicCommandDirectionalFaceMaskFallbackAllWhenInside = true;
-        mdicCommandMaxCommands = 128;
+        mdicCommandSelectionMode = "AUTO";
+        mdicCommandRenderDistanceChunks = 16;
+        mdicCommandMaxPlanCandidates = 512;
+        mdicCommandUseFrustum = true;
+        mdicCommandFrustumFallbackToRadius = true;
+        mdicCommandMaxCommands = 256;
         mdicCommandMaxCommandsPerSection = 8;
-        mdicDebugDrawMaxCommands = 128;
-        mdicDebugDrawMaxRecords = 32768;
+        mdicDebugDrawMaxCommands = 256;
+        mdicDebugDrawMaxRecords = 65536;
         directGpuGeometryRendererActualDraw = false;
         enableSimpleGpuMeshRenderer = false;
         enableDebugMeshRenderer = false;
@@ -369,6 +379,11 @@ public final class ForgeVoxyRuntimeOverrides {
         mdicCommandIncludeDirectional = null;
         mdicCommandDirectionalFaceMask = null;
         mdicCommandDirectionalFaceMaskFallbackAllWhenInside = null;
+        mdicCommandSelectionMode = null;
+        mdicCommandRenderDistanceChunks = null;
+        mdicCommandMaxPlanCandidates = null;
+        mdicCommandUseFrustum = null;
+        mdicCommandFrustumFallbackToRadius = null;
         mdicCommandMaxCommands = null;
         mdicCommandMaxCommandsPerSection = null;
         mdicDebugDrawMaxCommands = null;
@@ -557,6 +572,26 @@ public final class ForgeVoxyRuntimeOverrides {
         return ForgeVoxyConfig.MDIC_COMMAND_DIRECTIONAL_FACE_MASK_DEBUG_LOG.get();
     }
 
+    public static synchronized ForgeMdicCommandSelectionMode mdicCommandSelectionMode() {
+        return ForgeMdicCommandSelectionMode.parse(value(mdicCommandSelectionMode, ForgeVoxyConfig.MDIC_COMMAND_SELECTION_MODE.get()));
+    }
+
+    public static synchronized int mdicCommandRenderDistanceChunks() {
+        return Math.min(128, Math.max(1, value(mdicCommandRenderDistanceChunks, ForgeVoxyConfig.MDIC_COMMAND_RENDER_DISTANCE_CHUNKS.get())));
+    }
+
+    public static synchronized int mdicCommandMaxPlanCandidates() {
+        return Math.min(4096, Math.max(1, value(mdicCommandMaxPlanCandidates, ForgeVoxyConfig.MDIC_COMMAND_MAX_PLAN_CANDIDATES.get())));
+    }
+
+    public static synchronized boolean mdicCommandUseFrustum() {
+        return value(mdicCommandUseFrustum, ForgeVoxyConfig.MDIC_COMMAND_USE_FRUSTUM.get());
+    }
+
+    public static synchronized boolean mdicCommandFrustumFallbackToRadius() {
+        return value(mdicCommandFrustumFallbackToRadius, ForgeVoxyConfig.MDIC_COMMAND_FRUSTUM_FALLBACK_TO_RADIUS.get());
+    }
+
     public static synchronized int mdicCommandMaxCommands() {
         return Math.min(512, Math.max(1, value(mdicCommandMaxCommands, ForgeVoxyConfig.MDIC_COMMAND_MAX_COMMANDS.get())));
     }
@@ -716,6 +751,11 @@ public final class ForgeVoxyRuntimeOverrides {
                 || mdicCommandIncludeDirectional != null
                 || mdicCommandDirectionalFaceMask != null
                 || mdicCommandDirectionalFaceMaskFallbackAllWhenInside != null
+                || mdicCommandSelectionMode != null
+                || mdicCommandRenderDistanceChunks != null
+                || mdicCommandMaxPlanCandidates != null
+                || mdicCommandUseFrustum != null
+                || mdicCommandFrustumFallbackToRadius != null
                 || mdicCommandMaxCommands != null
                 || mdicCommandMaxCommandsPerSection != null
                 || mdicDebugDrawMaxCommands != null
