@@ -860,3 +860,151 @@ formalModelBridgeReady=false
 - Model colour / biome tint sample hardening.
 - G7.0 textured debug quad prototype once atlas ownership and formal shader
   inputs are explicitly ready.
+
+## G6.14 minimal atlas ownership skeleton, no upload
+
+G6.14 adds a no-draw atlas ownership skeleton for the Voxy-style model atlas.
+It records the address contract that original Voxy uses, but still does not
+copy pixels from Minecraft's atlas and does not create a textured renderer path.
+
+### Original Voxy atlas ownership
+
+The relevant original classes are:
+
+```text
+ModelFactory.MODEL_TEXTURE_SIZE
+ModelFactory.ModelBakeResultUpload.upload(...)
+ModelFactory.MipGen.putTextures(...)
+RenderResourceReuse.getOrCreateModelStoreTextureAtlas()
+ModelStore
+bindings.glsl
+quads.frag
+quad_util.glsl
+```
+
+The confirmed ownership shape is:
+
+```text
+MODEL_TEXTURE_SIZE = 16
+facesPerModelX = 3
+facesPerModelY = 2
+modelGridWidth = 256
+modelGridHeight = 256
+atlasWidth = 16 * 3 * 256 = 12288
+atlasHeight = 16 * 2 * 256 = 8192
+format = GL_RGBA8
+```
+
+`RenderResourceReuse.getOrCreateModelStoreTextureAtlas()` owns the shared atlas
+texture object in original Voxy. `ModelStore` owns the atlas reference plus the
+block sampler. The sampler is configured for nearest magnification and
+nearest-mipmap-linear minification, with max LOD derived from Minecraft's
+`textures/atlas/blocks.png`.
+
+### Address mapping
+
+Original `ModelBakeResultUpload.upload(...)` places each model in a 3x2 face
+tile region:
+
+```text
+modelTileX = modelId & 0xFF
+modelTileY = (modelId >> 8) & 0xFF
+baseX = modelTileX * MODEL_TEXTURE_SIZE * 3
+baseY = modelTileY * MODEL_TEXTURE_SIZE * 2
+```
+
+`MipGen.putTextures(...)` writes six faces with this tile offset pattern:
+
+```text
+faceTileX = baseX + ((faceIndex >> 1) * MODEL_TEXTURE_SIZE)
+faceTileY = baseY + ((faceIndex & 1) * MODEL_TEXTURE_SIZE)
+```
+
+That confirms the current skeleton can mark `faceTileOrderKnown=true` for the
+six raw face slots. It still does not prove every Forge-side face direction has
+the same final semantic ordering as a complete Voxy `ModelFactory` port.
+
+### Forge skeleton
+
+G6.14 adds:
+
+```text
+ForgeModelAtlasLayout
+ForgeModelAtlasSkeleton
+ForgeModelAtlasStats
+ForgeModelAtlasAuditResult
+```
+
+and commands:
+
+```text
+/voxy model_atlas_skeleton_build
+/voxy model_atlas_skeleton_status
+/voxy model_atlas_skeleton_audit
+/voxy model_atlas_skeleton_audit_status
+/voxy model_atlas_skeleton_dump_sample
+/voxy model_atlas_skeleton_clear
+```
+
+The skeleton consumes the G6.13 real-ish model sample if one exists, computes
+the Voxy atlas base coordinate and six face tile coordinates, then exposes them
+through status and audit. By default it does not create an OpenGL texture object
+or sampler. This is intentional: the goal is ownership/readiness and addressing
+validation, not pixel upload.
+
+Expected status remains:
+
+```text
+atlasSkeletonReady=true
+atlasLayoutReady=true
+atlasOwnershipReady=true
+atlasTextureObjectCreated=false
+atlasSamplerReady=false
+atlasPixelsUploaded=false
+realTextureDataReady=false
+customAtlasUploadReady=false
+formalTextureAtlasReady=false
+formalModelBridgeReady=false
+```
+
+`model_bridge_status` and `model_store_real_sample_status` include this atlas
+suffix so the readiness chain is visible without implying that a formal atlas
+exists.
+
+### Reload lifecycle
+
+The command-driven reload simulation now invalidates the atlas skeleton:
+
+```text
+/voxy model_bridge_simulate_resource_reload
+ -> atlasSkeletonStale=true
+ -> lastReloadInvalidatedAtlasSkeleton=true
+```
+
+It still does not clear GL geometry heap, MDIC command buffers, simple renderer
+state, or CPU section geometry managers.
+
+### Why no pixel upload and no textured draw
+
+Minecraft's block atlas is readable through the G6.12 baked-model bridge, and
+G6.13 can encode one real-ish 64-byte model record. That is still not enough to
+declare a formal Voxy atlas ready. A formal atlas needs controlled pixel
+ownership, mip upload, resource-reload invalidation, modelData/modelColour
+binding, and a shader that consumes the original contract.
+
+G6.14 therefore keeps:
+
+```text
+atlasPixelsUploaded=false
+formalTextureAtlasReady=false
+formalTexturedShaderReady=false
+formalModelBridgeReady=false
+```
+
+### G6.15 candidates
+
+- Atlas pixel upload audit for one solid block, still no draw.
+- Real ModelStore CPU records for multiple solid blocks.
+- Model colour / biome tint hardening.
+- G7.0 tiny textured debug quad prototype after atlas pixel ownership and
+  shader inputs are both explicit.

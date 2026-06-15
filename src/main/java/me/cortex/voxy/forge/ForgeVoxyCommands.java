@@ -273,6 +273,18 @@ public final class ForgeVoxyCommands {
                         .executes(ctx -> modelStoreRealSampleDump(ctx.getSource())))
                 .then(Commands.literal("model_store_real_sample_clear")
                         .executes(ctx -> modelStoreRealSampleClear(ctx.getSource())))
+                .then(Commands.literal("model_atlas_skeleton_build")
+                        .executes(ctx -> modelAtlasSkeletonBuild(ctx.getSource())))
+                .then(Commands.literal("model_atlas_skeleton_status")
+                        .executes(ctx -> modelAtlasSkeletonStatus(ctx.getSource())))
+                .then(Commands.literal("model_atlas_skeleton_audit")
+                        .executes(ctx -> modelAtlasSkeletonAudit(ctx.getSource())))
+                .then(Commands.literal("model_atlas_skeleton_audit_status")
+                        .executes(ctx -> modelAtlasSkeletonAuditStatus(ctx.getSource())))
+                .then(Commands.literal("model_atlas_skeleton_dump_sample")
+                        .executes(ctx -> modelAtlasSkeletonDumpSample(ctx.getSource())))
+                .then(Commands.literal("model_atlas_skeleton_clear")
+                        .executes(ctx -> modelAtlasSkeletonClear(ctx.getSource())))
                 .then(Commands.literal("mesh_cache_status")
                         .executes(ctx -> meshCacheStatus(ctx.getSource())))
                 .then(Commands.literal("mesh_cache_clear")
@@ -771,7 +783,7 @@ public final class ForgeVoxyCommands {
         String message = "Voxy: cleared CPU-only BuiltSection cache, closed all partial geometry buffers, and cleared auto BuiltSection build records."
                 + " CPU-only section geometry manager state and upload-only GL geometry heap were also cleared because they are derived from BuiltSection cache."
                 + (clearedGpuBuffers ? " Current source is BUILT_SECTION, so simple GPU buffers were also cleared to avoid orphan renders." : " Simple GPU buffers were left intact because the active source is not BUILT_SECTION.");
-        message = message + modelStoreFormalLayoutStatusSuffix() + bakedModelBridgeStatusSuffix() + realModelStoreSampleStatusSuffix() + modelBridgeResourceReloadStatusSuffix();
+        message = message + modelStoreFormalLayoutStatusSuffix() + bakedModelBridgeStatusSuffix() + realModelStoreSampleStatusSuffix() + modelAtlasSkeletonStatusSuffix() + modelBridgeResourceReloadStatusSuffix();
         String displayMessage = message;
         source.sendSuccess(() -> Component.literal(displayMessage), false);
         return 1;
@@ -3077,7 +3089,7 @@ public final class ForgeVoxyCommands {
                 status.sampleHasTextureMetadata(),
                 status.sampleNote()
         );
-        message = message + modelStoreFormalLayoutStatusSuffix() + bakedModelBridgeStatusSuffix() + realModelStoreSampleStatusSuffix() + modelBridgeResourceReloadStatusSuffix();
+        message = message + modelStoreFormalLayoutStatusSuffix() + bakedModelBridgeStatusSuffix() + realModelStoreSampleStatusSuffix() + modelAtlasSkeletonStatusSuffix() + modelBridgeResourceReloadStatusSuffix();
         String displayMessage = message;
         source.sendSuccess(() -> Component.literal(displayMessage), false);
         return result.success() ? 1 : 0;
@@ -3124,7 +3136,7 @@ public final class ForgeVoxyCommands {
                 status.sampleNote(),
                 status.placeholderModelStoreReady()
         );
-        message = message + modelStoreFormalLayoutStatusSuffix() + bakedModelBridgeStatusSuffix() + realModelStoreSampleStatusSuffix() + modelBridgeResourceReloadStatusSuffix();
+        message = message + modelStoreFormalLayoutStatusSuffix() + bakedModelBridgeStatusSuffix() + realModelStoreSampleStatusSuffix() + modelAtlasSkeletonStatusSuffix() + modelBridgeResourceReloadStatusSuffix();
         String displayMessage = message;
         source.sendSuccess(() -> Component.literal(displayMessage), false);
         return status.checkRuns() > 0 ? 1 : 0;
@@ -3134,7 +3146,8 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getModelBridgeReadiness().clear();
         ForgeVoxyInstance.INSTANCE.getBakedModelBridge().clear();
         ForgeVoxyInstance.INSTANCE.getRealModelStoreSample().clear();
-        source.sendSuccess(() -> Component.literal("Voxy model bridge readiness: cleared no-draw readiness stats, base model sample state, baked model bridge samples, and real ModelStore record sample buffers. Placeholder mapper entries, BuiltSection cache, upload-only GL heap, MDIC debug renderer, simple renderer, and CPU caches were left unchanged."), false);
+        ForgeVoxyInstance.INSTANCE.getModelAtlasSkeleton().clear();
+        source.sendSuccess(() -> Component.literal("Voxy model bridge readiness: cleared no-draw readiness stats, base model sample state, baked model bridge samples, real ModelStore record sample buffers, and atlas ownership skeleton state. Placeholder mapper entries, BuiltSection cache, upload-only GL heap, MDIC debug renderer, simple renderer, and CPU caches were left unchanged."), false);
         return 1;
     }
 
@@ -3164,7 +3177,7 @@ public final class ForgeVoxyCommands {
                 status.lastBuildDurationMs(),
                 status.lastBuildError()
         );
-        message = message + realModelStoreSampleStatusSuffix();
+        message = message + realModelStoreSampleStatusSuffix() + modelAtlasSkeletonStatusSuffix();
         String displayMessage = message;
         source.sendSuccess(() -> Component.literal(displayMessage), false);
         return status.placeholderModelStoreReady() ? 1 : 0;
@@ -3219,7 +3232,7 @@ public final class ForgeVoxyCommands {
                 status.auditRuns(),
                 status.auditFailures()
         );
-        message = message + realModelStoreSampleStatusSuffix();
+        message = message + realModelStoreSampleStatusSuffix() + modelAtlasSkeletonStatusSuffix();
         String displayMessage = message;
         source.sendSuccess(() -> Component.literal(displayMessage), false);
         return status.placeholderModelStoreReady() ? 1 : 0;
@@ -3446,13 +3459,13 @@ public final class ForgeVoxyCommands {
 
     private static int modelStoreRealSampleBuild(CommandSourceStack source) {
         ForgeRealModelStoreSampleStats status = ForgeVoxyInstance.INSTANCE.getRealModelStoreSample().build();
-        source.sendSuccess(() -> Component.literal("Voxy real ModelStore sample build: " + formatRealModelStoreSampleStatus(status)), false);
+        source.sendSuccess(() -> Component.literal("Voxy real ModelStore sample build: " + formatRealModelStoreSampleStatus(status) + modelAtlasSkeletonStatusSuffix()), false);
         return status.realModelRecordSampleReady() ? 1 : 0;
     }
 
     private static int modelStoreRealSampleStatus(CommandSourceStack source) {
         ForgeRealModelStoreSampleStats status = ForgeVoxyInstance.INSTANCE.getRealModelStoreSample().createStatusSnapshot();
-        source.sendSuccess(() -> Component.literal("Voxy real ModelStore sample status: " + formatRealModelStoreSampleStatus(status)), false);
+        source.sendSuccess(() -> Component.literal("Voxy real ModelStore sample status: " + formatRealModelStoreSampleStatus(status) + modelAtlasSkeletonStatusSuffix()), false);
         return status.buildRuns() > 0L || status.realModelRecordSampleStale() ? 1 : 0;
     }
 
@@ -3515,7 +3528,73 @@ public final class ForgeVoxyCommands {
 
     private static int modelStoreRealSampleClear(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getRealModelStoreSample().clear();
-        source.sendSuccess(() -> Component.literal("Voxy real ModelStore sample: cleared CPU real-ish record sample, no-draw modelData/modelColour sample buffers, and audit state. Placeholder ModelStore buffers, baked model bridge samples, texture atlas, GL geometry heap, MDIC debug renderer, simple renderer, and CPU caches were left unchanged."), false);
+        ForgeVoxyInstance.INSTANCE.getModelAtlasSkeleton().markStale("real-model-sample-clear");
+        source.sendSuccess(() -> Component.literal("Voxy real ModelStore sample: cleared CPU real-ish record sample, no-draw modelData/modelColour sample buffers, and audit state. The no-draw atlas skeleton was marked stale because its sample coordinates derive from the real sample. Placeholder ModelStore buffers, baked model bridge samples, GL geometry heap, MDIC debug renderer, simple renderer, and CPU caches were left unchanged."), false);
+        return 1;
+    }
+
+    private static int modelAtlasSkeletonBuild(CommandSourceStack source) {
+        ForgeModelAtlasStats status = ForgeVoxyInstance.INSTANCE.getModelAtlasSkeleton().build();
+        source.sendSuccess(() -> Component.literal("Voxy model atlas skeleton build: " + formatModelAtlasSkeletonStatus(status)), false);
+        return status.atlasSkeletonReady() ? 1 : 0;
+    }
+
+    private static int modelAtlasSkeletonStatus(CommandSourceStack source) {
+        ForgeModelAtlasStats status = ForgeVoxyInstance.INSTANCE.getModelAtlasSkeleton().createStatusSnapshot();
+        source.sendSuccess(() -> Component.literal("Voxy model atlas skeleton status: " + formatModelAtlasSkeletonStatus(status)), false);
+        return status.atlasSkeletonReady() || status.atlasSkeletonStale() ? 1 : 0;
+    }
+
+    private static int modelAtlasSkeletonAudit(CommandSourceStack source) {
+        ForgeModelAtlasAuditResult result = ForgeVoxyInstance.INSTANCE.getModelAtlasSkeleton().audit();
+        ForgeModelAtlasStats status = ForgeVoxyInstance.INSTANCE.getModelAtlasSkeleton().createStatusSnapshot();
+        String message = String.format(
+                "Voxy model atlas skeleton audit: success=%s error=%s durationMs=%.2f auditRuns=%d auditFailures=%d invalidLayout=%d invalidModelCoordinate=%d invalidFaceTileCoordinate=%d sampleModelId=%d voxyAtlasBaseX=%d voxyAtlasBaseY=%d atlasPixelsUploaded=false realTextureDataReady=false customAtlasUploadReady=false formalTextureAtlasReady=false formalModelBridgeReady=false draw=false",
+                result.success(),
+                result.error(),
+                result.durationMs(),
+                status.auditRuns(),
+                status.auditFailures(),
+                result.invalidLayout(),
+                result.invalidModelCoordinate(),
+                result.invalidFaceTileCoordinate(),
+                status.sampleModelId(),
+                status.voxyAtlasBaseX(),
+                status.voxyAtlasBaseY()
+        );
+        source.sendSuccess(() -> Component.literal(message), false);
+        return result.success() ? 1 : 0;
+    }
+
+    private static int modelAtlasSkeletonAuditStatus(CommandSourceStack source) {
+        ForgeModelAtlasStats status = ForgeVoxyInstance.INSTANCE.getModelAtlasSkeleton().createStatusSnapshot();
+        String message = String.format(
+                "Voxy model atlas skeleton audit: auditRuns=%d auditFailures=%d lastAuditOk=%s lastAuditError=%s lastAuditDurationMs=%.2f invalidLayout=%d invalidModelCoordinate=%d invalidFaceTileCoordinate=%d atlasSkeletonReady=%s atlasLayoutReady=%s atlasOwnershipReady=%s atlasPixelsUploaded=false formalTextureAtlasReady=false formalModelBridgeReady=false",
+                status.auditRuns(),
+                status.auditFailures(),
+                status.lastAuditOk(),
+                status.lastAuditError(),
+                status.lastAuditDurationMs(),
+                status.invalidLayout(),
+                status.invalidModelCoordinate(),
+                status.invalidFaceTileCoordinate(),
+                status.atlasSkeletonReady(),
+                status.atlasLayoutReady(),
+                status.atlasOwnershipReady()
+        );
+        source.sendSuccess(() -> Component.literal(message), false);
+        return status.lastAuditOk() ? 1 : 0;
+    }
+
+    private static int modelAtlasSkeletonDumpSample(CommandSourceStack source) {
+        String message = ForgeVoxyInstance.INSTANCE.getModelAtlasSkeleton().dumpSample();
+        source.sendSuccess(() -> Component.literal(message), false);
+        return ForgeVoxyInstance.INSTANCE.getModelAtlasSkeleton().createStatusSnapshot().sampleModelId() >= 0 ? 1 : 0;
+    }
+
+    private static int modelAtlasSkeletonClear(CommandSourceStack source) {
+        ForgeVoxyInstance.INSTANCE.getModelAtlasSkeleton().clear();
+        source.sendSuccess(() -> Component.literal("Voxy model atlas skeleton: cleared no-draw atlas layout ownership, sample coordinate state, and audit state. No real texture pixels were uploaded or deleted. GL geometry heap, MDIC debug renderer, simple renderer, and CPU caches were left unchanged."), false);
         return 1;
     }
 
@@ -3549,8 +3628,66 @@ public final class ForgeVoxyCommands {
         return " " + formatRealModelStoreSampleStatus(ForgeVoxyInstance.INSTANCE.getRealModelStoreSample().createStatusSnapshot());
     }
 
+    private static String modelAtlasSkeletonStatusSuffix() {
+        return " " + formatModelAtlasSkeletonStatus(ForgeVoxyInstance.INSTANCE.getModelAtlasSkeleton().createStatusSnapshot());
+    }
+
     private static String modelBridgeResourceReloadStatusSuffix() {
         return " " + formatModelBridgeResourceReloadStatus(ForgeVoxyInstance.INSTANCE.getModelBridgeResourceReloadTracker().createStatusSnapshot());
+    }
+
+    private static String formatModelAtlasSkeletonStatus(ForgeModelAtlasStats status) {
+        return String.format(
+                "atlasStage=%s buildRuns=%d clearRuns=%d auditRuns=%d auditFailures=%d lastBuildError=%s lastBuildDurationMs=%.2f atlasSkeletonReady=%s atlasLayoutReady=%s atlasOwnershipReady=%s atlasTextureObjectCreated=%s atlasSamplerReady=%s atlasTextureObjectId=%d atlasSamplerId=%d modelTextureSize=%d modelGridWidth=%d modelGridHeight=%d atlasWidth=%d atlasHeight=%d facesPerModelX=%d facesPerModelY=%d faceTileOrderKnown=%s atlasPixelsUploaded=%s realTextureDataReady=%s customAtlasUploadReady=%s formalTextureAtlasReady=%s formalModelBridgeReady=%s atlasSkeletonStale=%s lastReloadInvalidatedAtlasSkeleton=%s layoutVersion=%s lastAuditOk=%s lastAuditError=%s lastAuditDurationMs=%.2f invalidLayout=%d invalidModelCoordinate=%d invalidFaceTileCoordinate=%d sampleModelId=%d sourceBlockState=\"%s\" sourceSprite=%s minecraftSpriteAtlas=%s voxyAtlasBaseX=%d voxyAtlasBaseY=%d face0Tile=%s face1Tile=%s face2Tile=%s face3Tile=%s face4Tile=%s face5Tile=%s draw=false atlasUpload=false renderer=none",
+                status.stage(),
+                status.buildRuns(),
+                status.clearRuns(),
+                status.auditRuns(),
+                status.auditFailures(),
+                status.lastBuildError(),
+                status.lastBuildDurationMs(),
+                status.atlasSkeletonReady(),
+                status.atlasLayoutReady(),
+                status.atlasOwnershipReady(),
+                status.atlasTextureObjectCreated(),
+                status.atlasSamplerReady(),
+                status.atlasTextureObjectId(),
+                status.atlasSamplerId(),
+                status.modelTextureSize(),
+                status.modelGridWidth(),
+                status.modelGridHeight(),
+                status.atlasWidth(),
+                status.atlasHeight(),
+                status.facesPerModelX(),
+                status.facesPerModelY(),
+                status.faceTileOrderKnown(),
+                status.atlasPixelsUploaded(),
+                status.realTextureDataReady(),
+                status.customAtlasUploadReady(),
+                status.formalTextureAtlasReady(),
+                status.formalModelBridgeReady(),
+                status.atlasSkeletonStale(),
+                status.lastReloadInvalidatedAtlasSkeleton(),
+                status.layoutVersion(),
+                status.lastAuditOk(),
+                status.lastAuditError(),
+                status.lastAuditDurationMs(),
+                status.invalidLayout(),
+                status.invalidModelCoordinate(),
+                status.invalidFaceTileCoordinate(),
+                status.sampleModelId(),
+                status.sourceBlockState(),
+                status.sourceSprite(),
+                status.minecraftSpriteAtlas(),
+                status.voxyAtlasBaseX(),
+                status.voxyAtlasBaseY(),
+                status.face0Tile(),
+                status.face1Tile(),
+                status.face2Tile(),
+                status.face3Tile(),
+                status.face4Tile(),
+                status.face5Tile()
+        );
     }
 
     private static String formatRealModelStoreSampleStatus(ForgeRealModelStoreSampleStats status) {
@@ -3676,7 +3813,7 @@ public final class ForgeVoxyCommands {
 
     private static String formatModelBridgeResourceReloadStatus(ForgeModelBridgeResourceReloadStats status) {
         return String.format(
-                "reloadLifecycleSkeletonReady=%s resourceReloadReady=%s reloadEventsSeen=%d lastReloadSimulationRuns=%d lastReloadStartedAt=%s lastReloadFinishedAt=%s modelBridgeInvalidatedOnReload=%s placeholderBuffersInvalidatedOnReload=%s placeholderBuffersStale=%s realModelStoreStale=%s textureAtlasStale=%s formalShaderInputsStale=%s bakedModelSamplesStale=%s spriteSamplesStale=%s lastReloadInvalidatedBakedModelSamples=%s realModelRecordSampleStale=%s lastReloadInvalidatedRealModelRecordSample=%s lastReloadReason=%s formalModelBridgeReady=false realTextureAtlasUpload=false",
+                "reloadLifecycleSkeletonReady=%s resourceReloadReady=%s reloadEventsSeen=%d lastReloadSimulationRuns=%d lastReloadStartedAt=%s lastReloadFinishedAt=%s modelBridgeInvalidatedOnReload=%s placeholderBuffersInvalidatedOnReload=%s placeholderBuffersStale=%s realModelStoreStale=%s textureAtlasStale=%s formalShaderInputsStale=%s bakedModelSamplesStale=%s spriteSamplesStale=%s lastReloadInvalidatedBakedModelSamples=%s realModelRecordSampleStale=%s lastReloadInvalidatedRealModelRecordSample=%s atlasSkeletonStale=%s lastReloadInvalidatedAtlasSkeleton=%s lastReloadReason=%s formalModelBridgeReady=false realTextureAtlasUpload=false",
                 status.reloadLifecycleSkeletonReady(),
                 status.resourceReloadReady(),
                 status.reloadEventsSeen(),
@@ -3694,6 +3831,8 @@ public final class ForgeVoxyCommands {
                 status.lastReloadInvalidatedBakedModelSamples(),
                 status.realModelRecordSampleStale(),
                 status.lastReloadInvalidatedRealModelRecordSample(),
+                status.atlasSkeletonStale(),
+                status.lastReloadInvalidatedAtlasSkeleton(),
                 status.lastReloadReason()
         );
     }
@@ -4541,6 +4680,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getModelBridgeResourceReloadTracker().clear();
         ForgeVoxyInstance.INSTANCE.getBakedModelBridge().clear();
         ForgeVoxyInstance.INSTANCE.getRealModelStoreSample().clear();
+        ForgeVoxyInstance.INSTANCE.getModelAtlasSkeleton().clear();
         ForgeVoxyInstance.INSTANCE.getGpuMeshCache().clear();
     }
 
