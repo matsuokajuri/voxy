@@ -17,6 +17,8 @@ final class ForgeModelBridgeResourceReloadTracker {
     private boolean bakedModelSamplesStale;
     private boolean spriteSamplesStale;
     private boolean lastReloadInvalidatedBakedModelSamples;
+    private boolean realModelRecordSampleStale;
+    private boolean lastReloadInvalidatedRealModelRecordSample;
     private String lastReloadReason = "none";
 
     ForgeModelBridgeResourceReloadTracker(ForgeVoxyInstance instance) {
@@ -36,10 +38,13 @@ final class ForgeModelBridgeResourceReloadTracker {
         this.bakedModelSamplesStale = true;
         this.spriteSamplesStale = true;
         this.lastReloadInvalidatedBakedModelSamples = true;
+        this.realModelRecordSampleStale = true;
+        this.lastReloadInvalidatedRealModelRecordSample = true;
         this.lastReloadReason = reason == null || reason.isBlank() ? "command-simulated-resource-reload" : reason;
         this.instance.getModelBridgeReadiness().clear();
         this.instance.getModelStoreSkeleton().markStale("resource-reload-simulated");
         this.instance.getBakedModelBridge().markStale("resource-reload-simulated");
+        this.instance.getRealModelStoreSample().markStale("resource-reload-simulated");
         this.lastReloadFinishedAt = Instant.now().toString();
         return this.createStatusSnapshot();
     }
@@ -61,6 +66,8 @@ final class ForgeModelBridgeResourceReloadTracker {
                 this.bakedModelSamplesStale,
                 this.spriteSamplesStale,
                 this.lastReloadInvalidatedBakedModelSamples,
+                this.realModelRecordSampleStale,
+                this.lastReloadInvalidatedRealModelRecordSample,
                 this.lastReloadReason
         );
     }
@@ -79,6 +86,8 @@ final class ForgeModelBridgeResourceReloadTracker {
         this.bakedModelSamplesStale = false;
         this.spriteSamplesStale = false;
         this.lastReloadInvalidatedBakedModelSamples = false;
+        this.realModelRecordSampleStale = false;
+        this.lastReloadInvalidatedRealModelRecordSample = false;
         this.lastReloadReason = "none";
     }
 }

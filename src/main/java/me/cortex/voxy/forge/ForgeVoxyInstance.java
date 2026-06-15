@@ -40,6 +40,7 @@ public final class ForgeVoxyInstance {
     private final ForgeModelStoreLayoutAuditor modelStoreLayoutAuditor = new ForgeModelStoreLayoutAuditor();
     private final ForgeModelBridgeResourceReloadTracker modelBridgeResourceReloadTracker = new ForgeModelBridgeResourceReloadTracker(this);
     private final ForgeBakedModelBridge bakedModelBridge = new ForgeBakedModelBridge(this);
+    private final ForgeRealModelStoreSample realModelStoreSample = new ForgeRealModelStoreSample(this);
     private final AtomicInteger storageWriteCount = new AtomicInteger();
     private String activeClientDimension;
 
@@ -175,6 +176,10 @@ public final class ForgeVoxyInstance {
         return this.bakedModelBridge;
     }
 
+    public ForgeRealModelStoreSample getRealModelStoreSample() {
+        return this.realModelStoreSample;
+    }
+
     private void onRegisterClientCommands(RegisterClientCommandsEvent event) {
         ForgeVoxyCommands.register(event.getDispatcher());
     }
@@ -219,6 +224,7 @@ public final class ForgeVoxyInstance {
         this.modelStoreLayoutAuditor.clear();
         this.modelBridgeResourceReloadTracker.clear();
         this.bakedModelBridge.clear();
+        this.realModelStoreSample.clear();
         this.gpuMeshCache.setActiveDimension(dimension);
         this.closeActiveWorld();
         if (ForgeVoxyRuntimeOverrides.enabledWorldEngineSkeleton()) {
@@ -300,6 +306,7 @@ public final class ForgeVoxyInstance {
         this.modelStoreLayoutAuditor.clear();
         this.modelBridgeResourceReloadTracker.clear();
         this.bakedModelBridge.clear();
+        this.realModelStoreSample.clear();
         this.gpuMeshCache.clear();
         this.activeClientDimension = null;
         this.closeActiveWorld();

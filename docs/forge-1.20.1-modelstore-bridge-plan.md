@@ -713,3 +713,150 @@ formal flags therefore remain false.
   formal flags.
 - Real Forge resource reload event integration that invalidates model bridge
   samples, placeholder buffers, and future atlas ownership.
+
+## G6.13 minimal real-ish ModelStore record sample
+
+G6.13 adds a no-draw CPU record builder for one safe solid block. It is intended
+to prove that Forge baked-model metadata can be packed into a 64-byte
+ModelStore-style record that is uploadable and auditable, without claiming that
+the record is a complete original Voxy `ModelStore` record:
+
+```text
+solid BlockState sample
+ -> BakedModel directional BakedQuad samples
+ -> TextureAtlasSprite / baked UV sample
+ -> faceData[6] sample words
+ -> flagsA / colourTint / customId sample fields
+ -> no-draw modelData/modelColour sample buffers
+ -> readback audit
+```
+
+### Solid sample selection
+
+The builder prefers existing placeholder model-id mappings, then samples a
+nearby solid block below the spectator camera, and finally falls back to common
+vanilla solid states:
+
+```text
+minecraft:sand
+minecraft:stone
+minecraft:dirt
+```
+
+A candidate is accepted only if it is non-air, non-fluid, uses the Forge solid
+mesh layer, resolves to a non-custom `BakedModel`, and exposes at least one
+ordinary baked quad. Fluid-like samples remain handled by the G6.12 baked-model
+bridge and are not promoted into the G6.13 real-ish record.
+
+### Record layout
+
+`REAL_MODEL_RECORD_SAMPLE_V1` is fixed at 64 bytes, matching the original
+`MODEL_SIZE`, but it is deliberately not marked formal-compatible:
+
+```text
+word0..5  faceData[6] sample words
+word6     flagsA sample
+word7     colourTint sample or -1 no-tint marker
+word8     customId sample, currently 0
+word9     sample marker
+word10    source placeholder modelId
+word11    source blockStateId
+word12    source sprite-name hash
+word13    sampled face mask
+word14    tinted/untinted face counts
+word15    layout marker
+```
+
+Words 9..15 intentionally use the formal padding space for audit diagnostics.
+That makes the sample useful for readback validation, but also why
+`formalLayoutCompatible=false`.
+
+### faceData sample encoding
+
+For each directional face, the builder reads the first directional `BakedQuad`
+where available. It packs a partial original-style face word:
+
+```text
+bits 0..3    min U texel
+bits 4..7    max U texel
+bits 8..11   min V texel
+bits 12..15  max V texel
+bits 16..21  face indentation sample
+bits 24..25  tint state sample
+```
+
+UV bounds are derived from the baked vertex UVs relative to the sampled
+`TextureAtlasSprite` range. This proves the field path and readback logic, but
+it is still `faceDataEncoded=partial` because it does not run original Voxy's
+software texture bakery, alpha-discard analysis, darkened tint bake, or atlas
+tile upload.
+
+### modelColour sample
+
+For untinted blocks such as sand, the sample writes `colourTint=-1` and a
+matching no-tint modelColour marker. If a selected solid block has tinted faces,
+the builder makes a best-effort `BlockColors.getColor(...)` sample. Biome-aware
+modelColour LUT ownership remains missing, so `biomeTintReady=false`.
+
+### New commands
+
+G6.13 adds:
+
+```text
+/voxy model_store_real_sample_build
+/voxy model_store_real_sample_status
+/voxy model_store_real_sample_audit
+/voxy model_store_real_sample_audit_status
+/voxy model_store_real_sample_dump
+/voxy model_store_real_sample_clear
+```
+
+`model_bridge_status` and `model_store_skeleton_status` now include the real
+sample readiness suffix:
+
+```text
+realModelRecordSampleReady=true/false
+realModelRecordSampleBufferReady=true/false
+realModelRecordLayoutVersion=REAL_MODEL_RECORD_SAMPLE_V1
+faceDataEncoded=partial/none
+realTextureAtlasUploadReady=false
+formalTexturedShaderReady=false
+formalModelBridgeReady=false
+```
+
+### Reload lifecycle
+
+The command-driven resource reload simulation now invalidates the real sample:
+
+```text
+/voxy model_bridge_simulate_resource_reload
+ -> realModelRecordSampleStale=true
+ -> lastReloadInvalidatedRealModelRecordSample=true
+```
+
+The simulation still does not clear GL geometry heap, MDIC command buffers,
+MDIC debug renderer state, simple renderer state, or CPU section geometry
+managers.
+
+### Why still no atlas upload or textured draw
+
+G6.13 consumes Minecraft's existing baked-model and sprite metadata, but it does
+not own a Voxy atlas texture, does not repack the six face tiles into original
+Voxy's `3x2` per-model atlas tile layout, and does not bind modelData or
+modelColour buffers to a formal textured shader. The sample therefore narrows
+the CPU record-building gap while keeping:
+
+```text
+realTextureAtlasUploadReady=false
+formalTexturedShaderReady=false
+formalModelBridgeReady=false
+```
+
+### G6.14 candidates
+
+- Minimal atlas ownership skeleton with allocation/status only and no texture
+  upload.
+- Real ModelStore CPU record builder for multiple solid blocks.
+- Model colour / biome tint sample hardening.
+- G7.0 textured debug quad prototype once atlas ownership and formal shader
+  inputs are explicitly ready.
