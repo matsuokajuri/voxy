@@ -36,6 +36,7 @@ public final class ForgeVoxyInstance {
     private final ForgeMdicCommandManager mdicCommandManager = new ForgeMdicCommandManager(this);
     private final ForgeMdicDebugRenderer mdicDebugRenderer = new ForgeMdicDebugRenderer(this);
     private final ForgeModelBridgeReadiness modelBridgeReadiness = new ForgeModelBridgeReadiness(this);
+    private final ForgeModelStoreSkeleton modelStoreSkeleton = new ForgeModelStoreSkeleton(this);
     private final AtomicInteger storageWriteCount = new AtomicInteger();
     private String activeClientDimension;
 
@@ -155,6 +156,10 @@ public final class ForgeVoxyInstance {
         return this.modelBridgeReadiness;
     }
 
+    public ForgeModelStoreSkeleton getModelStoreSkeleton() {
+        return this.modelStoreSkeleton;
+    }
+
     private void onRegisterClientCommands(RegisterClientCommandsEvent event) {
         ForgeVoxyCommands.register(event.getDispatcher());
     }
@@ -195,6 +200,7 @@ public final class ForgeVoxyInstance {
         this.mdicCommandManager.clear();
         this.mdicDebugRenderer.clear();
         this.modelBridgeReadiness.clear();
+        this.modelStoreSkeleton.clear();
         this.gpuMeshCache.setActiveDimension(dimension);
         this.closeActiveWorld();
         if (ForgeVoxyRuntimeOverrides.enabledWorldEngineSkeleton()) {
@@ -272,6 +278,7 @@ public final class ForgeVoxyInstance {
         this.mdicCommandManager.clear();
         this.mdicDebugRenderer.clear();
         this.modelBridgeReadiness.clear();
+        this.modelStoreSkeleton.clear();
         this.gpuMeshCache.clear();
         this.activeClientDimension = null;
         this.closeActiveWorld();

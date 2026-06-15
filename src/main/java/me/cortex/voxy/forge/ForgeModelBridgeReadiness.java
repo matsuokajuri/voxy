@@ -31,7 +31,7 @@ final class ForgeModelBridgeReadiness {
     }
 
     ForgeModelBridgeReadinessStats createStatusSnapshot() {
-        return this.lastStats;
+        return this.withModelStoreStatus(this.lastStats);
     }
 
     String dumpSample() {
@@ -61,6 +61,7 @@ final class ForgeModelBridgeReadiness {
 
     private ForgeModelBridgeReadinessStats createStats(Sample sample, String error, double durationMs) {
         ForgeVoxyGeometryCache.StatusSnapshot cache = this.instance.getVoxyGeometryCache().createStatusSnapshot();
+        ForgeModelStoreStats modelStoreStatus = this.instance.getModelStoreSkeleton().createStatusSnapshot();
         ForgeVoxyModelIdMapper mapper = ForgeVoxyModelIdMapper.INSTANCE;
         int mapperSize = mapper.uniqueModelCount();
         boolean placeholderModelIdsPresent = mapperSize > 0 || cache.totalUniqueModelIds() > 0;
@@ -84,6 +85,9 @@ final class ForgeModelBridgeReadiness {
                 placeholderModelIdsPresent,
                 stablePlaceholderModelIds,
                 canMapModelIdToBlockState,
+                modelStoreStatus.placeholderModelStoreReady(),
+                modelStoreStatus.placeholderModelDataBufferReady(),
+                modelStoreStatus.placeholderModelColourBufferReady(),
                 false,
                 false,
                 false,
@@ -108,6 +112,47 @@ final class ForgeModelBridgeReadiness {
                 false,
                 false,
                 sampleNote
+        );
+    }
+
+    private ForgeModelBridgeReadinessStats withModelStoreStatus(ForgeModelBridgeReadinessStats stats) {
+        ForgeModelStoreStats modelStoreStatus = this.instance.getModelStoreSkeleton().createStatusSnapshot();
+        return new ForgeModelBridgeReadinessStats(
+                stats.stage(),
+                stats.checkRuns(),
+                stats.clearRuns(),
+                stats.lastCheckError(),
+                stats.lastCheckDurationMs(),
+                stats.placeholderModelIdsPresent(),
+                stats.stablePlaceholderModelIds(),
+                stats.canMapModelIdToBlockState(),
+                modelStoreStatus.placeholderModelStoreReady(),
+                modelStoreStatus.placeholderModelDataBufferReady(),
+                modelStoreStatus.placeholderModelColourBufferReady(),
+                false,
+                false,
+                false,
+                false,
+                false,
+                false,
+                false,
+                false,
+                false,
+                false,
+                false,
+                stats.placeholderModelIdCount(),
+                stats.builtSectionUniqueModelIds(),
+                stats.missingModelRecords(),
+                stats.currentDimension(),
+                stats.activeWorldEnginePresent(),
+                stats.blockStateIdSource(),
+                stats.sampleModelId(),
+                stats.sampleBlockStateId(),
+                stats.sampleBlockState(),
+                stats.sampleIsPlaceholder(),
+                stats.sampleHasRealModelMetadata(),
+                stats.sampleHasTextureMetadata(),
+                stats.sampleNote()
         );
     }
 

@@ -279,3 +279,118 @@ and shader variants.
 
 Only after model storage and reload ownership are understood, draw a tiny
 textured debug sample. This should still not be the formal MDIC renderer.
+
+## G6.10 placeholder ModelStore skeleton
+
+G6.10 adds a minimal no-draw placeholder ModelStore skeleton. Its purpose is to
+exercise the ownership, upload, readback, status, and clear lifecycle for future
+model buffers without claiming formal renderer compatibility.
+
+The new path is:
+
+```text
+ForgeVoxyModelIdMapper placeholder ids
+ -> placeholder model records
+ -> placeholder modelData GL buffer
+ -> placeholder modelColour GL buffer
+ -> readback audit
+```
+
+This is deliberately not the original `ModelStore`. The original model record is
+64 bytes and shader-visible as:
+
+```glsl
+struct BlockModel {
+    uint faceData[6];
+    uint flagsA;
+    uint colourTint;
+    uint customId;
+    uint _pad[7];
+};
+```
+
+The placeholder skeleton also uses 64 bytes per record so buffer sizing and
+readback costs resemble the original path. The layout is explicitly versioned as
+`PLACEHOLDER_MODEL_RECORD_V1` and reports `formalLayoutCompatible=false`.
+
+The placeholder record stores:
+
+```text
+word0 modelId
+word1 blockStateId
+word2 placeholder flags
+word3 debug colour
+word4 placeholder layout marker
+word5..15 reserved zero
+```
+
+The placeholder flags mark the missing formal inputs:
+
+```text
+placeholder
+missingTexture
+noAtlas
+noFaceData
+noRealModelMetadata
+```
+
+No real `faceData[6]` is synthesized. No UVs, material bits, tint metadata, or
+atlas coordinates are faked. The placeholder `modelColour` buffer stores one
+debug colour per placeholder record only; it is not the original biome colour
+buffer and still reports `realModelColourBufferReady=false`.
+
+The commands are:
+
+```text
+/voxy model_store_skeleton_build
+/voxy model_store_skeleton_status
+/voxy model_store_skeleton_audit
+/voxy model_store_skeleton_audit_status
+/voxy model_store_skeleton_dump_sample
+/voxy model_store_skeleton_clear
+```
+
+The build command uploads only placeholder `modelData` and placeholder
+`modelColour` buffers. It does not bind them to the MDIC debug renderer, does not
+change any shader, does not upload a texture atlas, and does not enable formal
+draw.
+
+`model_bridge_status` now separates placeholder readiness from real readiness:
+
+```text
+placeholderModelStoreReady=true/false
+placeholderModelDataBufferReady=true/false
+placeholderModelColourBufferReady=true/false
+
+realModelStoreReady=false
+realModelDataBufferReady=false
+realModelColourBufferReady=false
+textureAtlasReady=false
+formalShaderInputsReady=false
+formalModelBridgeReady=false
+```
+
+This distinction matters: a placeholder buffer proves lifecycle and audit
+plumbing, not textured terrain readiness.
+
+### Why no texture atlas in G6.10
+
+The original atlas is owned through `ModelStore` and `RenderResourceReuse`, with
+uploads from `ModelFactory.ModelBakeResultUpload`. That path also depends on
+resource reload ordering, sampler lifetime, model bake jobs, texture mip data,
+and shader binding ownership. G6.10 intentionally avoids all of that until the
+reload contract is designed.
+
+### Why no formal shader input in G6.10
+
+The G6 debug shader still uses model ids only as debug colour seed. Binding a
+placeholder buffer to the formal shader contract would be misleading because the
+buffer has no real `faceData`, atlas UVs, tint, or material information. The
+skeleton is therefore audit-only.
+
+### Next candidates after G6.10
+
+- G6.11 real ModelStore layout audit / field mapping.
+- G6.11 minimal atlas ownership skeleton, still no real upload.
+- G6.11 resource reload lifecycle skeleton for model buffers and atlas.
+- G7.0 tiny textured debug quad prototype after ownership and reload are clear.

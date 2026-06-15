@@ -227,6 +227,18 @@ public final class ForgeVoxyCommands {
                         .executes(ctx -> modelBridgeClear(ctx.getSource())))
                 .then(Commands.literal("model_bridge_dump_sample")
                         .executes(ctx -> modelBridgeDumpSample(ctx.getSource())))
+                .then(Commands.literal("model_store_skeleton_build")
+                        .executes(ctx -> modelStoreSkeletonBuild(ctx.getSource())))
+                .then(Commands.literal("model_store_skeleton_status")
+                        .executes(ctx -> modelStoreSkeletonStatus(ctx.getSource())))
+                .then(Commands.literal("model_store_skeleton_audit")
+                        .executes(ctx -> modelStoreSkeletonAudit(ctx.getSource())))
+                .then(Commands.literal("model_store_skeleton_audit_status")
+                        .executes(ctx -> modelStoreSkeletonAuditStatus(ctx.getSource())))
+                .then(Commands.literal("model_store_skeleton_dump_sample")
+                        .executes(ctx -> modelStoreSkeletonDumpSample(ctx.getSource())))
+                .then(Commands.literal("model_store_skeleton_clear")
+                        .executes(ctx -> modelStoreSkeletonClear(ctx.getSource())))
                 .then(Commands.literal("mesh_cache_status")
                         .executes(ctx -> meshCacheStatus(ctx.getSource())))
                 .then(Commands.literal("mesh_cache_clear")
@@ -2990,7 +3002,7 @@ public final class ForgeVoxyCommands {
         ForgeModelBridgeAuditResult result = ForgeVoxyInstance.INSTANCE.getModelBridgeReadiness().check();
         ForgeModelBridgeReadinessStats status = result.stats();
         String message = String.format(
-                "Voxy model bridge check: success=%s error=%s stage=%s checkRuns=%d durationMs=%.2f placeholderModelIdsPresent=%s stablePlaceholderModelIds=%s canMapModelIdToBlockState=%s realModelStoreReady=%s realModelFactoryReady=%s modelBakeryBridgeReady=%s textureAtlasReady=%s modelDataBufferReady=%s modelColourBufferReady=%s biomeTintReady=%s lightmapReady=%s resourceReloadReady=%s formalShaderInputsReady=%s formalModelBridgeReady=%s placeholderModelIdCount=%d builtSectionUniqueModelIds=%d missingModelRecords=%d currentDimension=%s activeWorldEnginePresent=%s blockStateIdSource=%s sampleModelId=%d sampleBlockStateId=%d sampleBlockState=\"%s\" sampleIsPlaceholder=%s sampleHasRealModelMetadata=%s sampleHasTextureMetadata=%s sampleNote=%s draw=false textureAtlasUpload=false formalRenderer=false",
+                "Voxy model bridge check: success=%s error=%s stage=%s checkRuns=%d durationMs=%.2f placeholderModelIdsPresent=%s stablePlaceholderModelIds=%s canMapModelIdToBlockState=%s placeholderModelStoreReady=%s placeholderModelDataBufferReady=%s placeholderModelColourBufferReady=%s realModelStoreReady=%s realModelFactoryReady=%s modelBakeryBridgeReady=%s textureAtlasReady=%s realModelDataBufferReady=%s realModelColourBufferReady=%s biomeTintReady=%s lightmapReady=%s resourceReloadReady=%s formalShaderInputsReady=%s formalModelBridgeReady=%s placeholderModelIdCount=%d builtSectionUniqueModelIds=%d missingModelRecords=%d currentDimension=%s activeWorldEnginePresent=%s blockStateIdSource=%s sampleModelId=%d sampleBlockStateId=%d sampleBlockState=\"%s\" sampleIsPlaceholder=%s sampleHasRealModelMetadata=%s sampleHasTextureMetadata=%s sampleNote=%s draw=false textureAtlasUpload=false formalRenderer=false",
                 result.success(),
                 result.error(),
                 status.stage(),
@@ -2999,12 +3011,15 @@ public final class ForgeVoxyCommands {
                 status.placeholderModelIdsPresent(),
                 status.stablePlaceholderModelIds(),
                 status.canMapModelIdToBlockState(),
+                status.placeholderModelStoreReady(),
+                status.placeholderModelDataBufferReady(),
+                status.placeholderModelColourBufferReady(),
                 status.realModelStoreReady(),
                 status.realModelFactoryReady(),
                 status.modelBakeryBridgeReady(),
                 status.textureAtlasReady(),
-                status.modelDataBufferReady(),
-                status.modelColourBufferReady(),
+                status.realModelDataBufferReady(),
+                status.realModelColourBufferReady(),
                 status.biomeTintReady(),
                 status.lightmapReady(),
                 status.resourceReloadReady(),
@@ -3031,7 +3046,7 @@ public final class ForgeVoxyCommands {
     private static int modelBridgeStatus(CommandSourceStack source) {
         ForgeModelBridgeReadinessStats status = ForgeVoxyInstance.INSTANCE.getModelBridgeReadiness().createStatusSnapshot();
         String message = String.format(
-                "Voxy model bridge status: stage=%s checkRuns=%d clearRuns=%d lastCheckError=%s lastCheckDurationMs=%.2f placeholderModelIdsPresent=%s stablePlaceholderModelIds=%s canMapModelIdToBlockState=%s realModelStoreReady=%s realModelFactoryReady=%s modelBakeryBridgeReady=%s textureAtlasReady=%s modelDataBufferReady=%s modelColourBufferReady=%s biomeTintReady=%s lightmapReady=%s resourceReloadReady=%s formalShaderInputsReady=%s formalModelBridgeReady=%s placeholderModelIdCount=%d builtSectionUniqueModelIds=%d missingModelRecords=%d currentDimension=%s activeWorldEnginePresent=%s blockStateIdSource=%s sampleModelId=%d sampleBlockStateId=%d sampleBlockState=\"%s\" sampleIsPlaceholder=%s sampleHasRealModelMetadata=%s sampleHasTextureMetadata=%s sampleNote=%s modelStoreBlocker=missing-real-ModelStore textureAtlasBlocker=no-atlas-upload formalShaderInputBlocker=debug-shader-only draw=false formalRenderer=false",
+                "Voxy model bridge status: stage=%s checkRuns=%d clearRuns=%d lastCheckError=%s lastCheckDurationMs=%.2f placeholderModelIdsPresent=%s stablePlaceholderModelIds=%s canMapModelIdToBlockState=%s placeholderModelStoreReady=%s placeholderModelDataBufferReady=%s placeholderModelColourBufferReady=%s realModelStoreReady=%s realModelFactoryReady=%s modelBakeryBridgeReady=%s textureAtlasReady=%s realModelDataBufferReady=%s realModelColourBufferReady=%s biomeTintReady=%s lightmapReady=%s resourceReloadReady=%s formalShaderInputsReady=%s formalModelBridgeReady=%s placeholderModelIdCount=%d builtSectionUniqueModelIds=%d missingModelRecords=%d currentDimension=%s activeWorldEnginePresent=%s blockStateIdSource=%s sampleModelId=%d sampleBlockStateId=%d sampleBlockState=\"%s\" sampleIsPlaceholder=%s sampleHasRealModelMetadata=%s sampleHasTextureMetadata=%s sampleNote=%s placeholderModelStoreIsNotRealModelStore=%s modelStoreBlocker=missing-real-ModelStore textureAtlasBlocker=no-atlas-upload formalShaderInputBlocker=debug-shader-only draw=false formalRenderer=false",
                 status.stage(),
                 status.checkRuns(),
                 status.clearRuns(),
@@ -3040,12 +3055,15 @@ public final class ForgeVoxyCommands {
                 status.placeholderModelIdsPresent(),
                 status.stablePlaceholderModelIds(),
                 status.canMapModelIdToBlockState(),
+                status.placeholderModelStoreReady(),
+                status.placeholderModelDataBufferReady(),
+                status.placeholderModelColourBufferReady(),
                 status.realModelStoreReady(),
                 status.realModelFactoryReady(),
                 status.modelBakeryBridgeReady(),
                 status.textureAtlasReady(),
-                status.modelDataBufferReady(),
-                status.modelColourBufferReady(),
+                status.realModelDataBufferReady(),
+                status.realModelColourBufferReady(),
                 status.biomeTintReady(),
                 status.lightmapReady(),
                 status.resourceReloadReady(),
@@ -3063,7 +3081,8 @@ public final class ForgeVoxyCommands {
                 status.sampleIsPlaceholder(),
                 status.sampleHasRealModelMetadata(),
                 status.sampleHasTextureMetadata(),
-                status.sampleNote()
+                status.sampleNote(),
+                status.placeholderModelStoreReady()
         );
         source.sendSuccess(() -> Component.literal(message), false);
         return status.checkRuns() > 0 ? 1 : 0;
@@ -3079,6 +3098,134 @@ public final class ForgeVoxyCommands {
         String message = ForgeVoxyInstance.INSTANCE.getModelBridgeReadiness().dumpSample();
         source.sendSuccess(() -> Component.literal(message), false);
         return ForgeVoxyInstance.INSTANCE.getModelBridgeReadiness().createStatusSnapshot().sampleModelId() >= 0 ? 1 : 0;
+    }
+
+    private static int modelStoreSkeletonBuild(CommandSourceStack source) {
+        ForgeModelStoreStats status = ForgeVoxyInstance.INSTANCE.getModelStoreSkeleton().build();
+        String message = String.format(
+                "Voxy placeholder ModelStore build: success=%s stage=%s layoutVersion=%s formalLayoutCompatible=%s placeholderModelStoreReady=%s placeholderModelRecords=%d placeholderModelRecordBytes=%d placeholderModelDataBufferCreated=%s placeholderModelDataBufferBytes=%d placeholderModelColourBufferCreated=%s placeholderModelColourBufferBytes=%d generation=%d dimension=%s durationMs=%.2f lastBuildError=%s realModelStoreReady=false textureAtlasReady=false formalShaderInputsReady=false formalModelBridgeReady=false draw=false atlasUpload=false renderer=none",
+                status.placeholderModelStoreReady(),
+                status.stage(),
+                status.layoutVersion(),
+                status.formalLayoutCompatible(),
+                status.placeholderModelStoreReady(),
+                status.placeholderModelRecords(),
+                status.placeholderModelRecordBytes(),
+                status.placeholderModelDataBufferCreated(),
+                status.placeholderModelDataBufferBytes(),
+                status.placeholderModelColourBufferCreated(),
+                status.placeholderModelColourBufferBytes(),
+                status.generation(),
+                status.dimension(),
+                status.lastBuildDurationMs(),
+                status.lastBuildError()
+        );
+        source.sendSuccess(() -> Component.literal(message), false);
+        return status.placeholderModelStoreReady() ? 1 : 0;
+    }
+
+    private static int modelStoreSkeletonStatus(CommandSourceStack source) {
+        ForgeModelStoreStats status = ForgeVoxyInstance.INSTANCE.getModelStoreSkeleton().createStatusSnapshot();
+        String message = String.format(
+                "Voxy placeholder ModelStore status: stage=%s layoutVersion=%s formalLayoutCompatible=%s buildRuns=%d clearRuns=%d lastBuildError=%s lastBuildDurationMs=%.2f placeholderModelStoreReady=%s placeholderModelRecords=%d placeholderModelRecordBytes=%d placeholderModelDataBufferCreated=%s placeholderModelDataBufferReady=%s placeholderModelDataBufferBytes=%d placeholderModelColourBufferCreated=%s placeholderModelColourBufferReady=%s placeholderModelColourBufferBytes=%d realModelStoreReady=%s realModelFactoryReady=%s modelBakeryBridgeReady=%s textureAtlasReady=%s realModelDataBufferReady=%s realModelColourBufferReady=%s biomeTintReady=%s lightmapReady=%s resourceReloadReady=%s formalShaderInputsReady=%s formalModelBridgeReady=%s generation=%d dimension=%s bufferStale=%s lastAuditOk=%s lastModelDataBufferMatch=%s lastModelColourBufferMatch=%s lastInvalidRecords=%d auditRuns=%d auditFailures=%d draw=false atlasUpload=false renderer=none",
+                status.stage(),
+                status.layoutVersion(),
+                status.formalLayoutCompatible(),
+                status.buildRuns(),
+                status.clearRuns(),
+                status.lastBuildError(),
+                status.lastBuildDurationMs(),
+                status.placeholderModelStoreReady(),
+                status.placeholderModelRecords(),
+                status.placeholderModelRecordBytes(),
+                status.placeholderModelDataBufferCreated(),
+                status.placeholderModelDataBufferReady(),
+                status.placeholderModelDataBufferBytes(),
+                status.placeholderModelColourBufferCreated(),
+                status.placeholderModelColourBufferReady(),
+                status.placeholderModelColourBufferBytes(),
+                status.realModelStoreReady(),
+                status.realModelFactoryReady(),
+                status.modelBakeryBridgeReady(),
+                status.textureAtlasReady(),
+                status.realModelDataBufferReady(),
+                status.realModelColourBufferReady(),
+                status.biomeTintReady(),
+                status.lightmapReady(),
+                status.resourceReloadReady(),
+                status.formalShaderInputsReady(),
+                status.formalModelBridgeReady(),
+                status.generation(),
+                status.dimension(),
+                status.bufferStale(),
+                status.lastAuditOk(),
+                status.lastModelDataBufferMatch(),
+                status.lastModelColourBufferMatch(),
+                status.lastInvalidRecords(),
+                status.auditRuns(),
+                status.auditFailures()
+        );
+        source.sendSuccess(() -> Component.literal(message), false);
+        return status.placeholderModelStoreReady() ? 1 : 0;
+    }
+
+    private static int modelStoreSkeletonAudit(CommandSourceStack source) {
+        ForgeModelStoreAuditResult result = ForgeVoxyInstance.INSTANCE.getModelStoreSkeleton().audit();
+        String message = String.format(
+                "Voxy placeholder ModelStore audit: success=%s error=%s durationMs=%.2f auditedRecords=%d auditedBytes=%d invalidRecords=%d modelDataBufferMatch=%s modelColourBufferMatch=%s generation=%d dimension=%s layoutVersion=%s formalLayoutCompatible=%s readbackApi=glGetNamedBufferSubData draw=false atlasUpload=false renderer=none",
+                result.success(),
+                result.error(),
+                result.durationMs(),
+                result.auditedRecords(),
+                result.auditedBytes(),
+                result.invalidRecords(),
+                result.modelDataBufferMatch(),
+                result.modelColourBufferMatch(),
+                result.generation(),
+                result.dimension(),
+                ForgeModelStoreLayout.LAYOUT_VERSION,
+                ForgeModelStoreLayout.FORMAL_LAYOUT_COMPATIBLE
+        );
+        source.sendSuccess(() -> Component.literal(message), false);
+        return result.success() ? 1 : 0;
+    }
+
+    private static int modelStoreSkeletonAuditStatus(CommandSourceStack source) {
+        ForgeModelStoreStats status = ForgeVoxyInstance.INSTANCE.getModelStoreSkeleton().createStatusSnapshot();
+        String message = String.format(
+                "Voxy placeholder ModelStore audit: auditRuns=%d auditFailures=%d lastAuditOk=%s lastAuditError=%s lastAuditDurationMs=%.2f lastAuditedRecords=%d lastAuditedBytes=%d lastInvalidRecords=%d lastModelDataBufferMatch=%s lastModelColourBufferMatch=%s placeholderModelRecords=%d placeholderModelDataBufferCreated=%s placeholderModelColourBufferCreated=%s generation=%d dimension=%s layoutVersion=%s formalLayoutCompatible=%s",
+                status.auditRuns(),
+                status.auditFailures(),
+                status.lastAuditOk(),
+                status.lastAuditError(),
+                status.lastAuditDurationMs(),
+                status.lastAuditedRecords(),
+                status.lastAuditedBytes(),
+                status.lastInvalidRecords(),
+                status.lastModelDataBufferMatch(),
+                status.lastModelColourBufferMatch(),
+                status.placeholderModelRecords(),
+                status.placeholderModelDataBufferCreated(),
+                status.placeholderModelColourBufferCreated(),
+                status.generation(),
+                status.dimension(),
+                status.layoutVersion(),
+                status.formalLayoutCompatible()
+        );
+        source.sendSuccess(() -> Component.literal(message), false);
+        return status.lastAuditOk() ? 1 : 0;
+    }
+
+    private static int modelStoreSkeletonDumpSample(CommandSourceStack source) {
+        String message = ForgeVoxyInstance.INSTANCE.getModelStoreSkeleton().dumpSample();
+        source.sendSuccess(() -> Component.literal(message), false);
+        return ForgeVoxyInstance.INSTANCE.getModelStoreSkeleton().createStatusSnapshot().sampleModelId() >= 0 ? 1 : 0;
+    }
+
+    private static int modelStoreSkeletonClear(CommandSourceStack source) {
+        ForgeVoxyInstance.INSTANCE.getModelStoreSkeleton().clear();
+        source.sendSuccess(() -> Component.literal("Voxy placeholder ModelStore skeleton: cleared CPU placeholder records, placeholder modelData/modelColour GL buffers, and audit state. Placeholder mapper entries, real ModelStore state, texture atlas, GL geometry heap, MDIC debug renderer, simple renderer, and CPU caches were left unchanged."), false);
+        return 1;
     }
 
     private static int meshCacheStatus(CommandSourceStack source) {
@@ -3591,6 +3738,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getMdicCommandManager().clear();
         ForgeVoxyInstance.INSTANCE.getMdicDebugRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getModelBridgeReadiness().clear();
+        ForgeVoxyInstance.INSTANCE.getModelStoreSkeleton().clear();
         if (!ForgeVoxyRuntimeOverrides.enabledWorldEngineSkeleton()) {
             clearRuntimePipeline();
             ForgeVoxyInstance.INSTANCE.closeActiveWorld();
@@ -3914,6 +4062,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getMdicCommandManager().clear();
         ForgeVoxyInstance.INSTANCE.getMdicDebugRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getModelBridgeReadiness().clear();
+        ForgeVoxyInstance.INSTANCE.getModelStoreSkeleton().clear();
         ForgeVoxyInstance.INSTANCE.getGpuMeshCache().clear();
     }
 
@@ -3933,6 +4082,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getMdicCommandManager().clear();
         ForgeVoxyInstance.INSTANCE.getMdicDebugRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getModelBridgeReadiness().clear();
+        ForgeVoxyInstance.INSTANCE.getModelStoreSkeleton().clear();
         source.sendSuccess(() -> Component.literal("Voxy: cleared CPU mesh cache, CPU-only BuiltSection cache, CPU-only section geometry manager, simple GPU mesh cache, upload-only GL geometry heap, direct GL renderer skeleton state, MDIC command skeleton/debug draw state, GL heap readback visualization/readback-mesh caches, readback mesh auto-refresh state, auto mesh build record, and auto BuiltSection build record."), false);
         return 1;
     }
@@ -3966,6 +4116,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getMdicCommandManager().clear();
         ForgeVoxyInstance.INSTANCE.getMdicDebugRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getModelBridgeReadiness().clear();
+        ForgeVoxyInstance.INSTANCE.getModelStoreSkeleton().clear();
         source.sendSuccess(() -> Component.literal("Voxy: cleared debug pipeline ingest records, mesh build records, BuiltSection build records, CPU mesh cache, CPU-only BuiltSection cache, CPU-only section geometry manager, simple GPU mesh cache, upload-only GL geometry heap, direct GL renderer skeleton state, MDIC command skeleton/debug draw state, GL heap readback visualization/readback-mesh caches, and readback mesh auto-refresh state."), false);
         return 1;
     }
