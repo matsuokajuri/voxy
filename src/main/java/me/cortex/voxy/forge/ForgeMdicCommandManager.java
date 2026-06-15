@@ -24,6 +24,8 @@ final class ForgeMdicCommandManager {
     private int lastInvalidGenerationCommands;
     private int lastInvalidDimensionCommands;
     private int lastInvalidBucketMaskCommands;
+    private int lastInvalidBucketRangeCommands;
+    private int lastInvalidBucketOffsetCommands;
     private int lastInvalidGeometryPtrCommands;
     private int lastAuditedCommands;
     private long lastAuditedRecords;
@@ -42,6 +44,8 @@ final class ForgeMdicCommandManager {
     private boolean lastStressRebuildOk;
     private boolean lastStressReauditOk;
     private boolean lastStressSourceRegressionOk;
+    private boolean lastStressBucketAwareOk;
+    private boolean lastStressBucketAuditOk;
     private int lastStressCommandCount;
     private long lastStressCommandRecords;
     private int lastStressInvalidCommands;
@@ -148,6 +152,8 @@ final class ForgeMdicCommandManager {
         this.lastInvalidGenerationCommands = 0;
         this.lastInvalidDimensionCommands = 0;
         this.lastInvalidBucketMaskCommands = 0;
+        this.lastInvalidBucketRangeCommands = 0;
+        this.lastInvalidBucketOffsetCommands = 0;
         this.lastInvalidGeometryPtrCommands = 0;
         this.lastAuditedCommands = 0;
         this.lastAuditedRecords = 0L;
@@ -169,6 +175,8 @@ final class ForgeMdicCommandManager {
         this.lastStressRebuildOk = false;
         this.lastStressReauditOk = false;
         this.lastStressSourceRegressionOk = false;
+        this.lastStressBucketAwareOk = false;
+        this.lastStressBucketAuditOk = false;
         this.lastStressCommandCount = 0;
         this.lastStressCommandRecords = 0L;
         this.lastStressInvalidCommands = 0;
@@ -186,6 +194,8 @@ final class ForgeMdicCommandManager {
         this.lastStressRebuildOk = false;
         this.lastStressReauditOk = false;
         this.lastStressSourceRegressionOk = false;
+        this.lastStressBucketAwareOk = false;
+        this.lastStressBucketAuditOk = false;
         this.lastStressCommandCount = 0;
         this.lastStressCommandRecords = 0L;
         this.lastStressInvalidCommands = 0;
@@ -205,12 +215,24 @@ final class ForgeMdicCommandManager {
                 this.lastStressBuildOk = this.lastStressPlanOk && this.buildBuffer();
                 ForgeMdicCommandAuditResult firstAudit = this.audit();
                 this.lastStressAuditOk = this.lastStressBuildOk && firstAudit.success();
+                this.lastStressBucketAwareOk = firstPlan.success()
+                        && this.commandList.bucketAware()
+                        && this.commandList.bucketCommands() > 0
+                        && this.commandList.sectionCommands() == 0;
+                this.lastStressBucketAuditOk = this.lastStressAuditOk
+                        && firstAudit.invalidBucketMaskCommands() == 0
+                        && firstAudit.invalidBucketRangeCommands() == 0
+                        && firstAudit.invalidBucketOffsetCommands() == 0;
                 if (!this.lastStressPlanOk && "none".equals(error)) {
                     error = "first-plan=" + firstPlan.error();
                 } else if (!this.lastStressBuildOk && "none".equals(error)) {
                     error = "first-build=" + this.lastError;
                 } else if (!this.lastStressAuditOk && "none".equals(error)) {
                     error = "first-audit=" + firstAudit.error();
+                } else if (!this.lastStressBucketAwareOk && "none".equals(error)) {
+                    error = "first-bucket-aware-plan-failed";
+                } else if (!this.lastStressBucketAuditOk && "none".equals(error)) {
+                    error = "first-bucket-audit-failed";
                 }
 
                 this.lastStressCommandCount = this.commandList.commandCount();
@@ -253,10 +275,24 @@ final class ForgeMdicCommandManager {
                 boolean thirdAuditOk = thirdBuild && thirdAudit.success();
                 this.lastStressRebuildOk = secondRebuildOk && thirdRebuildOk;
                 this.lastStressReauditOk = secondAuditOk && thirdAuditOk;
+                this.lastStressBucketAwareOk = this.lastStressBucketAwareOk
+                        && thirdPlan.success()
+                        && this.commandList.bucketAware()
+                        && this.commandList.bucketCommands() > 0
+                        && this.commandList.sectionCommands() == 0;
+                this.lastStressBucketAuditOk = this.lastStressBucketAuditOk
+                        && thirdAudit.success()
+                        && thirdAudit.invalidBucketMaskCommands() == 0
+                        && thirdAudit.invalidBucketRangeCommands() == 0
+                        && thirdAudit.invalidBucketOffsetCommands() == 0;
                 if (!thirdRebuildOk && "none".equals(error)) {
                     error = "post-heap-rebuild=" + (thirdPlan.success() ? this.lastError : thirdPlan.error());
                 } else if (!thirdAuditOk && "none".equals(error)) {
                     error = "post-heap-audit=" + thirdAudit.error();
+                } else if (!this.lastStressBucketAwareOk && "none".equals(error)) {
+                    error = "post-heap-bucket-aware-plan-failed";
+                } else if (!this.lastStressBucketAuditOk && "none".equals(error)) {
+                    error = "post-heap-bucket-audit-failed";
                 }
 
                 this.lastStressCommandCount = this.commandList.commandCount();
@@ -290,7 +326,9 @@ final class ForgeMdicCommandManager {
                 && this.lastStressHeapClearOk
                 && this.lastStressRebuildOk
                 && this.lastStressReauditOk
-                && this.lastStressSourceRegressionOk;
+                && this.lastStressSourceRegressionOk
+                && this.lastStressBucketAwareOk
+                && this.lastStressBucketAuditOk;
         this.lastStressDurationMs = elapsedMs(start);
         this.lastStressError = success ? "none" : error;
         if (!success) {
@@ -323,8 +361,14 @@ final class ForgeMdicCommandManager {
                 listStale,
                 bufferStale,
                 staleReason,
+                this.commandList.bucketAware(),
+                this.commandList.includedTranslucent(),
+                this.commandList.includedDoubleSided(),
+                this.commandList.includedDirectional(),
                 this.commandList.commandCount(),
-                this.commandList.commandCount(),
+                this.commandList.sectionCount(),
+                this.commandList.bucketCommands(),
+                this.commandList.sectionCommands(),
                 this.commandList.recordCount(),
                 this.commandList.vertexCount(),
                 this.commandList.minRecordCount(),
@@ -336,8 +380,21 @@ final class ForgeMdicCommandManager {
                 this.commandList.bucketMaskAnd(),
                 this.commandList.minGeometryPtr(),
                 this.commandList.maxGeometryPtr(),
+                this.commandList.commandsPerSectionMin(),
+                this.commandList.commandsPerSectionMax(),
+                this.commandList.bucketCommandCount(0),
+                this.commandList.bucketCommandCount(1),
+                this.commandList.bucketCommandCount(2),
+                this.commandList.bucketCommandCount(3),
+                this.commandList.bucketCommandCount(4),
+                this.commandList.bucketCommandCount(5),
+                this.commandList.bucketCommandCount(6),
+                this.commandList.bucketCommandCount(7),
                 this.commandList.skippedSections(),
                 this.commandList.skippedRecords(),
+                this.commandList.skippedTranslucentCommands(),
+                this.commandList.skippedEmptyBuckets(),
+                this.commandList.skippedBucketCommands(),
                 this.commandList.selectionMode(),
                 this.commandList.planCandidateSections(),
                 this.commandList.planAcceptedSections(),
@@ -355,6 +412,9 @@ final class ForgeMdicCommandManager {
                         && this.lastGenerationMatch
                         && this.lastDimensionMatch
                         && this.lastInvalidCommands == 0
+                        && this.lastInvalidBucketMaskCommands == 0
+                        && this.lastInvalidBucketRangeCommands == 0
+                        && this.lastInvalidBucketOffsetCommands == 0
                         && this.auditRuns > 0
                         && this.auditFailures == 0,
                 this.auditRuns,
@@ -370,6 +430,8 @@ final class ForgeMdicCommandManager {
                 this.lastInvalidGenerationCommands,
                 this.lastInvalidDimensionCommands,
                 this.lastInvalidBucketMaskCommands,
+                this.lastInvalidBucketRangeCommands,
+                this.lastInvalidBucketOffsetCommands,
                 this.lastInvalidGeometryPtrCommands,
                 this.lastAuditedCommands,
                 this.lastAuditedRecords,
@@ -388,6 +450,8 @@ final class ForgeMdicCommandManager {
                 this.lastStressRebuildOk,
                 this.lastStressReauditOk,
                 this.lastStressSourceRegressionOk,
+                this.lastStressBucketAwareOk,
+                this.lastStressBucketAuditOk,
                 this.lastStressCommandCount,
                 this.lastStressCommandRecords,
                 this.lastStressInvalidCommands
@@ -445,6 +509,8 @@ final class ForgeMdicCommandManager {
         int invalidGeneration = 0;
         int invalidDimension = 0;
         int invalidBucketMask = 0;
+        int invalidBucketRange = 0;
+        int invalidBucketOffset = 0;
         int invalidGeometryPtr = 0;
         long auditedRecords = 0L;
         int commandCount = this.commandList.commandCount();
@@ -487,6 +553,13 @@ final class ForgeMdicCommandManager {
                     invalidGeometryPtr++;
                 }
             }
+            BucketValidation bucketValidation = validateBucketCommand(heap, actual);
+            if (!bucketValidation.success()) {
+                invalid++;
+                invalidBucketMask += bucketValidation.invalidMask();
+                invalidBucketRange += bucketValidation.invalidRange();
+                invalidBucketOffset += bucketValidation.invalidOffset();
+            }
             if (expected.recordCount() != actual.recordCount()
                     || expected.geometryPtr() != actual.geometryPtr()
                     || expected.recordStart() != actual.recordStart()
@@ -500,6 +573,9 @@ final class ForgeMdicCommandManager {
                 invalidGeneration++;
             }
             if (actual.recordCount() > 0 && actual.bucketMask() == 0) {
+                invalidBucketMask++;
+            }
+            if (this.commandList.bucketAware() && !actual.isBucketCommand()) {
                 invalidBucketMask++;
             }
             if (actual.geometryPtr() < 0 || actual.geometryPtr() % 128 != 0) {
@@ -530,6 +606,8 @@ final class ForgeMdicCommandManager {
                 invalidGeneration,
                 invalidDimension,
                 invalidBucketMask,
+                invalidBucketRange,
+                invalidBucketOffset,
                 invalidGeometryPtr,
                 commandCount,
                 auditedRecords,
@@ -537,6 +615,53 @@ final class ForgeMdicCommandManager {
                 this.commandList.heapGeneration(),
                 this.commandList.dimensionId()
         );
+    }
+
+    private static BucketValidation validateBucketCommand(ForgeGpuGeometryHeap heap, ForgeMdicCommand command) {
+        if (!command.isBucketCommand()) {
+            return BucketValidation.ok();
+        }
+        int invalidMask = 0;
+        int invalidRange = 0;
+        int invalidOffset = 0;
+        int bucket = command.bucketIndex();
+        if (bucket < 0) {
+            invalidMask++;
+            return new BucketValidation(invalidMask, invalidRange, invalidOffset);
+        }
+        if (!bucketAllowedByConfig(bucket)) {
+            invalidMask++;
+        }
+        int[] words = heap.readbackMetadata(command.metadataIndex());
+        ForgeGpuGeometryDecodedMetadata metadata = ForgeGpuGeometryDecodedMetadata.decode(words);
+        int start = metadata.offsets()[bucket];
+        int end = bucket == ForgeGpuGeometryDecodedMetadata.BUCKET_COUNT - 1
+                ? metadata.itemCount()
+                : metadata.offsets()[bucket + 1];
+        int count = Math.max(0, end - start);
+        if (command.recordStart() != start) {
+            invalidOffset++;
+        }
+        if (command.recordCount() != count) {
+            invalidOffset++;
+        }
+        if (command.recordStart() < 0 || command.recordCount() < 0 || command.recordStart() + command.recordCount() > metadata.itemCount()) {
+            invalidRange++;
+        }
+        if (count <= 0) {
+            invalidRange++;
+        }
+        return new BucketValidation(invalidMask, invalidRange, invalidOffset);
+    }
+
+    private static boolean bucketAllowedByConfig(int bucket) {
+        if (bucket == 0) {
+            return ForgeMdicCommandConfig.includeTranslucent();
+        }
+        if (bucket == 1) {
+            return ForgeMdicCommandConfig.includeDoubleSided();
+        }
+        return bucket >= 2 && bucket < ForgeGpuGeometryDecodedMetadata.BUCKET_COUNT && ForgeMdicCommandConfig.includeDirectional();
     }
 
     private void recordAuditResult(ForgeMdicCommandAuditResult result) {
@@ -551,6 +676,8 @@ final class ForgeMdicCommandManager {
         this.lastInvalidGenerationCommands = result.invalidGenerationCommands();
         this.lastInvalidDimensionCommands = result.invalidDimensionCommands();
         this.lastInvalidBucketMaskCommands = result.invalidBucketMaskCommands();
+        this.lastInvalidBucketRangeCommands = result.invalidBucketRangeCommands();
+        this.lastInvalidBucketOffsetCommands = result.invalidBucketOffsetCommands();
         this.lastInvalidGeometryPtrCommands = result.invalidGeometryPtrCommands();
         this.lastAuditedCommands = result.auditedCommands();
         this.lastAuditedRecords = result.auditedRecords();
@@ -572,5 +699,15 @@ final class ForgeMdicCommandManager {
 
     private static double elapsedMs(long start) {
         return (System.nanoTime() - start) / 1_000_000.0D;
+    }
+
+    private record BucketValidation(int invalidMask, int invalidRange, int invalidOffset) {
+        static BucketValidation ok() {
+            return new BucketValidation(0, 0, 0);
+        }
+
+        boolean success() {
+            return this.invalidMask == 0 && this.invalidRange == 0 && this.invalidOffset == 0;
+        }
     }
 }

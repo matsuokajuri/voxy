@@ -24,6 +24,14 @@ public final class ForgeVoxyRuntimeOverrides {
     private static Boolean mdicDebugDrawActualDraw;
     private static Integer mdicCommandMaxSections;
     private static Integer mdicCommandMaxRecords;
+    private static Boolean mdicCommandBucketAware;
+    private static Boolean mdicCommandIncludeTranslucent;
+    private static Boolean mdicCommandIncludeDoubleSided;
+    private static Boolean mdicCommandIncludeDirectional;
+    private static Integer mdicCommandMaxCommands;
+    private static Integer mdicCommandMaxCommandsPerSection;
+    private static Integer mdicDebugDrawMaxCommands;
+    private static Integer mdicDebugDrawMaxRecords;
     private static Boolean directGpuGeometryRendererActualDraw;
     private static Integer directGpuGeometryRendererMaxPlanCandidates;
     private static Integer directGpuGeometryRendererMaxDrawSections;
@@ -95,6 +103,14 @@ public final class ForgeVoxyRuntimeOverrides {
         mdicDebugDrawActualDraw = false;
         mdicCommandMaxSections = 16;
         mdicCommandMaxRecords = 32768;
+        mdicCommandBucketAware = true;
+        mdicCommandIncludeTranslucent = false;
+        mdicCommandIncludeDoubleSided = true;
+        mdicCommandIncludeDirectional = true;
+        mdicCommandMaxCommands = 128;
+        mdicCommandMaxCommandsPerSection = 8;
+        mdicDebugDrawMaxCommands = 128;
+        mdicDebugDrawMaxRecords = 32768;
         directGpuGeometryRendererActualDraw = false;
         enableSimpleGpuMeshRenderer = false;
         enableDebugMeshRenderer = false;
@@ -343,6 +359,14 @@ public final class ForgeVoxyRuntimeOverrides {
         mdicDebugDrawActualDraw = null;
         mdicCommandMaxSections = null;
         mdicCommandMaxRecords = null;
+        mdicCommandBucketAware = null;
+        mdicCommandIncludeTranslucent = null;
+        mdicCommandIncludeDoubleSided = null;
+        mdicCommandIncludeDirectional = null;
+        mdicCommandMaxCommands = null;
+        mdicCommandMaxCommandsPerSection = null;
+        mdicDebugDrawMaxCommands = null;
+        mdicDebugDrawMaxRecords = null;
         directGpuGeometryRendererActualDraw = null;
         directGpuGeometryRendererMaxPlanCandidates = null;
         directGpuGeometryRendererMaxDrawSections = null;
@@ -499,16 +523,40 @@ public final class ForgeVoxyRuntimeOverrides {
         return Math.min(131072, Math.max(1, value(mdicCommandMaxRecords, ForgeVoxyConfig.MDIC_COMMAND_MAX_RECORDS.get())));
     }
 
+    public static synchronized boolean mdicCommandBucketAware() {
+        return value(mdicCommandBucketAware, ForgeVoxyConfig.MDIC_COMMAND_BUCKET_AWARE.get());
+    }
+
+    public static synchronized boolean mdicCommandIncludeTranslucent() {
+        return value(mdicCommandIncludeTranslucent, ForgeVoxyConfig.MDIC_COMMAND_INCLUDE_TRANSLUCENT.get());
+    }
+
+    public static synchronized boolean mdicCommandIncludeDoubleSided() {
+        return value(mdicCommandIncludeDoubleSided, ForgeVoxyConfig.MDIC_COMMAND_INCLUDE_DOUBLE_SIDED.get());
+    }
+
+    public static synchronized boolean mdicCommandIncludeDirectional() {
+        return value(mdicCommandIncludeDirectional, ForgeVoxyConfig.MDIC_COMMAND_INCLUDE_DIRECTIONAL.get());
+    }
+
+    public static synchronized int mdicCommandMaxCommands() {
+        return Math.min(512, Math.max(1, value(mdicCommandMaxCommands, ForgeVoxyConfig.MDIC_COMMAND_MAX_COMMANDS.get())));
+    }
+
+    public static synchronized int mdicCommandMaxCommandsPerSection() {
+        return Math.min(8, Math.max(1, value(mdicCommandMaxCommandsPerSection, ForgeVoxyConfig.MDIC_COMMAND_MAX_COMMANDS_PER_SECTION.get())));
+    }
+
     public static synchronized boolean mdicCommandDebugLog() {
         return ForgeVoxyConfig.MDIC_COMMAND_DEBUG_LOG.get();
     }
 
     public static synchronized int mdicDebugDrawMaxCommands() {
-        return Math.min(64, Math.max(1, ForgeVoxyConfig.MDIC_DEBUG_DRAW_MAX_COMMANDS.get()));
+        return Math.min(512, Math.max(1, value(mdicDebugDrawMaxCommands, ForgeVoxyConfig.MDIC_DEBUG_DRAW_MAX_COMMANDS.get())));
     }
 
     public static synchronized int mdicDebugDrawMaxRecords() {
-        return Math.min(131072, Math.max(1, ForgeVoxyConfig.MDIC_DEBUG_DRAW_MAX_RECORDS.get()));
+        return Math.min(131072, Math.max(1, value(mdicDebugDrawMaxRecords, ForgeVoxyConfig.MDIC_DEBUG_DRAW_MAX_RECORDS.get())));
     }
 
     public static synchronized double mdicDebugDrawAlpha() {
@@ -644,6 +692,14 @@ public final class ForgeVoxyRuntimeOverrides {
                 || mdicDebugDrawActualDraw != null
                 || mdicCommandMaxSections != null
                 || mdicCommandMaxRecords != null
+                || mdicCommandBucketAware != null
+                || mdicCommandIncludeTranslucent != null
+                || mdicCommandIncludeDoubleSided != null
+                || mdicCommandIncludeDirectional != null
+                || mdicCommandMaxCommands != null
+                || mdicCommandMaxCommandsPerSection != null
+                || mdicDebugDrawMaxCommands != null
+                || mdicDebugDrawMaxRecords != null
                 || directGpuGeometryRendererActualDraw != null
                 || directGpuGeometryRendererMaxPlanCandidates != null
                 || directGpuGeometryRendererMaxDrawSections != null

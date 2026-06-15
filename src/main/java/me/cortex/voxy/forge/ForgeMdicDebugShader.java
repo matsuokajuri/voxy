@@ -108,6 +108,27 @@ final class ForgeMdicDebugShader {
                 return min(vec3(1.0), faceColor * wobble);
             }
 
+            vec3 bucketTint(uint bucketMask) {
+                if ((bucketMask & 1u) != 0u) {
+                    return vec3(0.85, 0.65, 1.00);
+                } else if ((bucketMask & 2u) != 0u) {
+                    return vec3(1.00, 0.85, 0.55);
+                } else if ((bucketMask & 4u) != 0u) {
+                    return vec3(0.75, 1.00, 0.75);
+                } else if ((bucketMask & 8u) != 0u) {
+                    return vec3(1.00, 0.65, 0.65);
+                } else if ((bucketMask & 16u) != 0u) {
+                    return vec3(0.65, 0.85, 1.00);
+                } else if ((bucketMask & 32u) != 0u) {
+                    return vec3(1.00, 1.00, 0.60);
+                } else if ((bucketMask & 64u) != 0u) {
+                    return vec3(0.65, 1.00, 0.95);
+                } else if ((bucketMask & 128u) != 0u) {
+                    return vec3(1.00, 0.70, 0.95);
+                }
+                return vec3(1.0);
+            }
+
             void main() {
                 uint commandIndex = ${COMMAND_INDEX_EXPR};
                 MdicCommand command = commands[commandIndex];
@@ -170,7 +191,8 @@ final class ForgeMdicDebugShader {
                 }
 
                 uint colorSeed = sectionId ^ commandIndex ^ command.b.w ^ command.c.z;
-                vColor = vec4(colorFor(face, modelId, biomeId, lightId, colorSeed), uAlpha);
+                vec3 debugColor = colorFor(face, modelId, biomeId, lightId, colorSeed) * bucketTint(command.b.w);
+                vColor = vec4(min(vec3(1.0), debugColor), uAlpha);
                 gl_Position = uProjection * uModelView * vec4(sectionOrigin + local, 1.0);
             }
             """;

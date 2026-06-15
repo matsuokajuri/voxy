@@ -373,3 +373,117 @@ CPU SectionGeometryManager
 ```
 
 G6.2 still does not implement the formal MDIC renderer. The next useful step is a bucket-aware MDIC debug planning pass, then grouping and lifecycle hardening before any G7-era alignment with the original renderer, materials, atlas, shaderpack, or `VoxyRenderSystem`.
+
+## G6.3 Bucket-Aware MDIC Debug Commands
+
+G6.3 changes the Forge MDIC debug command semantics from section-level commands to bucket-level commands:
+
+```text
+G6.2:
+  one uploaded section -> one MDIC debug command
+  recordStart = 0
+  recordCount = section itemCount
+
+G6.3:
+  one uploaded section -> one command per included non-empty bucket
+  recordStart = offsets[bucket]
+  recordCount = bucketEnd - bucketStart
+  bucketMask = 1 << bucket
+```
+
+The existing 12-word `ForgeMdicCommand` layout is retained, but the layout version is now:
+
+```text
+layoutVersion=G6_3_MDIC_BUCKET_COMMAND_V1
+stage=G6_3_BUCKET_AWARE_MDIC_DEBUG_DRAW
+```
+
+Bucket meanings follow the Voxy `RenderDataFactory` output and the original `cmdgen.comp` command generation shape:
+
+```text
+bucket 0: translucent
+bucket 1: double-sided
+bucket 2..7: directional face buckets
+```
+
+By default, G6.3 includes:
+
+```text
+double-sided bucket 1
+directional buckets 2..7
+```
+
+and skips:
+
+```text
+translucent bucket 0
+```
+
+The translucent bucket is skipped because this debug renderer does not implement translucent sorting or the original translucent command generation path. This keeps the command list deterministic and bounded while still proving that the MDIC command buffer can address sub-section geometry ranges.
+
+The planner keeps the existing camera/radius section selection, then expands each accepted section into up to eight bucket commands. Empty buckets are not emitted. Budget limits apply to both records and commands:
+
+```text
+mdicCommandMaxSections=16
+mdicCommandMaxCommands=128
+mdicCommandMaxCommandsPerSection=8
+mdicCommandMaxRecords=32768
+```
+
+When the record budget cannot fit a whole bucket, G6.3 skips that bucket rather than truncating it. That keeps audit rules strict:
+
+```text
+recordStart == decodedMetadata.offsets[bucket]
+recordCount == decoded bucket length
+recordStart + recordCount <= itemCount
+bucketMask is a single bit
+empty buckets do not create commands
+skipped translucent buckets are counted
+```
+
+The draw paths from G6.2 are preserved:
+
+```text
+LOOP_PER_COMMAND
+MULTI_DRAW_ARRAYS
+MULTI_DRAW_ARRAYS_INDIRECT
+AUTO
+```
+
+The derived OpenGL `DrawArraysIndirectCommand` buffer still contains one standard indirect command per Forge MDIC debug command:
+
+```text
+count = bucketCommand.recordCount * 6
+instanceCount = 1
+first = 0
+baseInstance = MDIC command index
+```
+
+This makes the indirect draw path bucket-aware without changing it into the original Voxy MDIC renderer. The debug shader still reads the Forge MDIC command buffer SSBO and the upload-only geometry heap SSBO. It now also tints debug color by `bucketMask`, but it still does not sample textures, use ModelStore, apply real material state, or integrate with shaderpacks.
+
+Relationship to original Voxy:
+
+```text
+similar:
+  bucket-level command grouping from section metadata offsets
+  draw commands reference geometryPtr + bucket-local record ranges
+
+not yet similar:
+  no GPU hierarchical traversal
+  no HiZ occlusion
+  no directional camera face-mask filtering
+  no translucent sort
+  no DrawElementsIndirect / indexed shared quad buffer
+  no MDICSectionRenderer / VoxyRenderSystem
+```
+
+G6.4 candidates:
+
+```text
+directional face-mask filtering based on camera relative section position
+frustum / visibility planning alignment
+formal command layout closer to DrawElementsIndirect
+RenderDataFactory / ModelStore / texture metadata bridge
+```
+
+G6.3 remains a debug renderer and command-buffer migration checkpoint. It should not be treated as a formal renderer replacement.

@@ -45,6 +45,9 @@ final class ForgeMdicCommandPlanner {
         int invalidMetadata = 0;
         int skippedSections = 0;
         long skippedRecords = 0L;
+        int skippedTranslucentCommands = 0;
+        int skippedEmptyBuckets = 0;
+        int skippedBucketCommands = 0;
         String lastError = "none";
 
         int inspected = 0;
@@ -91,37 +94,87 @@ final class ForgeMdicCommandPlanner {
             });
         }
 
+        boolean bucketAware = ForgeMdicCommandConfig.bucketAware();
+        boolean includeTranslucent = ForgeMdicCommandConfig.includeTranslucent();
+        boolean includeDoubleSided = ForgeMdicCommandConfig.includeDoubleSided();
+        boolean includeDirectional = ForgeMdicCommandConfig.includeDirectional();
         int sectionLimit = Math.max(1, maxSections);
+        int commandLimit = bucketAware ? Math.max(1, ForgeMdicCommandConfig.maxCommands()) : sectionLimit;
+        int maxCommandsPerSection = Math.max(1, ForgeMdicCommandConfig.maxCommandsPerSection());
         int remainingRecords = Math.max(1, maxRecords);
         ArrayList<ForgeMdicCommand> commands = new ArrayList<>();
         long commandRecords = 0L;
         int generation = (int) heap.generation();
+        int acceptedSections = 0;
         for (int i = 0; i < candidates.size(); i++) {
-            if (commands.size() >= sectionLimit) {
+            if (acceptedSections >= sectionLimit) {
                 skippedSections += candidates.size() - i;
                 break;
             }
-            if (remainingRecords <= 0) {
+            if (remainingRecords <= 0 || commands.size() >= commandLimit) {
                 skippedSections += candidates.size() - i;
                 break;
             }
 
             Candidate candidate = candidates.get(i);
-            int records = Math.min(candidate.metadata().itemCount(), remainingRecords);
-            if (records <= 0) {
-                skippedSections++;
-                continue;
+            if (bucketAware) {
+                BucketPlan bucketPlan = planBucketCommands(
+                        commands,
+                        candidate,
+                        generation,
+                        remainingRecords,
+                        commandLimit,
+                        maxCommandsPerSection,
+                        includeTranslucent,
+                        includeDoubleSided,
+                        includeDirectional
+                );
+                remainingRecords -= bucketPlan.acceptedRecords();
+                commandRecords += bucketPlan.acceptedRecords();
+                skippedRecords += bucketPlan.skippedRecords();
+                skippedTranslucentCommands += bucketPlan.skippedTranslucentCommands();
+                skippedEmptyBuckets += bucketPlan.skippedEmptyBuckets();
+                skippedBucketCommands += bucketPlan.skippedBucketCommands();
+                if (bucketPlan.acceptedCommands() > 0) {
+                    acceptedSections++;
+                } else {
+                    skippedSections++;
+                }
+            } else {
+                int records = Math.min(candidate.metadata().itemCount(), remainingRecords);
+                if (records <= 0) {
+                    skippedSections++;
+                    continue;
+                }
+                if (candidate.metadata().itemCount() > records) {
+                    skippedRecords += candidate.metadata().itemCount() - records;
+                }
+                commands.add(createSectionCommand(candidate.sectionId(), candidate.metadata(), records, generation));
+                acceptedSections++;
+                commandRecords += records;
+                remainingRecords -= records;
             }
-            if (candidate.metadata().itemCount() > records) {
-                skippedRecords += candidate.metadata().itemCount() - records;
-            }
-            commands.add(createCommand(candidate.sectionId(), candidate.metadata(), records, generation));
-            commandRecords += records;
-            remainingRecords -= records;
         }
 
         String dimension = currentDimensionId(minecraft);
-        ForgeMdicCommandList commandList = ForgeMdicCommandList.of(commands, heap.generation(), dimension, commandRecords, selectionMode, skippedSections, skippedRecords, candidates.size(), commands.size());
+        ForgeMdicCommandList commandList = ForgeMdicCommandList.of(
+                commands,
+                heap.generation(),
+                dimension,
+                commandRecords,
+                selectionMode,
+                skippedSections,
+                skippedRecords,
+                candidates.size(),
+                acceptedSections,
+                bucketAware,
+                includeTranslucent,
+                includeDoubleSided,
+                includeDirectional,
+                skippedTranslucentCommands,
+                skippedEmptyBuckets,
+                skippedBucketCommands
+        );
         boolean success = commandList.isValid();
         return new PlanResult(
                 success,
@@ -137,7 +190,73 @@ final class ForgeMdicCommandPlanner {
         );
     }
 
-    private static ForgeMdicCommand createCommand(int sectionId, ForgeGpuGeometryDecodedMetadata metadata, int recordCount, int generation) {
+    private static BucketPlan planBucketCommands(
+            ArrayList<ForgeMdicCommand> commands,
+            Candidate candidate,
+            int generation,
+            int remainingRecords,
+            int commandLimit,
+            int maxCommandsPerSection,
+            boolean includeTranslucent,
+            boolean includeDoubleSided,
+            boolean includeDirectional
+    ) {
+        int acceptedCommands = 0;
+        int acceptedRecords = 0;
+        int skippedTranslucentCommands = 0;
+        int skippedEmptyBuckets = 0;
+        int skippedBucketCommands = 0;
+        long skippedRecords = 0L;
+        for (int bucket = 0; bucket < ForgeGpuGeometryDecodedMetadata.BUCKET_COUNT; bucket++) {
+            int start = candidate.metadata().offsets()[bucket];
+            int end = bucket == ForgeGpuGeometryDecodedMetadata.BUCKET_COUNT - 1
+                    ? candidate.metadata().itemCount()
+                    : candidate.metadata().offsets()[bucket + 1];
+            int bucketRecords = Math.max(0, end - start);
+            if (bucketRecords <= 0) {
+                skippedEmptyBuckets++;
+                continue;
+            }
+            if (!bucketAllowed(bucket, includeTranslucent, includeDoubleSided, includeDirectional)) {
+                if (bucket == 0) {
+                    skippedTranslucentCommands++;
+                } else {
+                    skippedBucketCommands++;
+                }
+                skippedRecords += bucketRecords;
+                continue;
+            }
+            if (acceptedCommands >= maxCommandsPerSection || commands.size() >= commandLimit || bucketRecords > remainingRecords - acceptedRecords) {
+                skippedBucketCommands++;
+                skippedRecords += bucketRecords;
+                continue;
+            }
+            commands.add(createBucketCommand(candidate.sectionId(), candidate.metadata(), start, bucketRecords, bucket, generation));
+            acceptedCommands++;
+            acceptedRecords += bucketRecords;
+        }
+        return new BucketPlan(acceptedCommands, acceptedRecords, skippedRecords, skippedTranslucentCommands, skippedEmptyBuckets, skippedBucketCommands);
+    }
+
+    private static boolean bucketAllowed(int bucket, boolean includeTranslucent, boolean includeDoubleSided, boolean includeDirectional) {
+        if (bucket == 0) {
+            return includeTranslucent;
+        }
+        if (bucket == 1) {
+            return includeDoubleSided;
+        }
+        return includeDirectional;
+    }
+
+    private static ForgeMdicCommand createSectionCommand(int sectionId, ForgeGpuGeometryDecodedMetadata metadata, int recordCount, int generation) {
+        return createCommand(sectionId, metadata, 0, Math.max(0, recordCount), bucketMask(metadata), generation, ForgeMdicCommandLayout.FLAG_DEBUG_SKELETON);
+    }
+
+    private static ForgeMdicCommand createBucketCommand(int sectionId, ForgeGpuGeometryDecodedMetadata metadata, int recordStart, int recordCount, int bucket, int generation) {
+        return createCommand(sectionId, metadata, recordStart, Math.max(0, recordCount), 1 << bucket, generation, ForgeMdicCommandLayout.FLAG_DEBUG_SKELETON | ForgeMdicCommandLayout.FLAG_BUCKET_COMMAND);
+    }
+
+    private static ForgeMdicCommand createCommand(int sectionId, ForgeGpuGeometryDecodedMetadata metadata, int recordStart, int recordCount, int bucketMask, int generation, int flags) {
         int level = Math.max(0, WorldEngine.getLevel(metadata.position()));
         int scale = 1 << Math.min(12, level);
         float originX = WorldEngine.getX(metadata.position()) * (float) SECTION_SIZE * scale;
@@ -146,15 +265,15 @@ final class ForgeMdicCommandPlanner {
         return new ForgeMdicCommand(
                 sectionId,
                 metadata.geometryPtr(),
-                0,
+                Math.max(0, recordStart),
                 Math.max(0, recordCount),
                 Float.floatToRawIntBits(originX),
                 Float.floatToRawIntBits(originY),
                 Float.floatToRawIntBits(originZ),
-                bucketMask(metadata),
+                bucketMask,
                 sectionId,
                 level,
-                ForgeMdicCommandLayout.FLAG_DEBUG_SKELETON,
+                flags,
                 generation
         );
     }
@@ -231,6 +350,9 @@ final class ForgeMdicCommandPlanner {
     }
 
     private record Candidate(int sectionId, ForgeGpuGeometryDecodedMetadata metadata, double distanceSquared) {
+    }
+
+    private record BucketPlan(int acceptedCommands, int acceptedRecords, long skippedRecords, int skippedTranslucentCommands, int skippedEmptyBuckets, int skippedBucketCommands) {
     }
 
     private record CameraContext(boolean available, double x, double y, double z, int chunkX, int chunkZ) {

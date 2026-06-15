@@ -20,6 +20,18 @@ record ForgeMdicCommand(
         return (long) this.recordCount * 6L;
     }
 
+    boolean isBucketCommand() {
+        return (this.flags & ForgeMdicCommandLayout.FLAG_BUCKET_COMMAND) != 0;
+    }
+
+    int bucketIndex() {
+        if (this.bucketMask == 0 || Integer.bitCount(this.bucketMask) != 1) {
+            return -1;
+        }
+        int index = Integer.numberOfTrailingZeros(this.bucketMask);
+        return index >= 0 && index < ForgeGpuGeometryDecodedMetadata.BUCKET_COUNT ? index : -1;
+    }
+
     int[] toWords() {
         int[] words = new int[ForgeMdicCommandLayout.WORDS];
         words[ForgeMdicCommandLayout.WORD_SECTION_ID] = this.sectionId;
@@ -82,6 +94,15 @@ record ForgeMdicCommand(
         }
         if (this.recordCount > 0 && this.bucketMask == 0) {
             return "non-empty-command-with-empty-bucket-mask";
+        }
+        if ((this.bucketMask & ~0xFF) != 0) {
+            return "bucket-mask-out-of-range";
+        }
+        if (this.recordCount > 0 && Integer.bitCount(this.bucketMask) != 1) {
+            return "bucket-mask-not-single-bit";
+        }
+        if (this.isBucketCommand() && this.bucketIndex() < 0) {
+            return "invalid-bucket-command-mask";
         }
         if (this.metadataIndex < 0) {
             return "negative-metadata-index";

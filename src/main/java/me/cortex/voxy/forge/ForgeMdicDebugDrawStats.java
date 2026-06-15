@@ -89,6 +89,8 @@ record ForgeMdicDebugDrawStats(
         boolean lastStressAutoOk,
         boolean lastStressDerivedIndirectAuditOk,
         boolean lastStressSourceRegressionOk,
+        boolean lastStressBucketDrawOk,
+        boolean lastStressBucketIndirectAuditOk,
         long lastStressGlErrorCount,
         long lastStressStateRestoreFailures
 ) {
