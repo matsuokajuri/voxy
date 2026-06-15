@@ -13,20 +13,24 @@ import static org.lwjgl.opengl.GL11C.GL_NO_ERROR;
 import static org.lwjgl.opengl.GL11C.glGetError;
 
 final class ForgeMdicDebugRenderer {
-    static final String STAGE = "G6_5_VISIBILITY_AWARE_MDIC_DEBUG_DRAW";
+    static final String STAGE = "G6_6_ELEMENTS_INDIRECT_MDIC_DEBUG_DRAW";
 
     private final ForgeVoxyInstance instance;
     private final ForgeMdicDebugShader shader = new ForgeMdicDebugShader();
     private final ForgeMdicDebugIndirectCommandBuffer derivedIndirectCommandBuffer = new ForgeMdicDebugIndirectCommandBuffer();
+    private final ForgeMdicDebugSharedIndexBuffer sharedIndexBuffer = new ForgeMdicDebugSharedIndexBuffer();
+    private final ForgeMdicDebugElementsIndirectCommandBuffer elementsIndirectCommandBuffer = new ForgeMdicDebugElementsIndirectCommandBuffer();
     private ForgeMdicDebugDrawMode configuredDrawMode = ForgeMdicDebugDrawMode.LOOP_PER_COMMAND;
     private String lastAutoModeSelectedReason = "configured-loop";
     private String lastAutoModeFallbackReason = "none";
     private int lastFrameApiDrawCalls;
     private int lastFrameLogicalCommands;
     private long lastFrameVertices;
+    private long lastFrameIndices;
     private long drawApiCallsIssued;
     private long logicalCommandsDrawn;
     private long verticesDrawn;
+    private long indicesDrawn;
     private double lastFrameRenderMs;
     private double maxFrameRenderMs;
     private double totalFrameRenderMs;
@@ -49,6 +53,16 @@ final class ForgeMdicDebugRenderer {
     private int lastInvalidIndirectCommands;
     private boolean lastIndirectCommandBufferMatch;
     private long lastIndirectAuditVertices;
+    private long elementsIndirectAuditRuns;
+    private long elementsIndirectAuditFailures;
+    private String lastElementsIndirectAuditError = "none";
+    private double lastElementsIndirectAuditDurationMs;
+    private int lastAuditedElementsIndirectCommands;
+    private long lastAuditedElementsIndirectBytes;
+    private int lastInvalidElementsIndirectCommands;
+    private boolean lastElementsIndirectCommandBufferMatch;
+    private long lastElementsIndirectAuditIndices;
+    private long lastElementsIndirectAuditLogicalVertices;
     private long stressRuns;
     private long stressFailures;
     private String lastStressError = "none";
@@ -66,8 +80,11 @@ final class ForgeMdicDebugRenderer {
     private boolean lastStressLoopOk;
     private boolean lastStressMultiDrawOk;
     private boolean lastStressIndirectOk;
+    private boolean lastStressElementsIndirectOk;
     private boolean lastStressAutoOk;
     private boolean lastStressDerivedIndirectAuditOk;
+    private boolean lastStressElementsIndirectAuditOk;
+    private boolean lastStressSharedIndexBufferOk;
     private boolean lastStressSourceRegressionOk;
     private boolean lastStressBucketDrawOk;
     private boolean lastStressBucketIndirectAuditOk;
@@ -110,12 +127,16 @@ final class ForgeMdicDebugRenderer {
     void clear() {
         this.shader.close();
         this.derivedIndirectCommandBuffer.close();
+        this.sharedIndexBuffer.close();
+        this.elementsIndirectCommandBuffer.close();
         this.lastFrameApiDrawCalls = 0;
         this.lastFrameLogicalCommands = 0;
         this.lastFrameVertices = 0L;
+        this.lastFrameIndices = 0L;
         this.drawApiCallsIssued = 0L;
         this.logicalCommandsDrawn = 0L;
         this.verticesDrawn = 0L;
+        this.indicesDrawn = 0L;
         this.lastFrameRenderMs = 0.0D;
         this.maxFrameRenderMs = 0.0D;
         this.totalFrameRenderMs = 0.0D;
@@ -130,6 +151,7 @@ final class ForgeMdicDebugRenderer {
         this.lastRenderSkippedReason = "CLEARED";
         this.lastDrawError = "none";
         this.clearIndirectAuditStats();
+        this.clearElementsIndirectAuditStats();
     }
 
     void clearStressStats() {
@@ -150,8 +172,11 @@ final class ForgeMdicDebugRenderer {
         this.lastStressLoopOk = false;
         this.lastStressMultiDrawOk = false;
         this.lastStressIndirectOk = false;
+        this.lastStressElementsIndirectOk = false;
         this.lastStressAutoOk = false;
         this.lastStressDerivedIndirectAuditOk = false;
+        this.lastStressElementsIndirectAuditOk = false;
+        this.lastStressSharedIndexBufferOk = false;
         this.lastStressSourceRegressionOk = false;
         this.lastStressBucketDrawOk = false;
         this.lastStressBucketIndirectAuditOk = false;
@@ -174,6 +199,19 @@ final class ForgeMdicDebugRenderer {
         this.lastInvalidIndirectCommands = 0;
         this.lastIndirectCommandBufferMatch = false;
         this.lastIndirectAuditVertices = 0L;
+    }
+
+    void clearElementsIndirectAuditStats() {
+        this.elementsIndirectAuditRuns = 0L;
+        this.elementsIndirectAuditFailures = 0L;
+        this.lastElementsIndirectAuditError = "none";
+        this.lastElementsIndirectAuditDurationMs = 0.0D;
+        this.lastAuditedElementsIndirectCommands = 0;
+        this.lastAuditedElementsIndirectBytes = 0L;
+        this.lastInvalidElementsIndirectCommands = 0;
+        this.lastElementsIndirectCommandBufferMatch = false;
+        this.lastElementsIndirectAuditIndices = 0L;
+        this.lastElementsIndirectAuditLogicalVertices = 0L;
     }
 
     ForgeMdicDebugShader.ShaderStatus createShaderStatusSnapshot() {
@@ -233,6 +271,60 @@ final class ForgeMdicDebugRenderer {
         }
     }
 
+    ForgeMdicDebugElementsIndirectAuditResult auditElementsIndirectBuffer() {
+        long start = System.nanoTime();
+        if (!RenderSystem.isOnRenderThread()) {
+            return this.recordElementsIndirectAuditResult(ForgeMdicDebugElementsIndirectAuditResult.failure("not-render-thread", elapsedMs(start)));
+        }
+        try {
+            ForgeGpuGeometryHeap heap = this.instance.getGpuGeometryUploadManager().getHeapForDebugReadback();
+            if (heap == null || !heap.isCreated()) {
+                return this.recordElementsIndirectAuditResult(ForgeMdicDebugElementsIndirectAuditResult.failure("heap-missing", elapsedMs(start)));
+            }
+            ForgeMdicCommandManager manager = this.instance.getMdicCommandManager();
+            ForgeMdicCommandList commandList = manager.commandListForDebugDraw();
+            if (!commandList.isValid()) {
+                return this.recordElementsIndirectAuditResult(ForgeMdicDebugElementsIndirectAuditResult.failure("command-list-invalid", elapsedMs(start)));
+            }
+            if (commandList.isStale(heap.generation())) {
+                return this.recordElementsIndirectAuditResult(ForgeMdicDebugElementsIndirectAuditResult.failure("command-list-stale", elapsedMs(start)));
+            }
+            String currentDimension = currentDimensionId(Minecraft.getInstance());
+            if (commandList.isDimensionMismatch(currentDimension)) {
+                return this.recordElementsIndirectAuditResult(ForgeMdicDebugElementsIndirectAuditResult.failure("dimension-mismatch:" + commandList.dimensionId() + "!=" + currentDimension, elapsedMs(start)));
+            }
+            ForgeMdicDebugShader.ShaderStatus shaderStatus = this.shader.createStatusSnapshot();
+            ModeResolution mode = this.resolveEffectiveDrawMode(shaderStatus);
+            if (mode.effectiveMode() != ForgeMdicDebugDrawMode.MULTI_DRAW_ELEMENTS_INDIRECT) {
+                return this.recordElementsIndirectAuditResult(ForgeMdicDebugElementsIndirectAuditResult.failure("effective-mode-not-elements-indirect:" + mode.effectiveMode().name(), elapsedMs(start)));
+            }
+            if (!this.ensureElementsIndirectResources(commandList)) {
+                return this.recordElementsIndirectAuditResult(ForgeMdicDebugElementsIndirectAuditResult.failure("elements-indirect-upload-failed:" + this.elementsIndirectCommandBuffer.lastUploadError() + "/" + this.sharedIndexBuffer.lastUploadError(), elapsedMs(start)));
+            }
+
+            int[] words = this.elementsIndirectCommandBuffer.readbackWords();
+            ElementsIndirectAuditCounts counts = compareElementsIndirectCommands(words, commandList);
+            DrawBudget budget = DrawBudget.from(commandList, ForgeMdicDebugDrawConfig.maxCommands(), ForgeMdicDebugDrawConfig.maxRecords());
+            boolean bytesMatch = this.elementsIndirectCommandBuffer.bytes() == (long) budget.logicalCommands() * ForgeMdicDebugElementsIndirectCommandBuffer.BYTES_PER_COMMAND;
+            boolean countMatch = words.length == budget.logicalCommands() * ForgeMdicDebugElementsIndirectCommandBuffer.WORDS_PER_COMMAND;
+            boolean commandMatch = bytesMatch && countMatch && counts.invalidCommands() == 0 && counts.auditedIndices() == budget.vertices();
+            boolean success = commandMatch;
+            return this.recordElementsIndirectAuditResult(new ForgeMdicDebugElementsIndirectAuditResult(
+                    success,
+                    success ? "none" : "mismatch",
+                    elapsedMs(start),
+                    budget.logicalCommands(),
+                    this.elementsIndirectCommandBuffer.bytes(),
+                    counts.invalidCommands(),
+                    commandMatch,
+                    counts.auditedIndices(),
+                    counts.auditedLogicalVertices()
+            ));
+        } catch (RuntimeException e) {
+            return this.recordElementsIndirectAuditResult(ForgeMdicDebugElementsIndirectAuditResult.failure(e.getClass().getSimpleName() + ": " + e.getMessage(), elapsedMs(start)));
+        }
+    }
+
     ForgeMdicDebugDrawStats stressOnce() {
         this.stressRuns++;
         long start = System.nanoTime();
@@ -250,8 +342,11 @@ final class ForgeMdicDebugRenderer {
         this.lastStressLoopOk = false;
         this.lastStressMultiDrawOk = false;
         this.lastStressIndirectOk = false;
+        this.lastStressElementsIndirectOk = false;
         this.lastStressAutoOk = false;
         this.lastStressDerivedIndirectAuditOk = false;
+        this.lastStressElementsIndirectAuditOk = false;
+        this.lastStressSharedIndexBufferOk = false;
         this.lastStressSourceRegressionOk = false;
         this.lastStressBucketDrawOk = false;
         this.lastStressBucketIndirectAuditOk = false;
@@ -292,6 +387,10 @@ final class ForgeMdicDebugRenderer {
                 this.lastStressIndirectOk = this.prepareStressMode(ForgeMdicDebugDrawMode.MULTI_DRAW_ARRAYS_INDIRECT);
                 ForgeMdicDebugIndirectAuditResult derivedAudit = this.auditDerivedIndirectBuffer();
                 this.lastStressDerivedIndirectAuditOk = derivedAudit.success();
+                this.lastStressElementsIndirectOk = this.prepareStressMode(ForgeMdicDebugDrawMode.MULTI_DRAW_ELEMENTS_INDIRECT);
+                ForgeMdicDebugElementsIndirectAuditResult elementsAudit = this.auditElementsIndirectBuffer();
+                this.lastStressElementsIndirectAuditOk = elementsAudit.success();
+                this.lastStressSharedIndexBufferOk = this.sharedIndexBuffer.isCreated() && this.sharedIndexBuffer.maxRecords() >= 1;
                 this.lastStressAutoOk = this.prepareStressMode(ForgeMdicDebugDrawMode.AUTO);
                 ForgeMdicCommandList stressCommandList = manager.commandListForDebugDraw();
                 this.lastStressBucketDrawOk = stressCommandList.bucketAware()
@@ -300,6 +399,7 @@ final class ForgeMdicDebugRenderer {
                         && this.lastStressLoopOk
                         && this.lastStressMultiDrawOk
                         && this.lastStressIndirectOk
+                        && this.lastStressElementsIndirectOk
                         && this.lastStressAutoOk;
                 this.lastStressBucketIndirectAuditOk = this.lastStressDerivedIndirectAuditOk
                         && derivedAudit.invalidCommands() == 0
@@ -335,6 +435,12 @@ final class ForgeMdicDebugRenderer {
                     error = "indirect-mode-not-ready:" + derivedAudit.error();
                 } else if (!this.lastStressDerivedIndirectAuditOk && "none".equals(error)) {
                     error = "derived-indirect-audit=" + derivedAudit.error();
+                } else if (!this.lastStressElementsIndirectOk && "none".equals(error)) {
+                    error = "elements-indirect-mode-not-ready:" + elementsAudit.error();
+                } else if (!this.lastStressElementsIndirectAuditOk && "none".equals(error)) {
+                    error = "elements-indirect-audit=" + elementsAudit.error();
+                } else if (!this.lastStressSharedIndexBufferOk && "none".equals(error)) {
+                    error = "shared-index-buffer-not-ready:" + this.sharedIndexBuffer.lastUploadError();
                 } else if (!this.lastStressAutoOk && "none".equals(error)) {
                     error = "auto-mode-not-ready";
                 } else if (!this.lastStressBucketDrawOk && "none".equals(error)) {
@@ -368,7 +474,8 @@ final class ForgeMdicDebugRenderer {
                 this.lastStressDrawClearOk = clearedStatus.lastFrameApiDrawCalls() == 0
                         && clearedStatus.drawApiCallsIssued() == 0
                         && !clearedStatus.shaderCompiled()
-                        && !clearedStatus.derivedIndirectCommandBufferCreated();
+                        && !clearedStatus.derivedIndirectCommandBufferCreated()
+                        && !clearedStatus.elementsIndirectCommandBufferCreated();
                 if (!this.lastStressDrawClearOk && "none".equals(error)) {
                     error = "draw-clear-failed";
                 }
@@ -382,6 +489,7 @@ final class ForgeMdicDebugRenderer {
                         && !afterHeapClear.commandBufferCreated()
                         && afterHeapClear.lastFrameApiDrawCalls() == 0
                         && !afterHeapClear.derivedIndirectCommandBufferCreated()
+                        && !afterHeapClear.elementsIndirectCommandBufferCreated()
                         && ("COMMAND_LIST_MISSING".equals(afterHeapClear.lastRenderSkippedReason())
                         || "HEAP_MISSING".equals(afterHeapClear.lastRenderSkippedReason()));
                 if (!this.lastStressHeapClearOk && "none".equals(error)) {
@@ -473,8 +581,11 @@ final class ForgeMdicDebugRenderer {
                 && this.lastStressLoopOk
                 && this.lastStressMultiDrawOk
                 && this.lastStressIndirectOk
+                && this.lastStressElementsIndirectOk
                 && this.lastStressAutoOk
                 && this.lastStressDerivedIndirectAuditOk
+                && this.lastStressElementsIndirectAuditOk
+                && this.lastStressSharedIndexBufferOk
                 && this.lastStressSourceRegressionOk
                 && this.lastStressBucketDrawOk
                 && this.lastStressBucketIndirectAuditOk
@@ -504,6 +615,9 @@ final class ForgeMdicDebugRenderer {
         boolean derivedStale = this.derivedIndirectCommandBuffer.isCreated()
                 && (!this.derivedIndirectCommandBuffer.matches(commandList, ForgeMdicDebugDrawConfig.maxCommands(), ForgeMdicDebugDrawConfig.maxRecords())
                 || this.derivedIndirectCommandBuffer.isStale(currentHeapGeneration, currentDimension));
+        boolean elementsStale = this.elementsIndirectCommandBuffer.isCreated()
+                && (!this.elementsIndirectCommandBuffer.matches(commandList, ForgeMdicDebugDrawConfig.maxCommands(), ForgeMdicDebugDrawConfig.maxRecords())
+                || this.elementsIndirectCommandBuffer.isStale(currentHeapGeneration, currentDimension));
         ForgeMdicDebugShader.ShaderStatus shaderStatus = this.shader.createStatusSnapshot();
         ModeResolution mode = this.resolveEffectiveDrawMode(shaderStatus);
         return new ForgeMdicDebugDrawStats(
@@ -515,8 +629,10 @@ final class ForgeMdicDebugRenderer {
                 shaderStatus.programCreatedFor(mode.effectiveMode()),
                 shaderStatus.multiDrawSupported(),
                 shaderStatus.indirectSupported(),
+                shaderStatus.elementsIndirectSupported(),
                 shaderStatus.drawIdSupported(),
                 shaderStatus.baseInstanceSupported(),
+                shaderStatus.elementsIndirectUnsupportedReason(),
                 this.configuredDrawMode.name(),
                 mode.effectiveMode().name(),
                 mode.selectedReason(),
@@ -524,6 +640,8 @@ final class ForgeMdicDebugRenderer {
                 shaderStatus.shaderCompiled(),
                 shaderStatus.multiDrawShaderCompiled(),
                 shaderStatus.indirectShaderCompiled(),
+                shaderStatus.elementsIndirectShaderCompiled(),
+                shaderStatus.elementsIndirectUsesBaseInstance(),
                 commandBuffer.isCreated(),
                 commandListValid,
                 commandListStale,
@@ -531,6 +649,13 @@ final class ForgeMdicDebugRenderer {
                 this.derivedIndirectCommandBuffer.isCreated(),
                 this.derivedIndirectCommandBuffer.bytes(),
                 derivedStale,
+                this.sharedIndexBuffer.isCreated(),
+                this.sharedIndexBuffer.bytes(),
+                this.sharedIndexBuffer.maxRecords(),
+                ForgeMdicDebugSharedIndexBuffer.FORMAT,
+                this.elementsIndirectCommandBuffer.isCreated(),
+                this.elementsIndirectCommandBuffer.bytes(),
+                elementsStale,
                 heap != null,
                 heapCreated,
                 currentHeapGeneration,
@@ -549,9 +674,11 @@ final class ForgeMdicDebugRenderer {
                 this.lastFrameApiDrawCalls,
                 this.lastFrameLogicalCommands,
                 this.lastFrameVertices,
+                this.lastFrameIndices,
                 this.drawApiCallsIssued,
                 this.logicalCommandsDrawn,
                 this.verticesDrawn,
+                this.indicesDrawn,
                 this.lastFrameRenderMs,
                 this.maxFrameRenderMs,
                 this.frameSamples == 0L ? 0.0D : this.totalFrameRenderMs / this.frameSamples,
@@ -575,6 +702,17 @@ final class ForgeMdicDebugRenderer {
                 this.lastInvalidIndirectCommands,
                 this.lastIndirectCommandBufferMatch,
                 this.lastIndirectAuditVertices,
+                this.lastElementsIndirectCommandBufferMatch && this.lastInvalidElementsIndirectCommands == 0 && this.elementsIndirectAuditRuns > 0 && "none".equals(this.lastElementsIndirectAuditError),
+                this.elementsIndirectAuditRuns,
+                this.elementsIndirectAuditFailures,
+                this.lastElementsIndirectAuditError,
+                this.lastElementsIndirectAuditDurationMs,
+                this.lastAuditedElementsIndirectCommands,
+                this.lastAuditedElementsIndirectBytes,
+                this.lastInvalidElementsIndirectCommands,
+                this.lastElementsIndirectCommandBufferMatch,
+                this.lastElementsIndirectAuditIndices,
+                this.lastElementsIndirectAuditLogicalVertices,
                 this.stressRuns,
                 this.stressFailures,
                 this.lastStressError,
@@ -592,8 +730,11 @@ final class ForgeMdicDebugRenderer {
                 this.lastStressLoopOk,
                 this.lastStressMultiDrawOk,
                 this.lastStressIndirectOk,
+                this.lastStressElementsIndirectOk,
                 this.lastStressAutoOk,
                 this.lastStressDerivedIndirectAuditOk,
+                this.lastStressElementsIndirectAuditOk,
+                this.lastStressSharedIndexBufferOk,
                 this.lastStressSourceRegressionOk,
                 this.lastStressBucketDrawOk,
                 this.lastStressBucketIndirectAuditOk,
@@ -678,6 +819,10 @@ final class ForgeMdicDebugRenderer {
             this.recordSkip("INDIRECT_COMMAND_BUFFER_STALE");
             return;
         }
+        if (mode.effectiveMode() == ForgeMdicDebugDrawMode.MULTI_DRAW_ELEMENTS_INDIRECT && this.elementsIndirectCommandBuffer.isStale(heap.generation(), currentDimension)) {
+            this.recordSkip("ELEMENTS_INDIRECT_COMMAND_BUFFER_STALE");
+            return;
+        }
 
         long start = System.nanoTime();
         DrawPassResult passResult = DrawPassResult.empty();
@@ -746,7 +891,7 @@ final class ForgeMdicDebugRenderer {
             return;
         }
 
-        this.recordFrame(passResult.apiDrawCalls(), passResult.logicalCommands(), passResult.vertices(), elapsedMs(start), passResult.glError(), passResult.glErrorStage(), stateRestoreError, stateRestoreFailed);
+        this.recordFrame(passResult.apiDrawCalls(), passResult.logicalCommands(), passResult.vertices(), passResult.indices(), elapsedMs(start), passResult.glError(), passResult.glErrorStage(), stateRestoreError, stateRestoreFailed);
     }
 
     private DrawPassResult drawCommandsForMode(
@@ -761,6 +906,7 @@ final class ForgeMdicDebugRenderer {
         return switch (mode) {
             case MULTI_DRAW_ARRAYS -> this.drawMulti(geometryBufferId, commandBufferId, modelView, projection, commandList, alpha);
             case MULTI_DRAW_ARRAYS_INDIRECT -> this.drawIndirect(geometryBufferId, commandBufferId, modelView, projection, commandList, alpha);
+            case MULTI_DRAW_ELEMENTS_INDIRECT -> this.drawElementsIndirect(geometryBufferId, commandBufferId, modelView, projection, commandList, alpha);
             case AUTO -> throw new IllegalStateException("AUTO must be resolved before drawing");
             case LOOP_PER_COMMAND -> this.drawLoop(geometryBufferId, commandBufferId, modelView, projection, commandList, alpha);
         };
@@ -791,10 +937,10 @@ final class ForgeMdicDebugRenderer {
             vertices += vertexCount;
             recordsLeft -= drawnRecords;
             if (!result.ok()) {
-                return new DrawPassResult(apiDrawCalls, logicalCommands, vertices, result.formattedError(), result.stage());
+                return new DrawPassResult(apiDrawCalls, logicalCommands, vertices, 0L, result.formattedError(), result.stage());
             }
         }
-        return new DrawPassResult(apiDrawCalls, logicalCommands, vertices, "none", "none");
+        return new DrawPassResult(apiDrawCalls, logicalCommands, vertices, 0L, "none", "none");
     }
 
     private DrawPassResult drawMulti(int geometryBufferId, int commandBufferId, Matrix4f modelView, Matrix4f projection, ForgeMdicCommandList commandList, float alpha) {
@@ -809,13 +955,13 @@ final class ForgeMdicDebugRenderer {
                 alpha
         );
         int apiDrawCalls = result.logicalCommands() > 0 ? 1 : 0;
-        return new DrawPassResult(apiDrawCalls, result.logicalCommands(), result.vertices(), result.formattedError(), result.stage());
+        return new DrawPassResult(apiDrawCalls, result.logicalCommands(), result.vertices(), 0L, result.formattedError(), result.stage());
     }
 
     private DrawPassResult drawIndirect(int geometryBufferId, int commandBufferId, Matrix4f modelView, Matrix4f projection, ForgeMdicCommandList commandList, float alpha) {
         if (!this.ensureDerivedIndirectBuffer(commandList)) {
             this.lastDrawError = "indirect-command-buffer-upload-failed:" + this.derivedIndirectCommandBuffer.lastUploadError();
-            return new DrawPassResult(0, 0, 0L, "none", ForgeMdicDebugShader.ERROR_STAGE_INDIRECT_COMMAND_BUFFER_UPLOAD);
+            return new DrawPassResult(0, 0, 0L, 0L, "none", ForgeMdicDebugShader.ERROR_STAGE_INDIRECT_COMMAND_BUFFER_UPLOAD);
         }
         ForgeMdicDebugShader.DrawCallResult result = this.shader.drawIndirectWithDiagnostics(
                 geometryBufferId,
@@ -829,7 +975,31 @@ final class ForgeMdicDebugRenderer {
                 alpha
         );
         int apiDrawCalls = result.logicalCommands() > 0 ? 1 : 0;
-        return new DrawPassResult(apiDrawCalls, result.logicalCommands(), result.vertices(), result.formattedError(), result.stage());
+        return new DrawPassResult(apiDrawCalls, result.logicalCommands(), result.vertices(), 0L, result.formattedError(), result.stage());
+    }
+
+    private DrawPassResult drawElementsIndirect(int geometryBufferId, int commandBufferId, Matrix4f modelView, Matrix4f projection, ForgeMdicCommandList commandList, float alpha) {
+        if (!this.ensureElementsIndirectResources(commandList)) {
+            this.lastDrawError = "elements-indirect-upload-failed:" + this.elementsIndirectCommandBuffer.lastUploadError() + "/" + this.sharedIndexBuffer.lastUploadError();
+            return new DrawPassResult(0, 0, 0L, 0L, "none", ForgeMdicDebugShader.ERROR_STAGE_ELEMENTS_INDIRECT_COMMAND_BUFFER_UPLOAD);
+        }
+        ForgeMdicDebugShader.DrawCallResult result = this.shader.drawElementsIndirectWithDiagnostics(
+                geometryBufferId,
+                commandBufferId,
+                this.sharedIndexBuffer.bufferId(),
+                this.elementsIndirectCommandBuffer.bufferId(),
+                modelView,
+                projection,
+                commandList,
+                ForgeMdicDebugDrawConfig.maxCommands(),
+                ForgeMdicDebugDrawConfig.maxRecords(),
+                alpha
+        );
+        DrawBudget budget = DrawBudget.from(commandList, ForgeMdicDebugDrawConfig.maxCommands(), ForgeMdicDebugDrawConfig.maxRecords());
+        int apiDrawCalls = result.logicalCommands() > 0 ? 1 : 0;
+        long logicalVertices = budget.logicalVertices();
+        long indices = budget.vertices();
+        return new DrawPassResult(apiDrawCalls, result.logicalCommands(), logicalVertices, indices, result.formattedError(), result.stage());
     }
 
     private boolean prepareStressMode(ForgeMdicDebugDrawMode mode) {
@@ -842,6 +1012,10 @@ final class ForgeMdicDebugRenderer {
         if (resolution.effectiveMode() == ForgeMdicDebugDrawMode.MULTI_DRAW_ARRAYS_INDIRECT) {
             ForgeMdicCommandList commandList = this.instance.getMdicCommandManager().commandListForDebugDraw();
             return this.ensureDerivedIndirectBuffer(commandList);
+        }
+        if (resolution.effectiveMode() == ForgeMdicDebugDrawMode.MULTI_DRAW_ELEMENTS_INDIRECT) {
+            ForgeMdicCommandList commandList = this.instance.getMdicCommandManager().commandListForDebugDraw();
+            return this.ensureElementsIndirectResources(commandList);
         }
         return true;
     }
@@ -874,6 +1048,7 @@ final class ForgeMdicDebugRenderer {
         return switch (mode) {
             case MULTI_DRAW_ARRAYS -> this.shader.ensureMultiDrawReady();
             case MULTI_DRAW_ARRAYS_INDIRECT -> this.shader.ensureIndirectReady();
+            case MULTI_DRAW_ELEMENTS_INDIRECT -> this.shader.ensureElementsIndirectReady();
             case AUTO -> this.prepareShaderForMode(this.resolveEffectiveDrawMode(this.shader.createStatusSnapshot()).effectiveMode());
             case LOOP_PER_COMMAND -> this.shader.ensureReady();
         };
@@ -886,6 +1061,19 @@ final class ForgeMdicDebugRenderer {
         return this.derivedIndirectCommandBuffer.upload(commandList, ForgeMdicDebugDrawConfig.maxCommands(), ForgeMdicDebugDrawConfig.maxRecords());
     }
 
+    private boolean ensureElementsIndirectResources(ForgeMdicCommandList commandList) {
+        DrawBudget budget = DrawBudget.from(commandList, ForgeMdicDebugDrawConfig.maxCommands(), ForgeMdicDebugDrawConfig.maxRecords());
+        int requiredRecords = (int) Math.min((long) ForgeMdicDebugDrawConfig.maxIndexedRecords(), Math.max(1L, budget.logicalVertices() / ForgeMdicDebugSharedIndexBuffer.VERTICES_PER_QUAD));
+        int configuredRecords = Math.max(requiredRecords, Math.min(ForgeMdicDebugDrawConfig.maxIndexedRecords(), ForgeMdicDebugDrawConfig.maxRecords()));
+        if (!this.sharedIndexBuffer.ensure(configuredRecords)) {
+            return false;
+        }
+        if (this.elementsIndirectCommandBuffer.matches(commandList, ForgeMdicDebugDrawConfig.maxCommands(), ForgeMdicDebugDrawConfig.maxRecords())) {
+            return true;
+        }
+        return this.elementsIndirectCommandBuffer.upload(commandList, ForgeMdicDebugDrawConfig.maxCommands(), ForgeMdicDebugDrawConfig.maxRecords());
+    }
+
     private ModeResolution resolveEffectiveDrawMode(ForgeMdicDebugShader.ShaderStatus shaderStatus) {
         ModeResolution resolution = switch (this.configuredDrawMode) {
             case LOOP_PER_COMMAND -> new ModeResolution(ForgeMdicDebugDrawMode.LOOP_PER_COMMAND, "configured-loop", "none");
@@ -893,6 +1081,7 @@ final class ForgeMdicDebugRenderer {
                     ? new ModeResolution(ForgeMdicDebugDrawMode.MULTI_DRAW_ARRAYS, "configured-multi-draw-supported", "none")
                     : new ModeResolution(ForgeMdicDebugDrawMode.LOOP_PER_COMMAND, "configured-multi-draw-unsupported", shaderStatus.multiDrawUnsupportedReason());
             case MULTI_DRAW_ARRAYS_INDIRECT -> this.resolveForcedIndirect(shaderStatus);
+            case MULTI_DRAW_ELEMENTS_INDIRECT -> this.resolveForcedElementsIndirect(shaderStatus);
             case AUTO -> this.resolveAuto(shaderStatus);
         };
         this.lastAutoModeSelectedReason = resolution.selectedReason();
@@ -910,9 +1099,20 @@ final class ForgeMdicDebugRenderer {
         return new ModeResolution(ForgeMdicDebugDrawMode.LOOP_PER_COMMAND, "configured-indirect-unsupported", shaderStatus.indirectUnsupportedReason());
     }
 
+    private ModeResolution resolveForcedElementsIndirect(ForgeMdicDebugShader.ShaderStatus shaderStatus) {
+        if (shaderStatus.elementsIndirectSupported()) {
+            return new ModeResolution(ForgeMdicDebugDrawMode.MULTI_DRAW_ELEMENTS_INDIRECT, "configured-elements-indirect-supported", "none");
+        }
+        ModeResolution fallback = this.resolveForcedIndirect(shaderStatus);
+        return new ModeResolution(fallback.effectiveMode(), "configured-elements-indirect-unsupported", shaderStatus.elementsIndirectUnsupportedReason());
+    }
+
     private ModeResolution resolveAuto(ForgeMdicDebugShader.ShaderStatus shaderStatus) {
+        if (shaderStatus.elementsIndirectSupported()) {
+            return new ModeResolution(ForgeMdicDebugDrawMode.MULTI_DRAW_ELEMENTS_INDIRECT, "auto-selected-elements-indirect-supported", "none");
+        }
         if (shaderStatus.indirectSupported()) {
-            return new ModeResolution(ForgeMdicDebugDrawMode.MULTI_DRAW_ARRAYS_INDIRECT, "auto-selected-indirect-supported", "none");
+            return new ModeResolution(ForgeMdicDebugDrawMode.MULTI_DRAW_ARRAYS_INDIRECT, "auto-fallback-arrays-indirect-supported", shaderStatus.elementsIndirectUnsupportedReason());
         }
         if (shaderStatus.multiDrawSupported()) {
             return new ModeResolution(ForgeMdicDebugDrawMode.MULTI_DRAW_ARRAYS, "auto-fallback-multi-draw-supported", shaderStatus.indirectUnsupportedReason());
@@ -935,22 +1135,41 @@ final class ForgeMdicDebugRenderer {
         return result;
     }
 
+    private ForgeMdicDebugElementsIndirectAuditResult recordElementsIndirectAuditResult(ForgeMdicDebugElementsIndirectAuditResult result) {
+        this.elementsIndirectAuditRuns++;
+        this.lastElementsIndirectAuditError = result.success() ? "none" : result.error();
+        this.lastElementsIndirectAuditDurationMs = result.durationMs();
+        this.lastAuditedElementsIndirectCommands = result.auditedCommands();
+        this.lastAuditedElementsIndirectBytes = result.auditedBytes();
+        this.lastInvalidElementsIndirectCommands = result.invalidCommands();
+        this.lastElementsIndirectCommandBufferMatch = result.commandBufferMatch();
+        this.lastElementsIndirectAuditIndices = result.auditedIndices();
+        this.lastElementsIndirectAuditLogicalVertices = result.auditedLogicalVertices();
+        if (!result.success()) {
+            this.elementsIndirectAuditFailures++;
+        }
+        return result;
+    }
+
     private void recordSkip(String reason) {
         this.lastFrameApiDrawCalls = 0;
         this.lastFrameLogicalCommands = 0;
         this.lastFrameVertices = 0L;
+        this.lastFrameIndices = 0L;
         this.lastFrameRenderMs = 0.0D;
         this.lastFrameOverBudget = false;
         this.lastRenderSkippedReason = reason;
     }
 
-    private void recordFrame(int apiDrawCalls, int logicalCommands, long vertices, double durationMs, String glError, String glErrorStage, String stateRestoreError, boolean stateRestoreFailed) {
+    private void recordFrame(int apiDrawCalls, int logicalCommands, long vertices, long indices, double durationMs, String glError, String glErrorStage, String stateRestoreError, boolean stateRestoreFailed) {
         this.lastFrameApiDrawCalls = apiDrawCalls;
         this.lastFrameLogicalCommands = logicalCommands;
         this.lastFrameVertices = vertices;
+        this.lastFrameIndices = indices;
         this.drawApiCallsIssued += apiDrawCalls;
         this.logicalCommandsDrawn += logicalCommands;
         this.verticesDrawn += vertices;
+        this.indicesDrawn += indices;
         this.lastFrameRenderMs = durationMs;
         this.maxFrameRenderMs = Math.max(this.maxFrameRenderMs, durationMs);
         this.totalFrameRenderMs += durationMs;
@@ -1013,6 +1232,39 @@ final class ForgeMdicDebugRenderer {
         return new IndirectAuditCounts(invalid, vertices);
     }
 
+    private static ElementsIndirectAuditCounts compareElementsIndirectCommands(int[] words, ForgeMdicCommandList commandList) {
+        DrawBudget budget = DrawBudget.from(commandList, ForgeMdicDebugDrawConfig.maxCommands(), ForgeMdicDebugDrawConfig.maxRecords());
+        int invalid = 0;
+        long indices = 0L;
+        long logicalVertices = 0L;
+        long recordsLeft = ForgeMdicDebugDrawConfig.maxRecords();
+        for (int i = 0; i < budget.logicalCommands(); i++) {
+            int wordOffset = i * ForgeMdicDebugElementsIndirectCommandBuffer.WORDS_PER_COMMAND;
+            if (wordOffset + 4 >= words.length) {
+                invalid++;
+                continue;
+            }
+            ForgeMdicCommand command = commandList.commands().get(i);
+            int records = Math.max(0, command.recordCount());
+            int drawnRecords = (int) Math.min(recordsLeft, records);
+            int expectedCount = drawnRecords * ForgeMdicDebugSharedIndexBuffer.INDICES_PER_QUAD;
+            indices += expectedCount;
+            logicalVertices += (long) drawnRecords * ForgeMdicDebugSharedIndexBuffer.VERTICES_PER_QUAD;
+            recordsLeft -= drawnRecords;
+            if (words[wordOffset] != expectedCount
+                    || words[wordOffset + 1] != 1
+                    || words[wordOffset + 2] != 0
+                    || words[wordOffset + 3] != 0
+                    || words[wordOffset + 4] != i) {
+                invalid++;
+            }
+        }
+        if (words.length != budget.logicalCommands() * ForgeMdicDebugElementsIndirectCommandBuffer.WORDS_PER_COMMAND) {
+            invalid += Math.abs(words.length - budget.logicalCommands() * ForgeMdicDebugElementsIndirectCommandBuffer.WORDS_PER_COMMAND);
+        }
+        return new ElementsIndirectAuditCounts(invalid, indices, logicalVertices);
+    }
+
     private static String currentDimensionId() {
         Minecraft minecraft = Minecraft.getInstance();
         return currentDimensionId(minecraft);
@@ -1038,30 +1290,35 @@ final class ForgeMdicDebugRenderer {
     private record ModeResolution(ForgeMdicDebugDrawMode effectiveMode, String selectedReason, String fallbackReason) {
     }
 
-    private record DrawBudget(int logicalCommands, long vertices) {
+    private record DrawBudget(int logicalCommands, long vertices, long logicalVertices) {
         static DrawBudget from(ForgeMdicCommandList commandList, int maxCommands, int maxRecords) {
             int commandLimit = Math.min(Math.max(0, maxCommands), commandList.commandCount());
             long recordsLeft = Math.max(0, maxRecords);
             int logicalCommands = 0;
             long vertices = 0L;
+            long logicalVertices = 0L;
             for (int i = 0; i < commandLimit && recordsLeft > 0L; i++) {
                 ForgeMdicCommand command = commandList.commands().get(i);
                 int records = Math.max(0, command.recordCount());
                 int drawnRecords = (int) Math.min(recordsLeft, records);
                 logicalCommands++;
                 vertices += (long) drawnRecords * 6L;
+                logicalVertices += (long) drawnRecords * ForgeMdicDebugSharedIndexBuffer.VERTICES_PER_QUAD;
                 recordsLeft -= drawnRecords;
             }
-            return new DrawBudget(logicalCommands, vertices);
+            return new DrawBudget(logicalCommands, vertices, logicalVertices);
         }
     }
 
-    private record DrawPassResult(int apiDrawCalls, int logicalCommands, long vertices, String glError, String glErrorStage) {
+    private record DrawPassResult(int apiDrawCalls, int logicalCommands, long vertices, long indices, String glError, String glErrorStage) {
         static DrawPassResult empty() {
-            return new DrawPassResult(0, 0, 0L, "none", "none");
+            return new DrawPassResult(0, 0, 0L, 0L, "none", "none");
         }
     }
 
     private record IndirectAuditCounts(int invalidCommands, long auditedVertices) {
+    }
+
+    private record ElementsIndirectAuditCounts(int invalidCommands, long auditedIndices, long auditedLogicalVertices) {
     }
 }

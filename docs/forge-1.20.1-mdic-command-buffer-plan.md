@@ -674,3 +674,90 @@ RenderData / ModelStore bridge
 ```
 
 G6.5 remains a debug renderer checkpoint. It improves which commands are generated and how that choice is audited, without making the Forge PoC a formal MDIC renderer.
+
+## G6.6 DrawElementsIndirect-Compatible Debug Path
+
+G6.6 keeps the G6.5 visibility-aware, bucket-aware MDIC command list intact and adds a derived indexed indirect debug draw path:
+
+```text
+MDIC bucket/visibility command list
+ -> Forge MDIC command SSBO
+ -> derived DrawElementsIndirectCommand buffer
+ -> shared quad index buffer
+ -> glMultiDrawElementsIndirect
+ -> MDIC debug shader
+```
+
+This is still a debug renderer. It does not connect `MDICSectionRenderer`, `VoxyRenderSystem`, shaderpack paths, Sodium/Iris/Embeddium/Oculus, texture atlases, ModelStore, occlusion, translucent sorting, or full LOD traversal.
+
+The shared index buffer uses `GL_UNSIGNED_INT` and expands each logical quad into two triangles:
+
+```text
+quad vertex base = recordIndex * 4
+indices = base+0, base+1, base+2, base+2, base+3, base+0
+```
+
+The derived indexed indirect command buffer uses the OpenGL standard layout:
+
+```c
+typedef struct {
+    uint count;
+    uint instanceCount;
+    uint firstIndex;
+    uint baseVertex;
+    uint baseInstance;
+} DrawElementsIndirectCommand;
+```
+
+For the G6.6 debug prototype each MDIC command derives one indexed command:
+
+```text
+count = mdicCommand.recordCount * 6
+instanceCount = 1
+firstIndex = 0
+baseVertex = 0
+baseInstance = mdicCommandIndex
+```
+
+`baseInstance` lets the shader choose the MDIC command while the shared index buffer provides the six triangle indices per quad. The indexed shader variant treats `gl_VertexID` as the indexed logical quad vertex id:
+
+```text
+quadLocalIndex = gl_VertexID / 4
+cornerIndex = gl_VertexID % 4
+recordIndex = command.recordStart + quadLocalIndex
+```
+
+The similarity to original Voxy is the draw-call shape: a command buffer compatible with indexed indirect drawing and one multi-draw-elements-indirect call. The major gaps remain deliberate:
+
+```text
+no formal Voxy DrawCommand producer
+no draw count buffer
+no glMultiDrawElementsIndirectCountARB
+no renderer-side MDICSectionRenderer lifecycle
+no texture/material/model metadata
+no shaderpack integration
+```
+
+G6.6 audit covers the derived indexed command buffer by reading back and comparing:
+
+```text
+command count
+buffer bytes
+count = recordCount * 6
+instanceCount = 1
+firstIndex = 0
+baseVertex = 0
+baseInstance = command index
+total indices = commandRecords * 6
+total logical vertices = commandRecords * 4
+generation / dimension ownership
+```
+
+G6.7 candidates:
+
+```text
+indirect count buffer skeleton
+formal DrawCommand buffer separation
+visibility / LOD stats hardening
+RenderData / ModelStore bridge
+```

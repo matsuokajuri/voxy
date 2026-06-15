@@ -20,6 +20,10 @@ final class ForgeMdicDebugDrawConfig {
         return ForgeVoxyRuntimeOverrides.mdicDebugDrawMaxRecords();
     }
 
+    static int maxIndexedRecords() {
+        return ForgeVoxyRuntimeOverrides.mdicDebugDrawMaxIndexedRecords();
+    }
+
     static double alpha() {
         return ForgeVoxyRuntimeOverrides.mdicDebugDrawAlpha();
     }

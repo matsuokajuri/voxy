@@ -181,6 +181,10 @@ public final class ForgeVoxyCommands {
                                 .executes(ctx -> setDirectGlMdicDrawMode(ctx.getSource(), ForgeMdicDebugDrawMode.MULTI_DRAW_ARRAYS_INDIRECT)))
                         .then(Commands.literal("multi_draw_arrays_indirect")
                                 .executes(ctx -> setDirectGlMdicDrawMode(ctx.getSource(), ForgeMdicDebugDrawMode.MULTI_DRAW_ARRAYS_INDIRECT)))
+                        .then(Commands.literal("elements_indirect")
+                                .executes(ctx -> setDirectGlMdicDrawMode(ctx.getSource(), ForgeMdicDebugDrawMode.MULTI_DRAW_ELEMENTS_INDIRECT)))
+                        .then(Commands.literal("multi_draw_elements_indirect")
+                                .executes(ctx -> setDirectGlMdicDrawMode(ctx.getSource(), ForgeMdicDebugDrawMode.MULTI_DRAW_ELEMENTS_INDIRECT)))
                         .then(Commands.literal("auto")
                                 .executes(ctx -> setDirectGlMdicDrawMode(ctx.getSource(), ForgeMdicDebugDrawMode.AUTO))))
                 .then(Commands.literal("direct_gl_mdic_draw_clear")
@@ -191,6 +195,12 @@ public final class ForgeVoxyCommands {
                         .executes(ctx -> directGlMdicDrawIndirectAuditStatus(ctx.getSource())))
                 .then(Commands.literal("direct_gl_mdic_draw_indirect_audit_clear")
                         .executes(ctx -> directGlMdicDrawIndirectAuditClear(ctx.getSource())))
+                .then(Commands.literal("direct_gl_mdic_draw_elements_indirect_audit")
+                        .executes(ctx -> directGlMdicDrawElementsIndirectAudit(ctx.getSource())))
+                .then(Commands.literal("direct_gl_mdic_draw_elements_indirect_audit_status")
+                        .executes(ctx -> directGlMdicDrawElementsIndirectAuditStatus(ctx.getSource())))
+                .then(Commands.literal("direct_gl_mdic_draw_elements_indirect_audit_clear")
+                        .executes(ctx -> directGlMdicDrawElementsIndirectAuditClear(ctx.getSource())))
                 .then(Commands.literal("direct_gl_mdic_draw_stress_once")
                         .executes(ctx -> directGlMdicDrawStressOnce(ctx.getSource())))
                 .then(Commands.literal("direct_gl_mdic_draw_stress_status")
@@ -2098,7 +2108,7 @@ public final class ForgeVoxyCommands {
         ForgeMdicCommandStats status = ForgeVoxyInstance.INSTANCE.getMdicCommandManager().createStatusSnapshot();
         ForgeMdicDebugDrawStats drawStatus = ForgeVoxyInstance.INSTANCE.getMdicDebugRenderer().createStatusSnapshot();
         String message = String.format(
-                "Voxy MDIC skeleton: stage=%s layoutVersion=%s wordsPerCommand=%d bytesPerCommand=%d enabled=%s actualDrawEnabled=%s hasHeap=%s heapCreated=%s currentHeapGeneration=%d currentDimension=%s commandListValid=%s commandListStale=%s commandBufferStale=%s lastStaleReason=%s bucketAware=%s includedTranslucent=%s includedDoubleSided=%s includedDirectional=%s directionalFaceMask=%s faceMaskFallbackAllWhenInside=%s faceMaskFallbackReason=%s faceMaskCommandsAccepted=%d faceMaskCommandsRejected=%d rejectedDirectionalBuckets=%d insideSectionFallbacks=%d missingCameraFallbacks=%d missingAabbFallbacks=%d commandCount=%d sectionCount=%d bucketCommands=%d sectionCommands=%d commandRecords=%d commandVertices=%d commandsPerSectionMin=%d commandsPerSectionMax=%d bucket0Commands=%d bucket1Commands=%d bucket2Commands=%d bucket3Commands=%d bucket4Commands=%d bucket5Commands=%d bucket6Commands=%d bucket7Commands=%d bucket2RejectedByFaceMask=%d bucket3RejectedByFaceMask=%d bucket4RejectedByFaceMask=%d bucket5RejectedByFaceMask=%d bucket6RejectedByFaceMask=%d bucket7RejectedByFaceMask=%d skippedEmptyBuckets=%d skippedTranslucentCommands=%d skippedBucketCommands=%d minRecordCount=%d maxRecordCount=%d avgRecordCount=%.2f nonEmptyBucketCommands=%d emptyBucketCommands=%d bucketMaskOr=0x%02X bucketMaskAnd=0x%02X minGeometryPtr=%d maxGeometryPtr=%d skippedSections=%d skippedRecords=%d selectionMode=%s effectiveSelectionMode=%s selectionFallbackReason=%s frustumAvailable=%s frustumAgeMs=%.2f cameraPosition=%s cameraChunk=%s cameraSection=%s renderDistanceChunks=%d candidateSections=%d acceptedSections=%d rejectedByRadius=%d rejectedByFrustum=%d rejectedByBudget=%d rejectedByMissingMetadata=%d nearestAcceptedDistance=%.2f farthestAcceptedDistance=%.2f maxPlanCandidates=%d maxSections=%d maxCommands=%d maxRecords=%d commandListDimension=%s commandListGeneration=%d commandBufferCreated=%s commandBufferBytes=%d commandBufferGeneration=%d commandBufferDimension=%s lastPlanDurationMs=%.2f lastBuildBufferDurationMs=%.2f lastError=%s lastAuditOk=%s lastCommandBufferMatch=%s lastLayoutMatch=%s lastGenerationMatch=%s lastDimensionMatch=%s lastInvalidCommands=%d lastInvalidLayoutCommands=%d lastInvalidGenerationCommands=%d lastInvalidDimensionCommands=%d lastInvalidBucketMaskCommands=%d lastInvalidBucketRangeCommands=%d lastInvalidBucketOffsetCommands=%d lastInvalidGeometryPtrCommands=%d lastInvalidFaceMaskCommands=%d lastFaceMaskAuditOk=%s lastSelectionAuditOk=%s invalidSelectionCommands=%d invalidRadiusCommands=%d invalidFrustumCommands=%d auditRuns=%d auditFailures=%d lastAuditedCommands=%d lastAuditedRecords=%d lastAuditedBytes=%d lastAuditHeapGeneration=%d lastAuditDimension=%s mdicDebugDrawEnabled=%s mdicDebugActualDraw=%s mdicDebugStage=%s mdicDebugConfiguredDrawMode=%s mdicDebugEffectiveDrawMode=%s mdicDebugDerivedIndirectCommandBufferCreated=%s mdicDebugDerivedIndirectCommandBufferBytes=%d mdicDebugLastFrameApiDrawCalls=%d mdicDebugLastFrameLogicalCommands=%d mdicDebugLastGlError=%s mdicDebugStateRestoreFailures=%d mdicDebugLastRenderSkippedReason=%s formalMdicRenderer=false voxyRenderSystem=false",
+                "Voxy MDIC skeleton: stage=%s layoutVersion=%s wordsPerCommand=%d bytesPerCommand=%d enabled=%s actualDrawEnabled=%s hasHeap=%s heapCreated=%s currentHeapGeneration=%d currentDimension=%s commandListValid=%s commandListStale=%s commandBufferStale=%s lastStaleReason=%s bucketAware=%s includedTranslucent=%s includedDoubleSided=%s includedDirectional=%s directionalFaceMask=%s faceMaskFallbackAllWhenInside=%s faceMaskFallbackReason=%s faceMaskCommandsAccepted=%d faceMaskCommandsRejected=%d rejectedDirectionalBuckets=%d insideSectionFallbacks=%d missingCameraFallbacks=%d missingAabbFallbacks=%d commandCount=%d sectionCount=%d bucketCommands=%d sectionCommands=%d commandRecords=%d commandVertices=%d commandsPerSectionMin=%d commandsPerSectionMax=%d bucket0Commands=%d bucket1Commands=%d bucket2Commands=%d bucket3Commands=%d bucket4Commands=%d bucket5Commands=%d bucket6Commands=%d bucket7Commands=%d bucket2RejectedByFaceMask=%d bucket3RejectedByFaceMask=%d bucket4RejectedByFaceMask=%d bucket5RejectedByFaceMask=%d bucket6RejectedByFaceMask=%d bucket7RejectedByFaceMask=%d skippedEmptyBuckets=%d skippedTranslucentCommands=%d skippedBucketCommands=%d minRecordCount=%d maxRecordCount=%d avgRecordCount=%.2f nonEmptyBucketCommands=%d emptyBucketCommands=%d bucketMaskOr=0x%02X bucketMaskAnd=0x%02X minGeometryPtr=%d maxGeometryPtr=%d skippedSections=%d skippedRecords=%d selectionMode=%s effectiveSelectionMode=%s selectionFallbackReason=%s frustumAvailable=%s frustumAgeMs=%.2f cameraPosition=%s cameraChunk=%s cameraSection=%s renderDistanceChunks=%d candidateSections=%d acceptedSections=%d rejectedByRadius=%d rejectedByFrustum=%d rejectedByBudget=%d rejectedByMissingMetadata=%d nearestAcceptedDistance=%.2f farthestAcceptedDistance=%.2f maxPlanCandidates=%d maxSections=%d maxCommands=%d maxRecords=%d commandListDimension=%s commandListGeneration=%d commandBufferCreated=%s commandBufferBytes=%d commandBufferGeneration=%d commandBufferDimension=%s lastPlanDurationMs=%.2f lastBuildBufferDurationMs=%.2f lastError=%s lastAuditOk=%s lastCommandBufferMatch=%s lastLayoutMatch=%s lastGenerationMatch=%s lastDimensionMatch=%s lastInvalidCommands=%d lastInvalidLayoutCommands=%d lastInvalidGenerationCommands=%d lastInvalidDimensionCommands=%d lastInvalidBucketMaskCommands=%d lastInvalidBucketRangeCommands=%d lastInvalidBucketOffsetCommands=%d lastInvalidGeometryPtrCommands=%d lastInvalidFaceMaskCommands=%d lastFaceMaskAuditOk=%s lastSelectionAuditOk=%s invalidSelectionCommands=%d invalidRadiusCommands=%d invalidFrustumCommands=%d auditRuns=%d auditFailures=%d lastAuditedCommands=%d lastAuditedRecords=%d lastAuditedBytes=%d lastAuditHeapGeneration=%d lastAuditDimension=%s mdicDebugDrawEnabled=%s mdicDebugActualDraw=%s mdicDebugStage=%s mdicDebugConfiguredDrawMode=%s mdicDebugEffectiveDrawMode=%s mdicDebugDerivedIndirectCommandBufferCreated=%s mdicDebugDerivedIndirectCommandBufferBytes=%d mdicDebugSharedIndexBufferCreated=%s mdicDebugSharedIndexBufferBytes=%d mdicDebugElementsIndirectCommandBufferCreated=%s mdicDebugElementsIndirectCommandBufferBytes=%d mdicDebugLastFrameApiDrawCalls=%d mdicDebugLastFrameLogicalCommands=%d mdicDebugLastFrameIndices=%d mdicDebugLastGlError=%s mdicDebugStateRestoreFailures=%d mdicDebugLastRenderSkippedReason=%s formalMdicRenderer=false voxyRenderSystem=false",
                 status.stage(),
                 status.layoutVersion(),
                 status.wordsPerCommand(),
@@ -2225,8 +2235,13 @@ public final class ForgeVoxyCommands {
                 drawStatus.effectiveDrawMode(),
                 drawStatus.derivedIndirectCommandBufferCreated(),
                 drawStatus.derivedIndirectCommandBufferBytes(),
+                drawStatus.sharedIndexBufferCreated(),
+                drawStatus.sharedIndexBufferBytes(),
+                drawStatus.elementsIndirectCommandBufferCreated(),
+                drawStatus.elementsIndirectCommandBufferBytes(),
                 drawStatus.lastFrameApiDrawCalls(),
                 drawStatus.lastFrameLogicalCommands(),
+                drawStatus.lastFrameIndices(),
                 drawStatus.lastGlError(),
                 drawStatus.stateRestoreFailures(),
                 drawStatus.lastRenderSkippedReason()
@@ -2417,17 +2432,23 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getMdicDebugRenderer().setDrawMode(mode);
         ForgeMdicDebugDrawStats status = ForgeVoxyInstance.INSTANCE.getMdicDebugRenderer().createStatusSnapshot();
         String message = String.format(
-                "Voxy MDIC debug draw mode: configuredDrawMode=%s effectiveDrawMode=%s autoModeSelectedReason=%s autoModeFallbackReason=%s multiDrawSupported=%s indirectSupported=%s drawIdSupported=%s baseInstanceSupported=%s derivedIndirectCommandBufferCreated=%s derivedIndirectCommandBufferBytes=%d. Runtime-only; no toml was written.",
+                "Voxy MDIC debug draw mode: configuredDrawMode=%s effectiveDrawMode=%s autoModeSelectedReason=%s autoModeFallbackReason=%s multiDrawSupported=%s indirectSupported=%s elementsIndirectSupported=%s elementsIndirectUnsupportedReason=%s drawIdSupported=%s baseInstanceSupported=%s derivedIndirectCommandBufferCreated=%s derivedIndirectCommandBufferBytes=%d elementsIndirectCommandBufferCreated=%s elementsIndirectCommandBufferBytes=%d sharedIndexBufferCreated=%s sharedIndexBufferBytes=%d. Runtime-only; no toml was written.",
                 status.configuredDrawMode(),
                 status.effectiveDrawMode(),
                 status.autoModeSelectedReason(),
                 status.autoModeFallbackReason(),
                 status.multiDrawSupported(),
                 status.indirectSupported(),
+                status.elementsIndirectSupported(),
+                status.elementsIndirectUnsupportedReason(),
                 status.drawIdSupported(),
                 status.baseInstanceSupported(),
                 status.derivedIndirectCommandBufferCreated(),
-                status.derivedIndirectCommandBufferBytes()
+                status.derivedIndirectCommandBufferBytes(),
+                status.elementsIndirectCommandBufferCreated(),
+                status.elementsIndirectCommandBufferBytes(),
+                status.sharedIndexBufferCreated(),
+                status.sharedIndexBufferBytes()
         );
         source.sendSuccess(() -> Component.literal(message), false);
         return 1;
@@ -2436,7 +2457,7 @@ public final class ForgeVoxyCommands {
     private static int directGlMdicDrawStatus(CommandSourceStack source) {
         ForgeMdicDebugDrawStats status = ForgeVoxyInstance.INSTANCE.getMdicDebugRenderer().createStatusSnapshot();
         String message = String.format(
-                "Voxy MDIC debug draw: stage=%s drawEnabled=%s actualDrawEnabled=%s configuredDrawMode=%s effectiveDrawMode=%s autoModeSelectedReason=%s autoModeFallbackReason=%s multiDrawSupported=%s indirectSupported=%s drawIdSupported=%s baseInstanceSupported=%s shaderSupported=%s shaderCompiled=%s programCreated=%s loopShaderCompiled=%s multiDrawShaderCompiled=%s indirectShaderCompiled=%s commandBufferCreated=%s commandListValid=%s commandListStale=%s commandBufferStale=%s derivedIndirectCommandBufferCreated=%s derivedIndirectCommandBufferBytes=%d derivedIndirectCommandBufferStale=%s hasHeap=%s heapCreated=%s currentHeapGeneration=%d currentDimension=%s commandListGeneration=%d commandBufferGeneration=%d commandListDimension=%s commandBufferDimension=%s commandCount=%d commandRecords=%d maxCommands=%d maxRecords=%d alpha=%.2f ignoreDepth=%s doubleSided=%s lastFrameApiDrawCalls=%d lastFrameLogicalCommands=%d lastFrameVertices=%d drawApiCallsIssued=%d logicalCommandsDrawn=%d verticesDrawn=%d lastFrameRenderMs=%.2f maxFrameRenderMs=%.2f avgFrameRenderMs=%.2f lastFrameOverBudget=%s overBudgetFrames=%d frameBudgetMs=%.2f lastIndirectAuditOk=%s indirectAuditRuns=%d indirectAuditFailures=%d lastIndirectAuditError=%s lastAuditedIndirectCommands=%d lastAuditedIndirectBytes=%d lastInvalidIndirectCommands=%d lastIndirectCommandBufferMatch=%s lastIndirectAuditVertices=%d lastGlError=%s lastGlErrorStage=%s glErrorCount=%d stateRestoreFailures=%d lastStateRestoreError=%s lastRenderSkippedReason=%s lastDrawError=%s stressRuns=%d stressFailures=%d lastStressError=%s formalMdicRenderer=false voxyRenderSystem=false shaderpack=false",
+                "Voxy MDIC debug draw: stage=%s drawEnabled=%s actualDrawEnabled=%s configuredDrawMode=%s effectiveDrawMode=%s autoModeSelectedReason=%s autoModeFallbackReason=%s multiDrawSupported=%s indirectSupported=%s elementsIndirectSupported=%s elementsIndirectUnsupportedReason=%s drawIdSupported=%s baseInstanceSupported=%s shaderSupported=%s shaderCompiled=%s programCreated=%s loopShaderCompiled=%s multiDrawShaderCompiled=%s indirectShaderCompiled=%s elementsIndirectShaderCompiled=%s elementsIndirectUsesBaseInstance=%s commandBufferCreated=%s commandListValid=%s commandListStale=%s commandBufferStale=%s derivedIndirectCommandBufferCreated=%s derivedIndirectCommandBufferBytes=%d derivedIndirectCommandBufferStale=%s sharedIndexBufferCreated=%s sharedIndexBufferBytes=%d sharedIndexMaxRecords=%d sharedIndexFormat=%s elementsIndirectCommandBufferCreated=%s elementsIndirectCommandBufferBytes=%d elementsIndirectCommandBufferStale=%s lastElementsIndirectCommandBufferMatch=%s lastInvalidElementsIndirectCommands=%d hasHeap=%s heapCreated=%s currentHeapGeneration=%d currentDimension=%s commandListGeneration=%d commandBufferGeneration=%d commandListDimension=%s commandBufferDimension=%s commandCount=%d commandRecords=%d maxCommands=%d maxRecords=%d alpha=%.2f ignoreDepth=%s doubleSided=%s lastFrameApiDrawCalls=%d lastFrameLogicalCommands=%d lastFrameVertices=%d lastFrameIndices=%d drawApiCallsIssued=%d logicalCommandsDrawn=%d verticesDrawn=%d indicesDrawn=%d lastFrameRenderMs=%.2f maxFrameRenderMs=%.2f avgFrameRenderMs=%.2f lastFrameOverBudget=%s overBudgetFrames=%d frameBudgetMs=%.2f lastIndirectAuditOk=%s indirectAuditRuns=%d indirectAuditFailures=%d lastIndirectAuditError=%s lastAuditedIndirectCommands=%d lastAuditedIndirectBytes=%d lastInvalidIndirectCommands=%d lastIndirectCommandBufferMatch=%s lastIndirectAuditVertices=%d lastElementsIndirectAuditOk=%s elementsIndirectAuditRuns=%d elementsIndirectAuditFailures=%d lastElementsIndirectAuditError=%s lastAuditedElementsIndirectCommands=%d lastAuditedElementsIndirectBytes=%d lastElementsIndirectAuditIndices=%d lastElementsIndirectAuditLogicalVertices=%d lastGlError=%s lastGlErrorStage=%s glErrorCount=%d stateRestoreFailures=%d lastStateRestoreError=%s lastRenderSkippedReason=%s lastDrawError=%s stressRuns=%d stressFailures=%d lastStressError=%s formalMdicRenderer=false voxyRenderSystem=false shaderpack=false",
                 status.stage(),
                 status.drawEnabled(),
                 status.actualDrawEnabled(),
@@ -2446,6 +2467,8 @@ public final class ForgeVoxyCommands {
                 status.autoModeFallbackReason(),
                 status.multiDrawSupported(),
                 status.indirectSupported(),
+                status.elementsIndirectSupported(),
+                status.elementsIndirectUnsupportedReason(),
                 status.drawIdSupported(),
                 status.baseInstanceSupported(),
                 status.shaderSupported(),
@@ -2454,6 +2477,8 @@ public final class ForgeVoxyCommands {
                 status.loopShaderCompiled(),
                 status.multiDrawShaderCompiled(),
                 status.indirectShaderCompiled(),
+                status.elementsIndirectShaderCompiled(),
+                status.elementsIndirectUsesBaseInstance(),
                 status.commandBufferCreated(),
                 status.commandListValid(),
                 status.commandListStale(),
@@ -2461,6 +2486,15 @@ public final class ForgeVoxyCommands {
                 status.derivedIndirectCommandBufferCreated(),
                 status.derivedIndirectCommandBufferBytes(),
                 status.derivedIndirectCommandBufferStale(),
+                status.sharedIndexBufferCreated(),
+                status.sharedIndexBufferBytes(),
+                status.sharedIndexMaxRecords(),
+                status.sharedIndexFormat(),
+                status.elementsIndirectCommandBufferCreated(),
+                status.elementsIndirectCommandBufferBytes(),
+                status.elementsIndirectCommandBufferStale(),
+                status.lastElementsIndirectCommandBufferMatch(),
+                status.lastInvalidElementsIndirectCommands(),
                 status.hasHeap(),
                 status.heapCreated(),
                 status.currentHeapGeneration(),
@@ -2479,9 +2513,11 @@ public final class ForgeVoxyCommands {
                 status.lastFrameApiDrawCalls(),
                 status.lastFrameLogicalCommands(),
                 status.lastFrameVertices(),
+                status.lastFrameIndices(),
                 status.drawApiCallsIssued(),
                 status.logicalCommandsDrawn(),
                 status.verticesDrawn(),
+                status.indicesDrawn(),
                 status.lastFrameRenderMs(),
                 status.maxFrameRenderMs(),
                 status.avgFrameRenderMs(),
@@ -2497,6 +2533,14 @@ public final class ForgeVoxyCommands {
                 status.lastInvalidIndirectCommands(),
                 status.lastIndirectCommandBufferMatch(),
                 status.lastIndirectAuditVertices(),
+                status.lastElementsIndirectAuditOk(),
+                status.elementsIndirectAuditRuns(),
+                status.elementsIndirectAuditFailures(),
+                status.lastElementsIndirectAuditError(),
+                status.lastAuditedElementsIndirectCommands(),
+                status.lastAuditedElementsIndirectBytes(),
+                status.lastElementsIndirectAuditIndices(),
+                status.lastElementsIndirectAuditLogicalVertices(),
                 status.lastGlError(),
                 status.lastGlErrorStage(),
                 status.glErrorCount(),
@@ -2515,7 +2559,7 @@ public final class ForgeVoxyCommands {
     private static int directGlMdicShaderStatus(CommandSourceStack source) {
         ForgeMdicDebugShader.ShaderStatus status = ForgeVoxyInstance.INSTANCE.getMdicDebugRenderer().createShaderStatusSnapshot();
         String message = String.format(
-                "Voxy MDIC debug shader: shaderSupported=%s shaderCompiled=%s programCreated=%s loopShaderCompiled=%s multiDrawSupported=%s drawIdSupported=%s multiDrawShaderCompiled=%s multiDrawProgramCreated=%s indirectSupported=%s multiDrawIndirectSupported=%s drawIndirectBufferSupported=%s baseInstanceSupported=%s indirectShaderCompiled=%s indirectProgramCreated=%s usesSsbo=%s lastShaderError=%s lastMultiDrawShaderError=%s lastIndirectShaderError=%s unsupportedReason=%s multiDrawUnsupportedReason=%s indirectUnsupportedReason=%s glVersion=%s glslVersion=%s stage=%s formalMdicRenderer=false voxyRenderSystem=false",
+                "Voxy MDIC debug shader: shaderSupported=%s shaderCompiled=%s programCreated=%s loopShaderCompiled=%s multiDrawSupported=%s drawIdSupported=%s multiDrawShaderCompiled=%s multiDrawProgramCreated=%s indirectSupported=%s multiDrawIndirectSupported=%s drawIndirectBufferSupported=%s baseInstanceSupported=%s indirectShaderCompiled=%s indirectProgramCreated=%s elementsIndirectSupported=%s elementsIndirectShaderCompiled=%s elementsIndirectProgramCreated=%s elementsIndirectUsesBaseInstance=%s usesSsbo=%s lastShaderError=%s lastMultiDrawShaderError=%s lastIndirectShaderError=%s lastElementsIndirectShaderError=%s unsupportedReason=%s multiDrawUnsupportedReason=%s indirectUnsupportedReason=%s elementsIndirectUnsupportedReason=%s glVersion=%s glslVersion=%s stage=%s formalMdicRenderer=false voxyRenderSystem=false",
                 status.shaderSupported(),
                 status.shaderCompiled(),
                 status.programCreated(),
@@ -2530,24 +2574,30 @@ public final class ForgeVoxyCommands {
                 status.baseInstanceSupported(),
                 status.indirectShaderCompiled(),
                 status.indirectProgramCreated(),
+                status.elementsIndirectSupported(),
+                status.elementsIndirectShaderCompiled(),
+                status.elementsIndirectProgramCreated(),
+                status.elementsIndirectUsesBaseInstance(),
                 status.usesSsbo(),
                 status.lastShaderError(),
                 status.lastMultiDrawShaderError(),
                 status.lastIndirectShaderError(),
+                status.lastElementsIndirectShaderError(),
                 status.unsupportedReason(),
                 status.multiDrawUnsupportedReason(),
                 status.indirectUnsupportedReason(),
+                status.elementsIndirectUnsupportedReason(),
                 status.glVersion(),
                 status.glslVersion(),
                 ForgeMdicDebugRenderer.STAGE
         );
         source.sendSuccess(() -> Component.literal(message), false);
-        return status.ok() || status.multiDrawShaderCompiled() || status.indirectShaderCompiled() ? 1 : 0;
+        return status.ok() || status.multiDrawShaderCompiled() || status.indirectShaderCompiled() || status.elementsIndirectShaderCompiled() ? 1 : 0;
     }
 
     private static int directGlMdicDrawClear(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getMdicDebugRenderer().clear();
-        source.sendSuccess(() -> Component.literal("Voxy MDIC debug draw: shader, draw counters, derived indirect command buffer, indirect draw audit state, and transient render state cleared. MDIC command list/buffer, upload-only GL heap, G5 direct renderer, simple renderer, CPU caches, and SectionGeometryManager were left unchanged."), false);
+        source.sendSuccess(() -> Component.literal("Voxy MDIC debug draw: shader, draw counters, derived arrays indirect command buffer, shared index buffer, elements indirect command buffer, indirect audit state, elements indirect audit state, and transient render state cleared. MDIC command list/buffer, upload-only GL heap, G5 direct renderer, simple renderer, CPU caches, and SectionGeometryManager were left unchanged."), false);
         return 1;
     }
 
@@ -2609,10 +2659,75 @@ public final class ForgeVoxyCommands {
         return 1;
     }
 
+    private static int directGlMdicDrawElementsIndirectAudit(CommandSourceStack source) {
+        ForgeMdicDebugElementsIndirectAuditResult result = ForgeVoxyInstance.INSTANCE.getMdicDebugRenderer().auditElementsIndirectBuffer();
+        ForgeMdicDebugDrawStats status = ForgeVoxyInstance.INSTANCE.getMdicDebugRenderer().createStatusSnapshot();
+        String message = String.format(
+                "Voxy MDIC debug elements indirect audit: success=%s error=%s durationMs=%.2f auditedCommands=%d auditedBytes=%d invalidElementsIndirectCommands=%d elementsIndirectCommandBufferMatch=%s auditedIndices=%d auditedLogicalVertices=%d effectiveDrawMode=%s sharedIndexBufferCreated=%s elementsIndirectCommandBufferCreated=%s stage=%s",
+                result.success(),
+                result.error(),
+                result.durationMs(),
+                result.auditedCommands(),
+                result.auditedBytes(),
+                result.invalidCommands(),
+                result.commandBufferMatch(),
+                result.auditedIndices(),
+                result.auditedLogicalVertices(),
+                status.effectiveDrawMode(),
+                status.sharedIndexBufferCreated(),
+                status.elementsIndirectCommandBufferCreated(),
+                status.stage()
+        );
+        if (result.success()) {
+            source.sendSuccess(() -> Component.literal(message), false);
+            return 1;
+        }
+        source.sendFailure(Component.literal(message));
+        return 0;
+    }
+
+    private static int directGlMdicDrawElementsIndirectAuditStatus(CommandSourceStack source) {
+        ForgeMdicDebugDrawStats status = ForgeVoxyInstance.INSTANCE.getMdicDebugRenderer().createStatusSnapshot();
+        String message = String.format(
+                "Voxy MDIC debug elements indirect audit: lastElementsIndirectAuditOk=%s auditRuns=%d auditFailures=%d lastElementsIndirectAuditError=%s lastElementsIndirectAuditDurationMs=%.2f lastAuditedElementsIndirectCommands=%d lastAuditedElementsIndirectBytes=%d lastInvalidElementsIndirectCommands=%d lastElementsIndirectCommandBufferMatch=%s lastElementsIndirectAuditIndices=%d lastElementsIndirectAuditLogicalVertices=%d sharedIndexBufferCreated=%s sharedIndexBufferBytes=%d sharedIndexMaxRecords=%d sharedIndexFormat=%s elementsIndirectCommandBufferCreated=%s elementsIndirectCommandBufferBytes=%d elementsIndirectCommandBufferStale=%s commandCount=%d commandRecords=%d currentHeapGeneration=%d currentDimension=%s stage=%s",
+                status.lastElementsIndirectAuditOk(),
+                status.elementsIndirectAuditRuns(),
+                status.elementsIndirectAuditFailures(),
+                status.lastElementsIndirectAuditError(),
+                status.lastElementsIndirectAuditDurationMs(),
+                status.lastAuditedElementsIndirectCommands(),
+                status.lastAuditedElementsIndirectBytes(),
+                status.lastInvalidElementsIndirectCommands(),
+                status.lastElementsIndirectCommandBufferMatch(),
+                status.lastElementsIndirectAuditIndices(),
+                status.lastElementsIndirectAuditLogicalVertices(),
+                status.sharedIndexBufferCreated(),
+                status.sharedIndexBufferBytes(),
+                status.sharedIndexMaxRecords(),
+                status.sharedIndexFormat(),
+                status.elementsIndirectCommandBufferCreated(),
+                status.elementsIndirectCommandBufferBytes(),
+                status.elementsIndirectCommandBufferStale(),
+                status.commandCount(),
+                status.commandRecords(),
+                status.currentHeapGeneration(),
+                status.currentDimension(),
+                status.stage()
+        );
+        source.sendSuccess(() -> Component.literal(message), false);
+        return status.lastElementsIndirectAuditOk() ? 1 : 0;
+    }
+
+    private static int directGlMdicDrawElementsIndirectAuditClear(CommandSourceStack source) {
+        ForgeVoxyInstance.INSTANCE.getMdicDebugRenderer().clearElementsIndirectAuditStats();
+        source.sendSuccess(() -> Component.literal("Voxy MDIC debug elements indirect audit: audit counters cleared. Shared index buffer, elements indirect command buffer, MDIC command list/buffer, upload-only GL heap, and render state were left unchanged."), false);
+        return 1;
+    }
+
     private static int directGlMdicDrawStressOnce(CommandSourceStack source) {
         ForgeMdicDebugDrawStats status = ForgeVoxyInstance.INSTANCE.getMdicDebugRenderer().stressOnce();
         String message = String.format(
-                "Voxy MDIC debug draw stress: success=%s stressRuns=%d stressFailures=%d lastStressError=%s lastStressDurationMs=%.2f lastStressPlanOk=%s lastStressBuildOk=%s lastStressAuditOk=%s lastStressDrawEnableOk=%s lastStressDrawStatusOk=%s lastStressDrawDisableOk=%s lastStressDrawClearOk=%s lastStressHeapClearOk=%s lastStressRebuildOk=%s lastStressRedrawOk=%s lastStressLoopOk=%s lastStressMultiDrawOk=%s lastStressIndirectOk=%s lastStressAutoOk=%s lastStressDerivedIndirectAuditOk=%s lastStressSourceRegressionOk=%s lastStressBucketDrawOk=%s lastStressBucketIndirectAuditOk=%s lastStressDirectionalFaceMaskOk=%s lastStressFaceMaskAuditOk=%s lastStressVisibilityPlanOk=%s lastStressSelectionAuditOk=%s lastStressFrustumFallbackOk=%s lastStressGlErrorCount=%d lastStressStateRestoreFailures=%d stage=%s effectiveDrawMode=%s formalMdicRenderer=false voxyRenderSystem=false",
+                "Voxy MDIC debug draw stress: success=%s stressRuns=%d stressFailures=%d lastStressError=%s lastStressDurationMs=%.2f lastStressPlanOk=%s lastStressBuildOk=%s lastStressAuditOk=%s lastStressDrawEnableOk=%s lastStressDrawStatusOk=%s lastStressDrawDisableOk=%s lastStressDrawClearOk=%s lastStressHeapClearOk=%s lastStressRebuildOk=%s lastStressRedrawOk=%s lastStressLoopOk=%s lastStressMultiDrawOk=%s lastStressIndirectOk=%s lastStressElementsIndirectOk=%s lastStressAutoOk=%s lastStressDerivedIndirectAuditOk=%s lastStressElementsIndirectAuditOk=%s lastStressSharedIndexBufferOk=%s lastStressSourceRegressionOk=%s lastStressBucketDrawOk=%s lastStressBucketIndirectAuditOk=%s lastStressDirectionalFaceMaskOk=%s lastStressFaceMaskAuditOk=%s lastStressVisibilityPlanOk=%s lastStressSelectionAuditOk=%s lastStressFrustumFallbackOk=%s lastStressGlErrorCount=%d lastStressStateRestoreFailures=%d stage=%s effectiveDrawMode=%s formalMdicRenderer=false voxyRenderSystem=false",
                 "none".equals(status.lastStressError()),
                 status.stressRuns(),
                 status.stressFailures(),
@@ -2631,8 +2746,11 @@ public final class ForgeVoxyCommands {
                 status.lastStressLoopOk(),
                 status.lastStressMultiDrawOk(),
                 status.lastStressIndirectOk(),
+                status.lastStressElementsIndirectOk(),
                 status.lastStressAutoOk(),
                 status.lastStressDerivedIndirectAuditOk(),
+                status.lastStressElementsIndirectAuditOk(),
+                status.lastStressSharedIndexBufferOk(),
                 status.lastStressSourceRegressionOk(),
                 status.lastStressBucketDrawOk(),
                 status.lastStressBucketIndirectAuditOk(),
@@ -2657,7 +2775,7 @@ public final class ForgeVoxyCommands {
     private static int directGlMdicDrawStressStatus(CommandSourceStack source) {
         ForgeMdicDebugDrawStats status = ForgeVoxyInstance.INSTANCE.getMdicDebugRenderer().createStatusSnapshot();
         String message = String.format(
-                "Voxy MDIC debug draw stress: stressRuns=%d stressFailures=%d lastStressError=%s lastStressDurationMs=%.2f lastStressPlanOk=%s lastStressBuildOk=%s lastStressAuditOk=%s lastStressDrawEnableOk=%s lastStressDrawStatusOk=%s lastStressDrawDisableOk=%s lastStressDrawClearOk=%s lastStressHeapClearOk=%s lastStressRebuildOk=%s lastStressRedrawOk=%s lastStressLoopOk=%s lastStressMultiDrawOk=%s lastStressIndirectOk=%s lastStressAutoOk=%s lastStressDerivedIndirectAuditOk=%s lastStressSourceRegressionOk=%s lastStressBucketDrawOk=%s lastStressBucketIndirectAuditOk=%s lastStressDirectionalFaceMaskOk=%s lastStressFaceMaskAuditOk=%s lastStressVisibilityPlanOk=%s lastStressSelectionAuditOk=%s lastStressFrustumFallbackOk=%s lastStressGlErrorCount=%d lastStressStateRestoreFailures=%d stage=%s effectiveDrawMode=%s formalMdicRenderer=false voxyRenderSystem=false",
+                "Voxy MDIC debug draw stress: stressRuns=%d stressFailures=%d lastStressError=%s lastStressDurationMs=%.2f lastStressPlanOk=%s lastStressBuildOk=%s lastStressAuditOk=%s lastStressDrawEnableOk=%s lastStressDrawStatusOk=%s lastStressDrawDisableOk=%s lastStressDrawClearOk=%s lastStressHeapClearOk=%s lastStressRebuildOk=%s lastStressRedrawOk=%s lastStressLoopOk=%s lastStressMultiDrawOk=%s lastStressIndirectOk=%s lastStressElementsIndirectOk=%s lastStressAutoOk=%s lastStressDerivedIndirectAuditOk=%s lastStressElementsIndirectAuditOk=%s lastStressSharedIndexBufferOk=%s lastStressSourceRegressionOk=%s lastStressBucketDrawOk=%s lastStressBucketIndirectAuditOk=%s lastStressDirectionalFaceMaskOk=%s lastStressFaceMaskAuditOk=%s lastStressVisibilityPlanOk=%s lastStressSelectionAuditOk=%s lastStressFrustumFallbackOk=%s lastStressGlErrorCount=%d lastStressStateRestoreFailures=%d stage=%s effectiveDrawMode=%s formalMdicRenderer=false voxyRenderSystem=false",
                 status.stressRuns(),
                 status.stressFailures(),
                 status.lastStressError(),
@@ -2675,8 +2793,11 @@ public final class ForgeVoxyCommands {
                 status.lastStressLoopOk(),
                 status.lastStressMultiDrawOk(),
                 status.lastStressIndirectOk(),
+                status.lastStressElementsIndirectOk(),
                 status.lastStressAutoOk(),
                 status.lastStressDerivedIndirectAuditOk(),
+                status.lastStressElementsIndirectAuditOk(),
+                status.lastStressSharedIndexBufferOk(),
                 status.lastStressSourceRegressionOk(),
                 status.lastStressBucketDrawOk(),
                 status.lastStressBucketIndirectAuditOk(),
@@ -3199,9 +3320,9 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getMdicDebugRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getMdicDebugRenderer().setDrawMode(ForgeMdicDebugDrawMode.LOOP_PER_COMMAND);
         boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
-        String message = "Voxy preset mdic_debug: runtime-only G6.5 visibility-aware directional face-mask bucket-aware multi/indirect MDIC command-buffer debug draw preset applied, not written to toml. "
+        String message = "Voxy preset mdic_debug: runtime-only G6.6 DrawElementsIndirect-compatible visibility-aware directional face-mask bucket-aware MDIC command-buffer debug draw preset applied, not written to toml. "
                 + "Effective values forced: engine=true autoIngest=true autoBuiltSection=true autoGeometryConsume=true geometryGpuUpload=true mdicCommandSkeleton=true mdicCommandBucketAware=true directionalFaceMask=true selectionMode=AUTO frustumFallbackToRadius=true maxPlanCandidates=512 maxSections=32 maxCommands=256 maxRecords=65536 mdicDebugDraw=true includeTranslucent=false includeDoubleSided=true includeDirectional=true simpleGpu=false directGlRenderer=false directActualDraw=false readbackAutoRefresh=false geometryGpuVisualization=false debugRenderer=false. "
-                + "actualDrawEnabled=false and configuredDrawMode=LOOP_PER_COMMAND by default; run /voxy direct_gl_mdic_plan_sample, /voxy direct_gl_mdic_build_buffer, /voxy direct_gl_mdic_audit, optional /voxy direct_gl_mdic_draw_mode auto, then /voxy direct_gl_mdic_draw_enable to draw visibility-aware face-mask bucket debug geometry. Use /voxy direct_gl_mdic_draw_stress_once for G6.5 loop/multi/indirect visibility stress. "
+                + "actualDrawEnabled=false and configuredDrawMode=LOOP_PER_COMMAND by default; run /voxy direct_gl_mdic_plan_sample, /voxy direct_gl_mdic_build_buffer, /voxy direct_gl_mdic_audit, optional /voxy direct_gl_mdic_draw_mode auto or elements_indirect, then /voxy direct_gl_mdic_draw_enable to draw visibility-aware face-mask bucket debug geometry. Use /voxy direct_gl_mdic_draw_stress_once for G6.6 loop/multi/arrays-indirect/elements-indirect visibility stress. "
                 + "This does not enable MDICSectionRenderer, VoxyRenderSystem, shaderpack, Embeddium/Oculus/Sodium/Iris, or mixins. "
                 + (engineReady ? "WorldEngine is active." : "No active client world was found; enter or re-enter a world to create the WorldEngine.");
         source.sendSuccess(() -> Component.literal(message), false);

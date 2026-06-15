@@ -89,6 +89,7 @@ public final class ForgeVoxyConfig {
     public static final ForgeConfigSpec.BooleanValue ENABLE_MDIC_DEBUG_DRAW;
     public static final ForgeConfigSpec.IntValue MDIC_DEBUG_DRAW_MAX_COMMANDS;
     public static final ForgeConfigSpec.IntValue MDIC_DEBUG_DRAW_MAX_RECORDS;
+    public static final ForgeConfigSpec.IntValue MDIC_DEBUG_DRAW_MAX_INDEXED_RECORDS;
     public static final ForgeConfigSpec.DoubleValue MDIC_DEBUG_DRAW_ALPHA;
     public static final ForgeConfigSpec.BooleanValue MDIC_DEBUG_DRAW_IGNORE_DEPTH;
     public static final ForgeConfigSpec.BooleanValue MDIC_DEBUG_DRAW_DOUBLE_SIDED;
@@ -375,6 +376,9 @@ public final class ForgeVoxyConfig {
         MDIC_DEBUG_DRAW_MAX_RECORDS = builder
                 .comment("Maximum packed quad records drawn by one G6.1 hardened minimal MDIC debug frame.")
                 .defineInRange("mdicDebugDrawMaxRecords", 65536, 1, 131072);
+        MDIC_DEBUG_DRAW_MAX_INDEXED_RECORDS = builder
+                .comment("Maximum quad records covered by the shared GL_UNSIGNED_INT index buffer used by the G6.6 DrawElementsIndirect-compatible MDIC debug path.")
+                .defineInRange("mdicDebugDrawMaxIndexedRecords", 65536, 1, 131072);
         MDIC_DEBUG_DRAW_ALPHA = builder
                 .comment("Alpha used by the G6.1 hardened minimal MDIC command-buffer debug renderer.")
                 .defineInRange("mdicDebugDrawAlpha", 0.75D, 0.05D, 1.0D);
