@@ -32,6 +32,10 @@ final class ForgeMdicDebugDrawConfig {
         return ForgeVoxyRuntimeOverrides.mdicDebugDrawDoubleSided();
     }
 
+    static double frameBudgetMs() {
+        return ForgeVoxyRuntimeOverrides.mdicDebugDrawFrameBudgetMs();
+    }
+
     static boolean debugLog() {
         return ForgeVoxyRuntimeOverrides.mdicDebugDrawDebugLog();
     }

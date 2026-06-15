@@ -523,6 +523,10 @@ public final class ForgeVoxyRuntimeOverrides {
         return ForgeVoxyConfig.MDIC_DEBUG_DRAW_DOUBLE_SIDED.get();
     }
 
+    public static synchronized double mdicDebugDrawFrameBudgetMs() {
+        return Math.max(0.1D, Math.min(100.0D, ForgeVoxyConfig.MDIC_DEBUG_DRAW_FRAME_BUDGET_MS.get()));
+    }
+
     public static synchronized boolean mdicDebugDrawDebugLog() {
         return ForgeVoxyConfig.MDIC_DEBUG_DRAW_DEBUG_LOG.get();
     }

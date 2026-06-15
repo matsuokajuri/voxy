@@ -117,8 +117,8 @@ If the heap is cleared, recreated, or the dimension/world changes, the command l
 ```text
 G5.9 MDIC command buffer CPU/GL audit + stress
 G6.0 minimal MDIC debug draw using MDIC command buffer
-G6.1 bucket-aware draw planning
-G6.2 renderer lifecycle hardening
+G6.1 minimal MDIC debug draw lifecycle hardening + stress
+G6.2 optional multi / indirect MDIC debug draw prototype
 G6.x original renderer alignment
 ```
 
@@ -214,3 +214,79 @@ lastDimensionMatch=true
 lastInvalidCommands=0
 stressFailures=0
 ```
+
+## G6.1 Debug Draw Hardening Notes
+
+G6.0 completed the first visible MDIC command-buffer debug draw:
+
+```text
+MDIC command GL buffer
+ + upload-only GL geometry heap
+ -> minimal MDIC debug shader
+ -> loop-per-command glDrawArrays
+ -> colored debug geometry
+```
+
+G6.1 keeps that renderer deliberately small. It does not add multi-draw, indirect MDIC draw, texture atlas access, ModelStore, shaderpack integration, or the formal `MDICSectionRenderer`. Instead it hardens the debug path around lifecycle and diagnostics.
+
+Current debug draw stage:
+
+```text
+stage=G6_1_MDIC_DEBUG_DRAW_HARDENED
+debugDrawMode=LOOP_PER_MDIC_COMMAND
+formalMdicRenderer=false
+voxyRenderSystem=false
+shaderpack=false
+```
+
+Status now reports command and heap ownership boundaries:
+
+```text
+commandListGeneration / commandBufferGeneration / currentHeapGeneration
+commandListDimension / commandBufferDimension / currentDimension
+commandListStale / commandBufferStale
+lastRenderSkippedReason
+```
+
+The expected skipped reasons are:
+
+```text
+DISABLED
+ACTUAL_DRAW_DISABLED
+HEAP_MISSING
+COMMAND_LIST_MISSING
+COMMAND_BUFFER_MISSING
+COMMAND_LIST_STALE
+COMMAND_BUFFER_STALE
+DIMENSION_MISMATCH
+SHADER_UNAVAILABLE
+WORLD_MISSING
+```
+
+Render-state safety remains local to the debug renderer. The draw path saves and restores the GL program, VAO, array buffer, geometry SSBO binding, MDIC command SSBO binding, the direct renderer draw-item SSBO binding, depth test, depth mask, blend, and cull state. Restore failures are counted but do not crash the client.
+
+G6.1 adds lightweight frame timing:
+
+```text
+lastFrameRenderMs
+maxFrameRenderMs
+avgFrameRenderMs
+lastFrameOverBudget
+overBudgetFrames
+mdicDebugDrawFrameBudgetMs
+```
+
+The new draw stress command exercises:
+
+```text
+mdic_debug preset
+plan -> build buffer -> audit
+draw enable -> status
+draw disable -> draw clear
+geometry heap clear -> verify draw stopped
+re-enable upload -> rebuild -> audit -> redraw
+source regression through BUILT_SECTION and GL_HEAP_READBACK
+return to mdic_debug runtime state
+```
+
+G6.1 still does not make this path a renderer replacement. G6.2 can prototype a bounded multi / indirect MDIC debug draw only after this lifecycle contract stays stable. G6.x remains the place to align toward formal renderer ownership, bucket-aware planning, material/atlas work, and original renderer compatibility.
