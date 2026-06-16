@@ -45,6 +45,7 @@ public final class ForgeVoxyInstance {
     private final ForgeModelAtlasPixelUploader modelAtlasPixelUploader = new ForgeModelAtlasPixelUploader(this);
     private final ForgeTexturedDebugQuadRenderer texturedDebugQuadRenderer = new ForgeTexturedDebugQuadRenderer(this);
     private final ForgeTexturedReadbackRenderer texturedReadbackRenderer = new ForgeTexturedReadbackRenderer(this);
+    private final ForgeTexturedMdicDebugRenderer texturedMdicDebugRenderer = new ForgeTexturedMdicDebugRenderer(this);
     private final AtomicInteger storageWriteCount = new AtomicInteger();
     private String activeClientDimension;
 
@@ -70,6 +71,7 @@ public final class ForgeVoxyInstance {
         this.mdicDebugRenderer.register();
         this.texturedDebugQuadRenderer.register();
         this.texturedReadbackRenderer.register();
+        this.texturedMdicDebugRenderer.register();
     }
 
     public WorldEngine getActiveWorld() {
@@ -202,6 +204,10 @@ public final class ForgeVoxyInstance {
         return this.texturedReadbackRenderer;
     }
 
+    public ForgeTexturedMdicDebugRenderer getTexturedMdicDebugRenderer() {
+        return this.texturedMdicDebugRenderer;
+    }
+
     private void onRegisterClientCommands(RegisterClientCommandsEvent event) {
         ForgeVoxyCommands.register(event.getDispatcher());
     }
@@ -251,6 +257,7 @@ public final class ForgeVoxyInstance {
         this.modelAtlasPixelUploader.clear();
         this.texturedDebugQuadRenderer.clear();
         this.texturedReadbackRenderer.clear();
+        this.texturedMdicDebugRenderer.clear();
         this.gpuMeshCache.setActiveDimension(dimension);
         this.closeActiveWorld();
         if (ForgeVoxyRuntimeOverrides.enabledWorldEngineSkeleton()) {
@@ -337,6 +344,7 @@ public final class ForgeVoxyInstance {
         this.modelAtlasPixelUploader.clear();
         this.texturedDebugQuadRenderer.clear();
         this.texturedReadbackRenderer.clear();
+        this.texturedMdicDebugRenderer.clear();
         this.gpuMeshCache.clear();
         this.activeClientDimension = null;
         this.closeActiveWorld();

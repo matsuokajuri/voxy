@@ -1392,3 +1392,126 @@ VoxyRenderSystem
 - Multi-block atlas upload audit.
 - Formal shader input bridge for modelData/modelColour/atlas.
 - Real resource reload event integration.
+
+## G6.18 textured MDIC debug one-model renderer
+
+G6.18 reduces the G6.17 readback bypass and proves that the current MDIC-style
+debug draw path can sample the Forge-owned atlas texture:
+
+```text
+upload-only GL geometry heap
+ + MDIC bucket/visibility command buffer
+ + DrawElementsIndirect / draw count buffers
+ + one sample modelId
+ + one sample atlas upload
+ -> textured MDIC-style debug draw
+```
+
+This is closer to the formal renderer than G6.17 because it draws from the GL
+heap and MDIC command list rather than rebuilding a CPU textured mesh. It still
+does not use `MDICSectionRenderer`, `VoxyRenderSystem`, a real `ModelStore`, or a
+formal textured shader.
+
+### Shader-side modelId filter
+
+The primary G6.18 strategy is intentionally simple:
+
+```text
+draw the existing MDIC command ranges
+shader decodes each packed quad record
+shader compares recordModelId == sampleModelId
+matching records sample the uploaded atlas tile
+non-matching records are discarded
+```
+
+Status reports this explicitly:
+
+```text
+shaderSideModelFilter=true
+cpuPrefilteredCommands=false
+notPerformanceRepresentative=true
+notFormalCmdgen=true
+```
+
+That means G6.18 is a correctness probe, not a performance result. It proves the
+textured shader can read the same packed records and command buffer used by the
+MDIC debug path, but it does not prove formal GPU command generation or
+multi-model batching.
+
+### Atlas and UV assumptions
+
+The shader samples only the already-uploaded G6.15 sample atlas texture. It uses
+the Voxy-style 3x2 face tile layout for the sample modelId. If the upload path
+falls back to the debug small atlas, the shader uses the small 3x2 coordinate
+layout instead of pretending the full atlas exists.
+
+The shader intentionally omits:
+
+```text
+lightmap
+biome tint
+material flags
+alpha cutout policy beyond basic discard
+fluid rendering
+translucent sorting
+full BlockModel semantics
+```
+
+### Commands
+
+G6.18 adds:
+
+```text
+/voxy textured_mdic_debug_build
+/voxy textured_mdic_debug_enable
+/voxy textured_mdic_debug_disable
+/voxy textured_mdic_debug_status
+/voxy textured_mdic_debug_clear
+```
+
+`textured_mdic_debug_build` ensures the real-ish model sample, atlas skeleton,
+sample atlas upload, GL heap, MDIC command list, MDIC command buffer, and
+elements-indirect/count resources are ready. It does not enable or clear the
+existing G6 MDIC debug renderer.
+
+### Lifecycle
+
+The textured MDIC debug renderer is stopped or marked stale when any of its
+inputs become stale:
+
+```text
+/voxy textured_mdic_debug_clear
+/voxy model_atlas_upload_clear
+/voxy model_atlas_skeleton_clear
+/voxy model_bridge_simulate_resource_reload
+/voxy direct_gl_mdic_clear
+world unload
+dimension switch
+debug_pipeline_clear
+preset off
+preset clear
+```
+
+It does not clear the GL geometry heap, the existing MDIC debug renderer, the
+simple renderer, or CPU section geometry manager unless the broader command
+already owns those clears.
+
+### What is still missing
+
+G6.18 still does not provide:
+
+```text
+multi-block atlas upload
+multi-model textured MDIC debug
+real ModelFactory / ModelBakery bridge
+formal textured shader
+formal MDIC renderer
+VoxyRenderSystem
+```
+
+### G6.19 candidates
+
+- Multi-block atlas upload audit.
+- Multi-model textured MDIC debug path.
+- Formal shader input bridge for modelData/modelColour/atlas.
+- Real resource reload event integration.
