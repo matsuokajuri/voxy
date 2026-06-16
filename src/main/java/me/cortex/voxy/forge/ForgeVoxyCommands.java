@@ -285,6 +285,18 @@ public final class ForgeVoxyCommands {
                         .executes(ctx -> modelAtlasSkeletonDumpSample(ctx.getSource())))
                 .then(Commands.literal("model_atlas_skeleton_clear")
                         .executes(ctx -> modelAtlasSkeletonClear(ctx.getSource())))
+                .then(Commands.literal("model_atlas_upload_sample")
+                        .executes(ctx -> modelAtlasUploadSample(ctx.getSource())))
+                .then(Commands.literal("model_atlas_upload_status")
+                        .executes(ctx -> modelAtlasUploadStatus(ctx.getSource())))
+                .then(Commands.literal("model_atlas_upload_audit")
+                        .executes(ctx -> modelAtlasUploadAudit(ctx.getSource())))
+                .then(Commands.literal("model_atlas_upload_audit_status")
+                        .executes(ctx -> modelAtlasUploadAuditStatus(ctx.getSource())))
+                .then(Commands.literal("model_atlas_upload_dump_sample")
+                        .executes(ctx -> modelAtlasUploadDumpSample(ctx.getSource())))
+                .then(Commands.literal("model_atlas_upload_clear")
+                        .executes(ctx -> modelAtlasUploadClear(ctx.getSource())))
                 .then(Commands.literal("mesh_cache_status")
                         .executes(ctx -> meshCacheStatus(ctx.getSource())))
                 .then(Commands.literal("mesh_cache_clear")
@@ -783,7 +795,7 @@ public final class ForgeVoxyCommands {
         String message = "Voxy: cleared CPU-only BuiltSection cache, closed all partial geometry buffers, and cleared auto BuiltSection build records."
                 + " CPU-only section geometry manager state and upload-only GL geometry heap were also cleared because they are derived from BuiltSection cache."
                 + (clearedGpuBuffers ? " Current source is BUILT_SECTION, so simple GPU buffers were also cleared to avoid orphan renders." : " Simple GPU buffers were left intact because the active source is not BUILT_SECTION.");
-        message = message + modelStoreFormalLayoutStatusSuffix() + bakedModelBridgeStatusSuffix() + realModelStoreSampleStatusSuffix() + modelAtlasSkeletonStatusSuffix() + modelBridgeResourceReloadStatusSuffix();
+        message = message + modelStoreFormalLayoutStatusSuffix() + bakedModelBridgeStatusSuffix() + realModelStoreSampleStatusSuffix() + modelAtlasSkeletonStatusSuffix() + modelAtlasUploadStatusSuffix() + modelBridgeResourceReloadStatusSuffix();
         String displayMessage = message;
         source.sendSuccess(() -> Component.literal(displayMessage), false);
         return 1;
@@ -3089,7 +3101,7 @@ public final class ForgeVoxyCommands {
                 status.sampleHasTextureMetadata(),
                 status.sampleNote()
         );
-        message = message + modelStoreFormalLayoutStatusSuffix() + bakedModelBridgeStatusSuffix() + realModelStoreSampleStatusSuffix() + modelAtlasSkeletonStatusSuffix() + modelBridgeResourceReloadStatusSuffix();
+        message = message + modelStoreFormalLayoutStatusSuffix() + bakedModelBridgeStatusSuffix() + realModelStoreSampleStatusSuffix() + modelAtlasSkeletonStatusSuffix() + modelAtlasUploadStatusSuffix() + modelBridgeResourceReloadStatusSuffix();
         String displayMessage = message;
         source.sendSuccess(() -> Component.literal(displayMessage), false);
         return result.success() ? 1 : 0;
@@ -3136,7 +3148,7 @@ public final class ForgeVoxyCommands {
                 status.sampleNote(),
                 status.placeholderModelStoreReady()
         );
-        message = message + modelStoreFormalLayoutStatusSuffix() + bakedModelBridgeStatusSuffix() + realModelStoreSampleStatusSuffix() + modelAtlasSkeletonStatusSuffix() + modelBridgeResourceReloadStatusSuffix();
+        message = message + modelStoreFormalLayoutStatusSuffix() + bakedModelBridgeStatusSuffix() + realModelStoreSampleStatusSuffix() + modelAtlasSkeletonStatusSuffix() + modelAtlasUploadStatusSuffix() + modelBridgeResourceReloadStatusSuffix();
         String displayMessage = message;
         source.sendSuccess(() -> Component.literal(displayMessage), false);
         return status.checkRuns() > 0 ? 1 : 0;
@@ -3147,7 +3159,8 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getBakedModelBridge().clear();
         ForgeVoxyInstance.INSTANCE.getRealModelStoreSample().clear();
         ForgeVoxyInstance.INSTANCE.getModelAtlasSkeleton().clear();
-        source.sendSuccess(() -> Component.literal("Voxy model bridge readiness: cleared no-draw readiness stats, base model sample state, baked model bridge samples, real ModelStore record sample buffers, and atlas ownership skeleton state. Placeholder mapper entries, BuiltSection cache, upload-only GL heap, MDIC debug renderer, simple renderer, and CPU caches were left unchanged."), false);
+        ForgeVoxyInstance.INSTANCE.getModelAtlasPixelUploader().clear();
+        source.sendSuccess(() -> Component.literal("Voxy model bridge readiness: cleared no-draw readiness stats, base model sample state, baked model bridge samples, real ModelStore record sample buffers, atlas ownership skeleton state, and sample atlas pixel upload state. Placeholder mapper entries, BuiltSection cache, upload-only GL heap, MDIC debug renderer, simple renderer, and CPU caches were left unchanged."), false);
         return 1;
     }
 
@@ -3177,7 +3190,7 @@ public final class ForgeVoxyCommands {
                 status.lastBuildDurationMs(),
                 status.lastBuildError()
         );
-        message = message + realModelStoreSampleStatusSuffix() + modelAtlasSkeletonStatusSuffix();
+        message = message + realModelStoreSampleStatusSuffix() + modelAtlasSkeletonStatusSuffix() + modelAtlasUploadStatusSuffix();
         String displayMessage = message;
         source.sendSuccess(() -> Component.literal(displayMessage), false);
         return status.placeholderModelStoreReady() ? 1 : 0;
@@ -3232,7 +3245,7 @@ public final class ForgeVoxyCommands {
                 status.auditRuns(),
                 status.auditFailures()
         );
-        message = message + realModelStoreSampleStatusSuffix() + modelAtlasSkeletonStatusSuffix();
+        message = message + realModelStoreSampleStatusSuffix() + modelAtlasSkeletonStatusSuffix() + modelAtlasUploadStatusSuffix();
         String displayMessage = message;
         source.sendSuccess(() -> Component.literal(displayMessage), false);
         return status.placeholderModelStoreReady() ? 1 : 0;
@@ -3459,13 +3472,13 @@ public final class ForgeVoxyCommands {
 
     private static int modelStoreRealSampleBuild(CommandSourceStack source) {
         ForgeRealModelStoreSampleStats status = ForgeVoxyInstance.INSTANCE.getRealModelStoreSample().build();
-        source.sendSuccess(() -> Component.literal("Voxy real ModelStore sample build: " + formatRealModelStoreSampleStatus(status) + modelAtlasSkeletonStatusSuffix()), false);
+        source.sendSuccess(() -> Component.literal("Voxy real ModelStore sample build: " + formatRealModelStoreSampleStatus(status) + modelAtlasSkeletonStatusSuffix() + modelAtlasUploadStatusSuffix()), false);
         return status.realModelRecordSampleReady() ? 1 : 0;
     }
 
     private static int modelStoreRealSampleStatus(CommandSourceStack source) {
         ForgeRealModelStoreSampleStats status = ForgeVoxyInstance.INSTANCE.getRealModelStoreSample().createStatusSnapshot();
-        source.sendSuccess(() -> Component.literal("Voxy real ModelStore sample status: " + formatRealModelStoreSampleStatus(status) + modelAtlasSkeletonStatusSuffix()), false);
+        source.sendSuccess(() -> Component.literal("Voxy real ModelStore sample status: " + formatRealModelStoreSampleStatus(status) + modelAtlasSkeletonStatusSuffix() + modelAtlasUploadStatusSuffix()), false);
         return status.buildRuns() > 0L || status.realModelRecordSampleStale() ? 1 : 0;
     }
 
@@ -3529,19 +3542,21 @@ public final class ForgeVoxyCommands {
     private static int modelStoreRealSampleClear(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getRealModelStoreSample().clear();
         ForgeVoxyInstance.INSTANCE.getModelAtlasSkeleton().markStale("real-model-sample-clear");
-        source.sendSuccess(() -> Component.literal("Voxy real ModelStore sample: cleared CPU real-ish record sample, no-draw modelData/modelColour sample buffers, and audit state. The no-draw atlas skeleton was marked stale because its sample coordinates derive from the real sample. Placeholder ModelStore buffers, baked model bridge samples, GL geometry heap, MDIC debug renderer, simple renderer, and CPU caches were left unchanged."), false);
+        ForgeVoxyInstance.INSTANCE.getModelAtlasPixelUploader().markStale("real-model-sample-clear");
+        source.sendSuccess(() -> Component.literal("Voxy real ModelStore sample: cleared CPU real-ish record sample, no-draw modelData/modelColour sample buffers, and audit state. The no-draw atlas skeleton and sample atlas pixel upload were marked stale because their sample coordinates derive from the real sample. Placeholder ModelStore buffers, baked model bridge samples, GL geometry heap, MDIC debug renderer, simple renderer, and CPU caches were left unchanged."), false);
         return 1;
     }
 
     private static int modelAtlasSkeletonBuild(CommandSourceStack source) {
         ForgeModelAtlasStats status = ForgeVoxyInstance.INSTANCE.getModelAtlasSkeleton().build();
-        source.sendSuccess(() -> Component.literal("Voxy model atlas skeleton build: " + formatModelAtlasSkeletonStatus(status)), false);
+        ForgeVoxyInstance.INSTANCE.getModelAtlasPixelUploader().markStale("atlas-skeleton-rebuilt");
+        source.sendSuccess(() -> Component.literal("Voxy model atlas skeleton build: " + formatModelAtlasSkeletonStatus(status) + modelAtlasUploadStatusSuffix()), false);
         return status.atlasSkeletonReady() ? 1 : 0;
     }
 
     private static int modelAtlasSkeletonStatus(CommandSourceStack source) {
         ForgeModelAtlasStats status = ForgeVoxyInstance.INSTANCE.getModelAtlasSkeleton().createStatusSnapshot();
-        source.sendSuccess(() -> Component.literal("Voxy model atlas skeleton status: " + formatModelAtlasSkeletonStatus(status)), false);
+        source.sendSuccess(() -> Component.literal("Voxy model atlas skeleton status: " + formatModelAtlasSkeletonStatus(status) + modelAtlasUploadStatusSuffix()), false);
         return status.atlasSkeletonReady() || status.atlasSkeletonStale() ? 1 : 0;
     }
 
@@ -3594,7 +3609,106 @@ public final class ForgeVoxyCommands {
 
     private static int modelAtlasSkeletonClear(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getModelAtlasSkeleton().clear();
-        source.sendSuccess(() -> Component.literal("Voxy model atlas skeleton: cleared no-draw atlas layout ownership, sample coordinate state, and audit state. No real texture pixels were uploaded or deleted. GL geometry heap, MDIC debug renderer, simple renderer, and CPU caches were left unchanged."), false);
+        ForgeVoxyInstance.INSTANCE.getModelAtlasPixelUploader().markStale("atlas-skeleton-clear");
+        source.sendSuccess(() -> Component.literal("Voxy model atlas skeleton: cleared no-draw atlas layout ownership, sample coordinate state, and audit state. Any sample atlas pixel upload was marked stale. GL geometry heap, MDIC debug renderer, simple renderer, and CPU caches were left unchanged."), false);
+        return 1;
+    }
+
+    private static int modelAtlasUploadSample(CommandSourceStack source) {
+        ForgeModelAtlasUploadStats status = ForgeVoxyInstance.INSTANCE.getModelAtlasPixelUploader().uploadSample();
+        source.sendSuccess(() -> Component.literal("Voxy model atlas upload sample: " + formatModelAtlasUploadStatus(status)), false);
+        return status.lastUploadOk() ? 1 : 0;
+    }
+
+    private static int modelAtlasUploadStatus(CommandSourceStack source) {
+        ForgeModelAtlasUploadStats status = ForgeVoxyInstance.INSTANCE.getModelAtlasPixelUploader().createStatusSnapshot();
+        source.sendSuccess(() -> Component.literal("Voxy model atlas upload status: " + formatModelAtlasUploadStatus(status)), false);
+        return status.sampleAtlasPixelsUploaded() || status.atlasPixelsStale() ? 1 : 0;
+    }
+
+    private static int modelAtlasUploadAudit(CommandSourceStack source) {
+        ForgeModelAtlasUploadAuditResult result = ForgeVoxyInstance.INSTANCE.getModelAtlasPixelUploader().audit();
+        ForgeModelAtlasUploadStats status = ForgeVoxyInstance.INSTANCE.getModelAtlasPixelUploader().createStatusSnapshot();
+        String message = String.format(
+                "Voxy model atlas upload audit: success=%s error=%s durationMs=%.2f uploadRuns=%d uploadFailures=%d auditRuns=%d auditFailures=%d lastUploadedFaces=%d lastUploadedPixels=%d lastMissingFaces=%d lastPixelMismatches=%d lastAtlasReadbackOk=%s atlasTextureObjectCreated=%s fullAtlasTextureCreated=%s debugSmallAtlasFallback=%s atlasWidth=%d atlasHeight=%d actualTextureWidth=%d actualTextureHeight=%d atlasFormat=%s sampleModelId=%d sourceBlockState=\"%s\" sourceSprite=%s sourceSpriteAtlas=%s face0Checksum=%s face1Checksum=%s face2Checksum=%s face3Checksum=%s face4Checksum=%s face5Checksum=%s sampleAtlasPixelsUploaded=%s realAtlasPixelUploadReady=%s formalTextureAtlasReady=false formalTexturedShaderReady=false formalModelBridgeReady=false draw=false renderer=none",
+                result.success(),
+                result.error(),
+                result.durationMs(),
+                status.uploadRuns(),
+                status.uploadFailures(),
+                status.auditRuns(),
+                status.auditFailures(),
+                result.auditedFaces(),
+                result.auditedPixels(),
+                result.missingFaces(),
+                result.pixelMismatches(),
+                result.atlasReadbackOk(),
+                status.atlasTextureObjectCreated(),
+                status.fullAtlasTextureCreated(),
+                status.debugSmallAtlasFallback(),
+                status.atlasWidth(),
+                status.atlasHeight(),
+                status.actualTextureWidth(),
+                status.actualTextureHeight(),
+                status.atlasFormat(),
+                status.sampleModelId(),
+                status.sourceBlockState(),
+                status.sourceSprite(),
+                status.sourceSpriteAtlas(),
+                status.face0Checksum(),
+                status.face1Checksum(),
+                status.face2Checksum(),
+                status.face3Checksum(),
+                status.face4Checksum(),
+                status.face5Checksum(),
+                status.sampleAtlasPixelsUploaded(),
+                status.realAtlasPixelUploadReady()
+        );
+        source.sendSuccess(() -> Component.literal(message), false);
+        return result.success() ? 1 : 0;
+    }
+
+    private static int modelAtlasUploadAuditStatus(CommandSourceStack source) {
+        ForgeModelAtlasUploadStats status = ForgeVoxyInstance.INSTANCE.getModelAtlasPixelUploader().createStatusSnapshot();
+        String message = String.format(
+                "Voxy model atlas upload audit: uploadRuns=%d uploadFailures=%d auditRuns=%d auditFailures=%d lastUploadOk=%s lastUploadError=%s lastAuditOk=%s lastAuditError=%s lastAuditDurationMs=%.2f lastUploadedFaces=%d lastUploadedPixels=%d lastMissingFaces=%d lastPixelMismatches=%d lastAtlasReadbackOk=%s face0Checksum=%s face1Checksum=%s face2Checksum=%s face3Checksum=%s face4Checksum=%s face5Checksum=%s atlasPixelsUploaded=%s sampleAtlasPixelsUploaded=%s realAtlasPixelUploadReady=%s formalTextureAtlasReady=false formalTexturedShaderReady=false formalModelBridgeReady=false",
+                status.uploadRuns(),
+                status.uploadFailures(),
+                status.auditRuns(),
+                status.auditFailures(),
+                status.lastUploadOk(),
+                status.lastUploadError(),
+                status.lastAuditOk(),
+                status.lastAuditError(),
+                status.lastAuditDurationMs(),
+                status.lastUploadedFaces(),
+                status.lastUploadedPixels(),
+                status.lastMissingFaces(),
+                status.lastPixelMismatches(),
+                status.lastAtlasReadbackOk(),
+                status.face0Checksum(),
+                status.face1Checksum(),
+                status.face2Checksum(),
+                status.face3Checksum(),
+                status.face4Checksum(),
+                status.face5Checksum(),
+                status.atlasPixelsUploaded(),
+                status.sampleAtlasPixelsUploaded(),
+                status.realAtlasPixelUploadReady()
+        );
+        source.sendSuccess(() -> Component.literal(message), false);
+        return status.lastAuditOk() ? 1 : 0;
+    }
+
+    private static int modelAtlasUploadDumpSample(CommandSourceStack source) {
+        String message = ForgeVoxyInstance.INSTANCE.getModelAtlasPixelUploader().dumpSample();
+        source.sendSuccess(() -> Component.literal(message), false);
+        return ForgeVoxyInstance.INSTANCE.getModelAtlasPixelUploader().createStatusSnapshot().sampleAtlasPixelsUploaded() ? 1 : 0;
+    }
+
+    private static int modelAtlasUploadClear(CommandSourceStack source) {
+        ForgeVoxyInstance.INSTANCE.getModelAtlasPixelUploader().clear();
+        source.sendSuccess(() -> Component.literal("Voxy model atlas upload sample: cleared Forge-owned sample atlas texture, uploaded pixel CPU copy, upload audit state, and stale flags. Formal renderer, MDIC debug renderer, GL geometry heap, simple renderer, and CPU caches were left unchanged."), false);
         return 1;
     }
 
@@ -3632,8 +3746,72 @@ public final class ForgeVoxyCommands {
         return " " + formatModelAtlasSkeletonStatus(ForgeVoxyInstance.INSTANCE.getModelAtlasSkeleton().createStatusSnapshot());
     }
 
+    private static String modelAtlasUploadStatusSuffix() {
+        return " " + formatModelAtlasUploadStatus(ForgeVoxyInstance.INSTANCE.getModelAtlasPixelUploader().createStatusSnapshot());
+    }
+
     private static String modelBridgeResourceReloadStatusSuffix() {
         return " " + formatModelBridgeResourceReloadStatus(ForgeVoxyInstance.INSTANCE.getModelBridgeResourceReloadTracker().createStatusSnapshot());
+    }
+
+    private static String formatModelAtlasUploadStatus(ForgeModelAtlasUploadStats status) {
+        return String.format(
+                "atlasUploadStage=%s uploadRuns=%d uploadFailures=%d auditRuns=%d auditFailures=%d clearRuns=%d lastUploadOk=%s lastUploadError=%s lastUploadDurationMs=%.2f atlasTextureObjectCreated=%s atlasTextureObjectId=%d fullAtlasTextureCreated=%s debugSmallAtlasFallback=%s atlasWidth=%d atlasHeight=%d actualTextureWidth=%d actualTextureHeight=%d atlasFormat=%s atlasPixelsUploaded=%s uploadedFaces=%d uploadedPixels=%d missingFaces=%d sampleAtlasPixelsUploaded=%s realAtlasPixelUploadReady=%s formalTextureAtlasReady=%s formalTexturedShaderReady=%s formalModelBridgeReady=%s atlasPixelsStale=%s lastReloadInvalidatedAtlasPixels=%s lastAuditOk=%s lastAuditError=%s lastAuditDurationMs=%.2f lastUploadedFaces=%d lastUploadedPixels=%d lastMissingFaces=%d lastPixelMismatches=%d lastAtlasReadbackOk=%s sampleModelId=%d sourceBlockStateId=%d sourceBlockState=\"%s\" sourceSprite=%s sourceSpriteAtlas=%s face0Tile=%s face0Checksum=%s face1Tile=%s face1Checksum=%s face2Tile=%s face2Checksum=%s face3Tile=%s face3Checksum=%s face4Tile=%s face4Checksum=%s face5Tile=%s face5Checksum=%s draw=false renderer=none",
+                status.stage(),
+                status.uploadRuns(),
+                status.uploadFailures(),
+                status.auditRuns(),
+                status.auditFailures(),
+                status.clearRuns(),
+                status.lastUploadOk(),
+                status.lastUploadError(),
+                status.lastUploadDurationMs(),
+                status.atlasTextureObjectCreated(),
+                status.atlasTextureObjectId(),
+                status.fullAtlasTextureCreated(),
+                status.debugSmallAtlasFallback(),
+                status.atlasWidth(),
+                status.atlasHeight(),
+                status.actualTextureWidth(),
+                status.actualTextureHeight(),
+                status.atlasFormat(),
+                status.atlasPixelsUploaded(),
+                status.uploadedFaces(),
+                status.uploadedPixels(),
+                status.missingFaces(),
+                status.sampleAtlasPixelsUploaded(),
+                status.realAtlasPixelUploadReady(),
+                status.formalTextureAtlasReady(),
+                status.formalTexturedShaderReady(),
+                status.formalModelBridgeReady(),
+                status.atlasPixelsStale(),
+                status.lastReloadInvalidatedAtlasPixels(),
+                status.lastAuditOk(),
+                status.lastAuditError(),
+                status.lastAuditDurationMs(),
+                status.lastUploadedFaces(),
+                status.lastUploadedPixels(),
+                status.lastMissingFaces(),
+                status.lastPixelMismatches(),
+                status.lastAtlasReadbackOk(),
+                status.sampleModelId(),
+                status.sourceBlockStateId(),
+                status.sourceBlockState(),
+                status.sourceSprite(),
+                status.sourceSpriteAtlas(),
+                status.face0Tile(),
+                status.face0Checksum(),
+                status.face1Tile(),
+                status.face1Checksum(),
+                status.face2Tile(),
+                status.face2Checksum(),
+                status.face3Tile(),
+                status.face3Checksum(),
+                status.face4Tile(),
+                status.face4Checksum(),
+                status.face5Tile(),
+                status.face5Checksum()
+        );
     }
 
     private static String formatModelAtlasSkeletonStatus(ForgeModelAtlasStats status) {
@@ -3813,7 +3991,7 @@ public final class ForgeVoxyCommands {
 
     private static String formatModelBridgeResourceReloadStatus(ForgeModelBridgeResourceReloadStats status) {
         return String.format(
-                "reloadLifecycleSkeletonReady=%s resourceReloadReady=%s reloadEventsSeen=%d lastReloadSimulationRuns=%d lastReloadStartedAt=%s lastReloadFinishedAt=%s modelBridgeInvalidatedOnReload=%s placeholderBuffersInvalidatedOnReload=%s placeholderBuffersStale=%s realModelStoreStale=%s textureAtlasStale=%s formalShaderInputsStale=%s bakedModelSamplesStale=%s spriteSamplesStale=%s lastReloadInvalidatedBakedModelSamples=%s realModelRecordSampleStale=%s lastReloadInvalidatedRealModelRecordSample=%s atlasSkeletonStale=%s lastReloadInvalidatedAtlasSkeleton=%s lastReloadReason=%s formalModelBridgeReady=false realTextureAtlasUpload=false",
+                "reloadLifecycleSkeletonReady=%s resourceReloadReady=%s reloadEventsSeen=%d lastReloadSimulationRuns=%d lastReloadStartedAt=%s lastReloadFinishedAt=%s modelBridgeInvalidatedOnReload=%s placeholderBuffersInvalidatedOnReload=%s placeholderBuffersStale=%s realModelStoreStale=%s textureAtlasStale=%s formalShaderInputsStale=%s bakedModelSamplesStale=%s spriteSamplesStale=%s lastReloadInvalidatedBakedModelSamples=%s realModelRecordSampleStale=%s lastReloadInvalidatedRealModelRecordSample=%s atlasSkeletonStale=%s lastReloadInvalidatedAtlasSkeleton=%s atlasPixelsStale=%s lastReloadInvalidatedAtlasPixels=%s lastReloadReason=%s formalModelBridgeReady=false realTextureAtlasUpload=false",
                 status.reloadLifecycleSkeletonReady(),
                 status.resourceReloadReady(),
                 status.reloadEventsSeen(),
@@ -3833,6 +4011,8 @@ public final class ForgeVoxyCommands {
                 status.lastReloadInvalidatedRealModelRecordSample(),
                 status.atlasSkeletonStale(),
                 status.lastReloadInvalidatedAtlasSkeleton(),
+                status.atlasPixelsStale(),
+                status.lastReloadInvalidatedAtlasPixels(),
                 status.lastReloadReason()
         );
     }
@@ -4681,6 +4861,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getBakedModelBridge().clear();
         ForgeVoxyInstance.INSTANCE.getRealModelStoreSample().clear();
         ForgeVoxyInstance.INSTANCE.getModelAtlasSkeleton().clear();
+        ForgeVoxyInstance.INSTANCE.getModelAtlasPixelUploader().clear();
         ForgeVoxyInstance.INSTANCE.getGpuMeshCache().clear();
     }
 
@@ -4705,6 +4886,8 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getModelBridgeResourceReloadTracker().clear();
         ForgeVoxyInstance.INSTANCE.getBakedModelBridge().clear();
         ForgeVoxyInstance.INSTANCE.getRealModelStoreSample().clear();
+        ForgeVoxyInstance.INSTANCE.getModelAtlasSkeleton().clear();
+        ForgeVoxyInstance.INSTANCE.getModelAtlasPixelUploader().clear();
         source.sendSuccess(() -> Component.literal("Voxy: cleared CPU mesh cache, CPU-only BuiltSection cache, CPU-only section geometry manager, simple GPU mesh cache, upload-only GL geometry heap, direct GL renderer skeleton state, MDIC command skeleton/debug draw state, GL heap readback visualization/readback-mesh caches, readback mesh auto-refresh state, auto mesh build record, and auto BuiltSection build record."), false);
         return 1;
     }
@@ -4743,6 +4926,8 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getModelBridgeResourceReloadTracker().clear();
         ForgeVoxyInstance.INSTANCE.getBakedModelBridge().clear();
         ForgeVoxyInstance.INSTANCE.getRealModelStoreSample().clear();
+        ForgeVoxyInstance.INSTANCE.getModelAtlasSkeleton().clear();
+        ForgeVoxyInstance.INSTANCE.getModelAtlasPixelUploader().clear();
         source.sendSuccess(() -> Component.literal("Voxy: cleared debug pipeline ingest records, mesh build records, BuiltSection build records, CPU mesh cache, CPU-only BuiltSection cache, CPU-only section geometry manager, simple GPU mesh cache, upload-only GL geometry heap, direct GL renderer skeleton state, MDIC command skeleton/debug draw state, GL heap readback visualization/readback-mesh caches, and readback mesh auto-refresh state."), false);
         return 1;
     }

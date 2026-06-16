@@ -20,6 +20,8 @@ record ForgeModelBridgeResourceReloadStats(
         boolean lastReloadInvalidatedRealModelRecordSample,
         boolean atlasSkeletonStale,
         boolean lastReloadInvalidatedAtlasSkeleton,
+        boolean atlasPixelsStale,
+        boolean lastReloadInvalidatedAtlasPixels,
         String lastReloadReason
 ) {
     static ForgeModelBridgeResourceReloadStats empty() {
@@ -30,6 +32,8 @@ record ForgeModelBridgeResourceReloadStats(
                 0L,
                 "none",
                 "none",
+                false,
+                false,
                 false,
                 false,
                 false,

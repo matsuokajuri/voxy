@@ -1008,3 +1008,161 @@ formalModelBridgeReady=false
 - Model colour / biome tint hardening.
 - G7.0 tiny textured debug quad prototype after atlas pixel ownership and
   shader inputs are both explicit.
+
+## G6.15 atlas pixel upload audit for one solid block, no draw
+
+G6.15 proves the first texture-data leg of the bridge:
+
+```text
+solid BakedModel sample
+ -> BakedQuad TextureAtlasSprite
+ -> 16x16 mip0 pixel sample
+ -> Forge-owned Voxy-style atlas tile
+ -> GL readback audit
+```
+
+It still does not bind the atlas to a renderer, does not change the MDIC debug
+shader, and does not mark the formal texture atlas ready.
+
+### TextureAtlasSprite pixel access
+
+For Minecraft / Forge 1.20.1, the mapped client API exposes:
+
+```text
+TextureAtlasSprite.contents()
+SpriteContents.name()
+SpriteContents.width()
+SpriteContents.height()
+TextureAtlasSprite.atlasLocation()
+TextureAtlasSprite.getPixelRGBA(frameIndex, x, y)
+NativeImage.getPixelRGBA(x, y)
+```
+
+The G6.15 sample path reads frame `0` from `TextureAtlasSprite.getPixelRGBA(...)`
+and resamples the source sprite into a 16x16 tile. The uploaded CPU byte copy is
+the audit source of truth, so the readback audit proves GL upload fidelity. It
+does not yet prove final shader colour correctness.
+
+Animated sprites and missing sprites remain explicit risks. The current sample
+selector still prefers a normal solid block such as sand, stone, or dirt, and
+records missing faces separately instead of inventing real texture data.
+
+### Atlas texture creation
+
+The uploader first attempts the full Voxy-style atlas dimensions from G6.14:
+
+```text
+atlasWidth = 12288
+atlasHeight = 8192
+atlasFormat = RGBA8
+```
+
+If the current OpenGL driver reports an insufficient max texture size or fails
+the allocation, the command falls back to a sample-only debug texture:
+
+```text
+actualTextureWidth = 48
+actualTextureHeight = 32
+debugSmallAtlasFallback = true
+fullAtlasTextureCreated = false
+```
+
+That fallback is only an audit fallback. It must not be interpreted as a full
+formal atlas.
+
+### Face tile upload
+
+Each sample face uses the existing 3x2 tile mapping:
+
+```text
+faceTileX = baseX + ((faceIndex >> 1) * 16)
+faceTileY = baseY + ((faceIndex & 1) * 16)
+```
+
+If the sample has no quad or no sprite for a face, the uploader writes a
+transparent marker tile and increments `missingFaces`. For the expected sand
+sample all six faces should have the same sand sprite and non-zero checksums.
+
+### New commands
+
+G6.15 adds:
+
+```text
+/voxy model_atlas_upload_sample
+/voxy model_atlas_upload_status
+/voxy model_atlas_upload_audit
+/voxy model_atlas_upload_audit_status
+/voxy model_atlas_upload_dump_sample
+/voxy model_atlas_upload_clear
+```
+
+The upload command ensures the G6.13 real-ish model sample and G6.14 atlas
+skeleton exist, creates a Forge-owned texture, uploads six 16x16 face tiles,
+keeps a CPU copy, and leaves all render paths untouched.
+
+### Pixel readback audit
+
+`model_atlas_upload_audit` reads back each uploaded tile by temporarily
+attaching the owned atlas texture to a read framebuffer and calling
+`glReadPixels` for the 16x16 tile rectangle, then compares it against the CPU
+byte copy:
+
+```text
+lastUploadedFaces
+lastUploadedPixels
+lastMissingFaces
+lastPixelMismatches
+lastAtlasReadbackOk
+face0Checksum..face5Checksum
+```
+
+The expected successful sample status is:
+
+```text
+atlasPixelsUploaded=true
+sampleAtlasPixelsUploaded=true
+realAtlasPixelUploadReady=true
+lastAuditOk=true
+lastPixelMismatches=0
+formalTextureAtlasReady=false
+formalTexturedShaderReady=false
+formalModelBridgeReady=false
+```
+
+`realAtlasPixelUploadReady=true` here means only that the one-block sample upload
+path was proven. It does not mean the project has a production Voxy atlas.
+
+### Reload lifecycle
+
+The command-driven reload simulation now invalidates uploaded sample pixels and
+the owned texture:
+
+```text
+/voxy model_bridge_simulate_resource_reload
+ -> atlasPixelsStale=true
+ -> lastReloadInvalidatedAtlasPixels=true
+```
+
+It still does not clear the GL geometry heap, MDIC command buffers, MDIC debug
+renderer, simple renderer, or CPU section geometry manager.
+
+### Why still no textured draw
+
+The project now has a proof that a Minecraft sprite sample can be copied into a
+Forge-owned Voxy-addressed atlas tile and read back intact. A visible textured
+LoD path still needs at least:
+
+```text
+multi-block atlas population
+modelData/modelColour binding for a texture shader
+formal shader input contract
+resource reload handling for real atlas contents
+debug textured draw before formal renderer integration
+```
+
+### G6.16 candidates
+
+- Multi-block atlas upload audit.
+- Bind modelData/modelColour/atlas to a tiny textured debug shader.
+- Real resource reload event integration.
+- Biome tint / modelColour hardening.

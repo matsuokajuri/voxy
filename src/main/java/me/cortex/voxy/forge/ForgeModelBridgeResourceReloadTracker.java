@@ -21,6 +21,8 @@ final class ForgeModelBridgeResourceReloadTracker {
     private boolean lastReloadInvalidatedRealModelRecordSample;
     private boolean atlasSkeletonStale;
     private boolean lastReloadInvalidatedAtlasSkeleton;
+    private boolean atlasPixelsStale;
+    private boolean lastReloadInvalidatedAtlasPixels;
     private String lastReloadReason = "none";
 
     ForgeModelBridgeResourceReloadTracker(ForgeVoxyInstance instance) {
@@ -44,12 +46,15 @@ final class ForgeModelBridgeResourceReloadTracker {
         this.lastReloadInvalidatedRealModelRecordSample = true;
         this.atlasSkeletonStale = true;
         this.lastReloadInvalidatedAtlasSkeleton = true;
+        this.atlasPixelsStale = true;
+        this.lastReloadInvalidatedAtlasPixels = true;
         this.lastReloadReason = reason == null || reason.isBlank() ? "command-simulated-resource-reload" : reason;
         this.instance.getModelBridgeReadiness().clear();
         this.instance.getModelStoreSkeleton().markStale("resource-reload-simulated");
         this.instance.getBakedModelBridge().markStale("resource-reload-simulated");
         this.instance.getRealModelStoreSample().markStale("resource-reload-simulated");
         this.instance.getModelAtlasSkeleton().markStale("resource-reload-simulated");
+        this.instance.getModelAtlasPixelUploader().markStale("resource-reload-simulated");
         this.lastReloadFinishedAt = Instant.now().toString();
         return this.createStatusSnapshot();
     }
@@ -75,6 +80,8 @@ final class ForgeModelBridgeResourceReloadTracker {
                 this.lastReloadInvalidatedRealModelRecordSample,
                 this.atlasSkeletonStale,
                 this.lastReloadInvalidatedAtlasSkeleton,
+                this.atlasPixelsStale,
+                this.lastReloadInvalidatedAtlasPixels,
                 this.lastReloadReason
         );
     }
@@ -97,6 +104,8 @@ final class ForgeModelBridgeResourceReloadTracker {
         this.lastReloadInvalidatedRealModelRecordSample = false;
         this.atlasSkeletonStale = false;
         this.lastReloadInvalidatedAtlasSkeleton = false;
+        this.atlasPixelsStale = false;
+        this.lastReloadInvalidatedAtlasPixels = false;
         this.lastReloadReason = "none";
     }
 }
