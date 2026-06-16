@@ -1166,3 +1166,110 @@ debug textured draw before formal renderer integration
 - Bind modelData/modelColour/atlas to a tiny textured debug shader.
 - Real resource reload event integration.
 - Biome tint / modelColour hardening.
+
+## G6.16 tiny textured debug quad prototype
+
+G6.16 is the first visible textured probe in the Forge port, but it is still a
+debug-only renderer:
+
+```text
+G6.15 Forge-owned atlas texture
+ + G6.13 real-ish model/sample sprite metadata
+ -> fixed tiny textured debug quad
+```
+
+It does not read the MDIC command buffer, does not read world geometry, does not
+replace the G6 MDIC debug renderer, and does not call `MDICSectionRenderer` or
+`VoxyRenderSystem`.
+
+### Purpose
+
+The goal is to prove that the sample atlas pixels uploaded in G6.15 can be bound
+and sampled by a Forge-owned shader in the running game. This is the smallest
+useful visual step after atlas upload/readback:
+
+```text
+TextureAtlasSprite pixels copied into owned atlas
+ -> atlas texture bound to sampler2D
+ -> normalized UVs for one 16x16 face tile
+ -> visible sand-like quad
+```
+
+The quad is intentionally screen-space and fixed. That keeps the test focused on
+texture ownership, UV addressing, shader compilation, GL state restoration, and
+basic visibility rather than camera placement or formal terrain draw logic.
+
+### New commands
+
+G6.16 adds:
+
+```text
+/voxy textured_debug_quad_build_sample
+/voxy textured_debug_quad_enable
+/voxy textured_debug_quad_disable
+/voxy textured_debug_quad_status
+/voxy textured_debug_quad_clear
+```
+
+`textured_debug_quad_build_sample` ensures the real-ish sample and atlas upload
+exist, then builds a six-vertex screen quad whose UVs point at one uploaded
+sample face tile. `enable` only turns on this tiny independent renderer after a
+sample is ready.
+
+### What it deliberately does not do
+
+The G6.16 shader only consumes:
+
+```text
+position
+uv
+sampler2D atlas
+alpha
+```
+
+It does not consume Voxy modelData, modelColour, lightmap, biome tint, material
+flags, section geometry, MDIC commands, draw count buffers, or LOD traversal
+data. Therefore these status fields remain false:
+
+```text
+formalTexturedShaderReady=false
+formalModelBridgeReady=false
+```
+
+### Lifecycle
+
+The tiny textured debug quad is marked stale or cleared when atlas/model bridge
+state is invalidated:
+
+```text
+/voxy textured_debug_quad_clear
+/voxy model_atlas_upload_clear
+/voxy model_atlas_skeleton_clear
+/voxy model_bridge_simulate_resource_reload
+world unload
+dimension switch
+debug_pipeline_clear
+preset off
+preset clear
+```
+
+Those operations do not clear the GL geometry heap, MDIC command buffer, MDIC
+debug renderer, simple renderer, or CPU section geometry manager unless the
+existing command already did so for its own scope.
+
+### Why this is not formal renderer progress by itself
+
+G6.16 should be visually obvious if it passes, because a sand-like textured quad
+appears on screen. However, it is still a probe. A real textured LoD renderer
+still needs multi-block atlas population, real ModelStore record generation,
+formal shader inputs, renderer ownership, resource reload handling, and MDIC or
+formal command integration.
+
+### G6.17 candidates
+
+- Textured MDIC debug command for one model.
+- Multi-block atlas upload audit.
+- Bind placeholder/real-ish modelData and modelColour into a textured debug
+  shader.
+- Real resource reload event integration.
+- Formal shader input bridge design.

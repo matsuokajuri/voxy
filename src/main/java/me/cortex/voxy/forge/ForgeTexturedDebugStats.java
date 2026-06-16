@@ -1,0 +1,35 @@
+package me.cortex.voxy.forge;
+
+record ForgeTexturedDebugStats(
+        String stage,
+        boolean enabled,
+        boolean actualDrawEnabled,
+        boolean shaderCompiled,
+        boolean programCreated,
+        String lastShaderError,
+        boolean sampleReady,
+        boolean atlasTextureReady,
+        boolean atlasPixelsUploaded,
+        int sampleModelId,
+        int sourceBlockStateId,
+        String sourceBlockState,
+        String sourceSprite,
+        String sourceSpriteAtlas,
+        String sourceFace,
+        String uvMin,
+        String uvMax,
+        int lastFrameDrawCalls,
+        int lastFrameVertices,
+        long drawCallsIssued,
+        long verticesDrawn,
+        String lastGlError,
+        String lastGlErrorStage,
+        long glErrorCount,
+        long stateRestoreFailures,
+        String lastStateRestoreError,
+        String lastRenderSkippedReason,
+        boolean texturedDebugQuadStale,
+        boolean formalTexturedShaderReady,
+        boolean formalModelBridgeReady
+) {
+}

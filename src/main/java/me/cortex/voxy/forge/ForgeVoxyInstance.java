@@ -43,6 +43,7 @@ public final class ForgeVoxyInstance {
     private final ForgeRealModelStoreSample realModelStoreSample = new ForgeRealModelStoreSample(this);
     private final ForgeModelAtlasSkeleton modelAtlasSkeleton = new ForgeModelAtlasSkeleton(this);
     private final ForgeModelAtlasPixelUploader modelAtlasPixelUploader = new ForgeModelAtlasPixelUploader(this);
+    private final ForgeTexturedDebugQuadRenderer texturedDebugQuadRenderer = new ForgeTexturedDebugQuadRenderer(this);
     private final AtomicInteger storageWriteCount = new AtomicInteger();
     private String activeClientDimension;
 
@@ -66,6 +67,7 @@ public final class ForgeVoxyInstance {
         this.simpleGpuMeshRenderer.register();
         this.directGpuGeometryRenderer.register();
         this.mdicDebugRenderer.register();
+        this.texturedDebugQuadRenderer.register();
     }
 
     public WorldEngine getActiveWorld() {
@@ -190,6 +192,10 @@ public final class ForgeVoxyInstance {
         return this.modelAtlasPixelUploader;
     }
 
+    public ForgeTexturedDebugQuadRenderer getTexturedDebugQuadRenderer() {
+        return this.texturedDebugQuadRenderer;
+    }
+
     private void onRegisterClientCommands(RegisterClientCommandsEvent event) {
         ForgeVoxyCommands.register(event.getDispatcher());
     }
@@ -237,6 +243,7 @@ public final class ForgeVoxyInstance {
         this.realModelStoreSample.clear();
         this.modelAtlasSkeleton.clear();
         this.modelAtlasPixelUploader.clear();
+        this.texturedDebugQuadRenderer.clear();
         this.gpuMeshCache.setActiveDimension(dimension);
         this.closeActiveWorld();
         if (ForgeVoxyRuntimeOverrides.enabledWorldEngineSkeleton()) {
@@ -321,6 +328,7 @@ public final class ForgeVoxyInstance {
         this.realModelStoreSample.clear();
         this.modelAtlasSkeleton.clear();
         this.modelAtlasPixelUploader.clear();
+        this.texturedDebugQuadRenderer.clear();
         this.gpuMeshCache.clear();
         this.activeClientDimension = null;
         this.closeActiveWorld();

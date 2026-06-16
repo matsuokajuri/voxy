@@ -55,6 +55,7 @@ final class ForgeModelBridgeResourceReloadTracker {
         this.instance.getRealModelStoreSample().markStale("resource-reload-simulated");
         this.instance.getModelAtlasSkeleton().markStale("resource-reload-simulated");
         this.instance.getModelAtlasPixelUploader().markStale("resource-reload-simulated");
+        this.instance.getTexturedDebugQuadRenderer().markStale("resource-reload-simulated");
         this.lastReloadFinishedAt = Instant.now().toString();
         return this.createStatusSnapshot();
     }

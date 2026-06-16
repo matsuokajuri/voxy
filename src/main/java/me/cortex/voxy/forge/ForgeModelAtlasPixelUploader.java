@@ -195,6 +195,45 @@ final class ForgeModelAtlasPixelUploader {
         );
     }
 
+    ForgeTexturedDebugQuadSample createTexturedDebugQuadSample(int preferredFaceIndex) {
+        if (this.sample == null || this.textureId == 0 || !this.atlasPixelsUploaded || this.atlasPixelsStale) {
+            return ForgeTexturedDebugQuadSample.missing("atlas-upload-sample-missing");
+        }
+        int faceIndex = preferredFaceIndex >= 0 && preferredFaceIndex < ForgeModelAtlasLayout.FACE_COUNT ? preferredFaceIndex : 0;
+        ForgeModelAtlasPixelSample.Face face = this.sample.face(faceIndex);
+        if (face == null || face.pixels().length != ForgeModelAtlasPixelSample.BYTES_PER_FACE) {
+            for (int i = 0; i < ForgeModelAtlasLayout.FACE_COUNT; i++) {
+                ForgeModelAtlasPixelSample.Face fallback = this.sample.face(i);
+                if (fallback != null && fallback.pixels().length == ForgeModelAtlasPixelSample.BYTES_PER_FACE) {
+                    faceIndex = i;
+                    face = fallback;
+                    break;
+                }
+            }
+        }
+        if (face == null || face.pixels().length != ForgeModelAtlasPixelSample.BYTES_PER_FACE) {
+            return ForgeTexturedDebugQuadSample.missing("face-pixels-missing");
+        }
+        ForgeModelAtlasLayout.Tile tile = this.actualUploadTile(faceIndex, this.sample.modelId());
+        return new ForgeTexturedDebugQuadSample(
+                true,
+                this.textureId,
+                this.actualTextureWidth,
+                this.actualTextureHeight,
+                this.sample.modelId(),
+                this.sample.blockStateId(),
+                this.sample.blockState(),
+                face.spriteName(),
+                face.spriteAtlas(),
+                faceIndex,
+                face.direction(),
+                tile.x(),
+                tile.y(),
+                tile.format(),
+                face.checksum()
+        );
+    }
+
     String dumpSample() {
         ForgeModelAtlasUploadStats status = this.createStatusSnapshot();
         return String.format(
