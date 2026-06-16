@@ -1515,3 +1515,163 @@ VoxyRenderSystem
 - Multi-model textured MDIC debug path.
 - Formal shader input bridge for modelData/modelColour/atlas.
 - Real resource reload event integration.
+
+## G6.19 multi-block model sample set and atlas upload
+
+G6.19 expands the single-model textured path into a small multi-block sample
+set:
+
+```text
+uploaded GL heap / mapper / nearby world samples
+ -> several solid BlockState samples
+ -> several real-ish 64-byte model records
+ -> several Voxy-style 3x2 atlas tile uploads
+ -> audit / optional multi-model textured MDIC debug
+```
+
+This is still a debug/readiness path. It does not move to the original
+`ModelFactory` or a formal `ModelStore`, and it does not make the atlas or shader
+formal-ready.
+
+### Sample selection policy
+
+The sample-set builder prioritizes model ids that are already visible in the
+current GL heap / MDIC command ranges. It then falls back to the runtime
+placeholder model-id mapper, nearby solid blocks around the player, and finally a
+small list of common solid blocks such as bedrock, stone, dirt, grass block,
+sand, gravel, oak log, and oak planks.
+
+Samples are accepted only when they are:
+
+```text
+non-air
+non-fluid
+solid render layer
+have a baked model
+have baked quads
+have readable TextureAtlasSprite data
+```
+
+Fluid, translucent/cutout, missing-model, missing-sprite, and unsupported custom
+models are rejected and counted in status. If the current world only exposes a
+small number of usable model ids, the sample count is reported honestly rather
+than fabricated.
+
+### Multi-record ModelStore sample layout
+
+Each accepted sample reuses the G6.13 `REAL_MODEL_RECORD_SAMPLE_V1` 64-byte
+record shape. The set is reported as `REAL_MODEL_RECORD_SAMPLE_SET_V1`, but each
+record remains a formal-ish sample rather than a real upstream ModelStore entry.
+
+The uploaded sample-set modelData/modelColour buffers are no-draw buffers used
+only for readback audit:
+
+```text
+N samples * 64 bytes -> modelData sample-set buffer
+N samples * 4 bytes  -> modelColour sample-set buffer
+```
+
+`formalLayoutCompatible=false` and `formalModelBridgeReady=false` remain true
+statements for this stage.
+
+### Multi-model atlas upload audit
+
+G6.19 adds a sample-set uploader that writes each accepted model's six 16x16
+face tiles into the Forge-owned Voxy-style atlas:
+
+```text
+baseX = (modelId & 0xFF) * 16 * 3
+baseY = ((modelId >> 8) & 0xFF) * 16 * 2
+faceTile = base + 3x2 face offset
+```
+
+The uploader records per-sample face checksums and reads the atlas tiles back to
+check that CPU pixels match GPU pixels. A full 12288x8192 RGBA8 atlas is used
+when supported. If the driver cannot allocate it, status reports the debug small
+atlas fallback instead of pretending the full atlas exists.
+
+Uploading several blocks still does not make `formalTextureAtlasReady=true`.
+The formal atlas requires ownership rules, rebuild policy, resource reload
+integration, model-id stability, and shader binding contracts that this sample
+path intentionally does not claim.
+
+### Optional multi-model textured MDIC debug
+
+The G6.18 textured MDIC debug shader now accepts a small sample model-id set. It
+still draws the existing MDIC command ranges and filters in the shader:
+
+```text
+recordModelId in sampleModelIdSet -> sample atlas
+otherwise discard
+```
+
+Status marks this explicitly:
+
+```text
+multiModelTexturedMdicDebug=true
+shaderSideModelFilter=true
+notPerformanceRepresentative=true
+notFormalCmdgen=true
+formalTexturedShaderReady=false
+formalModelBridgeReady=false
+```
+
+This makes G6.19 more useful visually than the one-model path, but it is still
+not a formal command generator or production renderer.
+
+### New commands
+
+G6.19 adds:
+
+```text
+/voxy model_sample_set_build
+/voxy model_sample_set_status
+/voxy model_sample_set_audit
+/voxy model_sample_set_audit_status
+/voxy model_sample_set_dump
+/voxy model_sample_set_clear
+
+/voxy model_atlas_upload_sample_set
+/voxy model_atlas_upload_sample_set_status
+/voxy model_atlas_upload_sample_set_audit
+/voxy model_atlas_upload_sample_set_dump
+```
+
+### Lifecycle
+
+The sample set and sample-set atlas upload are cleared or marked stale on:
+
+```text
+/voxy model_sample_set_clear
+/voxy model_atlas_upload_clear
+/voxy model_bridge_simulate_resource_reload
+world unload
+dimension switch
+debug_pipeline_clear
+preset off
+preset clear
+```
+
+These lifecycle paths leave the GL geometry heap, existing MDIC command buffer,
+existing MDIC debug renderer, simple renderer, and CPU SectionGeometryManager
+untouched unless the broader command already owns those clears.
+
+### What is still missing
+
+G6.19 still does not provide:
+
+```text
+formal shader input bridge
+real ModelFactory / ModelBakery bridge
+formal textured shader
+formal MDIC renderer
+VoxyRenderSystem
+shaderpack / Embeddium / Oculus / Sodium / Iris integration
+```
+
+### G6.20 candidates
+
+- Formal shader input bridge for modelData/modelColour/atlas.
+- Multi-model textured MDIC debug hardening.
+- Real resource reload event integration.
+- Begin formal renderer integration plan.

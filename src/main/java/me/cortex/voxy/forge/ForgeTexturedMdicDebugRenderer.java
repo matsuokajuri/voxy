@@ -69,6 +69,7 @@ final class ForgeTexturedMdicDebugRenderer {
     private int atlasTextureWidth;
     private int atlasTextureHeight;
     private int sampleModelId = -1;
+    private int[] sampleModelIds = new int[0];
     private int sourceBlockStateId = -1;
     private String sourceBlockState = "none";
     private String sourceSprite = "none";
@@ -104,10 +105,14 @@ final class ForgeTexturedMdicDebugRenderer {
         }
 
         ForgeModelAtlasUploadStats atlasStatus = this.instance.getModelAtlasPixelUploader().createStatusSnapshot();
-        if (!atlasStatus.sampleAtlasPixelsUploaded()) {
+        ForgeModelAtlasSampleSetUploadStats sampleSetAtlasStatus = this.instance.getModelAtlasSampleSetUploader().createStatusSnapshot();
+        boolean useSampleSet = sampleSetAtlasStatus.sampleSetAtlasUploadReady();
+        if (!useSampleSet && !atlasStatus.sampleAtlasPixelsUploaded()) {
             atlasStatus = this.instance.getModelAtlasPixelUploader().uploadSample();
         }
-        if (!atlasStatus.sampleAtlasPixelsUploaded() || atlasStatus.atlasTextureObjectId() == 0) {
+        sampleSetAtlasStatus = this.instance.getModelAtlasSampleSetUploader().createStatusSnapshot();
+        useSampleSet = sampleSetAtlasStatus.sampleSetAtlasUploadReady();
+        if (!useSampleSet && (!atlasStatus.sampleAtlasPixelsUploaded() || atlasStatus.atlasTextureObjectId() == 0)) {
             this.markStale("ATLAS_SAMPLE_MISSING");
             return this.createStatusSnapshot();
         }
@@ -156,19 +161,31 @@ final class ForgeTexturedMdicDebugRenderer {
             return this.createStatusSnapshot();
         }
 
-        MatchingCount count = this.countMatchingRecords(heap, commandList, atlasStatus.sampleModelId());
+        int[] activeModelIds = useSampleSet ? this.instance.getModelAtlasSampleSetUploader().modelIds() : new int[]{atlasStatus.sampleModelId()};
+        int activeTextureId = useSampleSet ? sampleSetAtlasStatus.atlasTextureObjectId() : atlasStatus.atlasTextureObjectId();
+        boolean activeFullAtlas = useSampleSet ? sampleSetAtlasStatus.fullAtlasTextureCreated() : atlasStatus.fullAtlasTextureCreated();
+        int activeAtlasWidth = useSampleSet ? sampleSetAtlasStatus.actualTextureWidth() : atlasStatus.actualTextureWidth();
+        int activeAtlasHeight = useSampleSet ? sampleSetAtlasStatus.actualTextureHeight() : atlasStatus.actualTextureHeight();
+        int activeSampleModelId = activeModelIds.length == 0 ? -1 : activeModelIds[0];
+        int activeBlockStateId = useSampleSet ? -1 : atlasStatus.sourceBlockStateId();
+        String activeBlockState = useSampleSet ? sampleSetAtlasStatus.sampleBlockStates() : atlasStatus.sourceBlockState();
+        String activeSprite = useSampleSet ? sampleSetAtlasStatus.sampleSprites() : atlasStatus.sourceSprite();
+        String activeSpriteAtlas = useSampleSet ? "sample-set" : atlasStatus.sourceSpriteAtlas();
+
+        MatchingCount count = this.countMatchingRecords(heap, commandList, activeModelIds);
         this.sampleReady = true;
         this.atlasTextureReady = true;
         this.atlasPixelsUploaded = true;
-        this.atlasTextureId = atlasStatus.atlasTextureObjectId();
-        this.fullAtlasTextureCreated = atlasStatus.fullAtlasTextureCreated();
-        this.atlasTextureWidth = atlasStatus.actualTextureWidth();
-        this.atlasTextureHeight = atlasStatus.actualTextureHeight();
-        this.sampleModelId = atlasStatus.sampleModelId();
-        this.sourceBlockStateId = atlasStatus.sourceBlockStateId();
-        this.sourceBlockState = atlasStatus.sourceBlockState();
-        this.sourceSprite = atlasStatus.sourceSprite();
-        this.sourceSpriteAtlas = atlasStatus.sourceSpriteAtlas();
+        this.atlasTextureId = activeTextureId;
+        this.fullAtlasTextureCreated = activeFullAtlas;
+        this.atlasTextureWidth = activeAtlasWidth;
+        this.atlasTextureHeight = activeAtlasHeight;
+        this.sampleModelIds = sanitizeModelIds(activeModelIds);
+        this.sampleModelId = activeSampleModelId;
+        this.sourceBlockStateId = activeBlockStateId;
+        this.sourceBlockState = activeBlockState;
+        this.sourceSprite = activeSprite;
+        this.sourceSpriteAtlas = activeSpriteAtlas;
         this.matchingRecordsKnown = count.known();
         this.matchingRecords = count.records();
         this.commandCount = commandList.commandCount();
@@ -225,6 +242,7 @@ final class ForgeTexturedMdicDebugRenderer {
         this.atlasTextureHeight = 0;
         this.sampleModelId = -1;
         this.sourceBlockStateId = -1;
+        this.sampleModelIds = new int[0];
         this.sourceBlockState = "none";
         this.sourceSprite = "none";
         this.sourceSpriteAtlas = "none";
@@ -284,6 +302,9 @@ final class ForgeTexturedMdicDebugRenderer {
                 false,
                 true,
                 true,
+                this.sampleModelIds.length > 1,
+                this.sampleModelIds.length,
+                this.sampleModelIdsString(),
                 this.sampleModelId,
                 this.sourceBlockStateId,
                 this.sourceBlockState,
@@ -327,8 +348,12 @@ final class ForgeTexturedMdicDebugRenderer {
             this.recordSkip("WORLD_MISSING");
             return;
         }
+        ForgeModelAtlasSampleSetUploadStats sampleSetAtlasStatus = this.instance.getModelAtlasSampleSetUploader().createStatusSnapshot();
         ForgeModelAtlasUploadStats atlasStatus = this.instance.getModelAtlasPixelUploader().createStatusSnapshot();
-        if (!atlasStatus.sampleAtlasPixelsUploaded() || atlasStatus.atlasTextureObjectId() == 0 || atlasStatus.atlasTextureObjectId() != this.atlasTextureId) {
+        boolean atlasStillValid = sampleSetAtlasStatus.sampleSetAtlasUploadReady()
+                ? sampleSetAtlasStatus.atlasTextureObjectId() == this.atlasTextureId
+                : atlasStatus.sampleAtlasPixelsUploaded() && atlasStatus.atlasTextureObjectId() == this.atlasTextureId;
+        if (!atlasStillValid || this.atlasTextureId == 0) {
             this.markStale("ATLAS_STALE");
             return;
         }
@@ -450,6 +475,7 @@ final class ForgeTexturedMdicDebugRenderer {
                     this.atlasTextureWidth,
                     this.atlasTextureHeight,
                     this.sampleModelId,
+                    this.sampleModelIds,
                     modelView,
                     projection,
                     commandList,
@@ -466,9 +492,10 @@ final class ForgeTexturedMdicDebugRenderer {
                 this.atlasTextureId,
                 this.fullAtlasTextureCreated,
                 this.atlasTextureWidth,
-                this.atlasTextureHeight,
-                this.sampleModelId,
-                modelView,
+            this.atlasTextureHeight,
+            this.sampleModelId,
+            this.sampleModelIds,
+            modelView,
                 projection,
                 commandList,
                 ForgeMdicDebugDrawConfig.maxCommands(),
@@ -519,8 +546,8 @@ final class ForgeTexturedMdicDebugRenderer {
         };
     }
 
-    private MatchingCount countMatchingRecords(ForgeGpuGeometryHeap heap, ForgeMdicCommandList commandList, int modelId) {
-        if (heap == null || !heap.isCreated() || commandList == null || !commandList.isValid() || modelId < 0) {
+    private MatchingCount countMatchingRecords(ForgeGpuGeometryHeap heap, ForgeMdicCommandList commandList, int[] modelIds) {
+        if (heap == null || !heap.isCreated() || commandList == null || !commandList.isValid() || modelIds == null || modelIds.length == 0) {
             return new MatchingCount(false, 0);
         }
         int matches = 0;
@@ -534,7 +561,7 @@ final class ForgeTexturedMdicDebugRenderer {
                 int count = (int) Math.min(recordsLeft, records);
                 long[] raw = heap.readbackGeometry(command.geometryPtr() + command.recordStart(), count);
                 for (long record : raw) {
-                    if (ForgeVoxyQuadEncoder.extractModelId(record) == modelId) {
+                    if (containsModelId(modelIds, ForgeVoxyQuadEncoder.extractModelId(record))) {
                         matches++;
                     }
                 }
@@ -551,6 +578,39 @@ final class ForgeTexturedMdicDebugRenderer {
         this.lastFrameLogicalCommands = 0;
         this.lastFrameVertices = 0L;
         this.lastRenderSkippedReason = reason == null || reason.isBlank() ? "UNKNOWN" : reason;
+    }
+
+    private String sampleModelIdsString() {
+        if (this.sampleModelIds.length == 0) {
+            return "none";
+        }
+        StringBuilder builder = new StringBuilder();
+        for (int id : this.sampleModelIds) {
+            if (builder.length() > 0) {
+                builder.append(',');
+            }
+            builder.append(id);
+        }
+        return builder.toString();
+    }
+
+    private static int[] sanitizeModelIds(int[] ids) {
+        if (ids == null || ids.length == 0) {
+            return new int[0];
+        }
+        int limit = Math.min(16, ids.length);
+        int[] result = new int[limit];
+        System.arraycopy(ids, 0, result, 0, limit);
+        return result;
+    }
+
+    private static boolean containsModelId(int[] ids, int modelId) {
+        for (int id : ids) {
+            if (id == modelId) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static String currentDimensionId() {

@@ -43,6 +43,7 @@ import static org.lwjgl.opengl.GL20C.glLinkProgram;
 import static org.lwjgl.opengl.GL20C.glShaderSource;
 import static org.lwjgl.opengl.GL20C.glUniform1f;
 import static org.lwjgl.opengl.GL20C.glUniform1i;
+import static org.lwjgl.opengl.GL20C.glUniform1iv;
 import static org.lwjgl.opengl.GL20C.glUniform2f;
 import static org.lwjgl.opengl.GL20C.glUniformMatrix4fv;
 import static org.lwjgl.opengl.GL20C.glUseProgram;
@@ -88,19 +89,33 @@ final class ForgeTexturedMdicDebugShader implements AutoCloseable {
             uniform mat4 uModelView;
             uniform mat4 uProjection;
             uniform int uSampleModelId;
+            uniform int uSampleModelCount;
+            uniform int uSampleModelIds[16];
             uniform int uFullAtlas;
             uniform vec2 uAtlasSize;
 
             out vec2 vUv;
             out float vVisible;
 
-            vec2 uvFor(uint face, int corner) {
+            bool isSampleModel(uint modelId) {
+                if (uSampleModelCount <= 0) {
+                    return modelId == uint(uSampleModelId);
+                }
+                int limit = min(uSampleModelCount, 16);
+                for (int i = 0; i < limit; i++) {
+                    if (modelId == uint(uSampleModelIds[i])) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+
+            vec2 uvFor(uint modelId, uint face, int corner) {
                 uint tileX;
                 uint tileY;
                 if (uFullAtlas != 0) {
-                    uint sampleId = uint(uSampleModelId);
-                    uint modelTileX = sampleId & 255u;
-                    uint modelTileY = (sampleId >> 8) & 255u;
+                    uint modelTileX = modelId & 255u;
+                    uint modelTileY = (modelId >> 8) & 255u;
                     uint baseX = modelTileX * 16u * 3u;
                     uint baseY = modelTileY * 16u * 2u;
                     tileX = baseX + ((face >> 1u) * 16u);
@@ -141,7 +156,7 @@ final class ForgeTexturedMdicDebugShader implements AutoCloseable {
                 uint localX = (lo >> 21) & 31u;
                 uint modelId = ((lo >> 26) & 63u) | ((hi & 1023u) << 6);
 
-                if (modelId != uint(uSampleModelId)) {
+                if (!isSampleModel(modelId)) {
                     vVisible = 0.0;
                     vUv = vec2(0.0);
                     gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
@@ -187,7 +202,7 @@ final class ForgeTexturedMdicDebugShader implements AutoCloseable {
                 }
 
                 vVisible = 1.0;
-                vUv = uvFor(face, corner);
+                vUv = uvFor(modelId, face, corner);
                 gl_Position = uProjection * uModelView * vec4(sectionOrigin + local, 1.0);
             }
             """;
@@ -228,6 +243,8 @@ final class ForgeTexturedMdicDebugShader implements AutoCloseable {
     private int alphaUniform = -1;
     private int atlasUniform = -1;
     private int sampleModelIdUniform = -1;
+    private int sampleModelCountUniform = -1;
+    private int sampleModelIdsUniform = -1;
     private int fullAtlasUniform = -1;
     private int atlasSizeUniform = -1;
     private boolean shaderCompiled;
@@ -267,6 +284,11 @@ final class ForgeTexturedMdicDebugShader implements AutoCloseable {
             this.alphaUniform = glGetUniformLocation(program, "uAlpha");
             this.atlasUniform = glGetUniformLocation(program, "uAtlas");
             this.sampleModelIdUniform = glGetUniformLocation(program, "uSampleModelId");
+            this.sampleModelCountUniform = glGetUniformLocation(program, "uSampleModelCount");
+            this.sampleModelIdsUniform = glGetUniformLocation(program, "uSampleModelIds");
+            if (this.sampleModelIdsUniform < 0) {
+                this.sampleModelIdsUniform = glGetUniformLocation(program, "uSampleModelIds[0]");
+            }
             this.fullAtlasUniform = glGetUniformLocation(program, "uFullAtlas");
             this.atlasSizeUniform = glGetUniformLocation(program, "uAtlasSize");
             this.shaderCompiled = true;
@@ -298,6 +320,7 @@ final class ForgeTexturedMdicDebugShader implements AutoCloseable {
             int atlasWidth,
             int atlasHeight,
             int sampleModelId,
+            int[] sampleModelIds,
             Matrix4f modelView,
             Matrix4f projection,
             ForgeMdicCommandList commandList,
@@ -315,7 +338,7 @@ final class ForgeTexturedMdicDebugShader implements AutoCloseable {
         if (budget.logicalCommands <= 0 || budget.indices <= 0L) {
             return DrawCallResult.empty();
         }
-        DrawCallResult bind = this.bindProgramAndBuffers(geometryBufferId, commandBufferId, atlasTextureId, fullAtlas, atlasWidth, atlasHeight, sampleModelId, modelView, projection, alpha);
+        DrawCallResult bind = this.bindProgramAndBuffers(geometryBufferId, commandBufferId, atlasTextureId, fullAtlas, atlasWidth, atlasHeight, sampleModelId, sampleModelIds, modelView, projection, alpha);
         if (!bind.ok()) {
             return bind;
         }
@@ -350,6 +373,7 @@ final class ForgeTexturedMdicDebugShader implements AutoCloseable {
             int atlasWidth,
             int atlasHeight,
             int sampleModelId,
+            int[] sampleModelIds,
             Matrix4f modelView,
             Matrix4f projection,
             ForgeMdicCommandList commandList,
@@ -368,7 +392,7 @@ final class ForgeTexturedMdicDebugShader implements AutoCloseable {
         if (budget.logicalCommands <= 0 || budget.indices <= 0L || clampedDrawCount <= 0) {
             return DrawCallResult.empty();
         }
-        DrawCallResult bind = this.bindProgramAndBuffers(geometryBufferId, commandBufferId, atlasTextureId, fullAtlas, atlasWidth, atlasHeight, sampleModelId, modelView, projection, alpha);
+        DrawCallResult bind = this.bindProgramAndBuffers(geometryBufferId, commandBufferId, atlasTextureId, fullAtlas, atlasWidth, atlasHeight, sampleModelId, sampleModelIds, modelView, projection, alpha);
         if (!bind.ok()) {
             return bind;
         }
@@ -442,6 +466,7 @@ final class ForgeTexturedMdicDebugShader implements AutoCloseable {
             int atlasWidth,
             int atlasHeight,
             int sampleModelId,
+            int[] sampleModelIds,
             Matrix4f modelView,
             Matrix4f projection,
             float alpha
@@ -468,7 +493,7 @@ final class ForgeTexturedMdicDebugShader implements AutoCloseable {
         if (glError != GL_NO_ERROR) {
             return new DrawCallResult(glError, ERROR_STAGE_BIND_ATLAS_TEXTURE, 0, 0L);
         }
-        this.setUniforms(modelView, projection, alpha, sampleModelId, fullAtlas, atlasWidth, atlasHeight);
+        this.setUniforms(modelView, projection, alpha, sampleModelId, sampleModelIds, fullAtlas, atlasWidth, atlasHeight);
         glError = glGetError();
         if (glError != GL_NO_ERROR) {
             return new DrawCallResult(glError, ERROR_STAGE_SET_UNIFORMS, 0, 0L);
@@ -476,7 +501,7 @@ final class ForgeTexturedMdicDebugShader implements AutoCloseable {
         return DrawCallResult.empty();
     }
 
-    private void setUniforms(Matrix4f modelView, Matrix4f projection, float alpha, int sampleModelId, boolean fullAtlas, int atlasWidth, int atlasHeight) {
+    private void setUniforms(Matrix4f modelView, Matrix4f projection, float alpha, int sampleModelId, int[] sampleModelIds, boolean fullAtlas, int atlasWidth, int atlasHeight) {
         try (MemoryStack stack = MemoryStack.stackPush()) {
             FloatBuffer matrixBuffer = stack.mallocFloat(16);
             modelView.get(matrixBuffer);
@@ -488,6 +513,11 @@ final class ForgeTexturedMdicDebugShader implements AutoCloseable {
         glUniform1f(this.alphaUniform, alpha);
         glUniform1i(this.atlasUniform, 0);
         glUniform1i(this.sampleModelIdUniform, sampleModelId);
+        int[] sanitizedIds = sanitizeSampleModelIds(sampleModelId, sampleModelIds);
+        glUniform1i(this.sampleModelCountUniform, sanitizedIds.length);
+        if (this.sampleModelIdsUniform >= 0) {
+            glUniform1iv(this.sampleModelIdsUniform, sanitizedIds);
+        }
         glUniform1i(this.fullAtlasUniform, fullAtlas ? 1 : 0);
         glUniform2f(this.atlasSizeUniform, Math.max(1, atlasWidth), Math.max(1, atlasHeight));
     }
@@ -547,6 +577,8 @@ final class ForgeTexturedMdicDebugShader implements AutoCloseable {
         this.alphaUniform = -1;
         this.atlasUniform = -1;
         this.sampleModelIdUniform = -1;
+        this.sampleModelCountUniform = -1;
+        this.sampleModelIdsUniform = -1;
         this.fullAtlasUniform = -1;
         this.atlasSizeUniform = -1;
         this.shaderCompiled = false;
@@ -571,6 +603,16 @@ final class ForgeTexturedMdicDebugShader implements AutoCloseable {
             return "unknown";
         }
         return log.replace('\n', ' ').replace('\r', ' ').trim();
+    }
+
+    private static int[] sanitizeSampleModelIds(int sampleModelId, int[] sampleModelIds) {
+        int[] source = sampleModelIds == null || sampleModelIds.length == 0 ? new int[]{sampleModelId} : sampleModelIds;
+        int count = Math.min(16, source.length);
+        int[] result = new int[count];
+        for (int i = 0; i < count; i++) {
+            result[i] = source[i];
+        }
+        return result;
     }
 
     static String formatGlError(int error) {

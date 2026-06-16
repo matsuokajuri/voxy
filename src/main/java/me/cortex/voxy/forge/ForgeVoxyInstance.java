@@ -41,8 +41,10 @@ public final class ForgeVoxyInstance {
     private final ForgeModelBridgeResourceReloadTracker modelBridgeResourceReloadTracker = new ForgeModelBridgeResourceReloadTracker(this);
     private final ForgeBakedModelBridge bakedModelBridge = new ForgeBakedModelBridge(this);
     private final ForgeRealModelStoreSample realModelStoreSample = new ForgeRealModelStoreSample(this);
+    private final ForgeModelSampleSet modelSampleSet = new ForgeModelSampleSet(this);
     private final ForgeModelAtlasSkeleton modelAtlasSkeleton = new ForgeModelAtlasSkeleton(this);
     private final ForgeModelAtlasPixelUploader modelAtlasPixelUploader = new ForgeModelAtlasPixelUploader(this);
+    private final ForgeModelAtlasSampleSetUploader modelAtlasSampleSetUploader = new ForgeModelAtlasSampleSetUploader(this);
     private final ForgeTexturedDebugQuadRenderer texturedDebugQuadRenderer = new ForgeTexturedDebugQuadRenderer(this);
     private final ForgeTexturedReadbackRenderer texturedReadbackRenderer = new ForgeTexturedReadbackRenderer(this);
     private final ForgeTexturedMdicDebugRenderer texturedMdicDebugRenderer = new ForgeTexturedMdicDebugRenderer(this);
@@ -188,12 +190,20 @@ public final class ForgeVoxyInstance {
         return this.realModelStoreSample;
     }
 
+    public ForgeModelSampleSet getModelSampleSet() {
+        return this.modelSampleSet;
+    }
+
     public ForgeModelAtlasSkeleton getModelAtlasSkeleton() {
         return this.modelAtlasSkeleton;
     }
 
     public ForgeModelAtlasPixelUploader getModelAtlasPixelUploader() {
         return this.modelAtlasPixelUploader;
+    }
+
+    public ForgeModelAtlasSampleSetUploader getModelAtlasSampleSetUploader() {
+        return this.modelAtlasSampleSetUploader;
     }
 
     public ForgeTexturedDebugQuadRenderer getTexturedDebugQuadRenderer() {
@@ -253,8 +263,10 @@ public final class ForgeVoxyInstance {
         this.modelBridgeResourceReloadTracker.clear();
         this.bakedModelBridge.clear();
         this.realModelStoreSample.clear();
+        this.modelSampleSet.clear();
         this.modelAtlasSkeleton.clear();
         this.modelAtlasPixelUploader.clear();
+        this.modelAtlasSampleSetUploader.clear();
         this.texturedDebugQuadRenderer.clear();
         this.texturedReadbackRenderer.clear();
         this.texturedMdicDebugRenderer.clear();
@@ -340,8 +352,10 @@ public final class ForgeVoxyInstance {
         this.modelBridgeResourceReloadTracker.clear();
         this.bakedModelBridge.clear();
         this.realModelStoreSample.clear();
+        this.modelSampleSet.clear();
         this.modelAtlasSkeleton.clear();
         this.modelAtlasPixelUploader.clear();
+        this.modelAtlasSampleSetUploader.clear();
         this.texturedDebugQuadRenderer.clear();
         this.texturedReadbackRenderer.clear();
         this.texturedMdicDebugRenderer.clear();
