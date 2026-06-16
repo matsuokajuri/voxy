@@ -4,6 +4,7 @@ import me.cortex.voxy.config.ForgeVoxyConfig;
 import me.cortex.voxy.platform.ForgePlatformServices;
 import me.cortex.voxy.platform.PlatformServices;
 import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.client.event.RegisterClientReloadListenersEvent;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.fml.DistExecutor;
 import net.minecraftforge.fml.ModLoadingContext;
@@ -25,6 +26,7 @@ public final class VoxyForge {
         ModLoadingContext.get().registerConfig(ModConfig.Type.CLIENT, ForgeVoxyConfig.CLIENT_SPEC);
 
         DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> modBus.addListener(this::onClientSetup));
+        DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> modBus.addListener(this::onRegisterClientReloadListeners));
 
         LOGGER.info("Voxy Forge 1.20.1 skeleton loaded. LoD rendering and shader integration are disabled.");
     }
@@ -32,5 +34,10 @@ public final class VoxyForge {
     private void onClientSetup(FMLClientSetupEvent event) {
         ForgeVoxyInstance.INSTANCE.register();
         LOGGER.info("Voxy Forge client skeleton ready. Game dir: {}", PLATFORM.getGameDir());
+    }
+
+    private void onRegisterClientReloadListeners(RegisterClientReloadListenersEvent event) {
+        ForgeVoxyInstance.INSTANCE.getModelBridgeResourceReloadTracker().registerClientReloadListeners(event);
+        LOGGER.info("Registered Voxy model bridge client resource reload listener.");
     }
 }

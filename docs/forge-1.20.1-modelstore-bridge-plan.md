@@ -1791,3 +1791,93 @@ formal shader patch inputs
 - Multi-model textured MDIC debug hardening.
 - Formal renderer integration readiness audit.
 - Begin formal renderer skeleton with no draw.
+
+## G6.21 real resource reload event integration
+
+G6.21 connects the model bridge lifecycle to Forge's client resource reload
+path. Forge 1.20.1 exposes `RegisterClientReloadListenersEvent` on the
+mod-specific event bus during `Minecraft` construction, and that event accepts a
+Minecraft `PreparableReloadListener`. The Forge PoC registers a small
+`ResourceManagerReloadListener` that records real client resource reloads and
+stales the model bridge resources.
+
+The listener does not build a formal renderer and does not call the original
+`MDICSectionRenderer` or `VoxyRenderSystem`. It only invalidates resources that
+depend on baked models, sprites, sample model buffers, and the Forge-owned
+sample atlas.
+
+### Reload scope
+
+Real reload events and command-driven simulation both stale or disable:
+
+```text
+baked model bridge samples
+sprite samples
+real model record sample
+multi-block model sample set
+sample-set modelData / modelColour buffers
+atlas skeleton
+uploaded atlas pixels / atlas texture
+formal shader input bridge
+tiny textured debug quad
+textured GL heap readback renderer
+textured MDIC debug renderer
+```
+
+They intentionally leave these systems alone:
+
+```text
+GL geometry heap
+MDIC command buffer
+existing G6 MDIC debug renderer
+simple renderer
+CPU SectionGeometryManager
+```
+
+### Thread and GL cleanup
+
+`ResourceManagerReloadListener` runs through Minecraft's reload executor, so
+the callback must not assume it is on the render thread. The G6.21 tracker
+records the callback thread and whether cleanup needed render-thread scheduling.
+The resource classes that own GL objects already route deletion through
+`RenderSystem.recordRenderCall(...)` when they are stale-cleared off the render
+thread. G6.21 reuses those lifecycle paths instead of deleting GL objects
+directly in the reload callback.
+
+### Simulation vs real reload
+
+`/voxy model_bridge_simulate_resource_reload` remains for deterministic tests.
+`/voxy model_bridge_resource_reload_status` now distinguishes:
+
+```text
+lastReloadSource=SIMULATED
+lastReloadSource=REAL_RESOURCE_RELOAD
+realReloadEventsSeen
+simulatedReloadEventsSeen
+reloadCleanupScheduled
+reloadCleanupOnRenderThread
+reloadCleanupCompleted
+```
+
+This matters because a simulation proves the stale path, while a real event
+proves Forge/Minecraft actually called the registered reload listener.
+
+### Why this is still not formal renderer work
+
+Real resource reload integration is a prerequisite for a formal renderer, but it
+does not provide:
+
+```text
+real ModelFactory / ModelBakery bridge
+formal textured shader
+formal MDIC renderer
+VoxyRenderSystem ownership
+shaderpack / Embeddium / Oculus / Sodium / Iris integration
+```
+
+### G6.22 candidates
+
+- Formal renderer integration readiness audit after the real reload hook.
+- Formal renderer no-draw skeleton.
+- Real ModelFactory / ModelBakery bridge plan.
+- Multi-model textured MDIC debug hardening.

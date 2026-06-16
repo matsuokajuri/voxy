@@ -247,6 +247,8 @@ public final class ForgeVoxyCommands {
                         .executes(ctx -> modelStoreLayoutAuditClear(ctx.getSource())))
                 .then(Commands.literal("model_bridge_resource_reload_status")
                         .executes(ctx -> modelBridgeResourceReloadStatus(ctx.getSource())))
+                .then(Commands.literal("model_bridge_resource_reload_clear_stats")
+                        .executes(ctx -> modelBridgeResourceReloadClearStats(ctx.getSource())))
                 .then(Commands.literal("model_bridge_simulate_resource_reload")
                         .executes(ctx -> modelBridgeSimulateResourceReload(ctx.getSource())))
                 .then(Commands.literal("baked_model_bridge_check")
@@ -3458,6 +3460,13 @@ public final class ForgeVoxyCommands {
         return status.reloadLifecycleSkeletonReady() ? 1 : 0;
     }
 
+    private static int modelBridgeResourceReloadClearStats(CommandSourceStack source) {
+        ForgeVoxyInstance.INSTANCE.getModelBridgeResourceReloadTracker().clearStats();
+        ForgeModelBridgeResourceReloadStats status = ForgeVoxyInstance.INSTANCE.getModelBridgeResourceReloadTracker().createStatusSnapshot();
+        source.sendSuccess(() -> Component.literal("Voxy model bridge resource reload stats clear: " + formatModelBridgeResourceReloadStatus(status) + " Model bridge resources, atlas buffers, GL geometry heap, MDIC command buffers, existing MDIC debug renderer, simple renderer, and CPU SectionGeometryManager were left unchanged."), false);
+        return 1;
+    }
+
     private static int modelBridgeSimulateResourceReload(CommandSourceStack source) {
         ForgeModelBridgeResourceReloadStats status = ForgeVoxyInstance.INSTANCE.getModelBridgeResourceReloadTracker().simulateReload("command-simulated-resource-reload");
         source.sendSuccess(() -> Component.literal("Voxy model bridge resource reload simulation: " + formatModelBridgeResourceReloadStatus(status) + " GL geometry heap, MDIC command buffers, MDIC debug renderer, simple renderer, and CPU SectionGeometryManager were left unchanged."), false);
@@ -4694,13 +4703,21 @@ public final class ForgeVoxyCommands {
 
     private static String formatModelBridgeResourceReloadStatus(ForgeModelBridgeResourceReloadStats status) {
         return String.format(
-                "reloadLifecycleSkeletonReady=%s resourceReloadReady=%s reloadEventsSeen=%d lastReloadSimulationRuns=%d lastReloadStartedAt=%s lastReloadFinishedAt=%s modelBridgeInvalidatedOnReload=%s placeholderBuffersInvalidatedOnReload=%s placeholderBuffersStale=%s realModelStoreStale=%s textureAtlasStale=%s formalShaderInputsStale=%s bakedModelSamplesStale=%s spriteSamplesStale=%s lastReloadInvalidatedBakedModelSamples=%s realModelRecordSampleStale=%s lastReloadInvalidatedRealModelRecordSample=%s atlasSkeletonStale=%s lastReloadInvalidatedAtlasSkeleton=%s atlasPixelsStale=%s lastReloadInvalidatedAtlasPixels=%s lastReloadReason=%s formalModelBridgeReady=false realTextureAtlasUpload=false",
+                "reloadLifecycleSkeletonReady=%s realResourceReloadListenerReady=%s resourceReloadReady=%s reloadEventsSeen=%d realReloadEventsSeen=%d simulatedReloadEventsSeen=%d lastReloadSource=%s lastReloadStartedAt=%s lastReloadFinishedAt=%s lastReloadThread=%s reloadCleanupScheduled=%s reloadCleanupOnRenderThread=%s reloadCleanupCompleted=%s reloadCleanupFailures=%d modelBridgeInvalidatedOnReload=%s placeholderBuffersInvalidatedOnReload=%s placeholderBuffersStale=%s realModelStoreStale=%s textureAtlasStale=%s formalShaderInputsStale=%s bakedModelSamplesStale=%s spriteSamplesStale=%s lastReloadInvalidatedBakedModelSamples=%s realModelRecordSampleStale=%s lastReloadInvalidatedRealModelRecordSample=%s sampleSetStale=%s atlasSkeletonStale=%s lastReloadInvalidatedAtlasSkeleton=%s atlasPixelsStale=%s lastReloadInvalidatedAtlasPixels=%s formalShaderInputBridgeStale=%s texturedDebugQuadStale=%s texturedReadbackStale=%s texturedMdicDebugStale=%s lastReloadReason=%s formalModelBridgeReady=false realTextureAtlasUpload=false",
                 status.reloadLifecycleSkeletonReady(),
+                status.realResourceReloadListenerReady(),
                 status.resourceReloadReady(),
                 status.reloadEventsSeen(),
-                status.lastReloadSimulationRuns(),
+                status.realReloadEventsSeen(),
+                status.simulatedReloadEventsSeen(),
+                status.lastReloadSource(),
                 status.lastReloadStartedAt(),
                 status.lastReloadFinishedAt(),
+                status.lastReloadThread(),
+                status.reloadCleanupScheduled(),
+                status.reloadCleanupOnRenderThread(),
+                status.reloadCleanupCompleted(),
+                status.reloadCleanupFailures(),
                 status.modelBridgeInvalidatedOnReload(),
                 status.placeholderBuffersInvalidatedOnReload(),
                 status.placeholderBuffersStale(),
@@ -4712,10 +4729,15 @@ public final class ForgeVoxyCommands {
                 status.lastReloadInvalidatedBakedModelSamples(),
                 status.realModelRecordSampleStale(),
                 status.lastReloadInvalidatedRealModelRecordSample(),
+                status.sampleSetStale(),
                 status.atlasSkeletonStale(),
                 status.lastReloadInvalidatedAtlasSkeleton(),
                 status.atlasPixelsStale(),
                 status.lastReloadInvalidatedAtlasPixels(),
+                status.formalShaderInputBridgeStale(),
+                status.texturedDebugQuadStale(),
+                status.texturedReadbackStale(),
+                status.texturedMdicDebugStale(),
                 status.lastReloadReason()
         );
     }
@@ -5235,6 +5257,11 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getModelBridgeResourceReloadTracker().clear();
         ForgeVoxyInstance.INSTANCE.getBakedModelBridge().clear();
         ForgeVoxyInstance.INSTANCE.getRealModelStoreSample().clear();
+        ForgeVoxyInstance.INSTANCE.getModelSampleSet().clear();
+        ForgeVoxyInstance.INSTANCE.getModelAtlasSkeleton().clear();
+        ForgeVoxyInstance.INSTANCE.getModelAtlasPixelUploader().clear();
+        ForgeVoxyInstance.INSTANCE.getModelAtlasSampleSetUploader().clear();
+        ForgeVoxyInstance.INSTANCE.getFormalShaderInputBridge().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedDebugQuadRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedReadbackRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedMdicDebugRenderer().clear();
@@ -5570,6 +5597,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getModelAtlasSkeleton().clear();
         ForgeVoxyInstance.INSTANCE.getModelAtlasPixelUploader().clear();
         ForgeVoxyInstance.INSTANCE.getModelAtlasSampleSetUploader().clear();
+        ForgeVoxyInstance.INSTANCE.getFormalShaderInputBridge().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedDebugQuadRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedReadbackRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedMdicDebugRenderer().clear();
@@ -5601,6 +5629,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getModelAtlasSkeleton().clear();
         ForgeVoxyInstance.INSTANCE.getModelAtlasPixelUploader().clear();
         ForgeVoxyInstance.INSTANCE.getModelAtlasSampleSetUploader().clear();
+        ForgeVoxyInstance.INSTANCE.getFormalShaderInputBridge().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedDebugQuadRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedReadbackRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedMdicDebugRenderer().clear();
