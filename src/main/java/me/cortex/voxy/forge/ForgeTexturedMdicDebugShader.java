@@ -60,6 +60,9 @@ final class ForgeTexturedMdicDebugShader implements AutoCloseable {
     static final String ERROR_STAGE_BIND_SHADER = "TEXTURED_MDIC_BIND_SHADER";
     static final String ERROR_STAGE_BIND_GEOMETRY_SSBO = "TEXTURED_MDIC_BIND_GEOMETRY_SSBO";
     static final String ERROR_STAGE_BIND_COMMAND_SSBO = "TEXTURED_MDIC_BIND_COMMAND_SSBO";
+    static final String ERROR_STAGE_BIND_MODEL_DATA_SSBO = "TEXTURED_MDIC_BIND_MODEL_DATA_SSBO";
+    static final String ERROR_STAGE_BIND_MODEL_COLOUR_SSBO = "TEXTURED_MDIC_BIND_MODEL_COLOUR_SSBO";
+    static final String ERROR_STAGE_BIND_MODEL_VALIDITY_SSBO = "TEXTURED_MDIC_BIND_MODEL_VALIDITY_SSBO";
     static final String ERROR_STAGE_BIND_ATLAS_TEXTURE = "TEXTURED_MDIC_BIND_ATLAS_TEXTURE";
     static final String ERROR_STAGE_SET_UNIFORMS = "TEXTURED_MDIC_SET_UNIFORMS";
     static final String ERROR_STAGE_BIND_ELEMENT_ARRAY_BUFFER = "TEXTURED_MDIC_BIND_ELEMENT_ARRAY_BUFFER";
@@ -86,18 +89,44 @@ final class ForgeTexturedMdicDebugShader implements AutoCloseable {
                 MdicCommand commands[];
             };
 
+            struct BlockModel {
+                uint faceData[6];
+                uint flagsA;
+                uint colourTint;
+                uint customId;
+                uint _pad[7];
+            };
+
+            layout(std430, binding = 3) readonly buffer ModelBuffer {
+                BlockModel modelData[];
+            };
+
+            layout(std430, binding = 4) readonly buffer ModelColourBuffer {
+                uint colourData[];
+            };
+
+            layout(std430, binding = 6) readonly buffer ModelValidityBuffer {
+                uint modelValidity[];
+            };
+
             uniform mat4 uModelView;
             uniform mat4 uProjection;
             uniform int uSampleModelId;
             uniform int uSampleModelCount;
             uniform int uSampleModelIds[16];
+            uniform int uInputMode;
+            uniform int uMaxModelId;
             uniform int uFullAtlas;
             uniform vec2 uAtlasSize;
 
             out vec2 vUv;
+            out flat uint vTintColour;
             out float vVisible;
 
             bool isSampleModel(uint modelId) {
+                if (uInputMode == 1) {
+                    return modelId <= uint(uMaxModelId) && modelValidity[modelId] != 0u;
+                }
                 if (uSampleModelCount <= 0) {
                     return modelId == uint(uSampleModelId);
                 }
@@ -110,7 +139,12 @@ final class ForgeTexturedMdicDebugShader implements AutoCloseable {
                 return false;
             }
 
-            vec2 uvFor(uint modelId, uint face, int corner) {
+            vec4 extractFaceSizes(uint faceData) {
+                return (vec4(faceData & 15u, (faceData >> 4u) & 15u, (faceData >> 8u) & 15u, (faceData >> 12u) & 15u) / 16.0)
+                    + vec4(0.0, 1.0 / 16.0, 0.0, 1.0 / 16.0);
+            }
+
+            vec2 uvFor(uint modelId, uint face, int corner, uint faceData) {
                 uint tileX;
                 uint tileY;
                 if (uFullAtlas != 0) {
@@ -125,8 +159,11 @@ final class ForgeTexturedMdicDebugShader implements AutoCloseable {
                     tileY = (face & 1u) * 16u;
                 }
 
-                vec2 uv0 = (vec2(float(tileX), float(tileY)) + vec2(0.5)) / uAtlasSize;
-                vec2 uv1 = (vec2(float(tileX + 16u), float(tileY + 16u)) - vec2(0.5)) / uAtlasSize;
+                vec4 faceSize = uInputMode == 1 ? extractFaceSizes(faceData) : vec4(0.0, 1.0, 0.0, 1.0);
+                vec2 faceUv0 = vec2(faceSize.x, faceSize.z);
+                vec2 faceUv1 = vec2(faceSize.y, faceSize.w);
+                vec2 uv0 = (vec2(float(tileX), float(tileY)) + faceUv0 * 16.0 + vec2(0.5)) / uAtlasSize;
+                vec2 uv1 = (vec2(float(tileX), float(tileY)) + faceUv1 * 16.0 - vec2(0.5)) / uAtlasSize;
                 if (corner == 1) {
                     return vec2(uv1.x, uv0.y);
                 } else if (corner == 2) {
@@ -159,8 +196,26 @@ final class ForgeTexturedMdicDebugShader implements AutoCloseable {
                 if (!isSampleModel(modelId)) {
                     vVisible = 0.0;
                     vUv = vec2(0.0);
+                    vTintColour = 0xFFFFFFFFu;
                     gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
                     return;
+                }
+                uint faceData = 0u;
+                uint tintColour = 0xFFFFFFFFu;
+                if (uInputMode == 1) {
+                    BlockModel model = modelData[modelId];
+                    faceData = model.faceData[face];
+                    if (faceData == 0xFFFFFFFFu) {
+                        vVisible = 0.0;
+                        vUv = vec2(0.0);
+                        vTintColour = 0xFFFFFFFFu;
+                        gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+                        return;
+                    }
+                    tintColour = colourData[modelId];
+                    if (tintColour == 0xFFFFFFFFu) {
+                        tintColour = model.colourTint;
+                    }
                 }
 
                 vec3 sectionOrigin = vec3(
@@ -202,7 +257,8 @@ final class ForgeTexturedMdicDebugShader implements AutoCloseable {
                 }
 
                 vVisible = 1.0;
-                vUv = uvFor(modelId, face, corner);
+                vUv = uvFor(modelId, face, corner, faceData);
+                vTintColour = tintColour;
                 gl_Position = uProjection * uModelView * vec4(sectionOrigin + local, 1.0);
             }
             """;
@@ -214,6 +270,7 @@ final class ForgeTexturedMdicDebugShader implements AutoCloseable {
             uniform float uAlpha;
 
             in vec2 vUv;
+            in flat uint vTintColour;
             in float vVisible;
             layout(location = 0) out vec4 fragColor;
 
@@ -224,6 +281,14 @@ final class ForgeTexturedMdicDebugShader implements AutoCloseable {
                 vec4 texel = texture(uAtlas, vUv);
                 if (texel.a <= 0.01) {
                     discard;
+                }
+                if (vTintColour != 0xFFFFFFFFu) {
+                    vec3 tint = vec3(
+                        float((vTintColour >> 16u) & 255u),
+                        float((vTintColour >> 8u) & 255u),
+                        float(vTintColour & 255u)
+                    ) / 255.0;
+                    texel.rgb *= tint;
                 }
                 fragColor = vec4(texel.rgb, texel.a * uAlpha);
             }
@@ -245,6 +310,8 @@ final class ForgeTexturedMdicDebugShader implements AutoCloseable {
     private int sampleModelIdUniform = -1;
     private int sampleModelCountUniform = -1;
     private int sampleModelIdsUniform = -1;
+    private int inputModeUniform = -1;
+    private int maxModelIdUniform = -1;
     private int fullAtlasUniform = -1;
     private int atlasSizeUniform = -1;
     private boolean shaderCompiled;
@@ -289,6 +356,8 @@ final class ForgeTexturedMdicDebugShader implements AutoCloseable {
             if (this.sampleModelIdsUniform < 0) {
                 this.sampleModelIdsUniform = glGetUniformLocation(program, "uSampleModelIds[0]");
             }
+            this.inputModeUniform = glGetUniformLocation(program, "uInputMode");
+            this.maxModelIdUniform = glGetUniformLocation(program, "uMaxModelId");
             this.fullAtlasUniform = glGetUniformLocation(program, "uFullAtlas");
             this.atlasSizeUniform = glGetUniformLocation(program, "uAtlasSize");
             this.shaderCompiled = true;
@@ -321,6 +390,11 @@ final class ForgeTexturedMdicDebugShader implements AutoCloseable {
             int atlasHeight,
             int sampleModelId,
             int[] sampleModelIds,
+            ForgeTexturedMdicDebugInputMode inputMode,
+            int modelDataBufferId,
+            int modelColourBufferId,
+            int modelValidityBufferId,
+            int maxModelId,
             Matrix4f modelView,
             Matrix4f projection,
             ForgeMdicCommandList commandList,
@@ -338,7 +412,7 @@ final class ForgeTexturedMdicDebugShader implements AutoCloseable {
         if (budget.logicalCommands <= 0 || budget.indices <= 0L) {
             return DrawCallResult.empty();
         }
-        DrawCallResult bind = this.bindProgramAndBuffers(geometryBufferId, commandBufferId, atlasTextureId, fullAtlas, atlasWidth, atlasHeight, sampleModelId, sampleModelIds, modelView, projection, alpha);
+        DrawCallResult bind = this.bindProgramAndBuffers(geometryBufferId, commandBufferId, atlasTextureId, fullAtlas, atlasWidth, atlasHeight, sampleModelId, sampleModelIds, inputMode, modelDataBufferId, modelColourBufferId, modelValidityBufferId, maxModelId, modelView, projection, alpha);
         if (!bind.ok()) {
             return bind;
         }
@@ -374,6 +448,11 @@ final class ForgeTexturedMdicDebugShader implements AutoCloseable {
             int atlasHeight,
             int sampleModelId,
             int[] sampleModelIds,
+            ForgeTexturedMdicDebugInputMode inputMode,
+            int modelDataBufferId,
+            int modelColourBufferId,
+            int modelValidityBufferId,
+            int maxModelId,
             Matrix4f modelView,
             Matrix4f projection,
             ForgeMdicCommandList commandList,
@@ -392,7 +471,7 @@ final class ForgeTexturedMdicDebugShader implements AutoCloseable {
         if (budget.logicalCommands <= 0 || budget.indices <= 0L || clampedDrawCount <= 0) {
             return DrawCallResult.empty();
         }
-        DrawCallResult bind = this.bindProgramAndBuffers(geometryBufferId, commandBufferId, atlasTextureId, fullAtlas, atlasWidth, atlasHeight, sampleModelId, sampleModelIds, modelView, projection, alpha);
+        DrawCallResult bind = this.bindProgramAndBuffers(geometryBufferId, commandBufferId, atlasTextureId, fullAtlas, atlasWidth, atlasHeight, sampleModelId, sampleModelIds, inputMode, modelDataBufferId, modelColourBufferId, modelValidityBufferId, maxModelId, modelView, projection, alpha);
         if (!bind.ok()) {
             return bind;
         }
@@ -442,6 +521,9 @@ final class ForgeTexturedMdicDebugShader implements AutoCloseable {
         }
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, 0);
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, ForgeMdicDebugShader.COMMAND_BINDING_INDEX, 0);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, ForgeFormalShaderInputBridge.MODEL_DATA_BINDING_INDEX, 0);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, ForgeFormalShaderInputBridge.MODEL_COLOUR_BINDING_INDEX, 0);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, ForgeFormalShaderInputBridge.MODEL_VALIDITY_BINDING_INDEX, 0);
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
         glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
         glBindBuffer(GL_PARAMETER_BUFFER_ARB, 0);
@@ -467,6 +549,11 @@ final class ForgeTexturedMdicDebugShader implements AutoCloseable {
             int atlasHeight,
             int sampleModelId,
             int[] sampleModelIds,
+            ForgeTexturedMdicDebugInputMode inputMode,
+            int modelDataBufferId,
+            int modelColourBufferId,
+            int modelValidityBufferId,
+            int maxModelId,
             Matrix4f modelView,
             Matrix4f projection,
             float alpha
@@ -487,13 +574,34 @@ final class ForgeTexturedMdicDebugShader implements AutoCloseable {
         if (glError != GL_NO_ERROR) {
             return new DrawCallResult(glError, ERROR_STAGE_BIND_COMMAND_SSBO, 0, 0L);
         }
+        boolean useFormalInputBridge = inputMode == ForgeTexturedMdicDebugInputMode.FORMAL_INPUT_BRIDGE;
+        if (useFormalInputBridge && (modelDataBufferId == 0 || modelColourBufferId == 0 || modelValidityBufferId == 0 || maxModelId < 0)) {
+            return DrawCallResult.empty();
+        }
+        if (useFormalInputBridge) {
+            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, ForgeFormalShaderInputBridge.MODEL_DATA_BINDING_INDEX, modelDataBufferId);
+            glError = glGetError();
+            if (glError != GL_NO_ERROR) {
+                return new DrawCallResult(glError, ERROR_STAGE_BIND_MODEL_DATA_SSBO, 0, 0L);
+            }
+            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, ForgeFormalShaderInputBridge.MODEL_COLOUR_BINDING_INDEX, modelColourBufferId);
+            glError = glGetError();
+            if (glError != GL_NO_ERROR) {
+                return new DrawCallResult(glError, ERROR_STAGE_BIND_MODEL_COLOUR_SSBO, 0, 0L);
+            }
+            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, ForgeFormalShaderInputBridge.MODEL_VALIDITY_BINDING_INDEX, modelValidityBufferId);
+            glError = glGetError();
+            if (glError != GL_NO_ERROR) {
+                return new DrawCallResult(glError, ERROR_STAGE_BIND_MODEL_VALIDITY_SSBO, 0, 0L);
+            }
+        }
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, atlasTextureId);
         glError = glGetError();
         if (glError != GL_NO_ERROR) {
             return new DrawCallResult(glError, ERROR_STAGE_BIND_ATLAS_TEXTURE, 0, 0L);
         }
-        this.setUniforms(modelView, projection, alpha, sampleModelId, sampleModelIds, fullAtlas, atlasWidth, atlasHeight);
+        this.setUniforms(modelView, projection, alpha, sampleModelId, sampleModelIds, inputMode, maxModelId, fullAtlas, atlasWidth, atlasHeight);
         glError = glGetError();
         if (glError != GL_NO_ERROR) {
             return new DrawCallResult(glError, ERROR_STAGE_SET_UNIFORMS, 0, 0L);
@@ -501,7 +609,18 @@ final class ForgeTexturedMdicDebugShader implements AutoCloseable {
         return DrawCallResult.empty();
     }
 
-    private void setUniforms(Matrix4f modelView, Matrix4f projection, float alpha, int sampleModelId, int[] sampleModelIds, boolean fullAtlas, int atlasWidth, int atlasHeight) {
+    private void setUniforms(
+            Matrix4f modelView,
+            Matrix4f projection,
+            float alpha,
+            int sampleModelId,
+            int[] sampleModelIds,
+            ForgeTexturedMdicDebugInputMode inputMode,
+            int maxModelId,
+            boolean fullAtlas,
+            int atlasWidth,
+            int atlasHeight
+    ) {
         try (MemoryStack stack = MemoryStack.stackPush()) {
             FloatBuffer matrixBuffer = stack.mallocFloat(16);
             modelView.get(matrixBuffer);
@@ -518,6 +637,8 @@ final class ForgeTexturedMdicDebugShader implements AutoCloseable {
         if (this.sampleModelIdsUniform >= 0) {
             glUniform1iv(this.sampleModelIdsUniform, sanitizedIds);
         }
+        glUniform1i(this.inputModeUniform, inputMode == ForgeTexturedMdicDebugInputMode.FORMAL_INPUT_BRIDGE ? 1 : 0);
+        glUniform1i(this.maxModelIdUniform, Math.max(-1, maxModelId));
         glUniform1i(this.fullAtlasUniform, fullAtlas ? 1 : 0);
         glUniform2f(this.atlasSizeUniform, Math.max(1, atlasWidth), Math.max(1, atlasHeight));
     }
@@ -579,6 +700,8 @@ final class ForgeTexturedMdicDebugShader implements AutoCloseable {
         this.sampleModelIdUniform = -1;
         this.sampleModelCountUniform = -1;
         this.sampleModelIdsUniform = -1;
+        this.inputModeUniform = -1;
+        this.maxModelIdUniform = -1;
         this.fullAtlasUniform = -1;
         this.atlasSizeUniform = -1;
         this.shaderCompiled = false;

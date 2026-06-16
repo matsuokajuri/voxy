@@ -15,6 +15,9 @@ record ForgeTexturedMdicDebugStats(
         boolean mdicCommandReady,
         String drawMode,
         String effectiveDrawMode,
+        String inputMode,
+        boolean usesModelDataLookup,
+        boolean usesSampleModelValidityTable,
         boolean elementsIndirectCountSupported,
         String unsupportedReason,
         boolean shaderSideModelFilter,
@@ -45,6 +48,7 @@ record ForgeTexturedMdicDebugStats(
         String lastRenderSkippedReason,
         boolean visibleTexturedMdicGeometry,
         boolean texturedMdicDebugStale,
+        boolean notFormalShader,
         boolean formalTexturedShaderReady,
         boolean formalModelBridgeReady
 ) {

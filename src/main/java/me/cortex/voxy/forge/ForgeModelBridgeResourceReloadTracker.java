@@ -57,6 +57,7 @@ final class ForgeModelBridgeResourceReloadTracker {
         this.instance.getModelAtlasSkeleton().markStale("resource-reload-simulated");
         this.instance.getModelAtlasPixelUploader().markStale("resource-reload-simulated");
         this.instance.getModelAtlasSampleSetUploader().markStale("resource-reload-simulated");
+        this.instance.getFormalShaderInputBridge().markStale("resource-reload-simulated");
         this.instance.getTexturedDebugQuadRenderer().markStale("resource-reload-simulated");
         this.instance.getTexturedReadbackRenderer().markStale("resource-reload-simulated");
         this.instance.getTexturedMdicDebugRenderer().markStale("resource-reload-simulated");

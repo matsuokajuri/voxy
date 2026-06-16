@@ -1675,3 +1675,119 @@ shaderpack / Embeddium / Oculus / Sodium / Iris integration
 - Multi-model textured MDIC debug hardening.
 - Real resource reload event integration.
 - Begin formal renderer integration plan.
+
+## G6.20 formal shader input bridge for sample-set inputs
+
+G6.20 adds a sample-set formal shader input bridge:
+
+```text
+sample-set real-ish model records
+ -> sparse modelData[modelId] buffer
+ -> sparse modelColour[modelId] buffer
+ -> model validity buffer
+ -> Forge-owned sample-set Voxy-style atlas
+ -> textured MDIC debug shader input mode
+```
+
+This is still a debug renderer bridge. It does not use the original
+`MDICSectionRenderer`, does not create a real upstream `ModelStore`, and does
+not make the shader formal-ready.
+
+### Original Voxy shader input contract
+
+The original GL 4.6 shader path declares its bindings in
+`assets/voxy/shaders/lod/gl46/bindings.glsl` and `quads3.vert`:
+
+```text
+MODEL_BUFFER_BINDING=3
+MODEL_COLOUR_BUFFER_BINDING=4
+BLOCK_MODEL_TEXTURE_BINDING=<pipeline define>
+```
+
+`block_model.glsl` defines the 64-byte `BlockModel` shape used by the shader:
+
+```text
+uint faceData[6]
+uint flagsA
+uint colourTint
+uint customId
+uint _pad[7]
+```
+
+`quad_util.glsl` extracts the model id from the packed quad, reads
+`modelData[modelId]`, then uses `faceData[face]` for UV bounds and face
+indentation. It also uses `colourTint` and `colourData` for tint paths. The
+Forge bridge mirrors only the binding shape and direct `modelData[modelId]`
+lookup for sample records.
+
+### Sample-set bridge layout
+
+G6.19 uploaded the sample-set records as a compact no-draw buffer:
+
+```text
+records[0..N)
+```
+
+That is useful for audit, but it is not the original shader access pattern.
+G6.20 therefore uploads bridge-owned sparse buffers:
+
+```text
+modelData[0..maxModelId]
+modelColour[0..maxModelId]
+modelValidity[0..maxModelId]
+```
+
+Only sampled model ids are marked valid. Missing ids are discarded by the
+debug shader. This keeps the debug path close to the original `modelData[modelId]`
+contract while avoiding any claim that the data is a complete formal ModelStore.
+
+### Textured MDIC debug input mode
+
+The textured MDIC debug renderer now reports an input mode:
+
+```text
+SAMPLE_SET_DIRECT
+FORMAL_INPUT_BRIDGE
+```
+
+`FORMAL_INPUT_BRIDGE` binds the sample modelData/modelColour/validity buffers and
+the sample-set atlas. The shader then:
+
+```text
+extracts record modelId
+checks modelValidity[modelId]
+reads modelData[modelId].faceData[face]
+reads colourData[modelId] / colourTint
+samples the Forge-owned atlas
+```
+
+This is closer to the formal shader input contract than G6.19, but it remains a
+debug shader:
+
+```text
+notFormalShader=true
+formalTexturedShaderReady=false
+formalModelBridgeReady=false
+```
+
+### What remains missing
+
+The bridge still lacks:
+
+```text
+real ModelFactory
+stable formal model id lifecycle
+complete faceData semantics
+biome LUT
+lightmap
+material / alpha semantics
+real resource reload event integration
+formal shader patch inputs
+```
+
+### G6.21 candidates
+
+- Real resource reload event integration.
+- Multi-model textured MDIC debug hardening.
+- Formal renderer integration readiness audit.
+- Begin formal renderer skeleton with no draw.

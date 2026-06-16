@@ -317,6 +317,16 @@ public final class ForgeVoxyCommands {
                         .executes(ctx -> modelAtlasUploadSampleSetAudit(ctx.getSource())))
                 .then(Commands.literal("model_atlas_upload_sample_set_dump")
                         .executes(ctx -> modelAtlasUploadSampleSetDump(ctx.getSource())))
+                .then(Commands.literal("formal_shader_input_bridge_build")
+                        .executes(ctx -> formalShaderInputBridgeBuild(ctx.getSource())))
+                .then(Commands.literal("formal_shader_input_bridge_status")
+                        .executes(ctx -> formalShaderInputBridgeStatus(ctx.getSource())))
+                .then(Commands.literal("formal_shader_input_bridge_audit")
+                        .executes(ctx -> formalShaderInputBridgeAudit(ctx.getSource())))
+                .then(Commands.literal("formal_shader_input_bridge_audit_status")
+                        .executes(ctx -> formalShaderInputBridgeAuditStatus(ctx.getSource())))
+                .then(Commands.literal("formal_shader_input_bridge_clear")
+                        .executes(ctx -> formalShaderInputBridgeClear(ctx.getSource())))
                 .then(Commands.literal("textured_debug_quad_build_sample")
                         .executes(ctx -> texturedDebugQuadBuildSample(ctx.getSource())))
                 .then(Commands.literal("textured_debug_quad_enable")
@@ -339,6 +349,11 @@ public final class ForgeVoxyCommands {
                         .executes(ctx -> texturedReadbackClear(ctx.getSource())))
                 .then(Commands.literal("textured_mdic_debug_build")
                         .executes(ctx -> texturedMdicDebugBuild(ctx.getSource())))
+                .then(Commands.literal("textured_mdic_debug_input_mode")
+                        .then(Commands.literal("sample_set")
+                                .executes(ctx -> texturedMdicDebugInputMode(ctx.getSource(), ForgeTexturedMdicDebugInputMode.SAMPLE_SET_DIRECT)))
+                        .then(Commands.literal("formal_bridge")
+                                .executes(ctx -> texturedMdicDebugInputMode(ctx.getSource(), ForgeTexturedMdicDebugInputMode.FORMAL_INPUT_BRIDGE))))
                 .then(Commands.literal("textured_mdic_debug_enable")
                         .executes(ctx -> texturedMdicDebugEnable(ctx.getSource())))
                 .then(Commands.literal("textured_mdic_debug_disable")
@@ -845,7 +860,7 @@ public final class ForgeVoxyCommands {
         String message = "Voxy: cleared CPU-only BuiltSection cache, closed all partial geometry buffers, and cleared auto BuiltSection build records."
                 + " CPU-only section geometry manager state and upload-only GL geometry heap were also cleared because they are derived from BuiltSection cache."
                 + (clearedGpuBuffers ? " Current source is BUILT_SECTION, so simple GPU buffers were also cleared to avoid orphan renders." : " Simple GPU buffers were left intact because the active source is not BUILT_SECTION.");
-        message = message + modelStoreFormalLayoutStatusSuffix() + bakedModelBridgeStatusSuffix() + realModelStoreSampleStatusSuffix() + modelSampleSetStatusSuffix() + modelAtlasSkeletonStatusSuffix() + modelAtlasUploadStatusSuffix() + modelAtlasSampleSetUploadStatusSuffix() + modelBridgeResourceReloadStatusSuffix();
+        message = message + modelStoreFormalLayoutStatusSuffix() + bakedModelBridgeStatusSuffix() + realModelStoreSampleStatusSuffix() + modelSampleSetStatusSuffix() + modelAtlasSkeletonStatusSuffix() + modelAtlasUploadStatusSuffix() + modelAtlasSampleSetUploadStatusSuffix() + formalShaderInputBridgeStatusSuffix() + modelBridgeResourceReloadStatusSuffix();
         String displayMessage = message;
         source.sendSuccess(() -> Component.literal(displayMessage), false);
         return 1;
@@ -3156,7 +3171,7 @@ public final class ForgeVoxyCommands {
                 status.sampleHasTextureMetadata(),
                 status.sampleNote()
         );
-        message = message + modelStoreFormalLayoutStatusSuffix() + bakedModelBridgeStatusSuffix() + realModelStoreSampleStatusSuffix() + modelSampleSetStatusSuffix() + modelAtlasSkeletonStatusSuffix() + modelAtlasUploadStatusSuffix() + modelAtlasSampleSetUploadStatusSuffix() + modelBridgeResourceReloadStatusSuffix();
+        message = message + modelStoreFormalLayoutStatusSuffix() + bakedModelBridgeStatusSuffix() + realModelStoreSampleStatusSuffix() + modelSampleSetStatusSuffix() + modelAtlasSkeletonStatusSuffix() + modelAtlasUploadStatusSuffix() + modelAtlasSampleSetUploadStatusSuffix() + formalShaderInputBridgeStatusSuffix() + modelBridgeResourceReloadStatusSuffix();
         String displayMessage = message;
         source.sendSuccess(() -> Component.literal(displayMessage), false);
         return result.success() ? 1 : 0;
@@ -3215,6 +3230,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getRealModelStoreSample().clear();
         ForgeVoxyInstance.INSTANCE.getModelAtlasSkeleton().clear();
         ForgeVoxyInstance.INSTANCE.getModelAtlasPixelUploader().clear();
+        ForgeVoxyInstance.INSTANCE.getFormalShaderInputBridge().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedDebugQuadRenderer().markStale("model-bridge-clear");
         ForgeVoxyInstance.INSTANCE.getTexturedReadbackRenderer().markStale("model-bridge-clear");
         ForgeVoxyInstance.INSTANCE.getTexturedMdicDebugRenderer().markStale("model-bridge-clear");
@@ -3601,6 +3617,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getRealModelStoreSample().clear();
         ForgeVoxyInstance.INSTANCE.getModelSampleSet().markStale("real-model-sample-clear");
         ForgeVoxyInstance.INSTANCE.getModelAtlasSampleSetUploader().markStale("real-model-sample-clear");
+        ForgeVoxyInstance.INSTANCE.getFormalShaderInputBridge().markStale("real-model-sample-clear");
         ForgeVoxyInstance.INSTANCE.getModelAtlasSkeleton().markStale("real-model-sample-clear");
         ForgeVoxyInstance.INSTANCE.getModelAtlasPixelUploader().markStale("real-model-sample-clear");
         ForgeVoxyInstance.INSTANCE.getTexturedReadbackRenderer().markStale("real-model-sample-clear");
@@ -3612,6 +3629,7 @@ public final class ForgeVoxyCommands {
     private static int modelSampleSetBuild(CommandSourceStack source) {
         ForgeModelSampleSetStats status = ForgeVoxyInstance.INSTANCE.getModelSampleSet().build();
         ForgeVoxyInstance.INSTANCE.getModelAtlasSampleSetUploader().markStale("model-sample-set-rebuilt");
+        ForgeVoxyInstance.INSTANCE.getFormalShaderInputBridge().markStale("model-sample-set-rebuilt");
         ForgeVoxyInstance.INSTANCE.getTexturedMdicDebugRenderer().markStale("model-sample-set-rebuilt");
         source.sendSuccess(() -> Component.literal("Voxy model sample set build: " + formatModelSampleSetStatus(status) + modelAtlasSampleSetUploadStatusSuffix()), false);
         return status.sampleSetReady() ? 1 : 0;
@@ -3678,6 +3696,7 @@ public final class ForgeVoxyCommands {
     private static int modelSampleSetClear(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getModelSampleSet().clear();
         ForgeVoxyInstance.INSTANCE.getModelAtlasSampleSetUploader().markStale("model-sample-set-clear");
+        ForgeVoxyInstance.INSTANCE.getFormalShaderInputBridge().markStale("model-sample-set-clear");
         ForgeVoxyInstance.INSTANCE.getTexturedMdicDebugRenderer().markStale("model-sample-set-clear");
         source.sendSuccess(() -> Component.literal("Voxy model sample set: cleared multi-block sample records, no-draw sample-set modelData/modelColour buffer, and audit state. Sample-set atlas upload and textured MDIC debug were marked stale. GL geometry heap, existing MDIC command/debug renderer, simple renderer, and CPU caches were left unchanged."), false);
         return 1;
@@ -3687,6 +3706,7 @@ public final class ForgeVoxyCommands {
         ForgeModelAtlasStats status = ForgeVoxyInstance.INSTANCE.getModelAtlasSkeleton().build();
         ForgeVoxyInstance.INSTANCE.getModelAtlasPixelUploader().markStale("atlas-skeleton-rebuilt");
         ForgeVoxyInstance.INSTANCE.getModelAtlasSampleSetUploader().markStale("atlas-skeleton-rebuilt");
+        ForgeVoxyInstance.INSTANCE.getFormalShaderInputBridge().markStale("atlas-skeleton-rebuilt");
         ForgeVoxyInstance.INSTANCE.getTexturedReadbackRenderer().markStale("atlas-skeleton-rebuilt");
         ForgeVoxyInstance.INSTANCE.getTexturedMdicDebugRenderer().markStale("atlas-skeleton-rebuilt");
         source.sendSuccess(() -> Component.literal("Voxy model atlas skeleton build: " + formatModelAtlasSkeletonStatus(status) + modelAtlasUploadStatusSuffix()), false);
@@ -3750,6 +3770,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getModelAtlasSkeleton().clear();
         ForgeVoxyInstance.INSTANCE.getModelAtlasPixelUploader().markStale("atlas-skeleton-clear");
         ForgeVoxyInstance.INSTANCE.getModelAtlasSampleSetUploader().markStale("atlas-skeleton-clear");
+        ForgeVoxyInstance.INSTANCE.getFormalShaderInputBridge().markStale("atlas-skeleton-clear");
         ForgeVoxyInstance.INSTANCE.getTexturedDebugQuadRenderer().markStale("atlas-skeleton-clear");
         ForgeVoxyInstance.INSTANCE.getTexturedReadbackRenderer().markStale("atlas-skeleton-clear");
         ForgeVoxyInstance.INSTANCE.getTexturedMdicDebugRenderer().markStale("atlas-skeleton-clear");
@@ -3855,6 +3876,7 @@ public final class ForgeVoxyCommands {
     private static int modelAtlasUploadClear(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getModelAtlasPixelUploader().clear();
         ForgeVoxyInstance.INSTANCE.getModelAtlasSampleSetUploader().clear();
+        ForgeVoxyInstance.INSTANCE.getFormalShaderInputBridge().markStale("atlas-upload-clear");
         ForgeVoxyInstance.INSTANCE.getTexturedDebugQuadRenderer().markStale("atlas-upload-clear");
         ForgeVoxyInstance.INSTANCE.getTexturedReadbackRenderer().markStale("atlas-upload-clear");
         ForgeVoxyInstance.INSTANCE.getTexturedMdicDebugRenderer().markStale("atlas-upload-clear");
@@ -3864,6 +3886,7 @@ public final class ForgeVoxyCommands {
 
     private static int modelAtlasUploadSampleSet(CommandSourceStack source) {
         ForgeModelAtlasSampleSetUploadStats status = ForgeVoxyInstance.INSTANCE.getModelAtlasSampleSetUploader().uploadSampleSet();
+        ForgeVoxyInstance.INSTANCE.getFormalShaderInputBridge().markStale("atlas-sample-set-upload-rebuilt");
         ForgeVoxyInstance.INSTANCE.getTexturedMdicDebugRenderer().markStale("atlas-sample-set-upload-rebuilt");
         source.sendSuccess(() -> Component.literal("Voxy model atlas upload sample set: " + formatModelAtlasSampleSetUploadStatus(status)), false);
         return status.lastUploadOk() ? 1 : 0;
@@ -3909,6 +3932,75 @@ public final class ForgeVoxyCommands {
         String message = ForgeVoxyInstance.INSTANCE.getModelAtlasSampleSetUploader().dumpSampleSet();
         source.sendSuccess(() -> Component.literal(message), false);
         return ForgeVoxyInstance.INSTANCE.getModelAtlasSampleSetUploader().createStatusSnapshot().sampleSetAtlasUploadReady() ? 1 : 0;
+    }
+
+    private static int formalShaderInputBridgeBuild(CommandSourceStack source) {
+        ForgeFormalShaderInputStats status = ForgeVoxyInstance.INSTANCE.getFormalShaderInputBridge().build();
+        ForgeVoxyInstance.INSTANCE.getTexturedMdicDebugRenderer().markStale("formal-shader-input-bridge-rebuilt");
+        source.sendSuccess(() -> Component.literal("Voxy formal shader input bridge build: " + formatFormalShaderInputBridgeStatus(status)), false);
+        return status.formalShaderInputBridgeReady() ? 1 : 0;
+    }
+
+    private static int formalShaderInputBridgeStatus(CommandSourceStack source) {
+        ForgeFormalShaderInputStats status = ForgeVoxyInstance.INSTANCE.getFormalShaderInputBridge().createStatusSnapshot();
+        source.sendSuccess(() -> Component.literal("Voxy formal shader input bridge status: " + formatFormalShaderInputBridgeStatus(status)), false);
+        return status.formalShaderInputBridgeReady() || status.formalShaderInputBridgeStale() ? 1 : 0;
+    }
+
+    private static int formalShaderInputBridgeAudit(CommandSourceStack source) {
+        ForgeFormalShaderInputAuditResult result = ForgeVoxyInstance.INSTANCE.getFormalShaderInputBridge().audit();
+        ForgeFormalShaderInputStats status = ForgeVoxyInstance.INSTANCE.getFormalShaderInputBridge().createStatusSnapshot();
+        String message = String.format(
+                "Voxy formal shader input bridge audit: success=%s error=%s durationMs=%.2f auditRuns=%d auditFailures=%d modelDataBufferMatch=%s modelColourBufferMatch=%s atlasUploadStillValid=%s sampleModelCount=%d invalidModelRecords=%d invalidColourRecords=%d missingAtlasTiles=%d formalShaderInputBridgeReady=%s usesSampleSetModelData=%s usesRealModelStore=%s formalTexturedShaderReady=false formalModelBridgeReady=false renderer=none formalRenderer=false",
+                result.success(),
+                result.error(),
+                result.durationMs(),
+                status.auditRuns(),
+                status.auditFailures(),
+                result.modelDataBufferMatch(),
+                result.modelColourBufferMatch(),
+                result.atlasUploadStillValid(),
+                result.sampleModelCount(),
+                result.invalidModelRecords(),
+                result.invalidColourRecords(),
+                result.missingAtlasTiles(),
+                status.formalShaderInputBridgeReady(),
+                status.usesSampleSetModelData(),
+                status.usesRealModelStore()
+        );
+        source.sendSuccess(() -> Component.literal(message), false);
+        return result.success() ? 1 : 0;
+    }
+
+    private static int formalShaderInputBridgeAuditStatus(CommandSourceStack source) {
+        ForgeFormalShaderInputStats status = ForgeVoxyInstance.INSTANCE.getFormalShaderInputBridge().createStatusSnapshot();
+        String message = String.format(
+                "Voxy formal shader input bridge audit: auditRuns=%d auditFailures=%d lastAuditOk=%s lastAuditError=%s lastAuditDurationMs=%.2f modelDataBufferMatch=%s modelColourBufferMatch=%s atlasUploadStillValid=%s sampleModelCount=%d invalidModelRecords=%d invalidColourRecords=%d missingAtlasTiles=%d formalShaderInputBridgeReady=%s formalShaderInputBridgeStale=%s formalTexturedShaderReady=false formalModelBridgeReady=false",
+                status.auditRuns(),
+                status.auditFailures(),
+                status.lastAuditOk(),
+                status.lastAuditError(),
+                status.lastAuditDurationMs(),
+                status.modelDataBufferMatch(),
+                status.modelColourBufferMatch(),
+                status.atlasUploadStillValid(),
+                status.sampleModelCount(),
+                status.invalidModelRecords(),
+                status.invalidColourRecords(),
+                status.missingAtlasTiles(),
+                status.formalShaderInputBridgeReady(),
+                status.formalShaderInputBridgeStale()
+        );
+        source.sendSuccess(() -> Component.literal(message), false);
+        return status.lastAuditOk() ? 1 : 0;
+    }
+
+    private static int formalShaderInputBridgeClear(CommandSourceStack source) {
+        ForgeVoxyInstance.INSTANCE.getFormalShaderInputBridge().clear();
+        ForgeVoxyInstance.INSTANCE.getTexturedMdicDebugRenderer().markStale("formal-shader-input-bridge-clear");
+        ForgeFormalShaderInputStats status = ForgeVoxyInstance.INSTANCE.getFormalShaderInputBridge().createStatusSnapshot();
+        source.sendSuccess(() -> Component.literal("Voxy formal shader input bridge clear: " + formatFormalShaderInputBridgeStatus(status) + " Sample-set records, atlas upload, GL geometry heap, existing MDIC debug renderer, simple renderer, and CPU caches were left unchanged."), false);
+        return 1;
     }
 
     private static int texturedDebugQuadBuildSample(CommandSourceStack source) {
@@ -3981,6 +4073,13 @@ public final class ForgeVoxyCommands {
         ForgeTexturedMdicDebugStats status = ForgeVoxyInstance.INSTANCE.getTexturedMdicDebugRenderer().build();
         source.sendSuccess(() -> Component.literal("Voxy textured MDIC debug build: " + formatTexturedMdicDebugStatus(status)), false);
         return status.sampleReady() && status.atlasTextureReady() && status.atlasPixelsUploaded() && status.mdicCommandReady() ? 1 : 0;
+    }
+
+    private static int texturedMdicDebugInputMode(CommandSourceStack source, ForgeTexturedMdicDebugInputMode mode) {
+        ForgeVoxyInstance.INSTANCE.getTexturedMdicDebugRenderer().setInputMode(mode);
+        ForgeTexturedMdicDebugStats status = ForgeVoxyInstance.INSTANCE.getTexturedMdicDebugRenderer().createStatusSnapshot();
+        source.sendSuccess(() -> Component.literal("Voxy textured MDIC debug input mode: " + formatTexturedMdicDebugStatus(status)), false);
+        return 1;
     }
 
     private static int texturedMdicDebugEnable(CommandSourceStack source) {
@@ -4056,6 +4155,10 @@ public final class ForgeVoxyCommands {
         return " " + formatModelAtlasSampleSetUploadStatus(ForgeVoxyInstance.INSTANCE.getModelAtlasSampleSetUploader().createStatusSnapshot());
     }
 
+    private static String formalShaderInputBridgeStatusSuffix() {
+        return " " + formatFormalShaderInputBridgeStatus(ForgeVoxyInstance.INSTANCE.getFormalShaderInputBridge().createStatusSnapshot());
+    }
+
     private static String texturedDebugQuadStatusSuffix() {
         return " " + formatTexturedDebugQuadStatus(ForgeVoxyInstance.INSTANCE.getTexturedDebugQuadRenderer().createStatusSnapshot());
     }
@@ -4070,6 +4173,56 @@ public final class ForgeVoxyCommands {
 
     private static String modelBridgeResourceReloadStatusSuffix() {
         return " " + formatModelBridgeResourceReloadStatus(ForgeVoxyInstance.INSTANCE.getModelBridgeResourceReloadTracker().createStatusSnapshot());
+    }
+
+    private static String formatFormalShaderInputBridgeStatus(ForgeFormalShaderInputStats status) {
+        return String.format(
+                "formalShaderInputStage=%s buildRuns=%d clearRuns=%d auditRuns=%d auditFailures=%d lastBuildError=%s lastBuildDurationMs=%.2f formalShaderInputBridgeReady=%s sampleModelDataBufferReady=%s sampleModelColourBufferReady=%s sampleAtlasTextureReady=%s modelDataBindingReady=%s modelColourBindingReady=%s atlasSamplerBindingReady=%s usesSampleSetModelData=%s usesRealModelStore=%s formalTexturedShaderReady=%s formalModelBridgeReady=%s sampleModelCount=%d sampleModelIds=%s maxModelId=%d modelDataBufferId=%d modelColourBufferId=%d modelValidityBufferId=%d atlasTextureObjectId=%d fullAtlasTextureCreated=%s atlasWidth=%d atlasHeight=%d modelDataBindingIndex=%d modelColourBindingIndex=%d modelValidityBindingIndex=%d atlasTextureUnit=%d usesSparseModelIdIndex=%s formalShaderInputBridgeStale=%s lastReloadInvalidatedFormalShaderInputBridge=%s lastAuditOk=%s lastAuditError=%s lastAuditDurationMs=%.2f modelDataBufferMatch=%s modelColourBufferMatch=%s atlasUploadStillValid=%s invalidModelRecords=%d invalidColourRecords=%d missingAtlasTiles=%d sampleOnly=true renderer=none formalRenderer=false",
+                status.stage(),
+                status.buildRuns(),
+                status.clearRuns(),
+                status.auditRuns(),
+                status.auditFailures(),
+                status.lastBuildError(),
+                status.lastBuildDurationMs(),
+                status.formalShaderInputBridgeReady(),
+                status.sampleModelDataBufferReady(),
+                status.sampleModelColourBufferReady(),
+                status.sampleAtlasTextureReady(),
+                status.modelDataBindingReady(),
+                status.modelColourBindingReady(),
+                status.atlasSamplerBindingReady(),
+                status.usesSampleSetModelData(),
+                status.usesRealModelStore(),
+                status.formalTexturedShaderReady(),
+                status.formalModelBridgeReady(),
+                status.sampleModelCount(),
+                status.sampleModelIds(),
+                status.maxModelId(),
+                status.modelDataBufferId(),
+                status.modelColourBufferId(),
+                status.modelValidityBufferId(),
+                status.atlasTextureObjectId(),
+                status.fullAtlasTextureCreated(),
+                status.atlasWidth(),
+                status.atlasHeight(),
+                status.modelDataBindingIndex(),
+                status.modelColourBindingIndex(),
+                status.modelValidityBindingIndex(),
+                status.atlasTextureUnit(),
+                status.usesSparseModelIdIndex(),
+                status.formalShaderInputBridgeStale(),
+                status.lastReloadInvalidatedFormalShaderInputBridge(),
+                status.lastAuditOk(),
+                status.lastAuditError(),
+                status.lastAuditDurationMs(),
+                status.modelDataBufferMatch(),
+                status.modelColourBufferMatch(),
+                status.atlasUploadStillValid(),
+                status.invalidModelRecords(),
+                status.invalidColourRecords(),
+                status.missingAtlasTiles()
+        );
     }
 
     private static String formatTexturedDebugQuadStatus(ForgeTexturedDebugStats status) {
@@ -4152,7 +4305,7 @@ public final class ForgeVoxyCommands {
 
     private static String formatTexturedMdicDebugStatus(ForgeTexturedMdicDebugStats status) {
         return String.format(
-                "stage=%s enabled=%s actualDrawEnabled=%s shaderCompiled=%s programCreated=%s lastShaderError=%s sampleReady=%s atlasTextureReady=%s atlasPixelsUploaded=%s geometryHeapReady=%s metadataReady=%s mdicCommandReady=%s drawMode=%s effectiveDrawMode=%s elementsIndirectCountSupported=%s unsupportedReason=%s shaderSideModelFilter=%s cpuPrefilteredCommands=%s notPerformanceRepresentative=%s notFormalCmdgen=%s multiModelTexturedMdicDebug=%s sampleModelCount=%d sampleModelIds=%s sampleModelId=%d sourceBlockStateId=%d sourceBlockState=\"%s\" sourceSprite=%s sourceSpriteAtlas=%s matchingRecordsKnown=%s matchingRecords=%d commandCount=%d lastFrameApiDrawCalls=%d lastFrameLogicalCommands=%d lastFrameVertices=%d drawCallsIssued=%d verticesDrawn=%d lastGlError=%s lastGlErrorStage=%s glErrorCount=%d stateRestoreFailures=%d lastStateRestoreError=%s lastRenderSkippedReason=%s visibleTexturedMdicGeometry=%s texturedMdicDebugStale=%s formalTexturedShaderReady=%s formalModelBridgeReady=%s renderer=textured-mdic-debug-one-or-sample-set debugRenderer=true formalRenderer=false mdicRenderer=false",
+                "stage=%s enabled=%s actualDrawEnabled=%s shaderCompiled=%s programCreated=%s lastShaderError=%s sampleReady=%s atlasTextureReady=%s atlasPixelsUploaded=%s geometryHeapReady=%s metadataReady=%s mdicCommandReady=%s drawMode=%s effectiveDrawMode=%s inputMode=%s usesModelDataLookup=%s usesSampleModelValidityTable=%s elementsIndirectCountSupported=%s unsupportedReason=%s shaderSideModelFilter=%s cpuPrefilteredCommands=%s notPerformanceRepresentative=%s notFormalCmdgen=%s multiModelTexturedMdicDebug=%s sampleModelCount=%d sampleModelIds=%s sampleModelId=%d sourceBlockStateId=%d sourceBlockState=\"%s\" sourceSprite=%s sourceSpriteAtlas=%s matchingRecordsKnown=%s matchingRecords=%d commandCount=%d lastFrameApiDrawCalls=%d lastFrameLogicalCommands=%d lastFrameVertices=%d drawCallsIssued=%d verticesDrawn=%d lastGlError=%s lastGlErrorStage=%s glErrorCount=%d stateRestoreFailures=%d lastStateRestoreError=%s lastRenderSkippedReason=%s visibleTexturedMdicGeometry=%s texturedMdicDebugStale=%s notFormalShader=%s formalTexturedShaderReady=%s formalModelBridgeReady=%s renderer=textured-mdic-debug-one-or-sample-set debugRenderer=true formalRenderer=false mdicRenderer=false",
                 status.stage(),
                 status.enabled(),
                 status.actualDrawEnabled(),
@@ -4167,6 +4320,9 @@ public final class ForgeVoxyCommands {
                 status.mdicCommandReady(),
                 status.drawMode(),
                 status.effectiveDrawMode(),
+                status.inputMode(),
+                status.usesModelDataLookup(),
+                status.usesSampleModelValidityTable(),
                 status.elementsIndirectCountSupported(),
                 status.unsupportedReason(),
                 status.shaderSideModelFilter(),
@@ -4197,6 +4353,7 @@ public final class ForgeVoxyCommands {
                 status.lastRenderSkippedReason(),
                 status.visibleTexturedMdicGeometry(),
                 status.texturedMdicDebugStale(),
+                status.notFormalShader(),
                 status.formalTexturedShaderReady(),
                 status.formalModelBridgeReady()
         );

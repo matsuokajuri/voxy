@@ -45,6 +45,7 @@ public final class ForgeVoxyInstance {
     private final ForgeModelAtlasSkeleton modelAtlasSkeleton = new ForgeModelAtlasSkeleton(this);
     private final ForgeModelAtlasPixelUploader modelAtlasPixelUploader = new ForgeModelAtlasPixelUploader(this);
     private final ForgeModelAtlasSampleSetUploader modelAtlasSampleSetUploader = new ForgeModelAtlasSampleSetUploader(this);
+    private final ForgeFormalShaderInputBridge formalShaderInputBridge = new ForgeFormalShaderInputBridge(this);
     private final ForgeTexturedDebugQuadRenderer texturedDebugQuadRenderer = new ForgeTexturedDebugQuadRenderer(this);
     private final ForgeTexturedReadbackRenderer texturedReadbackRenderer = new ForgeTexturedReadbackRenderer(this);
     private final ForgeTexturedMdicDebugRenderer texturedMdicDebugRenderer = new ForgeTexturedMdicDebugRenderer(this);
@@ -206,6 +207,10 @@ public final class ForgeVoxyInstance {
         return this.modelAtlasSampleSetUploader;
     }
 
+    public ForgeFormalShaderInputBridge getFormalShaderInputBridge() {
+        return this.formalShaderInputBridge;
+    }
+
     public ForgeTexturedDebugQuadRenderer getTexturedDebugQuadRenderer() {
         return this.texturedDebugQuadRenderer;
     }
@@ -267,6 +272,7 @@ public final class ForgeVoxyInstance {
         this.modelAtlasSkeleton.clear();
         this.modelAtlasPixelUploader.clear();
         this.modelAtlasSampleSetUploader.clear();
+        this.formalShaderInputBridge.clear();
         this.texturedDebugQuadRenderer.clear();
         this.texturedReadbackRenderer.clear();
         this.texturedMdicDebugRenderer.clear();
@@ -356,6 +362,7 @@ public final class ForgeVoxyInstance {
         this.modelAtlasSkeleton.clear();
         this.modelAtlasPixelUploader.clear();
         this.modelAtlasSampleSetUploader.clear();
+        this.formalShaderInputBridge.clear();
         this.texturedDebugQuadRenderer.clear();
         this.texturedReadbackRenderer.clear();
         this.texturedMdicDebugRenderer.clear();

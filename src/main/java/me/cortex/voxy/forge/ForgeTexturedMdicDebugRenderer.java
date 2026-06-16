@@ -55,6 +55,7 @@ final class ForgeTexturedMdicDebugRenderer {
     private final ForgeMdicDebugElementsIndirectCommandBuffer elementsIndirectCommandBuffer = new ForgeMdicDebugElementsIndirectCommandBuffer();
     private final ForgeMdicDebugDrawCountBuffer drawCountBuffer = new ForgeMdicDebugDrawCountBuffer();
     private ForgeTexturedMdicDebugDrawMode configuredDrawMode = ForgeTexturedMdicDebugDrawMode.AUTO;
+    private ForgeTexturedMdicDebugInputMode inputMode = ForgeTexturedMdicDebugInputMode.FORMAL_INPUT_BRIDGE;
     private String effectiveDrawMode = "UNSUPPORTED";
     private boolean enabled;
     private boolean sampleReady;
@@ -68,6 +69,10 @@ final class ForgeTexturedMdicDebugRenderer {
     private boolean fullAtlasTextureCreated;
     private int atlasTextureWidth;
     private int atlasTextureHeight;
+    private int modelDataBufferId;
+    private int modelColourBufferId;
+    private int modelValidityBufferId;
+    private int maxModelId = -1;
     private int sampleModelId = -1;
     private int[] sampleModelIds = new int[0];
     private int sourceBlockStateId = -1;
@@ -106,14 +111,25 @@ final class ForgeTexturedMdicDebugRenderer {
 
         ForgeModelAtlasUploadStats atlasStatus = this.instance.getModelAtlasPixelUploader().createStatusSnapshot();
         ForgeModelAtlasSampleSetUploadStats sampleSetAtlasStatus = this.instance.getModelAtlasSampleSetUploader().createStatusSnapshot();
-        boolean useSampleSet = sampleSetAtlasStatus.sampleSetAtlasUploadReady();
+        ForgeFormalShaderInputStats bridgeStatus = this.instance.getFormalShaderInputBridge().createStatusSnapshot();
+        boolean useFormalInputBridge = this.inputMode == ForgeTexturedMdicDebugInputMode.FORMAL_INPUT_BRIDGE;
+        if (useFormalInputBridge && !bridgeStatus.formalShaderInputBridgeReady()) {
+            bridgeStatus = this.instance.getFormalShaderInputBridge().build();
+        }
+        boolean useSampleSet = useFormalInputBridge || sampleSetAtlasStatus.sampleSetAtlasUploadReady();
         if (!useSampleSet && !atlasStatus.sampleAtlasPixelsUploaded()) {
             atlasStatus = this.instance.getModelAtlasPixelUploader().uploadSample();
         }
         sampleSetAtlasStatus = this.instance.getModelAtlasSampleSetUploader().createStatusSnapshot();
-        useSampleSet = sampleSetAtlasStatus.sampleSetAtlasUploadReady();
+        bridgeStatus = this.instance.getFormalShaderInputBridge().createStatusSnapshot();
+        useFormalInputBridge = this.inputMode == ForgeTexturedMdicDebugInputMode.FORMAL_INPUT_BRIDGE && bridgeStatus.formalShaderInputBridgeReady();
+        useSampleSet = useFormalInputBridge || sampleSetAtlasStatus.sampleSetAtlasUploadReady();
         if (!useSampleSet && (!atlasStatus.sampleAtlasPixelsUploaded() || atlasStatus.atlasTextureObjectId() == 0)) {
             this.markStale("ATLAS_SAMPLE_MISSING");
+            return this.createStatusSnapshot();
+        }
+        if (this.inputMode == ForgeTexturedMdicDebugInputMode.FORMAL_INPUT_BRIDGE && !useFormalInputBridge) {
+            this.markStale("FORMAL_INPUT_BRIDGE_MISSING");
             return this.createStatusSnapshot();
         }
 
@@ -161,16 +177,16 @@ final class ForgeTexturedMdicDebugRenderer {
             return this.createStatusSnapshot();
         }
 
-        int[] activeModelIds = useSampleSet ? this.instance.getModelAtlasSampleSetUploader().modelIds() : new int[]{atlasStatus.sampleModelId()};
-        int activeTextureId = useSampleSet ? sampleSetAtlasStatus.atlasTextureObjectId() : atlasStatus.atlasTextureObjectId();
-        boolean activeFullAtlas = useSampleSet ? sampleSetAtlasStatus.fullAtlasTextureCreated() : atlasStatus.fullAtlasTextureCreated();
-        int activeAtlasWidth = useSampleSet ? sampleSetAtlasStatus.actualTextureWidth() : atlasStatus.actualTextureWidth();
-        int activeAtlasHeight = useSampleSet ? sampleSetAtlasStatus.actualTextureHeight() : atlasStatus.actualTextureHeight();
+        int[] activeModelIds = useFormalInputBridge ? this.instance.getFormalShaderInputBridge().sampleModelIds() : useSampleSet ? this.instance.getModelAtlasSampleSetUploader().modelIds() : new int[]{atlasStatus.sampleModelId()};
+        int activeTextureId = useFormalInputBridge ? bridgeStatus.atlasTextureObjectId() : useSampleSet ? sampleSetAtlasStatus.atlasTextureObjectId() : atlasStatus.atlasTextureObjectId();
+        boolean activeFullAtlas = useFormalInputBridge ? bridgeStatus.fullAtlasTextureCreated() : useSampleSet ? sampleSetAtlasStatus.fullAtlasTextureCreated() : atlasStatus.fullAtlasTextureCreated();
+        int activeAtlasWidth = useFormalInputBridge ? bridgeStatus.atlasWidth() : useSampleSet ? sampleSetAtlasStatus.actualTextureWidth() : atlasStatus.actualTextureWidth();
+        int activeAtlasHeight = useFormalInputBridge ? bridgeStatus.atlasHeight() : useSampleSet ? sampleSetAtlasStatus.actualTextureHeight() : atlasStatus.actualTextureHeight();
         int activeSampleModelId = activeModelIds.length == 0 ? -1 : activeModelIds[0];
         int activeBlockStateId = useSampleSet ? -1 : atlasStatus.sourceBlockStateId();
         String activeBlockState = useSampleSet ? sampleSetAtlasStatus.sampleBlockStates() : atlasStatus.sourceBlockState();
         String activeSprite = useSampleSet ? sampleSetAtlasStatus.sampleSprites() : atlasStatus.sourceSprite();
-        String activeSpriteAtlas = useSampleSet ? "sample-set" : atlasStatus.sourceSpriteAtlas();
+        String activeSpriteAtlas = useFormalInputBridge ? "formal-input-bridge-sample-set" : useSampleSet ? "sample-set" : atlasStatus.sourceSpriteAtlas();
 
         MatchingCount count = this.countMatchingRecords(heap, commandList, activeModelIds);
         this.sampleReady = true;
@@ -180,6 +196,10 @@ final class ForgeTexturedMdicDebugRenderer {
         this.fullAtlasTextureCreated = activeFullAtlas;
         this.atlasTextureWidth = activeAtlasWidth;
         this.atlasTextureHeight = activeAtlasHeight;
+        this.modelDataBufferId = useFormalInputBridge ? bridgeStatus.modelDataBufferId() : 0;
+        this.modelColourBufferId = useFormalInputBridge ? bridgeStatus.modelColourBufferId() : 0;
+        this.modelValidityBufferId = useFormalInputBridge ? bridgeStatus.modelValidityBufferId() : 0;
+        this.maxModelId = useFormalInputBridge ? bridgeStatus.maxModelId() : -1;
         this.sampleModelIds = sanitizeModelIds(activeModelIds);
         this.sampleModelId = activeSampleModelId;
         this.sourceBlockStateId = activeBlockStateId;
@@ -210,6 +230,11 @@ final class ForgeTexturedMdicDebugRenderer {
         this.recordSkip("DISABLED");
     }
 
+    void setInputMode(ForgeTexturedMdicDebugInputMode mode) {
+        this.inputMode = mode == null ? ForgeTexturedMdicDebugInputMode.FORMAL_INPUT_BRIDGE : mode;
+        this.markStale("INPUT_MODE_CHANGED");
+    }
+
     void markStale(String reason) {
         this.enabled = false;
         this.sampleReady = false;
@@ -217,6 +242,10 @@ final class ForgeTexturedMdicDebugRenderer {
         this.atlasPixelsUploaded = false;
         this.mdicCommandReady = false;
         this.atlasTextureId = 0;
+        this.modelDataBufferId = 0;
+        this.modelColourBufferId = 0;
+        this.modelValidityBufferId = 0;
+        this.maxModelId = -1;
         this.commandCount = 0;
         this.matchingRecordsKnown = false;
         this.matchingRecords = 0;
@@ -240,6 +269,10 @@ final class ForgeTexturedMdicDebugRenderer {
         this.fullAtlasTextureCreated = false;
         this.atlasTextureWidth = 0;
         this.atlasTextureHeight = 0;
+        this.modelDataBufferId = 0;
+        this.modelColourBufferId = 0;
+        this.modelValidityBufferId = 0;
+        this.maxModelId = -1;
         this.sampleModelId = -1;
         this.sourceBlockStateId = -1;
         this.sampleModelIds = new int[0];
@@ -296,6 +329,9 @@ final class ForgeTexturedMdicDebugRenderer {
                 this.mdicCommandReady,
                 this.configuredDrawMode.name(),
                 this.effectiveDrawMode,
+                this.inputMode.name(),
+                this.inputMode == ForgeTexturedMdicDebugInputMode.FORMAL_INPUT_BRIDGE && this.modelDataBufferId != 0,
+                this.inputMode == ForgeTexturedMdicDebugInputMode.FORMAL_INPUT_BRIDGE && this.modelValidityBufferId != 0,
                 shaderStatus.elementsIndirectCountSupported(),
                 this.lastUnsupportedReason,
                 true,
@@ -326,6 +362,7 @@ final class ForgeTexturedMdicDebugRenderer {
                 this.lastRenderSkippedReason,
                 this.lastFrameApiDrawCalls > 0 && (!this.matchingRecordsKnown || this.matchingRecords > 0) && "none".equals(this.lastGlError),
                 this.stale,
+                true,
                 false,
                 false
         );
@@ -350,7 +387,12 @@ final class ForgeTexturedMdicDebugRenderer {
         }
         ForgeModelAtlasSampleSetUploadStats sampleSetAtlasStatus = this.instance.getModelAtlasSampleSetUploader().createStatusSnapshot();
         ForgeModelAtlasUploadStats atlasStatus = this.instance.getModelAtlasPixelUploader().createStatusSnapshot();
-        boolean atlasStillValid = sampleSetAtlasStatus.sampleSetAtlasUploadReady()
+        ForgeFormalShaderInputStats bridgeStatus = this.instance.getFormalShaderInputBridge().createStatusSnapshot();
+        boolean atlasStillValid = this.inputMode == ForgeTexturedMdicDebugInputMode.FORMAL_INPUT_BRIDGE
+                ? bridgeStatus.formalShaderInputBridgeReady()
+                && bridgeStatus.atlasTextureObjectId() == this.atlasTextureId
+                && bridgeStatus.sampleAtlasTextureReady()
+                : sampleSetAtlasStatus.sampleSetAtlasUploadReady()
                 ? sampleSetAtlasStatus.atlasTextureObjectId() == this.atlasTextureId
                 : atlasStatus.sampleAtlasPixelsUploaded() && atlasStatus.atlasTextureObjectId() == this.atlasTextureId;
         if (!atlasStillValid || this.atlasTextureId == 0) {
@@ -476,6 +518,11 @@ final class ForgeTexturedMdicDebugRenderer {
                     this.atlasTextureHeight,
                     this.sampleModelId,
                     this.sampleModelIds,
+                    this.inputMode,
+                    this.modelDataBufferId,
+                    this.modelColourBufferId,
+                    this.modelValidityBufferId,
+                    this.maxModelId,
                     modelView,
                     projection,
                     commandList,
@@ -495,6 +542,11 @@ final class ForgeTexturedMdicDebugRenderer {
             this.atlasTextureHeight,
             this.sampleModelId,
             this.sampleModelIds,
+            this.inputMode,
+            this.modelDataBufferId,
+            this.modelColourBufferId,
+            this.modelValidityBufferId,
+            this.maxModelId,
             modelView,
                 projection,
                 commandList,
@@ -653,6 +705,9 @@ final class ForgeTexturedMdicDebugRenderer {
             int geometryStorageBinding,
             int directDrawItemStorageBinding,
             int mdicCommandStorageBinding,
+            int modelDataStorageBinding,
+            int modelColourStorageBinding,
+            int modelValidityStorageBinding,
             int activeTexture,
             int texture0Binding,
             boolean depthTestEnabled,
@@ -675,6 +730,9 @@ final class ForgeTexturedMdicDebugRenderer {
                     glGetIntegeri(GL_SHADER_STORAGE_BUFFER_BINDING, 0),
                     glGetIntegeri(GL_SHADER_STORAGE_BUFFER_BINDING, ForgeDirectGpuGeometryDrawItemBuffer.BINDING_INDEX),
                     glGetIntegeri(GL_SHADER_STORAGE_BUFFER_BINDING, ForgeMdicDebugShader.COMMAND_BINDING_INDEX),
+                    glGetIntegeri(GL_SHADER_STORAGE_BUFFER_BINDING, ForgeFormalShaderInputBridge.MODEL_DATA_BINDING_INDEX),
+                    glGetIntegeri(GL_SHADER_STORAGE_BUFFER_BINDING, ForgeFormalShaderInputBridge.MODEL_COLOUR_BINDING_INDEX),
+                    glGetIntegeri(GL_SHADER_STORAGE_BUFFER_BINDING, ForgeFormalShaderInputBridge.MODEL_VALIDITY_BINDING_INDEX),
                     active,
                     textureBinding,
                     glIsEnabled(GL_DEPTH_TEST),
@@ -695,6 +753,9 @@ final class ForgeTexturedMdicDebugRenderer {
                 glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, this.geometryStorageBinding);
                 glBindBufferBase(GL_SHADER_STORAGE_BUFFER, ForgeDirectGpuGeometryDrawItemBuffer.BINDING_INDEX, this.directDrawItemStorageBinding);
                 glBindBufferBase(GL_SHADER_STORAGE_BUFFER, ForgeMdicDebugShader.COMMAND_BINDING_INDEX, this.mdicCommandStorageBinding);
+                glBindBufferBase(GL_SHADER_STORAGE_BUFFER, ForgeFormalShaderInputBridge.MODEL_DATA_BINDING_INDEX, this.modelDataStorageBinding);
+                glBindBufferBase(GL_SHADER_STORAGE_BUFFER, ForgeFormalShaderInputBridge.MODEL_COLOUR_BINDING_INDEX, this.modelColourStorageBinding);
+                glBindBufferBase(GL_SHADER_STORAGE_BUFFER, ForgeFormalShaderInputBridge.MODEL_VALIDITY_BINDING_INDEX, this.modelValidityStorageBinding);
                 glActiveTexture(GL_TEXTURE0);
                 glBindTexture(GL_TEXTURE_2D, this.texture0Binding);
                 glActiveTexture(this.activeTexture);
