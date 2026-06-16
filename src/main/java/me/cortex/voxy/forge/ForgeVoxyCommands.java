@@ -307,6 +307,16 @@ public final class ForgeVoxyCommands {
                         .executes(ctx -> texturedDebugQuadStatus(ctx.getSource())))
                 .then(Commands.literal("textured_debug_quad_clear")
                         .executes(ctx -> texturedDebugQuadClear(ctx.getSource())))
+                .then(Commands.literal("textured_readback_build_sample")
+                        .executes(ctx -> texturedReadbackBuildSample(ctx.getSource())))
+                .then(Commands.literal("textured_readback_enable")
+                        .executes(ctx -> texturedReadbackEnable(ctx.getSource())))
+                .then(Commands.literal("textured_readback_disable")
+                        .executes(ctx -> texturedReadbackDisable(ctx.getSource())))
+                .then(Commands.literal("textured_readback_status")
+                        .executes(ctx -> texturedReadbackStatus(ctx.getSource())))
+                .then(Commands.literal("textured_readback_clear")
+                        .executes(ctx -> texturedReadbackClear(ctx.getSource())))
                 .then(Commands.literal("mesh_cache_status")
                         .executes(ctx -> meshCacheStatus(ctx.getSource())))
                 .then(Commands.literal("mesh_cache_clear")
@@ -1383,6 +1393,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyRuntimeOverrides.setGeometryGpuUpload(enabled);
         if (!enabled) {
             ForgeVoxyInstance.INSTANCE.getGpuGeometryUploadManager().clear();
+            ForgeVoxyInstance.INSTANCE.getTexturedReadbackRenderer().markStale("geometry-gpu-upload-disabled");
         }
         String message = enabled
                 ? "Voxy upload-only GL geometry heap: runtime-only upload enabled. It will copy CPU section geometry upload/metadata intents into small GL buffers on the render thread; it does not render or draw."
@@ -1396,6 +1407,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getDirectGpuGeometryRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getMdicCommandManager().clear();
         ForgeVoxyInstance.INSTANCE.getMdicDebugRenderer().clear();
+        ForgeVoxyInstance.INSTANCE.getTexturedReadbackRenderer().markStale("geometry-gpu-upload-clear");
         source.sendSuccess(() -> Component.literal("Voxy: released upload-only GL geometry heap buffers, cleared GPU upload processed-state, cleared direct GL renderer skeleton state, cleared MDIC command skeleton/debug draw state, and cleared GL heap readback visualization/readback-mesh caches. CPU section geometry manager intents were left intact and can re-upload."), false);
         if (ForgeGpuMeshUploadManager.getConfiguredSource() == SimpleGpuMeshSource.GL_HEAP_READBACK
                 && ForgeVoxyRuntimeOverrides.enableGeometryGpuReadbackMeshAutoRefresh()) {
@@ -3553,6 +3565,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getRealModelStoreSample().clear();
         ForgeVoxyInstance.INSTANCE.getModelAtlasSkeleton().markStale("real-model-sample-clear");
         ForgeVoxyInstance.INSTANCE.getModelAtlasPixelUploader().markStale("real-model-sample-clear");
+        ForgeVoxyInstance.INSTANCE.getTexturedReadbackRenderer().markStale("real-model-sample-clear");
         source.sendSuccess(() -> Component.literal("Voxy real ModelStore sample: cleared CPU real-ish record sample, no-draw modelData/modelColour sample buffers, and audit state. The no-draw atlas skeleton and sample atlas pixel upload were marked stale because their sample coordinates derive from the real sample. Placeholder ModelStore buffers, baked model bridge samples, GL geometry heap, MDIC debug renderer, simple renderer, and CPU caches were left unchanged."), false);
         return 1;
     }
@@ -3560,6 +3573,7 @@ public final class ForgeVoxyCommands {
     private static int modelAtlasSkeletonBuild(CommandSourceStack source) {
         ForgeModelAtlasStats status = ForgeVoxyInstance.INSTANCE.getModelAtlasSkeleton().build();
         ForgeVoxyInstance.INSTANCE.getModelAtlasPixelUploader().markStale("atlas-skeleton-rebuilt");
+        ForgeVoxyInstance.INSTANCE.getTexturedReadbackRenderer().markStale("atlas-skeleton-rebuilt");
         source.sendSuccess(() -> Component.literal("Voxy model atlas skeleton build: " + formatModelAtlasSkeletonStatus(status) + modelAtlasUploadStatusSuffix()), false);
         return status.atlasSkeletonReady() ? 1 : 0;
     }
@@ -3621,6 +3635,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getModelAtlasSkeleton().clear();
         ForgeVoxyInstance.INSTANCE.getModelAtlasPixelUploader().markStale("atlas-skeleton-clear");
         ForgeVoxyInstance.INSTANCE.getTexturedDebugQuadRenderer().markStale("atlas-skeleton-clear");
+        ForgeVoxyInstance.INSTANCE.getTexturedReadbackRenderer().markStale("atlas-skeleton-clear");
         source.sendSuccess(() -> Component.literal("Voxy model atlas skeleton: cleared no-draw atlas layout ownership, sample coordinate state, and audit state. Any sample atlas pixel upload and tiny textured debug quad were marked stale. GL geometry heap, MDIC debug renderer, simple renderer, and CPU caches were left unchanged."), false);
         return 1;
     }
@@ -3720,6 +3735,7 @@ public final class ForgeVoxyCommands {
     private static int modelAtlasUploadClear(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getModelAtlasPixelUploader().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedDebugQuadRenderer().markStale("atlas-upload-clear");
+        ForgeVoxyInstance.INSTANCE.getTexturedReadbackRenderer().markStale("atlas-upload-clear");
         source.sendSuccess(() -> Component.literal("Voxy model atlas upload sample: cleared Forge-owned sample atlas texture, uploaded pixel CPU copy, upload audit state, and stale flags. Tiny textured debug quad was marked stale. Formal renderer, MDIC debug renderer, GL geometry heap, simple renderer, and CPU caches were left unchanged."), false);
         return 1;
     }
@@ -3754,6 +3770,39 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getTexturedDebugQuadRenderer().clear();
         ForgeTexturedDebugStats status = ForgeVoxyInstance.INSTANCE.getTexturedDebugQuadRenderer().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy textured debug quad clear: " + formatTexturedDebugQuadStatus(status) + " Atlas upload, MDIC debug renderer, GL geometry heap, simple renderer, and CPU caches were left unchanged."), false);
+        return 1;
+    }
+
+    private static int texturedReadbackBuildSample(CommandSourceStack source) {
+        ForgeTexturedReadbackStats status = ForgeVoxyInstance.INSTANCE.getTexturedReadbackRenderer().buildSample();
+        source.sendSuccess(() -> Component.literal("Voxy textured readback build sample: " + formatTexturedReadbackStatus(status)), false);
+        return status.sampleReady() && status.atlasTextureReady() && status.atlasPixelsUploaded() && status.builtQuads() > 0 ? 1 : 0;
+    }
+
+    private static int texturedReadbackEnable(CommandSourceStack source) {
+        ForgeVoxyInstance.INSTANCE.getTexturedReadbackRenderer().enable();
+        ForgeTexturedReadbackStats status = ForgeVoxyInstance.INSTANCE.getTexturedReadbackRenderer().createStatusSnapshot();
+        source.sendSuccess(() -> Component.literal("Voxy textured readback enable: " + formatTexturedReadbackStatus(status)), false);
+        return status.enabled() ? 1 : 0;
+    }
+
+    private static int texturedReadbackDisable(CommandSourceStack source) {
+        ForgeVoxyInstance.INSTANCE.getTexturedReadbackRenderer().disable();
+        ForgeTexturedReadbackStats status = ForgeVoxyInstance.INSTANCE.getTexturedReadbackRenderer().createStatusSnapshot();
+        source.sendSuccess(() -> Component.literal("Voxy textured readback disable: " + formatTexturedReadbackStatus(status)), false);
+        return 1;
+    }
+
+    private static int texturedReadbackStatus(CommandSourceStack source) {
+        ForgeTexturedReadbackStats status = ForgeVoxyInstance.INSTANCE.getTexturedReadbackRenderer().createStatusSnapshot();
+        source.sendSuccess(() -> Component.literal("Voxy textured readback status: " + formatTexturedReadbackStatus(status)), false);
+        return status.actualDrawEnabled() || status.texturedReadbackStale() ? 1 : 0;
+    }
+
+    private static int texturedReadbackClear(CommandSourceStack source) {
+        ForgeVoxyInstance.INSTANCE.getTexturedReadbackRenderer().clear();
+        ForgeTexturedReadbackStats status = ForgeVoxyInstance.INSTANCE.getTexturedReadbackRenderer().createStatusSnapshot();
+        source.sendSuccess(() -> Component.literal("Voxy textured readback clear: " + formatTexturedReadbackStatus(status) + " Atlas upload, MDIC debug renderer, GL geometry heap, simple renderer, and CPU caches were left unchanged."), false);
         return 1;
     }
 
@@ -3799,6 +3848,10 @@ public final class ForgeVoxyCommands {
         return " " + formatTexturedDebugQuadStatus(ForgeVoxyInstance.INSTANCE.getTexturedDebugQuadRenderer().createStatusSnapshot());
     }
 
+    private static String texturedReadbackStatusSuffix() {
+        return " " + formatTexturedReadbackStatus(ForgeVoxyInstance.INSTANCE.getTexturedReadbackRenderer().createStatusSnapshot());
+    }
+
     private static String modelBridgeResourceReloadStatusSuffix() {
         return " " + formatModelBridgeResourceReloadStatus(ForgeVoxyInstance.INSTANCE.getModelBridgeResourceReloadTracker().createStatusSnapshot());
     }
@@ -3834,6 +3887,48 @@ public final class ForgeVoxyCommands {
                 status.lastStateRestoreError(),
                 status.lastRenderSkippedReason(),
                 status.texturedDebugQuadStale(),
+                status.formalTexturedShaderReady(),
+                status.formalModelBridgeReady()
+        );
+    }
+
+    private static String formatTexturedReadbackStatus(ForgeTexturedReadbackStats status) {
+        return String.format(
+                "stage=%s enabled=%s actualDrawEnabled=%s shaderCompiled=%s programCreated=%s lastShaderError=%s sampleReady=%s atlasTextureReady=%s atlasPixelsUploaded=%s geometryHeapReady=%s metadataReady=%s geometryBacked=%s fallbackFixedQuad=%s sampleModelId=%d sourceBlockStateId=%d sourceBlockState=\"%s\" sourceSprite=%s sourceSpriteAtlas=%s matchingSections=%d matchingRecords=%d builtQuads=%d builtVertices=%d uploadedVertices=%d lastFrameDrawCalls=%d lastFrameVertices=%d drawCallsIssued=%d verticesDrawn=%d lastGlError=%s lastGlErrorStage=%s glErrorCount=%d stateRestoreFailures=%d lastStateRestoreError=%s lastRenderSkippedReason=%s texturedReadbackStale=%s formalTexturedShaderReady=%s formalModelBridgeReady=%s renderer=textured-gl-heap-readback debugRenderer=true formalRenderer=false mdicRenderer=false",
+                status.stage(),
+                status.enabled(),
+                status.actualDrawEnabled(),
+                status.shaderCompiled(),
+                status.programCreated(),
+                status.lastShaderError(),
+                status.sampleReady(),
+                status.atlasTextureReady(),
+                status.atlasPixelsUploaded(),
+                status.geometryHeapReady(),
+                status.metadataReady(),
+                status.geometryBacked(),
+                status.fallbackFixedQuad(),
+                status.sampleModelId(),
+                status.sourceBlockStateId(),
+                status.sourceBlockState(),
+                status.sourceSprite(),
+                status.sourceSpriteAtlas(),
+                status.matchingSections(),
+                status.matchingRecords(),
+                status.builtQuads(),
+                status.builtVertices(),
+                status.uploadedVertices(),
+                status.lastFrameDrawCalls(),
+                status.lastFrameVertices(),
+                status.drawCallsIssued(),
+                status.verticesDrawn(),
+                status.lastGlError(),
+                status.lastGlErrorStage(),
+                status.glErrorCount(),
+                status.stateRestoreFailures(),
+                status.lastStateRestoreError(),
+                status.lastRenderSkippedReason(),
+                status.texturedReadbackStale(),
                 status.formalTexturedShaderReady(),
                 status.formalModelBridgeReady()
         );
@@ -4618,6 +4713,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getBakedModelBridge().clear();
         ForgeVoxyInstance.INSTANCE.getRealModelStoreSample().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedDebugQuadRenderer().clear();
+        ForgeVoxyInstance.INSTANCE.getTexturedReadbackRenderer().clear();
         if (!ForgeVoxyRuntimeOverrides.enabledWorldEngineSkeleton()) {
             clearRuntimePipeline();
             ForgeVoxyInstance.INSTANCE.closeActiveWorld();
@@ -4949,6 +5045,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getModelAtlasSkeleton().clear();
         ForgeVoxyInstance.INSTANCE.getModelAtlasPixelUploader().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedDebugQuadRenderer().clear();
+        ForgeVoxyInstance.INSTANCE.getTexturedReadbackRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getGpuMeshCache().clear();
     }
 
@@ -4976,6 +5073,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getModelAtlasSkeleton().clear();
         ForgeVoxyInstance.INSTANCE.getModelAtlasPixelUploader().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedDebugQuadRenderer().clear();
+        ForgeVoxyInstance.INSTANCE.getTexturedReadbackRenderer().clear();
         source.sendSuccess(() -> Component.literal("Voxy: cleared CPU mesh cache, CPU-only BuiltSection cache, CPU-only section geometry manager, simple GPU mesh cache, upload-only GL geometry heap, direct GL renderer skeleton state, MDIC command skeleton/debug draw state, GL heap readback visualization/readback-mesh caches, readback mesh auto-refresh state, auto mesh build record, and auto BuiltSection build record."), false);
         return 1;
     }
@@ -5017,6 +5115,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getModelAtlasSkeleton().clear();
         ForgeVoxyInstance.INSTANCE.getModelAtlasPixelUploader().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedDebugQuadRenderer().clear();
+        ForgeVoxyInstance.INSTANCE.getTexturedReadbackRenderer().clear();
         source.sendSuccess(() -> Component.literal("Voxy: cleared debug pipeline ingest records, mesh build records, BuiltSection build records, CPU mesh cache, CPU-only BuiltSection cache, CPU-only section geometry manager, simple GPU mesh cache, upload-only GL geometry heap, direct GL renderer skeleton state, MDIC command skeleton/debug draw state, GL heap readback visualization/readback-mesh caches, and readback mesh auto-refresh state."), false);
         return 1;
     }

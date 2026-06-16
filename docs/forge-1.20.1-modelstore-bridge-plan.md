@@ -1267,9 +1267,128 @@ formal command integration.
 
 ### G6.17 candidates
 
+- Textured GL heap readback sample renderer.
 - Textured MDIC debug command for one model.
 - Multi-block atlas upload audit.
 - Bind placeholder/real-ish modelData and modelColour into a textured debug
   shader.
 - Real resource reload event integration.
 - Formal shader input bridge design.
+
+## G6.17 textured GL heap readback sample renderer
+
+G6.17 moves the textured probe one step closer to world geometry without making
+it a formal renderer:
+
+```text
+upload-only GL geometry heap
+ -> readback metadata/quad records
+ -> filter records by the G6.13/G6.16 sample modelId
+ -> build a tiny CPU textured mesh
+ -> draw it with the Forge-owned atlas texture
+```
+
+This renderer is still debug-only. It does not read the MDIC command buffer, does
+not use `MDICSectionRenderer`, does not use `VoxyRenderSystem`, and does not
+replace the G6 MDIC debug renderer.
+
+### Why GL heap readback first
+
+The draw-call side is already well covered by the G6 MDIC debug paths, including
+`glMultiDrawElementsIndirectCountARB`. The remaining texture gap is whether
+real-ish model/sample atlas data can be applied to actual uploaded geometry.
+Using GL heap readback keeps the test narrow:
+
+```text
+known uploaded quad record layout
+known modelId field
+known atlas texture/tile
+known world-space decode
+```
+
+That proves the texture path against real uploaded section geometry without
+requiring formal command generation, ModelStore completeness, or shaderpack
+integration.
+
+### Sample filtering
+
+The builder uses the current real model sample, normally `minecraft:sand`, and
+filters readback quad records by:
+
+```text
+ForgeVoxyQuadEncoder.extractModelId(record) == sampleModelId
+```
+
+Matching records are decoded into world-space quads using the same partial Voxy
+quad record layout already used by the GL heap readback debug paths. The renderer
+uses the uploaded sample atlas tile UVs for those quads. It intentionally ignores
+lighting, material flags, biome tint, transparency, and full block model
+semantics.
+
+If no matching record is present in the current heap, the command can build a
+clearly marked fallback fixed quad:
+
+```text
+geometryBacked=false
+fallbackFixedQuad=true
+matchingRecords=0
+```
+
+That fallback is useful for validating atlas/shader state, but it must not be
+reported as GL-heap-backed textured geometry.
+
+### New commands
+
+G6.17 adds:
+
+```text
+/voxy textured_readback_build_sample
+/voxy textured_readback_enable
+/voxy textured_readback_disable
+/voxy textured_readback_status
+/voxy textured_readback_clear
+```
+
+`textured_readback_build_sample` ensures the real-ish sample and atlas upload
+exist, reads the GL heap, filters by sample modelId, uploads a small textured VBO,
+and leaves MDIC/debug/simple renderers untouched.
+
+### Lifecycle
+
+The textured readback renderer is stopped or marked stale when its inputs become
+stale:
+
+```text
+/voxy textured_readback_clear
+/voxy model_atlas_upload_clear
+/voxy model_atlas_skeleton_clear
+/voxy model_bridge_simulate_resource_reload
+world unload
+dimension switch
+debug_pipeline_clear
+preset off
+preset clear
+```
+
+It does not clear the GL geometry heap, MDIC command buffer, MDIC debug renderer,
+simple renderer, or CPU section geometry manager.
+
+### What is still missing
+
+G6.17 still does not provide:
+
+```text
+textured MDIC commands
+multi-block atlas upload
+real ModelFactory / ModelBakery bridge
+formal textured shader
+formal MDIC renderer
+VoxyRenderSystem
+```
+
+### G6.18 candidates
+
+- Textured MDIC debug commands for one model.
+- Multi-block atlas upload audit.
+- Formal shader input bridge for modelData/modelColour/atlas.
+- Real resource reload event integration.
