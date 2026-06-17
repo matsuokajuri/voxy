@@ -413,3 +413,47 @@ actualRendererDrawEnabled=false
 
 The next safe work is formal visibility traversal ownership and/or a no-draw
 command-generation GPU-program skeleton. Live terrain draw remains out of scope.
+
+## K4 status note
+
+K4 adds the formal visibility / render-list ownership skeleton. It aligns the
+Forge formal renderer path with the original Voxy visibility order:
+
+```text
+RenderDistanceTracker / HierarchicalOcclusionTraverser
+ -> viewport render list / indirect lookup
+ -> visibility buffer
+ -> cmdgen.comp command generation input
+```
+
+The new owner is still logical-only and no-draw. It defines:
+
+- formal visibility owner,
+- formal render-list / indirect lookup owner,
+- formal visibility input contract,
+- formal render-list output contract,
+- provisional CPU candidate snapshot status.
+
+K4 deliberately does not implement hierarchical occlusion traversal, does not
+run `cmdgen.comp`, does not call `glMultiDrawElementsIndirectCountARB`, and does
+not treat debug radius/frustum command planners as formal traversal.
+
+Expected K4 status:
+
+```text
+formalVisibilityOwnerReady=true
+formalRenderListOwnerReady=true
+formalIndirectLookupOwnerReady=true
+formalVisibilityContractReady=true
+formalRenderListContractReady=true
+formalVisibilityTraversalImplemented=false
+formalHierarchicalOcclusionReady=false
+formalRenderDistanceTrackerReady=false
+debugPlannerUsedAsFormal=false
+formalDrawPipelineReady=false
+formalRendererReady=false
+actualRendererDrawEnabled=false
+```
+
+The next safe work is an operational command-generation GPU-program skeleton or
+formal traversal hardening. Live terrain draw remains out of scope.

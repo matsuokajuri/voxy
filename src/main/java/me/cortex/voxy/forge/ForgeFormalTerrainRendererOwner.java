@@ -190,6 +190,7 @@ final class ForgeFormalTerrainRendererOwner {
         ForgeSectionGeometryStats section = this.instance.getSectionGeometryManager().createStatusSnapshot();
         ForgeFormalMdicViewportStats mdicViewport = this.instance.getFormalMdicViewportOwner().createStatusSnapshot();
         ForgeFormalCommandGenerationOwner commandGeneration = this.instance.getFormalCommandGenerationOwner();
+        ForgeFormalVisibilityOwner visibilityOwner = this.instance.getFormalVisibilityOwner();
         boolean previewSystemsSeparated = !texturedPreview.formalTexturedShaderReady()
                 && !texturedPreview.formalRendererReady()
                 && !packedPreview.formalTexturedShaderReady()
@@ -244,7 +245,16 @@ final class ForgeFormalTerrainRendererOwner {
                 commandGeneration.isContractReady(),
                 commandGeneration.isDrawCommandLayoutReady(),
                 commandGeneration.isDrawCountLayoutReady(),
-                mdicViewport.formalVisibilityOwnerReady(),
+                mdicViewport.formalVisibilityOwnerReady() && visibilityOwner.isOwnerShellReady(),
+                visibilityOwner.isOwnerShellReady(),
+                visibilityOwner.isOwnerShellReady(),
+                visibilityOwner.isVisibilityContractReady(),
+                visibilityOwner.isRenderListContractReady(),
+                visibilityOwner.isVisibilityTraversalImplemented(),
+                visibilityOwner.isHierarchicalOcclusionReady(),
+                visibilityOwner.isRenderDistanceTrackerReady(),
+                visibilityOwner.isCpuCandidateSnapshotReady(),
+                false,
                 mdicViewport.formalDrawPipelineReady(),
                 false,
                 false,

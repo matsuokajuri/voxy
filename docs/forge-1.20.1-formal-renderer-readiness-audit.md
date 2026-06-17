@@ -999,3 +999,45 @@ This shifts the blocker boundary again: the owner and layout contract exist, but
 the formal GPU command-generation program, formal visibility traversal, global
 formal model-id geometry, formal terrain shader integration, and formal MDIC
 draw remain absent.
+
+## K4 readiness note
+
+K4 adds the formal visibility / render-list ownership skeleton. It inspects the
+original Voxy visibility path and records the contract that the Forge formal
+renderer must eventually implement:
+
+```text
+RenderDistanceTracker
+ -> HierarchicalOcclusionTraverser
+ -> Viewport.getRenderList()
+ -> MDICViewport.indirectLookupBuffer
+ -> MDICViewport.visibilityBuffer
+ -> cmdgen.comp sectionCount / indirectLookup / visibilityData inputs
+```
+
+The Forge K4 owner keeps that ownership separate from debug radius/frustum
+planners. A conservative CPU candidate snapshot may be reported from
+`ForgeSectionGeometryManager`, but it is explicitly provisional and is not a
+formal traversal implementation.
+
+K4 can now report:
+
+```text
+formalVisibilityOwnerReady=true
+formalRenderListOwnerReady=true
+formalIndirectLookupOwnerReady=true
+formalVisibilityContractReady=true
+formalRenderListContractReady=true
+cpuCandidateSnapshotReady=true
+debugPlannerUsedAsFormal=false
+cmdgenComputeShaderRun=false
+glMultiDrawElementsIndirectCountCalled=false
+formalDrawPipelineReady=false
+formalRendererReady=false
+actualRendererDrawEnabled=false
+```
+
+The remaining formal-renderer blockers are now more precise: formal visibility
+traversal implementation, formal command-generation GPU execution, global
+formal model-id geometry, formal terrain shader integration, and formal MDIC
+draw remain missing.

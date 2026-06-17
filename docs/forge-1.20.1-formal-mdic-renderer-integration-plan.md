@@ -418,3 +418,35 @@ Intentional Forge deviation:
 After K3, the missing piece is no longer "who owns command generation"; it is
 operational command generation fed by formal visibility traversal and global
 formal model-id geometry. Live terrain draw remains blocked.
+
+## K4 formal visibility/render-list ownership note
+
+K4 defines the formal owner for the inputs that original Voxy traversal provides
+to `MDICViewport` and `cmdgen.comp`:
+
+- formal visibility buffer contract,
+- formal render-list / indirect lookup contract,
+- formal section candidate source status,
+- provisional CPU candidate snapshot status,
+- explicit separation from debug command planners.
+
+Original alignment:
+
+- `HierarchicalOcclusionTraverser` writes section candidates through
+  `Viewport.getRenderList()`.
+- `MDICViewport.getRenderList()` returns the indirect lookup buffer.
+- `cmdgen.comp` consumes `sectionCount`, `indirectLookup[]`, and
+  `visibilityData[sectionId]`.
+
+Intentional Forge deviation:
+
+- K4 does not port hierarchical occlusion traversal yet.
+- K4 may report a CPU candidate snapshot, but marks it provisional.
+- K4 does not run `cmdgen.comp`.
+- K4 does not populate live formal draw command buffers.
+- K4 does not call `glMultiDrawElementsIndirectCountARB`,
+  `MDICSectionRenderer`, or `VoxyRenderSystem`.
+
+After K4, ownership and contracts exist for visibility/render-list data, but
+operational traversal and GPU command generation are still missing. Live terrain
+draw remains blocked.
