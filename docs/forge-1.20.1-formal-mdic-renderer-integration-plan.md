@@ -381,3 +381,40 @@ Intentional Forge deviation:
 The next safe work is command-generation ownership and visibility traversal
 design. Live draw remains out of scope until formal command resources are
 actually populated by a formal producer and consumed by a formal shader path.
+
+## K3 formal command generation ownership note
+
+K3 defines the formal producer contract for the K2 command resources. It aligns
+with original Voxy `cmdgen.comp` without running the compute shader:
+
+- `DRAW_BUFFER_BINDING = 1` maps to the K2 formal draw command buffer owner.
+- `DRAW_COUNT_BUFFER_BINDING = 2` maps to the K2 formal draw count / parameter
+  buffer owner.
+- `SECTION_METADATA_BUFFER_BINDING = 3` maps to formal section metadata input.
+- `VISIBILITY_BUFFER_BINDING = 4` maps to the K2 formal visibility owner.
+- `INDIRECT_SECTION_LOOKUP_BINDING = 5` maps to the K2 render-list / indirect
+  lookup owner.
+- `POSITION_SCRATCH_BINDING = 6` maps to the K2 position scratch owner.
+
+The formal `DrawCommand` layout is recorded as five 32-bit fields:
+
+```text
+count
+instanceCount
+firstIndex
+baseVertex
+baseInstance
+```
+
+Intentional Forge deviation:
+
+- K3 is logical-only and no-draw.
+- K3 does not allocate a command-generation GPU program.
+- K3 does not dispatch `cmdgen.comp`.
+- K3 does not bind the formal renderer draw pipeline.
+- K3 does not call `glMultiDrawElementsIndirectCountARB`.
+- K3 does not call `MDICSectionRenderer` or `VoxyRenderSystem`.
+
+After K3, the missing piece is no longer "who owns command generation"; it is
+operational command generation fed by formal visibility traversal and global
+formal model-id geometry. Live terrain draw remains blocked.

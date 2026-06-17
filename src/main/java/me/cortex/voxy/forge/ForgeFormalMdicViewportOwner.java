@@ -29,7 +29,7 @@ final class ForgeFormalMdicViewportOwner {
             Path.of("..", "docs", "forge-1.20.1-k0-original-voxy-renderer-alignment-audit.md")
     );
     private static final List<ForgeFormalRendererBlocker> BLOCKERS = List.of(
-            new ForgeFormalRendererBlocker("P0", "P0_FORMAL_COMMAND_GENERATION_MISSING", "Formal command generation missing", "K2 owns command resources, but no formal cmdgen path fills them.", "Add formal command generation after visibility and geometry model-id ownership are ready.", true),
+            new ForgeFormalRendererBlocker("P0", "P0_FORMAL_COMMAND_GENERATION_GPU_PROGRAM_MISSING", "Formal command generation GPU program missing", "K3 can own the command-generation contract, but no formal cmdgen path fills K2 command resources.", "Add operational command generation after visibility and geometry model-id ownership are ready.", true),
             new ForgeFormalRendererBlocker("P0", "P0_FORMAL_VISIBILITY_TRAVERSAL_MISSING", "Formal visibility traversal missing", "K2 owns visibility placeholders, but no traversal fills visibility/render-list data.", "Add formal visibility and LOD traversal ownership.", true),
             new ForgeFormalRendererBlocker("P0", "P0_GLOBAL_FORMAL_MODEL_ID_GEOMETRY_MISSING", "Global formal model-id geometry missing", "J5 rewrites only temporary preview records; live geometry is not globally formal-id encoded.", "Move formal model ids into the formal BuiltSection/RenderDataFactory path.", true),
             new ForgeFormalRendererBlocker("P0", "P0_FORMAL_TERRAIN_SHADER_INTEGRATION_MISSING", "Formal terrain shader integration missing", "No live formal terrain shader is bound or consumed by K2.", "Integrate the formal terrain shader after command resources are filled.", true),
@@ -213,6 +213,7 @@ final class ForgeFormalMdicViewportOwner {
         boolean ownerReady = k1OwnerReady;
         boolean commandOwnersReady = ownerReady;
         boolean visibilityOwnerReady = ownerReady;
+        boolean commandGenerationOwnerReady = this.instance.getFormalCommandGenerationOwner().isOwnerShellReady();
         return new ForgeFormalMdicViewportStats(
                 STAGE,
                 this.checkRuns,
@@ -227,7 +228,7 @@ final class ForgeFormalMdicViewportOwner {
                 visibilityOwnerReady,
                 visibilityOwnerReady,
                 visibilityOwnerReady,
-                false,
+                commandGenerationOwnerReady,
                 false,
                 false,
                 false,

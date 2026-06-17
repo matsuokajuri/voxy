@@ -376,3 +376,40 @@ actualRendererDrawEnabled=false
 K2 must not be treated as `MDICSectionRenderer` integration. It only creates the
 formal control-room ownership boundary needed before command generation and draw
 can be considered.
+
+## K3 status note
+
+K3 adds the formal command generation ownership skeleton. It defines who will
+produce formal MDIC draw commands and records the no-draw contract that mirrors
+original Voxy `cmdgen.comp` and `bindings.glsl`:
+
+- `DrawCommand` is five 32-bit fields and remains indexed-indirect compatible.
+- The draw-count / parameter buffer layout is known as dispatch fields, draw
+  counters, and the cull indirect command record.
+- Command generation inputs are explicit: visibility, render-list / indirect
+  lookup, section metadata, position scratch, geometry buffer, and formal
+  ModelStore inputs.
+- Command generation outputs are explicit: draw command records, draw counters,
+  and position scratch entries.
+
+K3 is still logical-only and no-draw. It does not compile or dispatch the
+formal command-generation compute shader, does not run `cmdgen.comp`, does not
+call `glMultiDrawElementsIndirectCountARB`, and does not call
+`MDICSectionRenderer` or `VoxyRenderSystem`.
+
+Expected K3 status:
+
+```text
+formalCommandGenerationOwnerReady=true
+formalCommandGenerationContractReady=true
+formalDrawCommandLayoutReady=true
+formalDrawCountLayoutReady=true
+commandGenerationGpuProgramReady=false
+cmdgenComputeShaderRun=false
+formalDrawPipelineReady=false
+formalRendererReady=false
+actualRendererDrawEnabled=false
+```
+
+The next safe work is formal visibility traversal ownership and/or a no-draw
+command-generation GPU-program skeleton. Live terrain draw remains out of scope.

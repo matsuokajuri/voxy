@@ -949,3 +949,53 @@ The blocker boundary shifts from missing owner shells to missing producers and
 draw integration: formal command generation, formal visibility traversal, global
 formal model-id geometry, formal terrain shader integration, and formal MDIC
 draw remain absent.
+
+## K3 readiness note
+
+K3 adds the formal command-generation ownership skeleton above the K2 resource
+owners. This is still a no-draw contract layer, not operational command
+generation.
+
+The K3 owner audits the original Voxy command-generation contract:
+
+```text
+cmdgen.comp
+ -> visibility buffer
+ -> indirect section lookup / render list
+ -> section metadata
+ -> position scratch
+ -> DrawCommand buffer
+ -> draw count / parameter buffer
+```
+
+The known no-draw layout is:
+
+```text
+drawCommandStructKnown=true
+drawCommandStrideBytes=20
+drawCommandFieldCount=5
+drawCommandIndexedIndirectCompatible=true
+drawCountBufferLayoutKnown=true
+drawCountBufferStrideBytes=4
+drawCountBufferLayoutBytes=44
+```
+
+K3 can now report:
+
+```text
+formalCommandGenerationOwnerReady=true
+formalCommandGenerationContractReady=true
+formalDrawCommandLayoutReady=true
+formalDrawCountLayoutReady=true
+debugMdicCommandBuffersUsedAsFormal=false
+cmdgenComputeShaderRun=false
+glMultiDrawElementsIndirectCountCalled=false
+formalDrawPipelineReady=false
+formalRendererReady=false
+actualRendererDrawEnabled=false
+```
+
+This shifts the blocker boundary again: the owner and layout contract exist, but
+the formal GPU command-generation program, formal visibility traversal, global
+formal model-id geometry, formal terrain shader integration, and formal MDIC
+draw remain absent.
