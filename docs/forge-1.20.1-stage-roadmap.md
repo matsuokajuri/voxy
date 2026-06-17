@@ -213,3 +213,16 @@ six face tiles into the I2 formal `ModelStore` owner.
 I4 is still not a renderer stage. It does not draw, bind a formal shader, call
 `MDICSectionRenderer`, call `VoxyRenderSystem`, or replace any debug renderer.
 The intended next work is I5 for multi-block bake/upload and dedupe.
+
+## I5 status note
+
+I5 generalizes the I4 one-block prototype into a small multi-block formal
+bake/upload path. It uploads several safe solid block models into the I2 formal
+`ModelStore` owner using I3 formal model ids, adds a conservative
+record/texture-signature dedupe skeleton, reports unsupported candidates, and
+audits modelData, modelColour, and atlas readback.
+
+I5 is still not a renderer stage. It does not draw, bind a formal shader, call
+`MDICSectionRenderer`, call `VoxyRenderSystem`, or claim full real
+`ModelFactory`, `ModelBakerySubsystem`, `ModelStore`, or formal renderer
+readiness.

@@ -190,6 +190,9 @@ final class ForgeFormalRendererManager {
                 readiness.oneBlockBakePrototypeReady(),
                 readiness.oneBlockFormalUploadReady(),
                 readiness.oneBlockFormalUploadAuditReady(),
+                readiness.multiBlockBakePrototypeReady(),
+                readiness.multiBlockFormalUploadReady(),
+                readiness.multiBlockFormalUploadAuditReady(),
                 readiness.formalModelFactorySkeletonReady(),
                 readiness.formalModelFactoryLifecycleReady(),
                 readiness.formalModelStoreSkeletonReady(),
@@ -247,6 +250,7 @@ final class ForgeFormalRendererManager {
         ForgeFormalModelFactoryStats formalModelFactory = this.instance.getFormalModelFactory().createStatusSnapshot();
         ForgeFormalModelStoreStats formalModelStore = this.instance.getFormalModelStore().createStatusSnapshot();
         ForgeOneBlockFormalBakeUploadStats oneBlock = this.instance.getOneBlockFormalBakeUpload().createStatusSnapshot();
+        ForgeMultiBlockFormalBakeUploadStats multiBlock = this.instance.getMultiBlockFormalBakeUpload().createStatusSnapshot();
         ForgeModelAtlasSampleSetUploadStats atlas = this.instance.getModelAtlasSampleSetUploader().createStatusSnapshot();
         ForgeModelBridgeResourceReloadStats reload = this.instance.getModelBridgeResourceReloadTracker().createStatusSnapshot();
         String dimension = currentDimensionId();
@@ -288,6 +292,9 @@ final class ForgeFormalRendererManager {
                 oneBlock.oneBlockBakePrototypeReady(),
                 oneBlock.oneBlockFormalUploadReady(),
                 oneBlock.oneBlockFormalUploadAuditReady(),
+                multiBlock.multiBlockBakePrototypeReady(),
+                multiBlock.multiBlockFormalUploadReady(),
+                multiBlock.multiBlockFormalUploadAuditReady(),
                 formalModelFactory.formalModelFactorySkeletonReady(),
                 formalModelFactory.formalModelFactoryLifecycleReady(),
                 formalModelStore.formalModelStoreSkeletonReady(),

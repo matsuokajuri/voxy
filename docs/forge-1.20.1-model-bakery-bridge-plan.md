@@ -576,3 +576,59 @@ I5: multi-block bake/upload and dedupe
 
 I5 should generalize the single-block path only after I4 readback proves that
 the formal owner can safely receive one real baked record and atlas tile set.
+
+## I5 multi-block formal bake/upload and dedupe
+
+I5 generalizes the I4 one-block prototype to a small set of safe solid block
+states. The chain is:
+
+```text
+safe solid BlockStates
+ -> Forge BakedModel / BakedQuad / TextureAtlasSprite
+ -> I3 formalModelId mappings
+ -> one 64-byte formal model record per accepted unique model
+ -> I2 formal ModelStore modelData slots
+ -> I2 formal ModelStore modelColour slots
+ -> I2 formal Voxy-style atlas face tiles
+ -> readback audit
+```
+
+The upload target remains the I2 formal `ModelStore` owner. I5 does not use
+the older sample-set uploader as the formal path.
+
+I5 adds a first conservative dedupe skeleton. It computes a record-and-texture
+signature and reports `modelTexture2idSize`, dedupe hits, and dedupe misses.
+Because the current I3 audit treats duplicate formal model ids as invalid, I5
+does not yet alias multiple block states onto one formal id. That is a future
+ModelFactory lifecycle hardening item.
+
+Unsupported candidates are rejected and counted instead of silently accepted.
+The initial policy accepts only safe solid, non-fluid, non-tinted blocks with
+readable baked quads and sprites. Fluid, cutout, translucent, tinted, missing
+sprite, missing model, and no-quad cases remain explicit unsupported categories.
+
+Successful I5 status means:
+
+```text
+multiBlockFormalBakeReady=true
+multiBlockFormalRecordsUploaded=true
+multiBlockFormalAtlasPixelsUploaded=true
+multiBlockFormalUploadAuditOk=true
+basicModelDedupeReady=true
+unsupportedPolicyReady=true
+```
+
+It must still keep:
+
+```text
+realModelFactoryReady=false
+realModelBakeryReady=false
+realModelStoreReady=false
+formalTexturedShaderReady=false
+formalRendererReady=false
+actualDrawEnabled=false
+```
+
+I5 is still not a renderer stage. It does not bind a formal shader, draw, call
+`MDICSectionRenderer`, call `VoxyRenderSystem`, implement fluid rendering,
+implement a broad biome LUT, or touch shaderpack integration.

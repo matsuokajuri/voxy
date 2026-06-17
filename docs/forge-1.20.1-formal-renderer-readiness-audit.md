@@ -579,3 +579,40 @@ actualDrawEnabled=false
 
 The remaining P0 blockers are still the general real bake lifecycle, full
 formal ModelStore population, resource reload rebuild, and formal shader.
+
+## I5 readiness note
+
+I5 adds a small multi-block formal bake/upload prototype. It takes several safe
+solid Forge block states through `BakedModel`, `BakedQuad`, and
+`TextureAtlasSprite`, assigns I3 formal model ids, uploads formal modelData,
+modelColour, and atlas face tiles into the I2 formal `ModelStore` owner, and
+audits readback.
+
+This is stronger evidence than I4 because multiple formal ids and multiple
+atlas regions are exercised. It still is not a formal renderer. It does not
+bind a formal shader, draw, call `MDICSectionRenderer`, or call
+`VoxyRenderSystem`.
+
+The formal renderer manager may report:
+
+```text
+multiBlockBakePrototypeReady=true
+multiBlockFormalUploadReady=true
+multiBlockFormalUploadAuditReady=true
+```
+
+while still reporting:
+
+```text
+realModelFactoryReady=false
+realModelBakeryReady=false
+realModelStoreReady=false
+formalTexturedShaderReady=false
+formalRendererReady=false
+actualDrawEnabled=false
+```
+
+The remaining blocker is still the full real `ModelFactory` /
+`ModelBakerySubsystem` lifecycle, including rebuild after resource reload,
+broader block coverage, fluid/tint/material handling, and formal shader
+consumption.
