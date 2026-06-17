@@ -481,3 +481,31 @@ Intentional Forge deviation:
 After K5, the project has a command-generation GPU proof, but production
 command generation, formal traversal, formal terrain shader integration, and
 formal MDIC draw remain blocked.
+
+## K6 formal cmdgen real-section dry-run note
+
+K6 removes the K5 synthetic fixture from the success path. The command-generation
+GPU validation program now consumes real Forge section metadata when available:
+
+- current-world chunks are ingested into the temporary WorldEngine skeleton,
+- `ForgeCpuMeshBuilder` creates CPU mesh sections,
+- `ForgeVoxyBuiltSectionBuilder` creates real Voxy/Forge BuiltSection records,
+- `ForgeSectionGeometryManager` owns the CPU-side section metadata snapshot,
+- K6 copies that metadata into isolated validation-only SSBOs,
+- the audit compute program emits command/count/position-scratch data,
+- CPU readback verifies the first command against the accepted section metadata.
+
+Intentional Forge deviation:
+
+- K6 does not run production `cmdgen.comp` as the live renderer path.
+- K6 does not use debug MDIC command buffers as formal command buffers.
+- K6 does not submit generated commands to
+  `glMultiDrawElementsIndirectCountARB`.
+- K6 does not call `MDICSectionRenderer` or `VoxyRenderSystem`.
+- K6 does not enable the formal draw pipeline.
+
+After K6, the command-generation proof has advanced from "can a validation
+program generate any command?" to "can the validation path consume real section
+metadata?" The remaining live-renderer blockers are still production cmdgen,
+formal traversal, global formal model-id geometry, formal terrain shader
+integration, and formal MDIC draw.

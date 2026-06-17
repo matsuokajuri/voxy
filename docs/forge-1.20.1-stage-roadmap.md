@@ -502,3 +502,57 @@ actualRendererDrawEnabled=false
 
 The next safe work is either production command-generation ownership hardening
 or formal traversal implementation. Live terrain draw remains blocked.
+
+## K6 status note
+
+K6 replaces the K5 synthetic validation fixture with a real-section dry-run
+input path when real section metadata is available. It keeps the K5 no-draw GPU
+validation shape, but the inputs now come from the Forge CPU section geometry
+manager:
+
+```text
+current world chunk
+ -> VoxelIngestService
+ -> ForgeCpuMeshBuilder
+ -> ForgeVoxyBuiltSectionBuilder
+ -> ForgeSectionGeometryManager metadata snapshot
+ -> isolated cmdgen validation buffers
+ -> GPU dry-run command generation
+ -> CPU readback audit
+```
+
+K6 success requires:
+
+```text
+validationInputSource=realSectionCandidateSnapshot
+syntheticValidationFixtureUsed=false
+realSectionMetadataUsed=true
+acceptedSectionCount>=1
+generatedCommandCount>=1
+generatedDrawCount>=1
+```
+
+K6 still does not run production `cmdgen.comp` as the renderer path, does not
+call `glMultiDrawElementsIndirectCountARB`, does not submit generated commands
+to draw, and does not call `MDICSectionRenderer` or `VoxyRenderSystem`.
+
+Expected K6 status:
+
+```text
+realSectionDryRunReady=true
+realSectionInputSnapshotReady=true
+realSectionMetadataUsed=true
+realSectionCandidateSnapshotUsed=true
+cmdgenDryRunDispatchRun=true
+cmdgenDryRunReadbackOk=true
+cmdgenDryRunAuditOk=true
+firstCommandMatchesAcceptedSection=true
+firstCommandUsesRealSectionMetadata=true
+productionCmdgenReady=false
+formalDrawPipelineReady=false
+formalRendererReady=false
+actualRendererDrawEnabled=false
+```
+
+The next safe work is production command generation hardening or formal
+visibility traversal implementation. Live terrain draw remains blocked.

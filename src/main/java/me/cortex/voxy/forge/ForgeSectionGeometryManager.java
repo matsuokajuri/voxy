@@ -4,6 +4,7 @@ import me.cortex.voxy.common.util.AllocationArena;
 import me.cortex.voxy.common.util.HierarchicalBitSet;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -151,6 +152,118 @@ public final class ForgeSectionGeometryManager {
         }
         ForgeSectionGeometryMetadata metadata = this.metadataById.get(sectionId);
         return metadata == null ? new int[ForgeSectionGeometryMetadata.METADATA_WORDS] : metadata.metadataWords();
+    }
+
+    public synchronized RealMetadataScan createRealMetadataScan(int maxAccepted) {
+        int limit = Math.max(1, maxAccepted);
+        var accepted = new ArrayList<RealMetadataSnapshot>();
+        int candidateSectionCount = 0;
+        int rejectedSectionCount = 0;
+        int recordsRejectedNoMetadata = 0;
+        int recordsRejectedNoGeometryPointer = 0;
+        int recordsRejectedNoBucketOffsets = 0;
+        int recordsRejectedNoVisibleBuckets = 0;
+        int recordsRejectedUnsafeState = 0;
+        int maxAcceptedSectionId = -1;
+        String lastRejectedReason = "none";
+
+        for (int sectionId = 0; sectionId < this.metadataById.size(); sectionId++) {
+            ForgeSectionGeometryMetadata metadata = this.metadataById.get(sectionId);
+            if (metadata == null) {
+                continue;
+            }
+            candidateSectionCount++;
+
+            ForgeSectionGeometryUploadIntent uploadIntent = this.uploadIntents.get(metadata.geometryPtr());
+            if (uploadIntent == null) {
+                recordsRejectedNoGeometryPointer++;
+                rejectedSectionCount++;
+                lastRejectedReason = "section-" + sectionId + ":missing-upload-intent";
+                continue;
+            }
+
+            ForgeSectionGeometryMetadata.ValidationResult validation = this.validateMetadata(sectionId, metadata);
+            if (!validation.valid()) {
+                if (validation.error() != null && validation.error().contains("geometry pointer")) {
+                    recordsRejectedNoGeometryPointer++;
+                } else {
+                    recordsRejectedUnsafeState++;
+                }
+                rejectedSectionCount++;
+                lastRejectedReason = "section-" + sectionId + ":" + validation.error();
+                continue;
+            }
+
+            int[] offsets;
+            int[] deltas;
+            int[] words;
+            try {
+                offsets = metadata.offsets();
+                deltas = metadata.deltas();
+                words = metadata.metadataWords();
+            } catch (RuntimeException e) {
+                recordsRejectedNoBucketOffsets++;
+                rejectedSectionCount++;
+                lastRejectedReason = "section-" + sectionId + ":metadata-decode-" + e.getClass().getSimpleName();
+                continue;
+            }
+
+            if (offsets.length != 8 || deltas.length != 8 || words.length != ForgeSectionGeometryMetadata.METADATA_WORDS) {
+                recordsRejectedNoBucketOffsets++;
+                rejectedSectionCount++;
+                lastRejectedReason = "section-" + sectionId + ":invalid-bucket-metadata";
+                continue;
+            }
+
+            boolean hasOpaqueOrDirectionalBucket = false;
+            for (int bucket = 1; bucket < deltas.length; bucket++) {
+                if (deltas[bucket] > 0) {
+                    hasOpaqueOrDirectionalBucket = true;
+                    break;
+                }
+            }
+            if (!hasOpaqueOrDirectionalBucket) {
+                recordsRejectedNoVisibleBuckets++;
+                rejectedSectionCount++;
+                lastRejectedReason = "section-" + sectionId + ":no-non-translucent-buckets";
+                continue;
+            }
+
+            accepted.add(new RealMetadataSnapshot(
+                    sectionId,
+                    metadata.dimension(),
+                    metadata.chunkX(),
+                    metadata.chunkZ(),
+                    metadata.position(),
+                    metadata.aabb(),
+                    metadata.geometryPtr(),
+                    metadata.itemCount(),
+                    metadata.allocatedItems(),
+                    offsets,
+                    deltas,
+                    words,
+                    uploadIntent.recordHash()
+            ));
+            maxAcceptedSectionId = Math.max(maxAcceptedSectionId, sectionId);
+            if (accepted.size() >= limit) {
+                break;
+            }
+        }
+
+        return new RealMetadataScan(
+                "ForgeSectionGeometryManager.metadata-snapshot",
+                candidateSectionCount,
+                accepted.size(),
+                rejectedSectionCount,
+                recordsRejectedNoMetadata,
+                recordsRejectedNoGeometryPointer,
+                recordsRejectedNoBucketOffsets,
+                recordsRejectedNoVisibleBuckets,
+                recordsRejectedUnsafeState,
+                maxAcceptedSectionId,
+                lastRejectedReason,
+                accepted
+        );
     }
 
     public synchronized ForgeSectionGeometryStats createStatusSnapshot() {
@@ -495,6 +608,64 @@ public final class ForgeSectionGeometryManager {
                 return this.allocatedIds.toString();
             }
             return this.allocatedIds.subList(0, 16) + "...+" + (this.allocatedIds.size() - 16);
+        }
+    }
+
+    public record RealMetadataScan(
+            String source,
+            int candidateSectionCount,
+            int acceptedSectionCount,
+            int rejectedSectionCount,
+            int recordsRejectedNoMetadata,
+            int recordsRejectedNoGeometryPointer,
+            int recordsRejectedNoBucketOffsets,
+            int recordsRejectedNoVisibleBuckets,
+            int recordsRejectedUnsafeState,
+            int maxAcceptedSectionId,
+            String lastRejectedReason,
+            List<RealMetadataSnapshot> acceptedSections
+    ) {
+        public RealMetadataScan {
+            source = source == null || source.isBlank() ? "none" : source;
+            lastRejectedReason = lastRejectedReason == null || lastRejectedReason.isBlank() ? "none" : lastRejectedReason.replace(' ', '-');
+            acceptedSections = List.copyOf(acceptedSections);
+        }
+    }
+
+    public record RealMetadataSnapshot(
+            int sectionId,
+            String dimension,
+            int chunkX,
+            int chunkZ,
+            long position,
+            int aabb,
+            int geometryPtr,
+            int itemCount,
+            int allocatedItems,
+            int[] offsets,
+            int[] deltas,
+            int[] metadataWords,
+            int uploadIntentHash
+    ) {
+        public RealMetadataSnapshot {
+            offsets = Arrays.copyOf(offsets, offsets.length);
+            deltas = Arrays.copyOf(deltas, deltas.length);
+            metadataWords = Arrays.copyOf(metadataWords, metadataWords.length);
+        }
+
+        @Override
+        public int[] offsets() {
+            return Arrays.copyOf(this.offsets, this.offsets.length);
+        }
+
+        @Override
+        public int[] deltas() {
+            return Arrays.copyOf(this.deltas, this.deltas.length);
+        }
+
+        @Override
+        public int[] metadataWords() {
+            return Arrays.copyOf(this.metadataWords, this.metadataWords.length);
         }
     }
 }

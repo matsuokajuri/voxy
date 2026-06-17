@@ -1081,3 +1081,56 @@ The blocker changes from "no GPU command-generation proof exists" to
 "production cmdgen is not operational." Formal visibility traversal, global
 formal model-id geometry, terrain shader integration, and formal MDIC draw are
 still absent.
+
+## K6 readiness note
+
+K6 adds a no-draw real-section command-generation dry-run. It keeps the K5
+audit-only GPU validation pattern, but replaces the synthetic fixture with a
+real section candidate snapshot from the Forge CPU section geometry manager.
+
+The K6 path can seed that manager without drawing by building current-world
+section data through the existing Forge ingest / CPU mesh / BuiltSection path:
+
+```text
+VoxelIngestService
+ -> ForgeCpuMeshBuilder
+ -> ForgeVoxyBuiltSectionBuilder
+ -> ForgeSectionGeometryManager.consumeSection
+ -> RealMetadataScan
+```
+
+The dry-run shader consumes the same formal binding shape as K5 and original
+`cmdgen.comp`:
+
+```text
+binding 1: DrawCommand output
+binding 2: draw count / parameter output
+binding 3: section metadata
+binding 4: visibility data
+binding 5: indirect section lookup
+binding 6: position scratch
+```
+
+K6 can now report:
+
+```text
+formalCmdgenRealSectionDryRunReady=true
+realSectionInputSnapshotReady=true
+realSectionMetadataUsed=true
+realSectionCandidateSnapshotUsed=true
+cmdgenRealSectionDryRunAuditOk=true
+```
+
+This is still not production command generation. K6 deliberately keeps:
+
+```text
+productionCmdgenReady=false
+originalCmdgenFullyOperational=false
+formalDrawPipelineReady=false
+formalRendererReady=false
+actualRendererDrawEnabled=false
+```
+
+Remaining blockers are unchanged in kind: formal hierarchical traversal,
+production cmdgen, global formal model-id geometry, formal terrain shader
+integration, and formal MDIC draw are still missing.

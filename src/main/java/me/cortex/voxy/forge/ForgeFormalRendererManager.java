@@ -248,6 +248,11 @@ final class ForgeFormalRendererManager {
                 readiness.cmdgenValidationReadbackOk(),
                 readiness.cmdgenValidationAuditOk(),
                 readiness.productionCmdgenReady(),
+                readiness.formalCmdgenRealSectionDryRunReady(),
+                readiness.realSectionInputSnapshotReady(),
+                readiness.realSectionMetadataUsed(),
+                readiness.realSectionCandidateSnapshotUsed(),
+                readiness.cmdgenRealSectionDryRunAuditOk(),
                 readiness.formalDrawPipelineReady(),
                 readiness.globalFormalModelIdGeometryReady(),
                 readiness.formalTerrainShaderReady(),
@@ -319,6 +324,7 @@ final class ForgeFormalRendererManager {
         ForgeFormalTerrainPackedRecordBridgeStats terrainRecordBridge = this.instance.getFormalTerrainPackedRecordBridge().createStatusSnapshot();
         ForgeFormalTerrainRendererStats terrainRendererOwner = this.instance.getFormalTerrainRendererOwner().createStatusSnapshot();
         ForgeFormalCmdgenGpuValidationStats cmdgenValidation = this.instance.getFormalCmdgenGpuValidator().createStatusSnapshot();
+        ForgeFormalCmdgenRealSectionDryRunStats cmdgenRealSectionDryRun = this.instance.getFormalCmdgenRealSectionDryRun().createStatusSnapshot();
         ForgeModelAtlasSampleSetUploadStats atlas = this.instance.getModelAtlasSampleSetUploader().createStatusSnapshot();
         ForgeModelBridgeResourceReloadStats reload = this.instance.getModelBridgeResourceReloadTracker().createStatusSnapshot();
         String dimension = currentDimensionId();
@@ -421,6 +427,11 @@ final class ForgeFormalRendererManager {
                 cmdgenValidation.cmdgenValidationReadbackOk(),
                 cmdgenValidation.cmdgenValidationAuditOk(),
                 cmdgenValidation.productionCmdgenReady(),
+                cmdgenRealSectionDryRun.realSectionDryRunReady(),
+                cmdgenRealSectionDryRun.realSectionInputSnapshotReady(),
+                cmdgenRealSectionDryRun.realSectionMetadataUsed(),
+                cmdgenRealSectionDryRun.realSectionCandidateSnapshotUsed(),
+                cmdgenRealSectionDryRun.cmdgenDryRunAuditOk(),
                 terrainRendererOwner.formalDrawPipelineReady(),
                 terrainRendererOwner.globalFormalModelIdGeometryReady(),
                 terrainRendererOwner.formalTerrainShaderReady(),

@@ -61,6 +61,7 @@ public final class ForgeVoxyInstance {
     private final ForgeFormalCommandGenerationOwner formalCommandGenerationOwner = new ForgeFormalCommandGenerationOwner(this);
     private final ForgeFormalVisibilityOwner formalVisibilityOwner = new ForgeFormalVisibilityOwner(this);
     private final ForgeFormalCmdgenGpuValidator formalCmdgenGpuValidator = new ForgeFormalCmdgenGpuValidator(this);
+    private final ForgeFormalCmdgenRealSectionDryRun formalCmdgenRealSectionDryRun = new ForgeFormalCmdgenRealSectionDryRun(this);
     private final ForgeFormalRendererManager formalRendererManager = new ForgeFormalRendererManager(this);
     private final ForgeTexturedDebugQuadRenderer texturedDebugQuadRenderer = new ForgeTexturedDebugQuadRenderer(this);
     private final ForgeTexturedReadbackRenderer texturedReadbackRenderer = new ForgeTexturedReadbackRenderer(this);
@@ -287,6 +288,10 @@ public final class ForgeVoxyInstance {
         return this.formalCmdgenGpuValidator;
     }
 
+    public ForgeFormalCmdgenRealSectionDryRun getFormalCmdgenRealSectionDryRun() {
+        return this.formalCmdgenRealSectionDryRun;
+    }
+
     public ForgeFormalRendererManager getFormalRendererManager() {
         return this.formalRendererManager;
     }
@@ -368,6 +373,7 @@ public final class ForgeVoxyInstance {
         this.formalCommandGenerationOwner.markDimensionSwitch();
         this.formalVisibilityOwner.markDimensionSwitch();
         this.formalCmdgenGpuValidator.markDimensionSwitch();
+        this.formalCmdgenRealSectionDryRun.markDimensionSwitch();
         this.formalRendererManager.markDimensionSwitch();
         this.texturedDebugQuadRenderer.clear();
         this.texturedReadbackRenderer.clear();
@@ -474,6 +480,7 @@ public final class ForgeVoxyInstance {
         this.formalCommandGenerationOwner.markWorldUnload();
         this.formalVisibilityOwner.markWorldUnload();
         this.formalCmdgenGpuValidator.markWorldUnload();
+        this.formalCmdgenRealSectionDryRun.markWorldUnload();
         this.formalRendererManager.markWorldUnload();
         this.texturedDebugQuadRenderer.clear();
         this.texturedReadbackRenderer.clear();
