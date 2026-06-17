@@ -1881,3 +1881,11 @@ shaderpack / Embeddium / Oculus / Sodium / Iris integration
 - Formal renderer no-draw skeleton.
 - Real ModelFactory / ModelBakery bridge plan.
 - Multi-model textured MDIC debug hardening.
+
+## Stage numbering note
+
+A-F were existing historical phases from the earlier project taxonomy. The
+current conversation continued around G4, and the long G6.x sequence is now
+treated as legacy labeling for the extended G phase. Future work after G6.22
+starts at H1, beginning with formal renderer no-draw ownership rather than more
+G6.x debug renderer expansion.

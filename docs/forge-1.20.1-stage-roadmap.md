@@ -1,0 +1,144 @@
+# Forge 1.20.1 stage roadmap
+
+This document corrects the project stage taxonomy after the extended G6.x
+sequence. It does not rename old commits, tags, commands, or code constants. It
+only defines how future work should be described.
+
+## Why this correction exists
+
+The project already had an A-F stage taxonomy before the current conversation
+became long enough to continue from summarized context. The newer conversation
+resumed around the later renderer/debug pipeline work, roughly G4 onward. Since
+then, the G6.x label grew too large and started covering several distinct work
+directions:
+
+- MDIC debug draw and indirect draw API proof.
+- Formal renderer readiness audits.
+- ModelStore, BakedModel, atlas, and texture bridge probes.
+- Textured debug renderers.
+- Formal shader input bridge for sample data.
+- Real Forge resource reload listener.
+
+That makes the project look like it is stuck in G6, even though the work has
+moved across multiple different readiness areas. From this point forward, G6.x
+is a legacy label for the extended G phase, not the name for new work.
+
+## Historical A-F phases
+
+A-F already existed as the early project phase system. This document does not
+redefine or rewrite those labels. Based on repository history and the carried
+context, they cover the early Forge port and renderer migration groundwork,
+including:
+
+- Forge 1.20.1 skeleton.
+- Forge-compatible Voxy core abstractions.
+- serialization, mapper, and world engine skeleton work.
+- chunk ingest and controlled lifecycle.
+- CPU mesh validation and cache.
+- vanilla/simple debug renderers.
+- CPU BuiltSection records and source workflow.
+- CPU section geometry manager.
+- early GL geometry/debug pipeline foundations.
+
+If a future audit recovers the exact original A1/A2/A3 naming from the old
+conversation, it should add that detail without changing the meaning of this
+roadmap.
+
+## Extended G phase
+
+The current conversation continued around G4 and then stretched G6.x far beyond
+one small subphase. The corrected interpretation is:
+
+- G4-G5: renderer, GL heap, direct GL, MDIC command, and debug draw proof phase.
+- G6.0-G6.7: MDIC debug draw hardening, DrawElementsIndirect, and draw count
+  buffer proof.
+- G6.8-G6.22: formal readiness, ModelStore/BakedModel/atlas bridge, textured
+  debug visibility, formal input bridge, real reload listener, and final formal
+  renderer readiness audit.
+
+G6.x labels remain useful when reading commit history, tags, status fields, and
+old documents. They should not be used for new stage names after G6.22.
+
+## Old-to-new mapping
+
+| Old label / old phase | New stage location | Nature | Visible? | Formal-ready? |
+| --- | --- | --- | --- | --- |
+| A-F | Existing historical phases; not renamed | Forge skeleton, core port, ingest, CPU mesh, BuiltSection, early geometry/debug groundwork | Some stages visible through debug/simple renderers | No; foundational history |
+| G4-G5 | G: renderer/GL/MDIC debug proof phase | GL heap, direct GL, MDIC command skeleton, debug draw proof | Yes, debug geometry | No; debug/PoC |
+| G6.0-G6.7 | G: MDIC debug draw and draw API proof | MDIC debug renderer, multi/indirect/elements-indirect/count-buffer proof | Yes, same style debug geometry | No; draw API proof only |
+| G6.8 | G: formal MDIC renderer readiness audit | Readiness and blocker audit | No | No; audit only |
+| G6.9-G6.13 | G: ModelStore / BakedModel / real-ish record bridge | model metadata, placeholder/no-draw validation, one-block record sample | Mostly no; status/audit only | No; sample/placeholder |
+| G6.14-G6.15 | G: Voxy-style atlas ownership / pixel upload audit | atlas skeleton and sample pixel upload/readback | No direct terrain draw | No; sample atlas proof |
+| G6.16-G6.18 | G: textured debug visibility path | tiny textured quad, readback textured geometry, one-model textured MDIC debug | Yes, textured debug probes | No; debug renderer |
+| G6.19-G6.20 | G: multi-block textured debug + formal shader input bridge | sample-set modelData/modelColour/atlas bridge and multi-model textured debug | Yes, textured debug geometry | No; sample-set bridge |
+| G6.21 | G: real resource reload lifecycle integration | Forge resource reload listener and stale/cleanup tracking | No direct visual change | Partial lifecycle readiness |
+| G6.22 | G: formal renderer readiness audit | Boundary audit and H1 entry decision | No | No; audit says only no-draw skeleton is safe |
+| Next | H1: formal renderer no-draw skeleton | formal ownership shell, lifecycle/status, no draw | No | Entry step toward formal ownership |
+
+## Current project position
+
+The project is not stuck in G6. It has completed the historical A-F groundwork
+and an extended G phase with substantial debug, GL, MDIC, atlas, model bridge,
+textured debug, shader-input, and reload-readiness work.
+
+The current position is the boundary between extended G and H:
+
+```text
+extended G complete enough for ownership audit
+ -> H1 formal renderer no-draw skeleton
+```
+
+Stage correction does not mean starting over. The debug renderer, atlas upload,
+MDIC command, indirect-count, sample-set, and formal-input-bridge work remain
+valuable validation results. The correction means future work should stop
+expanding debug renderers and start defining formal renderer ownership.
+
+## New stage taxonomy
+
+Future work should use these labels:
+
+- H: formal renderer ownership and no-draw skeleton.
+- I: real `ModelFactory` / `ModelBakerySubsystem` / formal `ModelStore` bridge.
+- J: formal textured renderer prototype.
+- K: early usable LoD renderer hardening.
+
+Recommended near-term breakdown:
+
+- H1: formal renderer no-draw skeleton.
+- H2: formal renderer lifecycle and status hardening.
+- H3: formal renderer prerequisite wiring, still no draw.
+- I1: real ModelFactory / ModelBakery bridge plan.
+- I2: formal ModelStore ownership skeleton.
+- I3: real model id lifecycle prototype.
+- J1: formal textured shader prototype.
+- J2: formal MDIC textured draw prototype.
+- K1: early usable LoD renderer hardening.
+
+## Naming rules from now on
+
+Do not use these labels for new work:
+
+```text
+G6.23
+G6.24
+G6.25
+```
+
+They may be mentioned only when referring to legacy plans or old documents. New
+work after G6.22 should start at:
+
+```text
+H1: formal renderer no-draw skeleton
+```
+
+The H1 boundary is strict:
+
+- no formal draw,
+- no formal shader binding,
+- no `MDICSectionRenderer`,
+- no `VoxyRenderSystem`,
+- no shaderpack integration,
+- no replacement of existing debug renderers.
+
+H1 exists to create a formal owner and status surface before any new rendering
+work is added.

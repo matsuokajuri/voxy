@@ -5,6 +5,10 @@ formal renderer integration skeleton after G6.21. It is intentionally not a
 renderer implementation document. The current textured paths are debug probes,
 not a formal Voxy renderer.
 
+Stage numbering note: G6.x labels are now treated as legacy labels for the
+extended G phase. New work after G6.22 should use the H/I/J/K stage taxonomy,
+starting with H1 formal renderer no-draw skeleton.
+
 ## Summary conclusion
 
 The project has not gone off the rails, but it has reached the point where the
@@ -14,7 +18,7 @@ sample-set shader input bridge, and resource reload invalidation. Those pieces
 are useful evidence for the formal renderer, but most of them should remain
 isolated as debug and validation tools.
 
-The next step can be `G6.23 formal renderer no-draw skeleton`, with a strict
+The next step can be `H1 formal renderer no-draw skeleton`, with a strict
 scope:
 
 - Allowed: create an ownership shell such as `ForgeFormalRendererManager`, add
@@ -164,10 +168,10 @@ Evidence files:
 | Formal shader input bindings | Sample bridge | `ForgeFormalShaderInputBridge`, `bindings.glsl` | Partial | Bridge is sample-set only and explicitly not formal shader ready | Reuse binding concept, not the sample data source |
 | Resource reload | Good invalidation pattern | `ForgeModelBridgeResourceReloadTracker`, `ForgeModelBridgeReloadListener`, `VoxyForge` | Partial | Listener stales sample resources, but formal resource ownership is absent | Reuse pattern in formal manager |
 | Dimension switch / world unload | Good debug hygiene | `ForgeVoxyInstance` | Partial | Broad clear works for debug state, not a formal renderer lifecycle contract | Formal manager should expose explicit unload/dimension hooks |
-| Renderer ownership | Missing formal owner | `ForgeVoxyInstance`, `VoxyRenderSystem` | No | Too much lives in singleton/debug command space | G6.23 should create no-draw formal ownership shell |
+| Renderer ownership | Missing formal owner | `ForgeVoxyInstance`, `VoxyRenderSystem` | No | Too much lives in singleton/debug command space | H1 should create no-draw formal ownership shell |
 | VoxyRenderSystem | Not ported | `VoxyRenderSystem` | No | Original depends on pipeline, traversal, model bakery, Iris/Sodium hooks | Do not instantiate directly; design Forge equivalent shell |
 | MDICSectionRenderer | Not integrated | `MDICSectionRenderer`, `MDICViewport` | No | Requires pipeline, ModelStore, viewport buffers, visibility, shader patches | Do not call yet |
-| Shaderpack / Iris / Oculus / Embeddium | Not started | `VoxyRenderSystem`, shader pipeline hooks | No | Original has Sodium/Iris/FREX assumptions; Forge path avoids these | Keep out of G6.23 |
+| Shaderpack / Iris / Oculus / Embeddium | Not started | `VoxyRenderSystem`, shader pipeline hooks | No | Original has Sodium/Iris/FREX assumptions; Forge path avoids these | Keep out of H1 |
 | Commands / presets | Extensive PoC tools | `ForgeVoxyCommands` | No | Useful for validation, too large and debug-heavy for formal UX | Keep tools, later split/debug-gate them |
 
 ## Debug and formal boundary
@@ -302,9 +306,9 @@ Needed modules:
 Largest blocker: real `ModelFactory` / `ModelBakerySubsystem` bridge and formal
 `ModelStore` ownership. Without that, textured output remains sample-driven.
 
-## Recommended G6.23 scope
+## Recommended H1 scope
 
-Recommended next stage: `G6.23 formal renderer no-draw skeleton`.
+Recommended next stage: `H1 formal renderer no-draw skeleton`.
 
 Allowed:
 
@@ -362,5 +366,5 @@ command layout, audits, atlas upload, or shader inputs, not the final visual
 style. That work was still useful, but it is now time to stop adding debug draw
 modes and establish the formal renderer ownership shell.
 
-The next stage should be no-draw. If G6.23 starts drawing, it risks blending
+The next stage should be no-draw. If H1 starts drawing, it risks blending
 debug scaffolding with formal renderer responsibilities too early.
