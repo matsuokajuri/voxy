@@ -457,6 +457,13 @@ H3 / I1 candidates:
 - I1: real `ModelFactory` / `ModelBakerySubsystem` bridge plan.
 - I2: formal `ModelStore` ownership skeleton.
 
+## I1 model bakery bridge note
+
+I1 is tracked in `docs/forge-1.20.1-model-bakery-bridge-plan.md`. It addresses
+the P0 `real ModelFactory / ModelBakery bridge missing` blocker as a design
+audit only. It does not implement Java, draw, bind a formal shader, call
+`MDICSectionRenderer`, or treat sample-set model data as a formal `ModelStore`.
+
 ## Blocker list
 
 P0 blockers before formal draw:

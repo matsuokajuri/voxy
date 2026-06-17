@@ -162,8 +162,12 @@ readiness aggregation layers. It still does not draw, bind a formal shader, call
 `MDICSectionRenderer`, call `VoxyRenderSystem`, or modify existing debug renderer
 draw behavior.
 
-The intended next work remains in the H/I boundary:
+I1 is the real `ModelFactory` / `ModelBakerySubsystem` bridge plan. It is a
+docs-first audit of the original `ModelBakerySubsystem`, `ModelFactory`,
+`ModelStore`, and `RenderDataFactory` lifecycle, and it maps the Forge migration
+into I2-I5 without implementing Java or renderer draw behavior.
 
-- H3 for prerequisite wiring if the formal shell needs more no-draw ownership
-  reporting.
-- I1 for the real `ModelFactory` / `ModelBakerySubsystem` bridge plan.
+The intended next work moves into the I-stage model lifecycle boundary:
+
+- I2 for a formal `ModelStore` ownership skeleton, still no draw.
+- I3 for a Forge `ModelFactory` lifecycle skeleton.
