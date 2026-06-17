@@ -556,3 +556,48 @@ actualRendererDrawEnabled=false
 
 The next safe work is production command generation hardening or formal
 visibility traversal implementation. Live terrain draw remains blocked.
+
+## K7 status note
+
+K7 adds the first formal-path draw smoke test, but keeps it isolated to an
+offscreen validation framebuffer. It reuses the K6 real-section command dry-run
+as the draw input:
+
+```text
+real section metadata / candidate snapshot
+ -> K6 isolated cmdgen dry-run command
+ -> K7-owned indirect command buffer
+ -> K7-owned draw count / parameter buffer
+ -> K7-owned offscreen framebuffer
+ -> validation shader subset over formal ModelStore resources
+ -> pixel readback audit
+```
+
+K7 success requires:
+
+```text
+drawInputSource=realSectionCmdgenDryRun
+realSectionCommandUsed=true
+syntheticDrawFixtureUsed=false
+offscreenValidationDrawExecuted=true
+offscreenReadbackOk=true
+offscreenNonZeroPixelCount>0
+```
+
+K7 is not live terrain rendering. It does not draw into the Minecraft main
+framebuffer, does not call `MDICSectionRenderer` or `VoxyRenderSystem`, does not
+mutate the original geometry heap, and does not mark the formal renderer ready:
+
+```text
+validationOnly=true
+offscreenOnly=true
+visibleTerrainDrawExecuted=false
+liveRendererDrawExecuted=false
+formalDrawPipelineReady=false
+formalRendererReady=false
+actualRendererDrawEnabled=false
+```
+
+The next safe work is still production command generation, formal traversal,
+global formal model-id geometry, and production terrain shader integration
+before any visible LoD renderer can be considered.

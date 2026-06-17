@@ -539,6 +539,18 @@ public final class ForgeVoxyCommands {
                         .executes(ctx -> formalCmdgenRealSectionDryRunClear(ctx.getSource())))
                 .then(Commands.literal("qa_k6_formal_cmdgen_real_section_dry_run")
                         .executes(ctx -> qaK6FormalCmdgenRealSectionDryRun(ctx.getSource())))
+                .then(Commands.literal("formal_isolated_mdic_draw_build")
+                        .executes(ctx -> formalIsolatedMdicDrawBuild(ctx.getSource())))
+                .then(Commands.literal("formal_isolated_mdic_draw_status")
+                        .executes(ctx -> formalIsolatedMdicDrawStatus(ctx.getSource())))
+                .then(Commands.literal("formal_isolated_mdic_draw_audit")
+                        .executes(ctx -> formalIsolatedMdicDrawAudit(ctx.getSource())))
+                .then(Commands.literal("formal_isolated_mdic_draw_dump")
+                        .executes(ctx -> formalIsolatedMdicDrawDump(ctx.getSource())))
+                .then(Commands.literal("formal_isolated_mdic_draw_clear")
+                        .executes(ctx -> formalIsolatedMdicDrawClear(ctx.getSource())))
+                .then(Commands.literal("qa_k7_formal_isolated_mdic_draw")
+                        .executes(ctx -> qaK7FormalIsolatedMdicDraw(ctx.getSource())))
                 .then(Commands.literal("formal_renderer_check")
                         .executes(ctx -> formalRendererCheck(ctx.getSource())))
                 .then(Commands.literal("formal_renderer_status")
@@ -660,6 +672,8 @@ public final class ForgeVoxyCommands {
                                 .executes(ctx -> applyPresetFormalCmdgenGpuValidationNoDraw(ctx.getSource())))
                         .then(Commands.literal("formal_cmdgen_real_section_dry_run_no_draw")
                                 .executes(ctx -> applyPresetFormalCmdgenRealSectionDryRunNoDraw(ctx.getSource())))
+                        .then(Commands.literal("formal_isolated_mdic_draw_offscreen")
+                                .executes(ctx -> applyPresetFormalIsolatedMdicDrawOffscreen(ctx.getSource())))
                         .then(Commands.literal("clear")
                                 .executes(ctx -> clearPreset(ctx.getSource())))
                         .then(Commands.literal("status")
@@ -5652,6 +5666,107 @@ public final class ForgeVoxyCommands {
                 && !rendererStatus.actualDrawEnabled() ? 1 : 0;
     }
 
+    private static int formalIsolatedMdicDrawBuild(CommandSourceStack source) {
+        ForgeFormalIsolatedMdicDrawSmokeTestStats status = ForgeVoxyInstance.INSTANCE.getFormalIsolatedMdicDrawSmokeTest().build();
+        ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("k7-formal-isolated-mdic-draw-build");
+        source.sendSuccess(() -> Component.literal("Voxy K7 formal isolated MDIC draw build: "
+                + formatFormalIsolatedMdicDrawStatus(status)
+                + " "
+                + formatFormalRendererStatus(rendererStatus)
+                + " K7 draw, if executed, is offscreen validation only and never enables the live renderer."), false);
+        return status.isolatedMdicDrawSmokeTestReady()
+                && status.offscreenValidationDrawExecuted()
+                && status.offscreenReadbackOk()
+                && status.offscreenNonZeroPixelCount() > 0
+                && status.realSectionCommandUsed()
+                && !status.syntheticDrawFixtureUsed()
+                && !status.formalRendererReady()
+                && !status.actualRendererDrawEnabled() ? 1 : 0;
+    }
+
+    private static int formalIsolatedMdicDrawStatus(CommandSourceStack source) {
+        ForgeFormalIsolatedMdicDrawSmokeTestStats status = ForgeVoxyInstance.INSTANCE.getFormalIsolatedMdicDrawSmokeTest().createStatusSnapshot();
+        source.sendSuccess(() -> Component.literal("Voxy K7 formal isolated MDIC draw status: " + formatFormalIsolatedMdicDrawStatus(status)), false);
+        return status.isolatedMdicDrawSmokeTestReady() || status.stale() ? 1 : 0;
+    }
+
+    private static int formalIsolatedMdicDrawAudit(CommandSourceStack source) {
+        ForgeFormalIsolatedMdicDrawSmokeTestAuditResult audit = ForgeVoxyInstance.INSTANCE.getFormalIsolatedMdicDrawSmokeTest().audit();
+        ForgeFormalIsolatedMdicDrawSmokeTestStats status = ForgeVoxyInstance.INSTANCE.getFormalIsolatedMdicDrawSmokeTest().createStatusSnapshot();
+        ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("k7-formal-isolated-mdic-draw-audit");
+        source.sendSuccess(() -> Component.literal("Voxy K7 formal isolated MDIC draw audit: "
+                + formatFormalIsolatedMdicDrawAudit(audit)
+                + " "
+                + formatFormalIsolatedMdicDrawStatus(status)
+                + " "
+                + formatFormalRendererStatus(rendererStatus)), false);
+        return audit.success() ? 1 : 0;
+    }
+
+    private static int formalIsolatedMdicDrawDump(CommandSourceStack source) {
+        ForgeFormalIsolatedMdicDrawSmokeTestStats status = ForgeVoxyInstance.INSTANCE.getFormalIsolatedMdicDrawSmokeTest().createStatusSnapshot();
+        String dump = ForgeVoxyInstance.INSTANCE.getFormalIsolatedMdicDrawSmokeTest().dump();
+        source.sendSuccess(() -> Component.literal("Voxy K7 formal isolated MDIC draw dump: " + dump + " " + formatFormalIsolatedMdicDrawStatus(status)), false);
+        return status.blockerCount() > 0 || status.isolatedMdicDrawSmokeTestReady() ? 1 : 0;
+    }
+
+    private static int formalIsolatedMdicDrawClear(CommandSourceStack source) {
+        ForgeVoxyInstance.INSTANCE.getFormalIsolatedMdicDrawSmokeTest().clear();
+        ForgeFormalIsolatedMdicDrawSmokeTestStats status = ForgeVoxyInstance.INSTANCE.getFormalIsolatedMdicDrawSmokeTest().createStatusSnapshot();
+        source.sendSuccess(() -> Component.literal("Voxy K7 formal isolated MDIC draw clear: "
+                + formatFormalIsolatedMdicDrawStatus(status)
+                + " Only K7 offscreen framebuffer, validation shader, and isolated validation buffers were cleared; K1-K6 owners, debug command buffers, debug renderers, GL geometry heap, and formal model resources were left unchanged."), false);
+        return 1;
+    }
+
+    private static int qaK7FormalIsolatedMdicDraw(CommandSourceStack source) {
+        ForgeVoxyRuntimeOverrides.applyFormalIsolatedMdicDrawOffscreenPreset();
+        boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
+        ForgeFormalIsolatedMdicDrawSmokeTestStats status = ForgeVoxyInstance.INSTANCE.getFormalIsolatedMdicDrawSmokeTest().build();
+        ForgeFormalIsolatedMdicDrawSmokeTestAuditResult audit = ForgeVoxyInstance.INSTANCE.getFormalIsolatedMdicDrawSmokeTest().createAuditStatusSnapshot();
+        ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("qa-k7-formal-isolated-mdic-draw");
+        String message = "Voxy QA K7 formal isolated MDIC draw smoke test offscreen: "
+                + (engineReady ? "WorldEngine is active. " : "No active client world was found; K7 success requires a real-section K6 command and should be treated as partial if ready=false. ")
+                + formatFormalIsolatedMdicDrawStatus(status)
+                + " "
+                + formatFormalIsolatedMdicDrawAudit(audit)
+                + " "
+                + formatFormalRendererStatus(rendererStatus)
+                + " The QA path executes only a K7-owned offscreen validation draw from K6 real-section command data; it does not draw into the Minecraft main framebuffer, call MDICSectionRenderer, call VoxyRenderSystem, enable live terrain draw, or replace debug renderers.";
+        VoxyForge.LOGGER.info(message);
+        source.sendSuccess(() -> Component.literal(message), false);
+        return status.formalTerrainRendererOwnerReady()
+                && status.formalViewportOwnerReady()
+                && status.formalCommandGenerationOwnerReady()
+                && status.formalVisibilityOwnerReady()
+                && status.realSectionDryRunReady()
+                && status.isolatedMdicDrawSmokeTestReady()
+                && status.offscreenFramebufferComplete()
+                && status.offscreenValidationDrawExecuted()
+                && status.offscreenReadbackOk()
+                && status.offscreenNonZeroPixelCount() > 0
+                && "realSectionCmdgenDryRun".equals(status.drawInputSource())
+                && status.realSectionCommandUsed()
+                && !status.syntheticDrawFixtureUsed()
+                && status.drawCommandMatchesK6()
+                && !status.originalGeometryHeapMutated()
+                && !status.visibleTerrainDrawExecuted()
+                && !status.liveRendererDrawExecuted()
+                && !status.mdicSectionRendererCalled()
+                && !status.voxyRenderSystemCalled()
+                && !status.formalDrawPipelineReady()
+                && !status.formalRendererReady()
+                && !status.actualRendererDrawEnabled()
+                && status.validationOnly()
+                && status.offscreenOnly()
+                && status.p0BlockerCount() >= 1
+                && audit.success()
+                && rendererStatus.formalIsolatedMdicDrawSmokeTestReady()
+                && rendererStatus.offscreenValidationDrawExecuted()
+                && !rendererStatus.formalRendererReady()
+                && !rendererStatus.actualDrawEnabled() ? 1 : 0;
+    }
+
     private static int formalRendererCheck(CommandSourceStack source) {
         ForgeFormalRendererStats status = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("command-check");
         source.sendSuccess(() -> Component.literal("Voxy formal renderer check: " + formatFormalRendererStatus(status)), false);
@@ -7453,9 +7568,145 @@ public final class ForgeVoxyCommands {
         );
     }
 
+    private static String formatFormalIsolatedMdicDrawStatus(ForgeFormalIsolatedMdicDrawSmokeTestStats status) {
+        return String.format(
+                "stage=%s formalTerrainRendererOwnerReady=%s formalViewportOwnerReady=%s formalCommandGenerationOwnerReady=%s formalVisibilityOwnerReady=%s realSectionDryRunReady=%s isolatedMdicDrawSmokeTestReady=%s offscreenValidationDrawReady=%s offscreenFramebufferCreated=%s offscreenFramebufferComplete=%s offscreenValidationDrawExecuted=%s offscreenReadbackOk=%s offscreenNonZeroPixelCount=%d offscreenChecksum=%s offscreenSize=%dx%d drawInputSource=%s realSectionCommandUsed=%s syntheticDrawFixtureUsed=%s drawCommandMatchesK6=%s generatedCommandCount=%d acceptedDrawCommandCount=%d drawCountAccepted=%s geometryInputAvailable=%s modelInputAvailable=%s shaderInputAvailable=%s isolatedGeometryBufferUsed=%s originalGeometryHeapMutated=%s liveGeometryHeapUsedAsMutableTarget=%s formalModelIdsUsed=%s placeholderModelIdsUsed=%s sampleSetUsedAsFormalSource=%s validationFormalModelId=%d validationFormalModelIds=%s validationDrawShaderUsed=%s productionTerrainShaderUsed=%s formalTerrainShaderReady=%s shaderContractSubset=%s modelDataBindingOk=%s modelColourBindingOk=%s atlasTextureBindingOk=%s samplerBindingOk=%s bindingLayoutCompatible=%s glMultiDrawElementsIndirectCountCalled=%s glMultiDrawElementsIndirectCountCallScope=%s MDICSectionRendererCalled=%s VoxyRenderSystemCalled=%s visibleTerrainDrawExecuted=%s liveRendererDrawExecuted=%s formalDrawPipelineReady=%s formalRendererReady=%s actualRendererDrawEnabled=%s noDraw=%s liveNoDraw=%s offscreenOnly=%s validationOnly=%s validationProgramId=%d offscreenFramebufferId=%d offscreenTextureId=%d validationVertexArrayId=%d validationIndexBufferId=%d validationIndirectBufferId=%d validationParameterBufferId=%d k6FirstCommandCount=%d k6FirstCommandInstanceCount=%d k6FirstCommandFirstIndex=%d k6FirstCommandBaseVertex=%d k6FirstCommandBaseInstance=%d firstCommandCount=%d firstCommandInstanceCount=%d firstCommandFirstIndex=%d firstCommandBaseVertex=%d firstCommandBaseInstance=%d lifecycleState=%s lastLifecycleEvent=%s stale=%s requiresRebuild=%s blockerCount=%d p0BlockerCount=%d p1BlockerCount=%d p2BlockerCount=%d blockers=%s lastGlError=%s lastFailureReason=%s lastAuditOk=%s lastAuditError=%s lastAuditDurationMs=%.2f renderer=formal-isolated-mdic-draw-smoke-test formalRenderer=false liveDraw=false offscreenValidationDraw=%s",
+                status.stage(),
+                status.formalTerrainRendererOwnerReady(),
+                status.formalViewportOwnerReady(),
+                status.formalCommandGenerationOwnerReady(),
+                status.formalVisibilityOwnerReady(),
+                status.realSectionDryRunReady(),
+                status.isolatedMdicDrawSmokeTestReady(),
+                status.offscreenValidationDrawReady(),
+                status.offscreenFramebufferCreated(),
+                status.offscreenFramebufferComplete(),
+                status.offscreenValidationDrawExecuted(),
+                status.offscreenReadbackOk(),
+                status.offscreenNonZeroPixelCount(),
+                status.offscreenChecksum(),
+                status.offscreenWidth(),
+                status.offscreenHeight(),
+                status.drawInputSource(),
+                status.realSectionCommandUsed(),
+                status.syntheticDrawFixtureUsed(),
+                status.drawCommandMatchesK6(),
+                status.generatedCommandCount(),
+                status.acceptedDrawCommandCount(),
+                status.drawCountAccepted(),
+                status.geometryInputAvailable(),
+                status.modelInputAvailable(),
+                status.shaderInputAvailable(),
+                status.isolatedGeometryBufferUsed(),
+                status.originalGeometryHeapMutated(),
+                status.liveGeometryHeapUsedAsMutableTarget(),
+                status.formalModelIdsUsed(),
+                status.placeholderModelIdsUsed(),
+                status.sampleSetUsedAsFormalSource(),
+                status.validationFormalModelId(),
+                status.validationFormalModelIds(),
+                status.validationDrawShaderUsed(),
+                status.productionTerrainShaderUsed(),
+                status.formalTerrainShaderReady(),
+                status.shaderContractSubset(),
+                status.modelDataBindingOk(),
+                status.modelColourBindingOk(),
+                status.atlasTextureBindingOk(),
+                status.samplerBindingOk(),
+                status.bindingLayoutCompatible(),
+                status.glMultiDrawElementsIndirectCountCalled(),
+                status.glMultiDrawElementsIndirectCountCallScope(),
+                status.mdicSectionRendererCalled(),
+                status.voxyRenderSystemCalled(),
+                status.visibleTerrainDrawExecuted(),
+                status.liveRendererDrawExecuted(),
+                status.formalDrawPipelineReady(),
+                status.formalRendererReady(),
+                status.actualRendererDrawEnabled(),
+                status.noDraw(),
+                status.liveNoDraw(),
+                status.offscreenOnly(),
+                status.validationOnly(),
+                status.validationProgramId(),
+                status.offscreenFramebufferId(),
+                status.offscreenTextureId(),
+                status.validationVertexArrayId(),
+                status.validationIndexBufferId(),
+                status.validationIndirectBufferId(),
+                status.validationParameterBufferId(),
+                status.k6FirstCommandCount(),
+                status.k6FirstCommandInstanceCount(),
+                status.k6FirstCommandFirstIndex(),
+                status.k6FirstCommandBaseVertex(),
+                status.k6FirstCommandBaseInstance(),
+                status.firstCommandCount(),
+                status.firstCommandInstanceCount(),
+                status.firstCommandFirstIndex(),
+                status.firstCommandBaseVertex(),
+                status.firstCommandBaseInstance(),
+                status.lifecycleState(),
+                status.lastLifecycleEvent(),
+                status.stale(),
+                status.requiresRebuild(),
+                status.blockerCount(),
+                status.p0BlockerCount(),
+                status.p1BlockerCount(),
+                status.p2BlockerCount(),
+                status.blockers(),
+                status.lastGlError(),
+                status.lastFailureReason(),
+                status.lastAuditOk(),
+                status.lastAuditError(),
+                status.lastAuditDurationMs(),
+                status.offscreenValidationDrawExecuted()
+        );
+    }
+
+    private static String formatFormalIsolatedMdicDrawAudit(ForgeFormalIsolatedMdicDrawSmokeTestAuditResult audit) {
+        return String.format(
+                "k7AuditOk=%s k7AuditError=%s durationMs=%.2f k1OwnerExists=%s k2ViewportOwnerExists=%s k3CommandGenerationOwnerExists=%s k4VisibilityOwnerExists=%s k5ValidationProgramExists=%s k6RealSectionDryRunExists=%s originalMdicSectionRendererInspected=%s originalShaderBindingsInspected=%s drawInputUsesK6Command=%s realSectionCommandUsed=%s syntheticDrawFixtureUsed=%s validationBuffersIsolated=%s debugMdicCommandBuffersUsedAsFormal=%s originalGeometryHeapMutated=%s offscreenFramebufferComplete=%s offscreenValidationDrawExecuted=%s offscreenReadbackOk=%s offscreenNonZeroPixelCount=%d drawCommandAccepted=%s drawCountAccepted=%s drawCommandMatchesK6=%s geometryInputAvailable=%s modelInputAvailable=%s shaderInputAvailable=%s glMultiDrawElementsIndirectCountCalled=%s visibleTerrainDrawExecuted=%s liveRendererDrawExecuted=%s minecraftMainFramebufferDrawn=%s MDICSectionRendererCalled=%s VoxyRenderSystemCalled=%s formalDrawPipelineReady=%s formalRendererReady=%s actualRendererDrawEnabled=%s",
+                audit.success(),
+                audit.error(),
+                audit.durationMs(),
+                audit.k1OwnerExists(),
+                audit.k2ViewportOwnerExists(),
+                audit.k3CommandGenerationOwnerExists(),
+                audit.k4VisibilityOwnerExists(),
+                audit.k5ValidationProgramExists(),
+                audit.k6RealSectionDryRunExists(),
+                audit.originalMdicSectionRendererInspected(),
+                audit.originalShaderBindingsInspected(),
+                audit.drawInputUsesK6Command(),
+                audit.realSectionCommandUsed(),
+                audit.syntheticDrawFixtureUsed(),
+                audit.validationBuffersIsolated(),
+                audit.debugMdicCommandBuffersUsedAsFormal(),
+                audit.originalGeometryHeapMutated(),
+                audit.offscreenFramebufferComplete(),
+                audit.offscreenValidationDrawExecuted(),
+                audit.offscreenReadbackOk(),
+                audit.offscreenNonZeroPixelCount(),
+                audit.drawCommandAccepted(),
+                audit.drawCountAccepted(),
+                audit.drawCommandMatchesK6(),
+                audit.geometryInputAvailable(),
+                audit.modelInputAvailable(),
+                audit.shaderInputAvailable(),
+                audit.glMultiDrawElementsIndirectCountCalled(),
+                audit.visibleTerrainDrawExecuted(),
+                audit.liveRendererDrawExecuted(),
+                audit.minecraftMainFramebufferDrawn(),
+                audit.mdicSectionRendererCalled(),
+                audit.voxyRenderSystemCalled(),
+                audit.formalDrawPipelineReady(),
+                audit.formalRendererReady(),
+                audit.actualRendererDrawEnabled()
+        );
+    }
+
     private static String formatFormalRendererStatus(ForgeFormalRendererStats status) {
         return String.format(
-                "stage=%s formalRendererSkeletonReady=%s formalRendererReady=%s actualDrawEnabled=%s noDraw=%s enabled=%s lifecycleState=%s formalRendererOwnershipReady=%s lastEnableReason=%s lastDisableReason=%s lastClearReason=%s lastLifecycleEvent=%s lastCheckAt=%s lastCheckReason=%s lastStaleReason=%s requiresRecheck=%s readinessGeneration=%d lifecycleGeneration=%d geometryHeapReady=%s metadataReady=%s sectionGeometryManagerReady=%s mdicCommandReady=%s mdicDrawCountReady=%s modelBridgeReady=%s formalShaderInputBridgeReady=%s atlasReady=%s resourceReloadReady=%s worldEngineReady=%s dimensionReady=%s infrastructureReady=%s debugProofReady=%s sampleBridgeReady=%s oneBlockBakePrototypeReady=%s oneBlockFormalUploadReady=%s oneBlockFormalUploadAuditReady=%s multiBlockBakePrototypeReady=%s multiBlockFormalUploadReady=%s multiBlockFormalUploadAuditReady=%s formalModelBakeryLifecycleSkeletonReady=%s reloadRebuildPrototypeReady=%s aliasSafeDedupeReady=%s formalModelFactorySkeletonReady=%s formalModelFactoryLifecycleReady=%s formalModelStoreSkeletonReady=%s formalModelStoreOwnerReady=%s formalShaderInputConsumerReady=%s formalShaderInputBindingLayoutKnown=%s formalShaderInputBindingLayoutCompatible=%s formalShaderProgramValidatorReady=%s formalShaderProgramValidationReady=%s validationShaderCompileOk=%s validationProgramLinkOk=%s gpuValidationOk=%s formalTexturedShaderPrototypeReady=%s formalTexturedShaderPreviewReady=%s formalPackedQuadPreviewReady=%s packedQuadShaderPreviewReady=%s packedQuadModelIdBridgeReady=%s formalTerrainPackedRecordBridgeReady=%s realTerrainPackedRecordBridgeReady=%s temporaryFormalQuadBufferCreated=%s originalGeometryUntouched=%s originalGeometryHeapUntouched=%s realTerrainRecordsUsed=%s syntheticFallbackUsed=%s formalTerrainRendererOwnerReady=%s formalTerrainRendererLifecycleReady=%s k0AlignmentAuditReady=%s k0VerdictReadyForK1=%s originalVoxyAlignmentPreserved=%s formalViewportOwnerReady=%s formalCommandBufferOwnerReady=%s formalCommandGenerationOwnerReady=%s formalCommandGenerationContractReady=%s formalDrawCommandLayoutReady=%s formalDrawCountLayoutReady=%s formalVisibilityOwnerReady=%s formalRenderListOwnerReady=%s formalIndirectLookupOwnerReady=%s formalVisibilityContractReady=%s formalRenderListContractReady=%s formalVisibilityTraversalImplemented=%s formalHierarchicalOcclusionReady=%s formalRenderDistanceTrackerReady=%s cpuCandidateSnapshotReady=%s debugPlannerUsedAsFormal=%s cmdgenValidationProgramReady=%s cmdgenValidationProgramCompileOk=%s cmdgenValidationProgramLinkOk=%s cmdgenValidationDispatchRun=%s cmdgenValidationReadbackOk=%s cmdgenValidationAuditOk=%s productionCmdgenReady=%s formalCmdgenRealSectionDryRunReady=%s realSectionInputSnapshotReady=%s realSectionMetadataUsed=%s realSectionCandidateSnapshotUsed=%s cmdgenRealSectionDryRunAuditOk=%s formalDrawPipelineReady=%s globalFormalModelIdGeometryReady=%s formalTerrainShaderReady=%s previewSystemsSeparated=%s sampleSetUsedAsFormalSource=%s terrainDrawStarted=%s formalRendererDrawStarted=%s actualRendererDrawEnabled=%s formalShaderInputContractReady=%s formalPrerequisitesReady=%s realModelFactoryReady=%s realModelBakeryReady=%s realModelStoreReady=%s formalShaderReady=%s formalTextureAtlasReady=%s formalTexturedShaderReady=%s formalTraversalReady=%s formalVisibilityTraversalReady=%s formalVoxyRenderSystemReady=%s shaderpackIntegrationReady=%s blockerCount=%d p0BlockerCount=%d p1BlockerCount=%d p2BlockerCount=%d formalDrawBlockingBlockerCount=%d blockers=%s worldUnloadSeen=%s dimensionSwitchSeen=%s resourceReloadSeen=%s debugPipelineClearSeen=%s presetOffSeen=%s presetClearSeen=%s formalRendererStale=%s debugRenderersIsolated=%s existingMdicDebugTouched=%s texturedMdicDebugTouched=%s actualDrawStartedByFormalRenderer=%s renderer=formal-renderer-skeleton formalRenderer=false draw=false",
+                "stage=%s formalRendererSkeletonReady=%s formalRendererReady=%s actualDrawEnabled=%s noDraw=%s enabled=%s lifecycleState=%s formalRendererOwnershipReady=%s lastEnableReason=%s lastDisableReason=%s lastClearReason=%s lastLifecycleEvent=%s lastCheckAt=%s lastCheckReason=%s lastStaleReason=%s requiresRecheck=%s readinessGeneration=%d lifecycleGeneration=%d geometryHeapReady=%s metadataReady=%s sectionGeometryManagerReady=%s mdicCommandReady=%s mdicDrawCountReady=%s modelBridgeReady=%s formalShaderInputBridgeReady=%s atlasReady=%s resourceReloadReady=%s worldEngineReady=%s dimensionReady=%s infrastructureReady=%s debugProofReady=%s sampleBridgeReady=%s oneBlockBakePrototypeReady=%s oneBlockFormalUploadReady=%s oneBlockFormalUploadAuditReady=%s multiBlockBakePrototypeReady=%s multiBlockFormalUploadReady=%s multiBlockFormalUploadAuditReady=%s formalModelBakeryLifecycleSkeletonReady=%s reloadRebuildPrototypeReady=%s aliasSafeDedupeReady=%s formalModelFactorySkeletonReady=%s formalModelFactoryLifecycleReady=%s formalModelStoreSkeletonReady=%s formalModelStoreOwnerReady=%s formalShaderInputConsumerReady=%s formalShaderInputBindingLayoutKnown=%s formalShaderInputBindingLayoutCompatible=%s formalShaderProgramValidatorReady=%s formalShaderProgramValidationReady=%s validationShaderCompileOk=%s validationProgramLinkOk=%s gpuValidationOk=%s formalTexturedShaderPrototypeReady=%s formalTexturedShaderPreviewReady=%s formalPackedQuadPreviewReady=%s packedQuadShaderPreviewReady=%s packedQuadModelIdBridgeReady=%s formalTerrainPackedRecordBridgeReady=%s realTerrainPackedRecordBridgeReady=%s temporaryFormalQuadBufferCreated=%s originalGeometryUntouched=%s originalGeometryHeapUntouched=%s realTerrainRecordsUsed=%s syntheticFallbackUsed=%s formalTerrainRendererOwnerReady=%s formalTerrainRendererLifecycleReady=%s k0AlignmentAuditReady=%s k0VerdictReadyForK1=%s originalVoxyAlignmentPreserved=%s formalViewportOwnerReady=%s formalCommandBufferOwnerReady=%s formalCommandGenerationOwnerReady=%s formalCommandGenerationContractReady=%s formalDrawCommandLayoutReady=%s formalDrawCountLayoutReady=%s formalVisibilityOwnerReady=%s formalRenderListOwnerReady=%s formalIndirectLookupOwnerReady=%s formalVisibilityContractReady=%s formalRenderListContractReady=%s formalVisibilityTraversalImplemented=%s formalHierarchicalOcclusionReady=%s formalRenderDistanceTrackerReady=%s cpuCandidateSnapshotReady=%s debugPlannerUsedAsFormal=%s cmdgenValidationProgramReady=%s cmdgenValidationProgramCompileOk=%s cmdgenValidationProgramLinkOk=%s cmdgenValidationDispatchRun=%s cmdgenValidationReadbackOk=%s cmdgenValidationAuditOk=%s productionCmdgenReady=%s formalCmdgenRealSectionDryRunReady=%s realSectionInputSnapshotReady=%s realSectionMetadataUsed=%s realSectionCandidateSnapshotUsed=%s cmdgenRealSectionDryRunAuditOk=%s formalIsolatedMdicDrawSmokeTestReady=%s offscreenValidationDrawReady=%s offscreenValidationDrawExecuted=%s offscreenValidationReadbackOk=%s offscreenValidationOnly=%s offscreenOnly=%s realSectionCommandUsedForOffscreenDraw=%s syntheticDrawFixtureUsed=%s formalDrawPipelineReady=%s globalFormalModelIdGeometryReady=%s formalTerrainShaderReady=%s previewSystemsSeparated=%s sampleSetUsedAsFormalSource=%s terrainDrawStarted=%s formalRendererDrawStarted=%s actualRendererDrawEnabled=%s formalShaderInputContractReady=%s formalPrerequisitesReady=%s realModelFactoryReady=%s realModelBakeryReady=%s realModelStoreReady=%s formalShaderReady=%s formalTextureAtlasReady=%s formalTexturedShaderReady=%s formalTraversalReady=%s formalVisibilityTraversalReady=%s formalVoxyRenderSystemReady=%s shaderpackIntegrationReady=%s blockerCount=%d p0BlockerCount=%d p1BlockerCount=%d p2BlockerCount=%d formalDrawBlockingBlockerCount=%d blockers=%s worldUnloadSeen=%s dimensionSwitchSeen=%s resourceReloadSeen=%s debugPipelineClearSeen=%s presetOffSeen=%s presetClearSeen=%s formalRendererStale=%s debugRenderersIsolated=%s existingMdicDebugTouched=%s texturedMdicDebugTouched=%s actualDrawStartedByFormalRenderer=%s renderer=formal-renderer-skeleton formalRenderer=false draw=false",
                 status.stage(),
                 status.formalRendererSkeletonReady(),
                 status.formalRendererReady(),
@@ -7554,6 +7805,14 @@ public final class ForgeVoxyCommands {
                 status.realSectionMetadataUsed(),
                 status.realSectionCandidateSnapshotUsed(),
                 status.cmdgenRealSectionDryRunAuditOk(),
+                status.formalIsolatedMdicDrawSmokeTestReady(),
+                status.offscreenValidationDrawReady(),
+                status.offscreenValidationDrawExecuted(),
+                status.offscreenValidationReadbackOk(),
+                status.offscreenValidationOnly(),
+                status.offscreenOnly(),
+                status.realSectionCommandUsedForOffscreenDraw(),
+                status.syntheticDrawFixtureUsed(),
                 status.formalDrawPipelineReady(),
                 status.globalFormalModelIdGeometryReady(),
                 status.formalTerrainShaderReady(),
@@ -8527,6 +8786,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getFormalVisibilityOwner().markPresetOff();
         ForgeVoxyInstance.INSTANCE.getFormalCmdgenGpuValidator().markPresetOff();
         ForgeVoxyInstance.INSTANCE.getFormalCmdgenRealSectionDryRun().markPresetOff();
+        ForgeVoxyInstance.INSTANCE.getFormalIsolatedMdicDrawSmokeTest().markPresetOff();
         ForgeVoxyInstance.INSTANCE.closeActiveWorld();
         source.sendSuccess(() -> Component.literal("Voxy preset off: runtime overrides disabled engine, auto ingest, auto CPU mesh build, auto BuiltSection build, auto geometry-manager consume, upload-only GL geometry heap, direct GL renderer skeleton, MDIC command skeleton/debug draw, simple GPU renderer, and debug renderer. Overrides are not written to toml."), false);
         return 1;
@@ -9148,6 +9408,36 @@ public final class ForgeVoxyCommands {
                 && !rendererStatus.formalRendererReady() ? 1 : 0;
     }
 
+    private static int applyPresetFormalIsolatedMdicDrawOffscreen(CommandSourceStack source) {
+        ForgeVoxyRuntimeOverrides.applyFormalIsolatedMdicDrawOffscreenPreset();
+        boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
+        ForgeFormalIsolatedMdicDrawSmokeTestStats status = ForgeVoxyInstance.INSTANCE.getFormalIsolatedMdicDrawSmokeTest().build();
+        ForgeFormalIsolatedMdicDrawSmokeTestAuditResult audit = ForgeVoxyInstance.INSTANCE.getFormalIsolatedMdicDrawSmokeTest().createAuditStatusSnapshot();
+        ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("preset-formal-isolated-mdic-draw-offscreen");
+        String message = "Voxy preset formal_isolated_mdic_draw_offscreen: runtime-only K7 formal isolated MDIC draw smoke test applied, not written to toml. "
+                + "The preset consumes K6 real-section command data, builds K7-owned validation buffers and an offscreen framebuffer, executes only an offscreen validation draw, and does not draw into the Minecraft main framebuffer or enable live terrain rendering. "
+                + (engineReady ? "WorldEngine is active. " : "No active client world was found; K7 success requires a real-section K6 command and should be treated as partial if ready=false. ")
+                + formatFormalIsolatedMdicDrawStatus(status)
+                + " "
+                + formatFormalIsolatedMdicDrawAudit(audit)
+                + " "
+                + formatFormalRendererStatus(rendererStatus);
+        source.sendSuccess(() -> Component.literal(message), false);
+        return status.isolatedMdicDrawSmokeTestReady()
+                && status.offscreenValidationDrawExecuted()
+                && status.offscreenReadbackOk()
+                && status.realSectionCommandUsed()
+                && !status.syntheticDrawFixtureUsed()
+                && audit.success()
+                && !status.visibleTerrainDrawExecuted()
+                && !status.liveRendererDrawExecuted()
+                && !status.actualRendererDrawEnabled()
+                && !status.formalDrawPipelineReady()
+                && !status.formalRendererReady()
+                && !rendererStatus.actualDrawEnabled()
+                && !rendererStatus.formalRendererReady() ? 1 : 0;
+    }
+
     private static int clearPreset(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.clear();
         ForgeVoxyInstance.INSTANCE.getGpuGeometryReadbackMeshCache().clear();
@@ -9183,6 +9473,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getFormalVisibilityOwner().clear("preset-clear");
         ForgeVoxyInstance.INSTANCE.getFormalCmdgenGpuValidator().clear();
         ForgeVoxyInstance.INSTANCE.getFormalCmdgenRealSectionDryRun().clear();
+        ForgeVoxyInstance.INSTANCE.getFormalIsolatedMdicDrawSmokeTest().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedDebugQuadRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedReadbackRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedMdicDebugRenderer().clear();
@@ -9207,6 +9498,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getFormalVisibilityOwner().markPresetClear();
         ForgeVoxyInstance.INSTANCE.getFormalCmdgenGpuValidator().markPresetClear();
         ForgeVoxyInstance.INSTANCE.getFormalCmdgenRealSectionDryRun().markPresetClear();
+        ForgeVoxyInstance.INSTANCE.getFormalIsolatedMdicDrawSmokeTest().markPresetClear();
         source.sendSuccess(() -> Component.literal("Voxy preset clear: runtime overrides cleared; effective values now come from the toml config."), false);
         return 1;
     }
@@ -9552,6 +9844,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getFormalVisibilityOwner().markDebugPipelineClear();
         ForgeVoxyInstance.INSTANCE.getFormalCmdgenGpuValidator().markDebugPipelineClear();
         ForgeVoxyInstance.INSTANCE.getFormalCmdgenRealSectionDryRun().markDebugPipelineClear();
+        ForgeVoxyInstance.INSTANCE.getFormalIsolatedMdicDrawSmokeTest().markDebugPipelineClear();
         ForgeVoxyInstance.INSTANCE.getTexturedDebugQuadRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedReadbackRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedMdicDebugRenderer().clear();
@@ -9644,6 +9937,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getFormalVisibilityOwner().markDebugPipelineClear();
         ForgeVoxyInstance.INSTANCE.getFormalCmdgenGpuValidator().markDebugPipelineClear();
         ForgeVoxyInstance.INSTANCE.getFormalCmdgenRealSectionDryRun().markDebugPipelineClear();
+        ForgeVoxyInstance.INSTANCE.getFormalIsolatedMdicDrawSmokeTest().markDebugPipelineClear();
         ForgeVoxyInstance.INSTANCE.getTexturedDebugQuadRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedReadbackRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedMdicDebugRenderer().clear();

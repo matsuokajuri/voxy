@@ -509,3 +509,37 @@ program generate any command?" to "can the validation path consume real section
 metadata?" The remaining live-renderer blockers are still production cmdgen,
 formal traversal, global formal model-id geometry, formal terrain shader
 integration, and formal MDIC draw.
+
+## K7 formal isolated MDIC draw smoke test note
+
+K7 performs one formal-path validation draw, but only into an isolated
+offscreen framebuffer. It intentionally does not wire the original
+`MDICSectionRenderer` or `VoxyRenderSystem`.
+
+Original alignment:
+
+- The validation command is shaped as the original Voxy five-field indexed
+  indirect `DrawCommand`.
+- The draw count is read from the original opaque draw-count parameter-buffer
+  offset.
+- Formal model inputs use the original binding intent: model data at binding 3,
+  model colour at binding 4, and the block model atlas on texture unit 0.
+- The validation call may use `glMultiDrawElementsIndirectCountARB`, but only
+  with `glMultiDrawElementsIndirectCountCallScope=K7_validation_offscreen_only`.
+
+Intentional Forge deviation:
+
+- K7 copies K6 command values into K7-owned validation buffers instead of using
+  live renderer command buffers.
+- K7 uses an isolated validation shader subset, not the production terrain
+  shader.
+- K7 uses an offscreen framebuffer, not the Minecraft main framebuffer.
+- K7 does not mutate the original GL geometry heap.
+- K7 does not enable live terrain draw and does not claim the formal draw
+  pipeline is ready.
+
+After K7, the project has proven that a real-section-derived formal command can
+execute an isolated offscreen validation draw against formal ModelStore
+resources. Live renderer integration remains blocked on production cmdgen,
+formal traversal, global formal model-id geometry, production terrain shader
+semantics, and renderer lifecycle hardening.

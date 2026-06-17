@@ -1134,3 +1134,42 @@ actualRendererDrawEnabled=false
 Remaining blockers are unchanged in kind: formal hierarchical traversal,
 production cmdgen, global formal model-id geometry, formal terrain shader
 integration, and formal MDIC draw are still missing.
+
+## K7 readiness note
+
+K7 adds a controlled offscreen-only draw smoke test for the formal path. It is
+the first K-stage validation allowed to submit a draw call, but the call is
+restricted to K7-owned resources:
+
+- K6 real-section dry-run `DrawCommand` values are copied into a K7-owned
+  indirect command buffer.
+- The draw count / parameter buffer is K7-owned and uses the original Voxy
+  opaque draw-count offset shape.
+- The framebuffer, validation shader, index buffer, indirect buffer, and
+  parameter buffer are all isolated validation resources.
+- Formal model inputs are read from the I2 formal `ModelStore` owner populated
+  by the I/J model lifecycle path.
+
+K7 can now report:
+
+```text
+isolatedMdicDrawSmokeTestReady=true
+offscreenValidationDrawReady=true
+offscreenValidationDrawExecuted=true
+offscreenReadbackOk=true
+realSectionCommandUsed=true
+syntheticDrawFixtureUsed=false
+```
+
+This does not change renderer readiness:
+
+```text
+formalDrawPipelineReady=false
+formalRendererReady=false
+actualRendererDrawEnabled=false
+formalTerrainShaderReady=false
+```
+
+The remaining blockers are production cmdgen, formal traversal, global formal
+model-id geometry, production terrain shader integration, live MDIC renderer
+integration, lightmap, biome tint, and material/alpha semantics.

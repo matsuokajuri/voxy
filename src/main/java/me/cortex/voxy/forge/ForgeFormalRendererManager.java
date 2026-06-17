@@ -253,6 +253,14 @@ final class ForgeFormalRendererManager {
                 readiness.realSectionMetadataUsed(),
                 readiness.realSectionCandidateSnapshotUsed(),
                 readiness.cmdgenRealSectionDryRunAuditOk(),
+                readiness.formalIsolatedMdicDrawSmokeTestReady(),
+                readiness.offscreenValidationDrawReady(),
+                readiness.offscreenValidationDrawExecuted(),
+                readiness.offscreenValidationReadbackOk(),
+                readiness.offscreenValidationOnly(),
+                readiness.offscreenOnly(),
+                readiness.realSectionCommandUsedForOffscreenDraw(),
+                readiness.syntheticDrawFixtureUsed(),
                 readiness.formalDrawPipelineReady(),
                 readiness.globalFormalModelIdGeometryReady(),
                 readiness.formalTerrainShaderReady(),
@@ -325,6 +333,7 @@ final class ForgeFormalRendererManager {
         ForgeFormalTerrainRendererStats terrainRendererOwner = this.instance.getFormalTerrainRendererOwner().createStatusSnapshot();
         ForgeFormalCmdgenGpuValidationStats cmdgenValidation = this.instance.getFormalCmdgenGpuValidator().createStatusSnapshot();
         ForgeFormalCmdgenRealSectionDryRunStats cmdgenRealSectionDryRun = this.instance.getFormalCmdgenRealSectionDryRun().createStatusSnapshot();
+        ForgeFormalIsolatedMdicDrawSmokeTestStats isolatedMdicDraw = this.instance.getFormalIsolatedMdicDrawSmokeTest().createStatusSnapshot();
         ForgeModelAtlasSampleSetUploadStats atlas = this.instance.getModelAtlasSampleSetUploader().createStatusSnapshot();
         ForgeModelBridgeResourceReloadStats reload = this.instance.getModelBridgeResourceReloadTracker().createStatusSnapshot();
         String dimension = currentDimensionId();
@@ -432,14 +441,22 @@ final class ForgeFormalRendererManager {
                 cmdgenRealSectionDryRun.realSectionMetadataUsed(),
                 cmdgenRealSectionDryRun.realSectionCandidateSnapshotUsed(),
                 cmdgenRealSectionDryRun.cmdgenDryRunAuditOk(),
+                isolatedMdicDraw.isolatedMdicDrawSmokeTestReady(),
+                isolatedMdicDraw.offscreenValidationDrawReady(),
+                isolatedMdicDraw.offscreenValidationDrawExecuted(),
+                isolatedMdicDraw.offscreenReadbackOk(),
+                isolatedMdicDraw.validationOnly(),
+                isolatedMdicDraw.offscreenOnly(),
+                isolatedMdicDraw.realSectionCommandUsed(),
+                isolatedMdicDraw.syntheticDrawFixtureUsed(),
                 terrainRendererOwner.formalDrawPipelineReady(),
                 terrainRendererOwner.globalFormalModelIdGeometryReady(),
                 terrainRendererOwner.formalTerrainShaderReady(),
                 terrainRendererOwner.previewSystemsSeparated(),
                 terrainRendererOwner.sampleSetUsedAsFormalSource(),
-                texturedShaderPreview.terrainDrawStarted() || packedQuadPreview.terrainDrawStarted() || terrainRecordBridge.terrainDrawStarted(),
-                texturedShaderPreview.formalRendererDrawStarted() || packedQuadPreview.formalRendererDrawStarted() || terrainRecordBridge.formalRendererDrawStarted(),
-                texturedShaderPreview.actualRendererDrawEnabled() || packedQuadPreview.actualRendererDrawEnabled() || terrainRecordBridge.actualRendererDrawEnabled(),
+                texturedShaderPreview.terrainDrawStarted() || packedQuadPreview.terrainDrawStarted() || terrainRecordBridge.terrainDrawStarted() || isolatedMdicDraw.visibleTerrainDrawExecuted(),
+                texturedShaderPreview.formalRendererDrawStarted() || packedQuadPreview.formalRendererDrawStarted() || terrainRecordBridge.formalRendererDrawStarted() || isolatedMdicDraw.liveRendererDrawExecuted(),
+                texturedShaderPreview.actualRendererDrawEnabled() || packedQuadPreview.actualRendererDrawEnabled() || terrainRecordBridge.actualRendererDrawEnabled() || isolatedMdicDraw.actualRendererDrawEnabled(),
                 shaderInputConsumer.formalShaderInputContractReady(),
                 formalPrerequisitesReady
         );
