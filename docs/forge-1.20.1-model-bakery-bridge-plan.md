@@ -516,3 +516,63 @@ I4 should take exactly one safe solid `BlockState` through the real Forge
 `BakedModel` / `BakedQuad` read path, build one formal record, and upload it
 through the I2 formal ModelStore owner. It should still avoid broad renderer
 integration until the one-block bake/upload path audits cleanly.
+
+## I4 one-block formal bake/upload prototype
+
+I4 implements the first real-bake upload path into the formal owner, but only
+for one safe solid block. The chain is:
+
+```text
+safe solid BlockState
+ -> Forge BakedModel / BakedQuad / TextureAtlasSprite
+ -> one 64-byte formal model record
+ -> I3 formalModelId mapping
+ -> I2 formal ModelStore modelData slot
+ -> I2 formal ModelStore modelColour slot
+ -> I2 formal Voxy-style atlas six 16x16 face tiles
+ -> readback audit
+```
+
+This deliberately bypasses the old sample-set atlas helper as an upload target.
+The sample-set path remains a debug/validation tool; the I4 target is the I2
+formal `ModelStore` owner.
+
+I4 still does not implement:
+
+- multi-block bake,
+- texture dedupe,
+- fluid support,
+- broad biome LUT,
+- formal shader binding,
+- formal MDIC draw,
+- `MDICSectionRenderer`,
+- `VoxyRenderSystem`.
+
+Successful I4 status means only that one prototype block can be baked and
+uploaded into the formal owner:
+
+```text
+oneBlockRealBakeReady=true
+oneBlockFormalModelRecordUploaded=true
+oneBlockFormalAtlasPixelsUploaded=true
+oneBlockFormalUploadAuditOk=true
+```
+
+It must still keep:
+
+```text
+realModelFactoryReady=false
+realModelBakeryReady=false
+realModelStoreReady=false
+formalRendererReady=false
+actualDrawEnabled=false
+```
+
+Recommended next stage:
+
+```text
+I5: multi-block bake/upload and dedupe
+```
+
+I5 should generalize the single-block path only after I4 readback proves that
+the formal owner can safely receive one real baked record and atlas tile set.

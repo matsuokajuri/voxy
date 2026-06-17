@@ -198,6 +198,201 @@ final class ForgeFormalModelStore {
         return this.lastAudit;
     }
 
+    boolean canUploadOneBlockPrototype() {
+        return RenderSystem.isOnRenderThread()
+                && !this.stale
+                && this.modelDataBufferId != 0
+                && this.modelColourBufferId != 0
+                && this.atlasTextureId != 0
+                && this.fullAtlasTextureCreated
+                && this.actualAtlasWidth == ForgeModelAtlasLayout.ATLAS_WIDTH
+                && this.actualAtlasHeight == ForgeModelAtlasLayout.ATLAS_HEIGHT;
+    }
+
+    String uploadPrototypeModelRecord(int formalModelId, int[] words) {
+        if (!this.canUploadOneBlockPrototype()) {
+            return "formal-model-store-not-upload-ready";
+        }
+        if (!ForgeModelAtlasLayout.isValidModelId(formalModelId) || formalModelId == 0) {
+            return "invalid-formal-model-id-" + formalModelId;
+        }
+        if (words == null || words.length != ForgeModelStoreFormalLayout.MODEL_RECORD_WORDS) {
+            return "invalid-model-record-word-count";
+        }
+        long offset = modelDataOffset(formalModelId);
+        long ptr = MemoryUtil.nmemAlloc(ForgeModelStoreFormalLayout.MODEL_RECORD_BYTES);
+        try {
+            for (int i = 0; i < words.length; i++) {
+                MemoryUtil.memPutInt(ptr + ((long) i * Integer.BYTES), words[i]);
+            }
+            GL45C.nglNamedBufferSubData(this.modelDataBufferId, offset, ForgeModelStoreFormalLayout.MODEL_RECORD_BYTES, ptr);
+            int error = GL11C.glGetError();
+            return error == GL11C.GL_NO_ERROR ? "none" : "model-record-upload-" + glErrorName(error);
+        } finally {
+            MemoryUtil.nmemFree(ptr);
+        }
+    }
+
+    String uploadPrototypeModelColour(int formalModelId, int colour) {
+        if (!this.canUploadOneBlockPrototype()) {
+            return "formal-model-store-not-upload-ready";
+        }
+        if (!ForgeModelAtlasLayout.isValidModelId(formalModelId) || formalModelId == 0) {
+            return "invalid-formal-model-id-" + formalModelId;
+        }
+        long ptr = MemoryUtil.nmemAlloc(Integer.BYTES);
+        try {
+            MemoryUtil.memPutInt(ptr, colour);
+            GL45C.nglNamedBufferSubData(this.modelColourBufferId, modelColourOffset(formalModelId), Integer.BYTES, ptr);
+            int error = GL11C.glGetError();
+            return error == GL11C.GL_NO_ERROR ? "none" : "model-colour-upload-" + glErrorName(error);
+        } finally {
+            MemoryUtil.nmemFree(ptr);
+        }
+    }
+
+    String uploadPrototypeAtlasFace(int formalModelId, int faceIndex, byte[] pixels) {
+        if (!this.canUploadOneBlockPrototype()) {
+            return "formal-model-store-not-upload-ready";
+        }
+        if (!ForgeModelAtlasLayout.isValidModelId(formalModelId) || formalModelId == 0) {
+            return "invalid-formal-model-id-" + formalModelId;
+        }
+        if (faceIndex < 0 || faceIndex >= ForgeModelAtlasLayout.FACE_COUNT) {
+            return "invalid-face-index-" + faceIndex;
+        }
+        if (pixels == null || pixels.length != ForgeModelAtlasPixelSample.BYTES_PER_FACE) {
+            return "invalid-face-pixel-count";
+        }
+
+        ForgeModelAtlasLayout.Tile tile = ForgeModelAtlasLayout.faceTile(formalModelId, faceIndex);
+        ByteBuffer buffer = MemoryUtil.memAlloc(ForgeModelAtlasPixelSample.BYTES_PER_FACE);
+        PixelStoreState pixelStore = PixelStoreState.captureUnpack();
+        int unpackBufferBinding = GL11C.glGetInteger(GL21C.GL_PIXEL_UNPACK_BUFFER_BINDING);
+        int oldTextureBinding = GL11C.glGetInteger(GL11C.GL_TEXTURE_BINDING_2D);
+        try {
+            GL15C.glBindBuffer(GL21C.GL_PIXEL_UNPACK_BUFFER, 0);
+            GL11C.glBindTexture(GL11C.GL_TEXTURE_2D, this.atlasTextureId);
+            PixelStoreState.applyTightUnpack();
+            buffer.put(pixels);
+            buffer.flip();
+            clearGlErrors();
+            GL11C.glTexSubImage2D(
+                    GL11C.GL_TEXTURE_2D,
+                    0,
+                    tile.x(),
+                    tile.y(),
+                    ForgeModelAtlasLayout.MODEL_TEXTURE_SIZE,
+                    ForgeModelAtlasLayout.MODEL_TEXTURE_SIZE,
+                    GL11C.GL_RGBA,
+                    GL11C.GL_UNSIGNED_BYTE,
+                    buffer
+            );
+            int error = GL11C.glGetError();
+            return error == GL11C.GL_NO_ERROR ? "none" : "atlas-face-upload-" + faceIndex + "-" + glErrorName(error);
+        } finally {
+            GL11C.glBindTexture(GL11C.GL_TEXTURE_2D, oldTextureBinding);
+            GL15C.glBindBuffer(GL21C.GL_PIXEL_UNPACK_BUFFER, unpackBufferBinding);
+            pixelStore.restoreUnpack();
+            MemoryUtil.memFree(buffer);
+        }
+    }
+
+    int[] readPrototypeModelRecord(int formalModelId) {
+        int[] words = new int[ForgeModelStoreFormalLayout.MODEL_RECORD_WORDS];
+        if (this.modelDataBufferId == 0 || !ForgeModelAtlasLayout.isValidModelId(formalModelId)) {
+            return words;
+        }
+        long ptr = MemoryUtil.nmemAlloc(ForgeModelStoreFormalLayout.MODEL_RECORD_BYTES);
+        try {
+            GL45C.nglGetNamedBufferSubData(this.modelDataBufferId, modelDataOffset(formalModelId), ForgeModelStoreFormalLayout.MODEL_RECORD_BYTES, ptr);
+            for (int i = 0; i < words.length; i++) {
+                words[i] = MemoryUtil.memGetInt(ptr + ((long) i * Integer.BYTES));
+            }
+            return words;
+        } finally {
+            MemoryUtil.nmemFree(ptr);
+        }
+    }
+
+    int readPrototypeModelColour(int formalModelId) {
+        if (this.modelColourBufferId == 0 || !ForgeModelAtlasLayout.isValidModelId(formalModelId)) {
+            return 0;
+        }
+        long ptr = MemoryUtil.nmemAlloc(Integer.BYTES);
+        try {
+            GL45C.nglGetNamedBufferSubData(this.modelColourBufferId, modelColourOffset(formalModelId), Integer.BYTES, ptr);
+            return MemoryUtil.memGetInt(ptr);
+        } finally {
+            MemoryUtil.nmemFree(ptr);
+        }
+    }
+
+    byte[] readPrototypeAtlasFace(int formalModelId, int faceIndex) {
+        if (this.atlasTextureId == 0 || !ForgeModelAtlasLayout.isValidModelId(formalModelId)) {
+            return new byte[ForgeModelAtlasPixelSample.BYTES_PER_FACE];
+        }
+        ForgeModelAtlasLayout.Tile tile = ForgeModelAtlasLayout.faceTile(formalModelId, faceIndex);
+        ByteBuffer buffer = MemoryUtil.memAlloc(ForgeModelAtlasPixelSample.BYTES_PER_FACE);
+        PixelStoreState pixelStore = PixelStoreState.capturePack();
+        int packBufferBinding = GL11C.glGetInteger(GL21C.GL_PIXEL_PACK_BUFFER_BINDING);
+        int oldReadFramebuffer = GL11C.glGetInteger(GL30C.GL_READ_FRAMEBUFFER_BINDING);
+        int oldReadBuffer = GL11C.glGetInteger(GL11C.GL_READ_BUFFER);
+        int framebuffer = GL30C.glGenFramebuffers();
+        try {
+            GL15C.glBindBuffer(GL21C.GL_PIXEL_PACK_BUFFER, 0);
+            GL30C.glBindFramebuffer(GL30C.GL_READ_FRAMEBUFFER, framebuffer);
+            GL30C.glFramebufferTexture2D(
+                    GL30C.GL_READ_FRAMEBUFFER,
+                    GL30C.GL_COLOR_ATTACHMENT0,
+                    GL11C.GL_TEXTURE_2D,
+                    this.atlasTextureId,
+                    0
+            );
+            GL11C.glReadBuffer(GL30C.GL_COLOR_ATTACHMENT0);
+            int framebufferStatus = GL30C.glCheckFramebufferStatus(GL30C.GL_READ_FRAMEBUFFER);
+            if (framebufferStatus != GL30C.GL_FRAMEBUFFER_COMPLETE) {
+                throw new IllegalStateException("formal atlas read framebuffer incomplete 0x" + Integer.toHexString(framebufferStatus));
+            }
+            PixelStoreState.applyTightPack();
+            clearGlErrors();
+            GL11C.glReadPixels(
+                    tile.x(),
+                    tile.y(),
+                    ForgeModelAtlasLayout.MODEL_TEXTURE_SIZE,
+                    ForgeModelAtlasLayout.MODEL_TEXTURE_SIZE,
+                    GL11C.GL_RGBA,
+                    GL11C.GL_UNSIGNED_BYTE,
+                    buffer
+            );
+            int error = GL11C.glGetError();
+            if (error != GL11C.GL_NO_ERROR) {
+                throw new IllegalStateException("formal atlas readback face " + faceIndex + " " + glErrorName(error));
+            }
+            byte[] result = new byte[ForgeModelAtlasPixelSample.BYTES_PER_FACE];
+            buffer.position(0);
+            buffer.get(result);
+            return result;
+        } finally {
+            GL30C.glBindFramebuffer(GL30C.GL_READ_FRAMEBUFFER, oldReadFramebuffer);
+            GL11C.glReadBuffer(oldReadBuffer);
+            if (framebuffer != 0) {
+                GL30C.glDeleteFramebuffers(framebuffer);
+            }
+            GL15C.glBindBuffer(GL21C.GL_PIXEL_PACK_BUFFER, packBufferBinding);
+            pixelStore.restorePack();
+            MemoryUtil.memFree(buffer);
+        }
+    }
+
+    long modelDataWriteOffset(int formalModelId) {
+        return modelDataOffset(formalModelId);
+    }
+
+    long modelColourWriteOffset(int formalModelId) {
+        return modelColourOffset(formalModelId);
+    }
+
     String dumpLayout() {
         ForgeFormalModelStoreStats status = this.createStatusSnapshot();
         return String.format(
@@ -553,6 +748,14 @@ final class ForgeFormalModelStore {
                 && ForgeModelAtlasLayout.ATLAS_HEIGHT == 8192;
     }
 
+    private static long modelDataOffset(int formalModelId) {
+        return (long) formalModelId * ForgeModelStoreFormalLayout.MODEL_RECORD_BYTES;
+    }
+
+    private static long modelColourOffset(int formalModelId) {
+        return (long) formalModelId * Integer.BYTES;
+    }
+
     private static void clearGlErrors() {
         while (GL11C.glGetError() != GL11C.GL_NO_ERROR) {
             // drain
@@ -572,5 +775,65 @@ final class ForgeFormalModelStore {
 
     private static double elapsedMs(long startNanos) {
         return (System.nanoTime() - startNanos) / 1_000_000.0D;
+    }
+
+    private record PixelStoreState(int alignment, int rowLength, int imageHeight, int skipRows, int skipPixels, int skipImages) {
+        static PixelStoreState captureUnpack() {
+            return new PixelStoreState(
+                    GL11C.glGetInteger(GL11C.GL_UNPACK_ALIGNMENT),
+                    GL11C.glGetInteger(GL11C.GL_UNPACK_ROW_LENGTH),
+                    GL11C.glGetInteger(GL12C.GL_UNPACK_IMAGE_HEIGHT),
+                    GL11C.glGetInteger(GL11C.GL_UNPACK_SKIP_ROWS),
+                    GL11C.glGetInteger(GL11C.GL_UNPACK_SKIP_PIXELS),
+                    GL11C.glGetInteger(GL12C.GL_UNPACK_SKIP_IMAGES)
+            );
+        }
+
+        static PixelStoreState capturePack() {
+            return new PixelStoreState(
+                    GL11C.glGetInteger(GL11C.GL_PACK_ALIGNMENT),
+                    GL11C.glGetInteger(GL11C.GL_PACK_ROW_LENGTH),
+                    GL11C.glGetInteger(GL12C.GL_PACK_IMAGE_HEIGHT),
+                    GL11C.glGetInteger(GL11C.GL_PACK_SKIP_ROWS),
+                    GL11C.glGetInteger(GL11C.GL_PACK_SKIP_PIXELS),
+                    GL11C.glGetInteger(GL12C.GL_PACK_SKIP_IMAGES)
+            );
+        }
+
+        static void applyTightUnpack() {
+            GL11C.glPixelStorei(GL11C.GL_UNPACK_ALIGNMENT, 1);
+            GL11C.glPixelStorei(GL11C.GL_UNPACK_ROW_LENGTH, 0);
+            GL11C.glPixelStorei(GL12C.GL_UNPACK_IMAGE_HEIGHT, 0);
+            GL11C.glPixelStorei(GL11C.GL_UNPACK_SKIP_ROWS, 0);
+            GL11C.glPixelStorei(GL11C.GL_UNPACK_SKIP_PIXELS, 0);
+            GL11C.glPixelStorei(GL12C.GL_UNPACK_SKIP_IMAGES, 0);
+        }
+
+        static void applyTightPack() {
+            GL11C.glPixelStorei(GL11C.GL_PACK_ALIGNMENT, 1);
+            GL11C.glPixelStorei(GL11C.GL_PACK_ROW_LENGTH, 0);
+            GL11C.glPixelStorei(GL12C.GL_PACK_IMAGE_HEIGHT, 0);
+            GL11C.glPixelStorei(GL11C.GL_PACK_SKIP_ROWS, 0);
+            GL11C.glPixelStorei(GL11C.GL_PACK_SKIP_PIXELS, 0);
+            GL11C.glPixelStorei(GL12C.GL_PACK_SKIP_IMAGES, 0);
+        }
+
+        void restoreUnpack() {
+            GL11C.glPixelStorei(GL11C.GL_UNPACK_ALIGNMENT, this.alignment);
+            GL11C.glPixelStorei(GL11C.GL_UNPACK_ROW_LENGTH, this.rowLength);
+            GL11C.glPixelStorei(GL12C.GL_UNPACK_IMAGE_HEIGHT, this.imageHeight);
+            GL11C.glPixelStorei(GL11C.GL_UNPACK_SKIP_ROWS, this.skipRows);
+            GL11C.glPixelStorei(GL11C.GL_UNPACK_SKIP_PIXELS, this.skipPixels);
+            GL11C.glPixelStorei(GL12C.GL_UNPACK_SKIP_IMAGES, this.skipImages);
+        }
+
+        void restorePack() {
+            GL11C.glPixelStorei(GL11C.GL_PACK_ALIGNMENT, this.alignment);
+            GL11C.glPixelStorei(GL11C.GL_PACK_ROW_LENGTH, this.rowLength);
+            GL11C.glPixelStorei(GL12C.GL_PACK_IMAGE_HEIGHT, this.imageHeight);
+            GL11C.glPixelStorei(GL11C.GL_PACK_SKIP_ROWS, this.skipRows);
+            GL11C.glPixelStorei(GL11C.GL_PACK_SKIP_PIXELS, this.skipPixels);
+            GL11C.glPixelStorei(GL12C.GL_PACK_SKIP_IMAGES, this.skipImages);
+        }
     }
 }

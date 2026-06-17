@@ -359,6 +359,18 @@ public final class ForgeVoxyCommands {
                         .executes(ctx -> formalModelFactoryClear(ctx.getSource())))
                 .then(Commands.literal("formal_model_factory_dump_mappings")
                         .executes(ctx -> formalModelFactoryDumpMappings(ctx.getSource())))
+                .then(Commands.literal("formal_model_factory_bake_one_current")
+                        .executes(ctx -> formalModelFactoryBakeOneCurrent(ctx.getSource())))
+                .then(Commands.literal("formal_model_factory_bake_one_status")
+                        .executes(ctx -> formalModelFactoryBakeOneStatus(ctx.getSource())))
+                .then(Commands.literal("formal_model_factory_bake_one_audit")
+                        .executes(ctx -> formalModelFactoryBakeOneAudit(ctx.getSource())))
+                .then(Commands.literal("formal_model_factory_bake_one_dump")
+                        .executes(ctx -> formalModelFactoryBakeOneDump(ctx.getSource())))
+                .then(Commands.literal("formal_model_factory_bake_one_clear")
+                        .executes(ctx -> formalModelFactoryBakeOneClear(ctx.getSource())))
+                .then(Commands.literal("qa_i4_formal_bake_upload")
+                        .executes(ctx -> qaI4FormalBakeUpload(ctx.getSource())))
                 .then(Commands.literal("formal_renderer_check")
                         .executes(ctx -> formalRendererCheck(ctx.getSource())))
                 .then(Commands.literal("formal_renderer_status")
@@ -452,6 +464,8 @@ public final class ForgeVoxyCommands {
                                 .executes(ctx -> applyPresetFormalModelStoreSkeleton(ctx.getSource())))
                         .then(Commands.literal("formal_model_factory_skeleton")
                                 .executes(ctx -> applyPresetFormalModelFactorySkeleton(ctx.getSource())))
+                        .then(Commands.literal("formal_one_block_bake_upload")
+                                .executes(ctx -> applyPresetFormalOneBlockBakeUpload(ctx.getSource())))
                         .then(Commands.literal("clear")
                                 .executes(ctx -> clearPreset(ctx.getSource())))
                         .then(Commands.literal("status")
@@ -4148,6 +4162,61 @@ public final class ForgeVoxyCommands {
         return 1;
     }
 
+    private static int formalModelFactoryBakeOneCurrent(CommandSourceStack source) {
+        ForgeOneBlockFormalBakeUploadStats status = ForgeVoxyInstance.INSTANCE.getOneBlockFormalBakeUpload().bakeOneCurrent();
+        ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("i4-bake-one-current");
+        source.sendSuccess(() -> Component.literal("Voxy I4 one-block bake/upload: " + formatOneBlockFormalBakeUploadStatus(status)), false);
+        return status.oneBlockFormalUploadReady() && status.oneBlockRealBakeReady() ? 1 : 0;
+    }
+
+    private static int formalModelFactoryBakeOneStatus(CommandSourceStack source) {
+        ForgeOneBlockFormalBakeUploadStats status = ForgeVoxyInstance.INSTANCE.getOneBlockFormalBakeUpload().createStatusSnapshot();
+        source.sendSuccess(() -> Component.literal("Voxy I4 one-block bake/upload status: " + formatOneBlockFormalBakeUploadStatus(status)), false);
+        return status.oneBlockBakePrototypeReady() || status.stale() ? 1 : 0;
+    }
+
+    private static int formalModelFactoryBakeOneAudit(CommandSourceStack source) {
+        ForgeOneBlockFormalBakeUploadAuditResult audit = ForgeVoxyInstance.INSTANCE.getOneBlockFormalBakeUpload().audit();
+        ForgeOneBlockFormalBakeUploadStats status = ForgeVoxyInstance.INSTANCE.getOneBlockFormalBakeUpload().createStatusSnapshot();
+        source.sendSuccess(() -> Component.literal("Voxy I4 one-block bake/upload audit: " + formatOneBlockFormalBakeUploadAudit(audit) + " " + formatOneBlockFormalBakeUploadStatus(status)), false);
+        return audit.success() ? 1 : 0;
+    }
+
+    private static int formalModelFactoryBakeOneDump(CommandSourceStack source) {
+        String message = ForgeVoxyInstance.INSTANCE.getOneBlockFormalBakeUpload().dump();
+        source.sendSuccess(() -> Component.literal(message), false);
+        return ForgeVoxyInstance.INSTANCE.getOneBlockFormalBakeUpload().createStatusSnapshot().oneBlockBakePrototypeReady() ? 1 : 0;
+    }
+
+    private static int formalModelFactoryBakeOneClear(CommandSourceStack source) {
+        ForgeVoxyInstance.INSTANCE.getOneBlockFormalBakeUpload().clear();
+        ForgeOneBlockFormalBakeUploadStats status = ForgeVoxyInstance.INSTANCE.getOneBlockFormalBakeUpload().createStatusSnapshot();
+        source.sendSuccess(() -> Component.literal("Voxy I4 one-block bake/upload clear: " + formatOneBlockFormalBakeUploadStatus(status) + " Formal ModelStore owner resources, GL heap, debug renderers, and sample-set resources were left unchanged."), false);
+        return 1;
+    }
+
+    private static int qaI4FormalBakeUpload(CommandSourceStack source) {
+        ForgeOneBlockFormalBakeUploadStats buildStatus = ForgeVoxyInstance.INSTANCE.getOneBlockFormalBakeUpload().bakeOneCurrent();
+        ForgeOneBlockFormalBakeUploadAuditResult audit = ForgeVoxyInstance.INSTANCE.getOneBlockFormalBakeUpload().audit();
+        ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("qa-i4-formal-bake-upload");
+        ForgeOneBlockFormalBakeUploadStats status = ForgeVoxyInstance.INSTANCE.getOneBlockFormalBakeUpload().createStatusSnapshot();
+        String message = "Voxy QA I4 formal bake/upload: "
+                + formatOneBlockFormalBakeUploadStatus(status)
+                + " "
+                + formatOneBlockFormalBakeUploadAudit(audit)
+                + " "
+                + formatFormalRendererStatus(rendererStatus)
+                + " no formal shader bind, formal draw, MDICSectionRenderer, or VoxyRenderSystem call was performed.";
+        source.sendSuccess(() -> Component.literal(message), false);
+        return buildStatus.oneBlockFormalUploadReady()
+                && audit.success()
+                && status.usesFormalModelIds()
+                && !status.usesPlaceholderModelIds()
+                && !status.sampleSetModelIdsUsed()
+                && !status.formalRendererReady()
+                && !status.actualDrawEnabled() ? 1 : 0;
+    }
+
     private static int formalRendererCheck(CommandSourceStack source) {
         ForgeFormalRendererStats status = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("command-check");
         source.sendSuccess(() -> Component.literal("Voxy formal renderer check: " + formatFormalRendererStatus(status)), false);
@@ -4519,9 +4588,105 @@ public final class ForgeVoxyCommands {
         );
     }
 
+    private static String formatOneBlockFormalBakeUploadStatus(ForgeOneBlockFormalBakeUploadStats status) {
+        return String.format(
+                "stage=%s buildRuns=%d auditRuns=%d clearRuns=%d uploadFailures=%d oneBlockBakePrototypeReady=%s oneBlockRealBakeReady=%s oneBlockFormalUploadReady=%s oneBlockFormalUploadAuditReady=%s oneBlockFormalModelRecordUploaded=%s oneBlockFormalAtlasPixelsUploaded=%s oneBlockFormalUploadAuditOk=%s sourceBlockStateId=%d sourceBlockState=\"%s\" sourceRenderLayer=%s sourceBakedModelClass=%s sourcePrimarySprite=%s sourcePrimarySpriteAtlas=%s sourceTinted=%s sourceFluid=%s formalModelId=%d usesFormalModelIds=%s usesPlaceholderModelIds=%s sampleSetModelIdsUsed=%s formalModelIdsBackedByRealBake=%s modelRecordBytes=%d modelRecordUploaded=%s modelDataWriteOffset=%d modelColourUploaded=%s modelColourWriteOffset=%d colourTint=%d flagsA=%d faceDataWrittenCount=%d missingFaceCount=%d fallbackFaceCount=%d atlasPixelsUploaded=%s uploadedFaceTiles=%d uploadedPixels=%d atlasBaseX=%d atlasBaseY=%d atlasReadbackOk=%s atlasPixelMismatches=%d faceChecksums=%s modelDataReadbackOk=%s modelColourReadbackOk=%s formalModelStoreOwnerReady=%s realModelFactoryReady=%s realModelBakeryReady=%s realModelStoreReady=%s formalRendererReady=%s actualDrawEnabled=%s noDraw=%s noShaderBind=%s stale=%s requiresRebuild=%s lifecycleState=%s lastLifecycleEvent=%s staleReason=%s lastFailureReason=%s resourceReloadSeen=%s worldUnloadSeen=%s dimensionSwitchSeen=%s debugPipelineClearSeen=%s presetOffSeen=%s presetClearSeen=%s lastAuditOk=%s lastAuditError=%s lastAuditDurationMs=%.2f renderer=none draw=false formalShader=false MDICSectionRenderer=false VoxyRenderSystem=false",
+                status.stage(),
+                status.buildRuns(),
+                status.auditRuns(),
+                status.clearRuns(),
+                status.uploadFailures(),
+                status.oneBlockBakePrototypeReady(),
+                status.oneBlockRealBakeReady(),
+                status.oneBlockFormalUploadReady(),
+                status.oneBlockFormalUploadAuditReady(),
+                status.oneBlockFormalModelRecordUploaded(),
+                status.oneBlockFormalAtlasPixelsUploaded(),
+                status.oneBlockFormalUploadAuditOk(),
+                status.sourceBlockStateId(),
+                status.sourceBlockState(),
+                status.sourceRenderLayer(),
+                status.sourceBakedModelClass(),
+                status.sourcePrimarySprite(),
+                status.sourcePrimarySpriteAtlas(),
+                status.sourceTinted(),
+                status.sourceFluid(),
+                status.formalModelId(),
+                status.usesFormalModelIds(),
+                status.usesPlaceholderModelIds(),
+                status.sampleSetModelIdsUsed(),
+                status.formalModelIdsBackedByRealBake(),
+                status.modelRecordBytes(),
+                status.modelRecordUploaded(),
+                status.modelDataWriteOffset(),
+                status.modelColourUploaded(),
+                status.modelColourWriteOffset(),
+                status.colourTint(),
+                status.flagsA(),
+                status.faceDataWrittenCount(),
+                status.missingFaceCount(),
+                status.fallbackFaceCount(),
+                status.atlasPixelsUploaded(),
+                status.uploadedFaceTiles(),
+                status.uploadedPixels(),
+                status.atlasBaseX(),
+                status.atlasBaseY(),
+                status.atlasReadbackOk(),
+                status.atlasPixelMismatches(),
+                status.faceChecksums(),
+                status.modelDataReadbackOk(),
+                status.modelColourReadbackOk(),
+                status.formalModelStoreOwnerReady(),
+                status.realModelFactoryReady(),
+                status.realModelBakeryReady(),
+                status.realModelStoreReady(),
+                status.formalRendererReady(),
+                status.actualDrawEnabled(),
+                status.noDraw(),
+                status.noShaderBind(),
+                status.stale(),
+                status.requiresRebuild(),
+                status.lifecycleState(),
+                status.lastLifecycleEvent(),
+                status.staleReason(),
+                status.lastFailureReason(),
+                status.resourceReloadSeen(),
+                status.worldUnloadSeen(),
+                status.dimensionSwitchSeen(),
+                status.debugPipelineClearSeen(),
+                status.presetOffSeen(),
+                status.presetClearSeen(),
+                status.lastAuditOk(),
+                status.lastAuditError(),
+                status.lastAuditDurationMs()
+        );
+    }
+
+    private static String formatOneBlockFormalBakeUploadAudit(ForgeOneBlockFormalBakeUploadAuditResult audit) {
+        return String.format(
+                "auditSuccess=%s auditError=%s auditDurationMs=%.2f validFormalModelId=%s mappingBelongsToI3=%s placeholderIdUsed=%s sampleSetIdUsed=%s modelRecordBytesOk=%s modelDataReadbackOk=%s modelColourReadbackOk=%s atlasReadbackOk=%s atlasPixelMismatches=%d shaderBound=%s drawOccurred=%s formalRendererReady=%s actualDrawEnabled=%s",
+                audit.success(),
+                audit.error(),
+                audit.durationMs(),
+                audit.validFormalModelId(),
+                audit.mappingBelongsToI3(),
+                audit.placeholderIdUsed(),
+                audit.sampleSetIdUsed(),
+                audit.modelRecordBytesOk(),
+                audit.modelDataReadbackOk(),
+                audit.modelColourReadbackOk(),
+                audit.atlasReadbackOk(),
+                audit.atlasPixelMismatches(),
+                audit.shaderBound(),
+                audit.drawOccurred(),
+                audit.formalRendererReady(),
+                audit.actualDrawEnabled()
+        );
+    }
+
     private static String formatFormalRendererStatus(ForgeFormalRendererStats status) {
         return String.format(
-                "stage=%s formalRendererSkeletonReady=%s formalRendererReady=%s actualDrawEnabled=%s noDraw=%s enabled=%s lifecycleState=%s formalRendererOwnershipReady=%s lastEnableReason=%s lastDisableReason=%s lastClearReason=%s lastLifecycleEvent=%s lastCheckAt=%s lastCheckReason=%s lastStaleReason=%s requiresRecheck=%s readinessGeneration=%d lifecycleGeneration=%d geometryHeapReady=%s metadataReady=%s sectionGeometryManagerReady=%s mdicCommandReady=%s mdicDrawCountReady=%s modelBridgeReady=%s formalShaderInputBridgeReady=%s atlasReady=%s resourceReloadReady=%s worldEngineReady=%s dimensionReady=%s infrastructureReady=%s debugProofReady=%s sampleBridgeReady=%s formalModelFactorySkeletonReady=%s formalModelFactoryLifecycleReady=%s formalModelStoreSkeletonReady=%s formalModelStoreOwnerReady=%s formalPrerequisitesReady=%s realModelFactoryReady=%s realModelBakeryReady=%s realModelStoreReady=%s formalShaderReady=%s formalTextureAtlasReady=%s formalTexturedShaderReady=%s formalTraversalReady=%s formalVisibilityTraversalReady=%s formalVoxyRenderSystemReady=%s shaderpackIntegrationReady=%s blockerCount=%d p0BlockerCount=%d p1BlockerCount=%d p2BlockerCount=%d formalDrawBlockingBlockerCount=%d blockers=%s worldUnloadSeen=%s dimensionSwitchSeen=%s resourceReloadSeen=%s debugPipelineClearSeen=%s presetOffSeen=%s presetClearSeen=%s formalRendererStale=%s debugRenderersIsolated=%s existingMdicDebugTouched=%s texturedMdicDebugTouched=%s actualDrawStartedByFormalRenderer=%s renderer=formal-renderer-skeleton formalRenderer=false draw=false",
+                "stage=%s formalRendererSkeletonReady=%s formalRendererReady=%s actualDrawEnabled=%s noDraw=%s enabled=%s lifecycleState=%s formalRendererOwnershipReady=%s lastEnableReason=%s lastDisableReason=%s lastClearReason=%s lastLifecycleEvent=%s lastCheckAt=%s lastCheckReason=%s lastStaleReason=%s requiresRecheck=%s readinessGeneration=%d lifecycleGeneration=%d geometryHeapReady=%s metadataReady=%s sectionGeometryManagerReady=%s mdicCommandReady=%s mdicDrawCountReady=%s modelBridgeReady=%s formalShaderInputBridgeReady=%s atlasReady=%s resourceReloadReady=%s worldEngineReady=%s dimensionReady=%s infrastructureReady=%s debugProofReady=%s sampleBridgeReady=%s oneBlockBakePrototypeReady=%s oneBlockFormalUploadReady=%s oneBlockFormalUploadAuditReady=%s formalModelFactorySkeletonReady=%s formalModelFactoryLifecycleReady=%s formalModelStoreSkeletonReady=%s formalModelStoreOwnerReady=%s formalPrerequisitesReady=%s realModelFactoryReady=%s realModelBakeryReady=%s realModelStoreReady=%s formalShaderReady=%s formalTextureAtlasReady=%s formalTexturedShaderReady=%s formalTraversalReady=%s formalVisibilityTraversalReady=%s formalVoxyRenderSystemReady=%s shaderpackIntegrationReady=%s blockerCount=%d p0BlockerCount=%d p1BlockerCount=%d p2BlockerCount=%d formalDrawBlockingBlockerCount=%d blockers=%s worldUnloadSeen=%s dimensionSwitchSeen=%s resourceReloadSeen=%s debugPipelineClearSeen=%s presetOffSeen=%s presetClearSeen=%s formalRendererStale=%s debugRenderersIsolated=%s existingMdicDebugTouched=%s texturedMdicDebugTouched=%s actualDrawStartedByFormalRenderer=%s renderer=formal-renderer-skeleton formalRenderer=false draw=false",
                 status.stage(),
                 status.formalRendererSkeletonReady(),
                 status.formalRendererReady(),
@@ -4554,6 +4719,9 @@ public final class ForgeVoxyCommands {
                 status.infrastructureReady(),
                 status.debugProofReady(),
                 status.sampleBridgeReady(),
+                status.oneBlockBakePrototypeReady(),
+                status.oneBlockFormalUploadReady(),
+                status.oneBlockFormalUploadAuditReady(),
                 status.formalModelFactorySkeletonReady(),
                 status.formalModelFactoryLifecycleReady(),
                 status.formalModelStoreSkeletonReady(),
@@ -5508,6 +5676,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getFormalRendererManager().markPresetOff();
         ForgeVoxyInstance.INSTANCE.getFormalModelStore().markPresetOff();
         ForgeVoxyInstance.INSTANCE.getFormalModelFactory().markPresetOff();
+        ForgeVoxyInstance.INSTANCE.getOneBlockFormalBakeUpload().markPresetOff();
         ForgeVoxyInstance.INSTANCE.closeActiveWorld();
         source.sendSuccess(() -> Component.literal("Voxy preset off: runtime overrides disabled engine, auto ingest, auto CPU mesh build, auto BuiltSection build, auto geometry-manager consume, upload-only GL geometry heap, direct GL renderer skeleton, MDIC command skeleton/debug draw, simple GPU renderer, and debug renderer. Overrides are not written to toml."), false);
         return 1;
@@ -5721,6 +5890,29 @@ public final class ForgeVoxyCommands {
         return processStatus.formalModelFactorySkeletonReady() && audit.success() && rendererStatus.noDraw() && !rendererStatus.actualDrawEnabled() ? 1 : 0;
     }
 
+    private static int applyPresetFormalOneBlockBakeUpload(CommandSourceStack source) {
+        ForgeVoxyRuntimeOverrides.applyFormalModelFactorySkeletonPreset();
+        boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
+        ForgeOneBlockFormalBakeUploadStats buildStatus = ForgeVoxyInstance.INSTANCE.getOneBlockFormalBakeUpload().bakeOneCurrent();
+        ForgeOneBlockFormalBakeUploadAuditResult audit = ForgeVoxyInstance.INSTANCE.getOneBlockFormalBakeUpload().audit();
+        ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("preset-formal-one-block-bake-upload");
+        ForgeOneBlockFormalBakeUploadStats status = ForgeVoxyInstance.INSTANCE.getOneBlockFormalBakeUpload().createStatusSnapshot();
+        String message = "Voxy preset formal_one_block_bake_upload: runtime-only I4 one-block real bake/upload prototype applied, not written to toml. "
+                + "Exactly one safe solid block is baked and uploaded into the I2 formal ModelStore owner. No formal shader bind, formal draw, MDICSectionRenderer, VoxyRenderSystem, multi-block bake, or sample-set upload path was used. "
+                + (engineReady ? "WorldEngine is active. " : "No active client world was found; safe fallback block selection may still use vanilla registry. ")
+                + formatOneBlockFormalBakeUploadStatus(status)
+                + " "
+                + formatOneBlockFormalBakeUploadAudit(audit)
+                + " "
+                + formatFormalRendererStatus(rendererStatus);
+        source.sendSuccess(() -> Component.literal(message), false);
+        return buildStatus.oneBlockFormalUploadReady()
+                && audit.success()
+                && rendererStatus.noDraw()
+                && !rendererStatus.actualDrawEnabled()
+                && !rendererStatus.formalRendererReady() ? 1 : 0;
+    }
+
     private static int clearPreset(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.clear();
         ForgeVoxyInstance.INSTANCE.getGpuGeometryReadbackMeshCache().clear();
@@ -5742,6 +5934,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getFormalShaderInputBridge().clear();
         ForgeVoxyInstance.INSTANCE.getFormalModelStore().clear();
         ForgeVoxyInstance.INSTANCE.getFormalModelFactory().clear();
+        ForgeVoxyInstance.INSTANCE.getOneBlockFormalBakeUpload().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedDebugQuadRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedReadbackRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedMdicDebugRenderer().clear();
@@ -5752,6 +5945,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getFormalRendererManager().markPresetClear();
         ForgeVoxyInstance.INSTANCE.getFormalModelStore().markPresetClear();
         ForgeVoxyInstance.INSTANCE.getFormalModelFactory().markPresetClear();
+        ForgeVoxyInstance.INSTANCE.getOneBlockFormalBakeUpload().markPresetClear();
         source.sendSuccess(() -> Component.literal("Voxy preset clear: runtime overrides cleared; effective values now come from the toml config."), false);
         return 1;
     }
@@ -6083,6 +6277,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getFormalShaderInputBridge().clear();
         ForgeVoxyInstance.INSTANCE.getFormalModelStore().markDebugPipelineClear();
         ForgeVoxyInstance.INSTANCE.getFormalModelFactory().markDebugPipelineClear();
+        ForgeVoxyInstance.INSTANCE.getOneBlockFormalBakeUpload().markDebugPipelineClear();
         ForgeVoxyInstance.INSTANCE.getTexturedDebugQuadRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedReadbackRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedMdicDebugRenderer().clear();
@@ -6161,6 +6356,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getModelAtlasPixelUploader().clear();
         ForgeVoxyInstance.INSTANCE.getFormalModelStore().markDebugPipelineClear();
         ForgeVoxyInstance.INSTANCE.getFormalModelFactory().markDebugPipelineClear();
+        ForgeVoxyInstance.INSTANCE.getOneBlockFormalBakeUpload().markDebugPipelineClear();
         ForgeVoxyInstance.INSTANCE.getTexturedDebugQuadRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedReadbackRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedMdicDebugRenderer().clear();

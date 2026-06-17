@@ -169,6 +169,10 @@ final class ForgeFormalModelFactory {
         return this.lastAudit;
     }
 
+    Optional<ForgeFormalModelIdMapping> mappingForBlockStateId(int blockStateId) {
+        return Optional.ofNullable(this.idMappings.get(blockStateId));
+    }
+
     ForgeFormalModelFactoryStats createStatusSnapshot() {
         ForgeFormalModelStoreStats store = this.instance.getFormalModelStore().createStatusSnapshot();
         boolean formalModelIdsAssigned = !this.idMappings.isEmpty();

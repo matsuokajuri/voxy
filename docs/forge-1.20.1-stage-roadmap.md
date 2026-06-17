@@ -202,3 +202,14 @@ The intended next work is:
 - I4 for a one-block real bake/upload prototype through the formal ModelStore
   owner.
 - I5 for multi-block bake/upload, dedupe, tint, fluids, and reload rebuild.
+
+## I4 status note
+
+I4 is the real one-block bake/upload prototype. It takes one safe solid block
+through the Forge `BakedModel` / `BakedQuad` / `TextureAtlasSprite` path, uses
+an I3 formal model id, and uploads one model record, one model colour entry, and
+six face tiles into the I2 formal `ModelStore` owner.
+
+I4 is still not a renderer stage. It does not draw, bind a formal shader, call
+`MDICSectionRenderer`, call `VoxyRenderSystem`, or replace any debug renderer.
+The intended next work is I5 for multi-block bake/upload and dedupe.

@@ -557,3 +557,25 @@ modes and establish the formal renderer ownership shell.
 
 The next stage should be no-draw. If H1 starts drawing, it risks blending
 debug scaffolding with formal renderer responsibilities too early.
+
+## I4 readiness note
+
+I4 adds a one-block real bake/upload prototype into the I2 formal `ModelStore`
+owner. It can take one safe solid Forge `BakedModel` sample, build one 64-byte
+formal model record, upload one model colour entry, upload six face tiles into
+the formal atlas, and audit the readback.
+
+This improves the model pipeline evidence, but it does not make the formal
+renderer ready. The formal renderer manager may report one-block prototype
+readiness, while still reporting:
+
+```text
+realModelFactoryReady=false
+realModelBakeryReady=false
+realModelStoreReady=false
+formalRendererReady=false
+actualDrawEnabled=false
+```
+
+The remaining P0 blockers are still the general real bake lifecycle, full
+formal ModelStore population, resource reload rebuild, and formal shader.
