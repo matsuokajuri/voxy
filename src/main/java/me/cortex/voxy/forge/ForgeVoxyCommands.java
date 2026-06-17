@@ -515,6 +515,18 @@ public final class ForgeVoxyCommands {
                         .executes(ctx -> formalVisibilityOwnerClear(ctx.getSource())))
                 .then(Commands.literal("qa_k4_formal_visibility_owner")
                         .executes(ctx -> qaK4FormalVisibilityOwner(ctx.getSource())))
+                .then(Commands.literal("formal_cmdgen_gpu_validate_build")
+                        .executes(ctx -> formalCmdgenGpuValidateBuild(ctx.getSource())))
+                .then(Commands.literal("formal_cmdgen_gpu_validate_status")
+                        .executes(ctx -> formalCmdgenGpuValidateStatus(ctx.getSource())))
+                .then(Commands.literal("formal_cmdgen_gpu_validate_audit")
+                        .executes(ctx -> formalCmdgenGpuValidateAudit(ctx.getSource())))
+                .then(Commands.literal("formal_cmdgen_gpu_validate_dump")
+                        .executes(ctx -> formalCmdgenGpuValidateDump(ctx.getSource())))
+                .then(Commands.literal("formal_cmdgen_gpu_validate_clear")
+                        .executes(ctx -> formalCmdgenGpuValidateClear(ctx.getSource())))
+                .then(Commands.literal("qa_k5_formal_cmdgen_gpu_validation")
+                        .executes(ctx -> qaK5FormalCmdgenGpuValidation(ctx.getSource())))
                 .then(Commands.literal("formal_renderer_check")
                         .executes(ctx -> formalRendererCheck(ctx.getSource())))
                 .then(Commands.literal("formal_renderer_status")
@@ -632,6 +644,8 @@ public final class ForgeVoxyCommands {
                                 .executes(ctx -> applyPresetFormalCommandGenerationOwnerNoDraw(ctx.getSource())))
                         .then(Commands.literal("formal_visibility_owner_no_draw")
                                 .executes(ctx -> applyPresetFormalVisibilityOwnerNoDraw(ctx.getSource())))
+                        .then(Commands.literal("formal_cmdgen_gpu_validation_no_draw")
+                                .executes(ctx -> applyPresetFormalCmdgenGpuValidationNoDraw(ctx.getSource())))
                         .then(Commands.literal("clear")
                                 .executes(ctx -> clearPreset(ctx.getSource())))
                         .then(Commands.literal("status")
@@ -5428,6 +5442,96 @@ public final class ForgeVoxyCommands {
                 && !rendererStatus.actualDrawEnabled() ? 1 : 0;
     }
 
+    private static int formalCmdgenGpuValidateBuild(CommandSourceStack source) {
+        ForgeFormalCmdgenGpuValidationStats status = ForgeVoxyInstance.INSTANCE.getFormalCmdgenGpuValidator().build();
+        ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("k5-formal-cmdgen-gpu-validate-build");
+        source.sendSuccess(() -> Component.literal("Voxy K5 formal cmdgen GPU validation build: "
+                + formatFormalCmdgenGpuValidationStatus(status)
+                + " "
+                + formatFormalRendererStatus(rendererStatus)
+                + " Generated commands are validation-only and were not submitted to any draw call."), false);
+        return status.cmdgenValidationProgramReady()
+                && status.cmdgenValidationReadbackOk()
+                && status.cmdgenValidationAuditOk()
+                && !status.glMultiDrawElementsIndirectCountCalled()
+                && !status.formalRendererReady()
+                && !status.actualRendererDrawEnabled() ? 1 : 0;
+    }
+
+    private static int formalCmdgenGpuValidateStatus(CommandSourceStack source) {
+        ForgeFormalCmdgenGpuValidationStats status = ForgeVoxyInstance.INSTANCE.getFormalCmdgenGpuValidator().createStatusSnapshot();
+        source.sendSuccess(() -> Component.literal("Voxy K5 formal cmdgen GPU validation status: " + formatFormalCmdgenGpuValidationStatus(status)), false);
+        return status.cmdgenValidationProgramReady() || status.stale() ? 1 : 0;
+    }
+
+    private static int formalCmdgenGpuValidateAudit(CommandSourceStack source) {
+        ForgeFormalCmdgenGpuValidationAuditResult audit = ForgeVoxyInstance.INSTANCE.getFormalCmdgenGpuValidator().audit();
+        ForgeFormalCmdgenGpuValidationStats status = ForgeVoxyInstance.INSTANCE.getFormalCmdgenGpuValidator().createStatusSnapshot();
+        ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("k5-formal-cmdgen-gpu-validate-audit");
+        source.sendSuccess(() -> Component.literal("Voxy K5 formal cmdgen GPU validation audit: "
+                + formatFormalCmdgenGpuValidationAudit(audit)
+                + " "
+                + formatFormalCmdgenGpuValidationStatus(status)
+                + " "
+                + formatFormalRendererStatus(rendererStatus)), false);
+        return audit.success() ? 1 : 0;
+    }
+
+    private static int formalCmdgenGpuValidateDump(CommandSourceStack source) {
+        ForgeFormalCmdgenGpuValidationStats status = ForgeVoxyInstance.INSTANCE.getFormalCmdgenGpuValidator().createStatusSnapshot();
+        String dump = ForgeVoxyInstance.INSTANCE.getFormalCmdgenGpuValidator().dump();
+        source.sendSuccess(() -> Component.literal("Voxy K5 formal cmdgen GPU validation dump: " + dump + " " + formatFormalCmdgenGpuValidationStatus(status)), false);
+        return status.blockerCount() > 0 || status.cmdgenValidationProgramReady() ? 1 : 0;
+    }
+
+    private static int formalCmdgenGpuValidateClear(CommandSourceStack source) {
+        ForgeVoxyInstance.INSTANCE.getFormalCmdgenGpuValidator().clear();
+        ForgeFormalCmdgenGpuValidationStats status = ForgeVoxyInstance.INSTANCE.getFormalCmdgenGpuValidator().createStatusSnapshot();
+        source.sendSuccess(() -> Component.literal("Voxy K5 formal cmdgen GPU validation clear: "
+                + formatFormalCmdgenGpuValidationStatus(status)
+                + " Only K5 validation program/buffers were cleared; K1-K4 owners, debug command buffers, debug renderers, GL geometry heap, previews, and formal model resources were left unchanged."), false);
+        return 1;
+    }
+
+    private static int qaK5FormalCmdgenGpuValidation(CommandSourceStack source) {
+        ForgeFormalCmdgenGpuValidationStats status = ForgeVoxyInstance.INSTANCE.getFormalCmdgenGpuValidator().build();
+        ForgeFormalCmdgenGpuValidationAuditResult audit = ForgeVoxyInstance.INSTANCE.getFormalCmdgenGpuValidator().createAuditStatusSnapshot();
+        ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("qa-k5-formal-cmdgen-gpu-validation");
+        String message = "Voxy QA K5 formal command-generation GPU validation no-draw: "
+                + formatFormalCmdgenGpuValidationStatus(status)
+                + " "
+                + formatFormalCmdgenGpuValidationAudit(audit)
+                + " "
+                + formatFormalRendererStatus(rendererStatus)
+                + " The QA path used isolated validation-only buffers and did not submit generated commands to glMultiDrawElementsIndirectCountARB, MDICSectionRenderer, VoxyRenderSystem, live terrain draw, visible LoD draw, or debug renderer replacement.";
+        VoxyForge.LOGGER.info(message);
+        source.sendSuccess(() -> Component.literal(message), false);
+        return status.formalTerrainRendererOwnerReady()
+                && status.formalViewportOwnerReady()
+                && status.formalCommandGenerationOwnerReady()
+                && status.formalVisibilityOwnerReady()
+                && status.cmdgenValidationProgramReady()
+                && status.cmdgenValidationProgramCompileOk()
+                && status.cmdgenValidationProgramLinkOk()
+                && status.cmdgenValidationDispatchRun()
+                && status.cmdgenValidationReadbackOk()
+                && status.cmdgenValidationAuditOk()
+                && status.drawCommandReadbackOk()
+                && status.drawCountReadbackOk()
+                && !status.debugMdicCommandBuffersUsedAsFormal()
+                && !status.glMultiDrawElementsIndirectCountCalled()
+                && !status.mdicSectionRendererCalled()
+                && !status.voxyRenderSystemCalled()
+                && !status.formalDrawPipelineReady()
+                && !status.formalRendererReady()
+                && !status.actualRendererDrawEnabled()
+                && status.noDraw()
+                && status.p0BlockerCount() >= 1
+                && audit.success()
+                && !rendererStatus.formalRendererReady()
+                && !rendererStatus.actualDrawEnabled() ? 1 : 0;
+    }
+
     private static int formalRendererCheck(CommandSourceStack source) {
         ForgeFormalRendererStats status = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("command-check");
         source.sendSuccess(() -> Component.literal("Voxy formal renderer check: " + formatFormalRendererStatus(status)), false);
@@ -6989,9 +7093,110 @@ public final class ForgeVoxyCommands {
         );
     }
 
+    private static String formatFormalCmdgenGpuValidationStatus(ForgeFormalCmdgenGpuValidationStats status) {
+        return String.format(
+                "stage=%s formalTerrainRendererOwnerReady=%s formalViewportOwnerReady=%s formalCommandGenerationOwnerReady=%s formalVisibilityOwnerReady=%s cmdgenValidationProgramReady=%s cmdgenValidationProgramCompileAttempted=%s cmdgenValidationProgramCompileOk=%s cmdgenValidationProgramLinkOk=%s cmdgenValidationProgramId=%d cmdgenValidationDispatchRun=%s cmdgenValidationReadbackOk=%s cmdgenValidationAuditOk=%s originalCmdgenFullyOperational=%s productionCmdgenReady=%s validationInputSource=%s syntheticValidationFixtureUsed=%s cpuCandidateSnapshotUsed=%s validationDrawCommandBufferAllocated=%s validationDrawCountBufferAllocated=%s validationVisibilityBufferAllocated=%s validationRenderListBufferAllocated=%s validationPositionScratchBufferAllocated=%s validationSectionMetadataBufferAllocated=%s validationOnly=%s liveRendererBuffer=%s debugBuffer=%s drawCommandStructKnown=%s drawCommandStrideBytes=%d drawCommandFieldCount=%d drawCommandIndexedIndirectCompatible=%s generatedCommandCount=%d generatedDrawCount=%d drawCommandReadbackOk=%s drawCountReadbackOk=%s positionScratchReadbackOk=%s firstCommandCount=%d firstCommandInstanceCount=%d firstCommandFirstIndex=%d firstCommandBaseVertex=%d firstCommandBaseInstance=%d positionScratchWord0=%d positionScratchWord1=%d debugMdicCommandBuffersUsedAsFormal=%s debugRendererIsolationOk=%s glMultiDrawElementsIndirectCountCalled=%s MDICSectionRendererCalled=%s VoxyRenderSystemCalled=%s formalDrawPipelineReady=%s formalRendererReady=%s actualRendererDrawEnabled=%s noDraw=%s lifecycleState=%s lastLifecycleEvent=%s stale=%s requiresRebuild=%s blockerCount=%d p0BlockerCount=%d p1BlockerCount=%d p2BlockerCount=%d blockers=%s lastGlError=%s lastFailureReason=%s lastAuditOk=%s lastAuditError=%s renderer=formal-cmdgen-gpu-validator formalRenderer=false draw=false",
+                status.stage(),
+                status.formalTerrainRendererOwnerReady(),
+                status.formalViewportOwnerReady(),
+                status.formalCommandGenerationOwnerReady(),
+                status.formalVisibilityOwnerReady(),
+                status.cmdgenValidationProgramReady(),
+                status.cmdgenValidationProgramCompileAttempted(),
+                status.cmdgenValidationProgramCompileOk(),
+                status.cmdgenValidationProgramLinkOk(),
+                status.cmdgenValidationProgramId(),
+                status.cmdgenValidationDispatchRun(),
+                status.cmdgenValidationReadbackOk(),
+                status.cmdgenValidationAuditOk(),
+                status.originalCmdgenFullyOperational(),
+                status.productionCmdgenReady(),
+                status.validationInputSource(),
+                status.syntheticValidationFixtureUsed(),
+                status.cpuCandidateSnapshotUsed(),
+                status.validationDrawCommandBufferAllocated(),
+                status.validationDrawCountBufferAllocated(),
+                status.validationVisibilityBufferAllocated(),
+                status.validationRenderListBufferAllocated(),
+                status.validationPositionScratchBufferAllocated(),
+                status.validationSectionMetadataBufferAllocated(),
+                status.validationOnly(),
+                status.liveRendererBuffer(),
+                status.debugBuffer(),
+                status.drawCommandStructKnown(),
+                status.drawCommandStrideBytes(),
+                status.drawCommandFieldCount(),
+                status.drawCommandIndexedIndirectCompatible(),
+                status.generatedCommandCount(),
+                status.generatedDrawCount(),
+                status.drawCommandReadbackOk(),
+                status.drawCountReadbackOk(),
+                status.positionScratchReadbackOk(),
+                status.firstCommandCount(),
+                status.firstCommandInstanceCount(),
+                status.firstCommandFirstIndex(),
+                status.firstCommandBaseVertex(),
+                status.firstCommandBaseInstance(),
+                status.positionScratchWord0(),
+                status.positionScratchWord1(),
+                status.debugMdicCommandBuffersUsedAsFormal(),
+                status.debugRendererIsolationOk(),
+                status.glMultiDrawElementsIndirectCountCalled(),
+                status.mdicSectionRendererCalled(),
+                status.voxyRenderSystemCalled(),
+                status.formalDrawPipelineReady(),
+                status.formalRendererReady(),
+                status.actualRendererDrawEnabled(),
+                status.noDraw(),
+                status.lifecycleState(),
+                status.lastLifecycleEvent(),
+                status.stale(),
+                status.requiresRebuild(),
+                status.blockerCount(),
+                status.p0BlockerCount(),
+                status.p1BlockerCount(),
+                status.p2BlockerCount(),
+                status.blockers(),
+                status.lastGlError(),
+                status.lastFailureReason(),
+                status.lastAuditOk(),
+                status.lastAuditError()
+        );
+    }
+
+    private static String formatFormalCmdgenGpuValidationAudit(ForgeFormalCmdgenGpuValidationAuditResult audit) {
+        return String.format(
+                "k5AuditOk=%s k5AuditError=%s durationMs=%.2f k1OwnerExists=%s k2ViewportOwnerExists=%s k3CommandGenerationOwnerExists=%s k4VisibilityOwnerExists=%s cmdgenCompInspected=%s bindingsGlslInspected=%s validationBuffersIsolated=%s debugMdicCommandBuffersUsedAsFormal=%s validationDispatchRun=%s liveCommandGenerationRun=%s drawCommandReadbackOk=%s drawCountReadbackOk=%s positionScratchReadbackOk=%s generatedCommandCount=%d generatedDrawCount=%d multiDrawIndirectCountCalled=%s mdicSectionRendererCalled=%s voxyRenderSystemCalled=%s formalDrawPipelineReady=%s formalRendererReady=%s actualRendererDrawEnabled=%s",
+                audit.success(),
+                audit.error(),
+                audit.durationMs(),
+                audit.k1OwnerExists(),
+                audit.k2ViewportOwnerExists(),
+                audit.k3CommandGenerationOwnerExists(),
+                audit.k4VisibilityOwnerExists(),
+                audit.cmdgenCompInspected(),
+                audit.bindingsGlslInspected(),
+                audit.validationBuffersIsolated(),
+                audit.debugMdicCommandBuffersUsedAsFormal(),
+                audit.validationDispatchRun(),
+                audit.liveCommandGenerationRun(),
+                audit.drawCommandReadbackOk(),
+                audit.drawCountReadbackOk(),
+                audit.positionScratchReadbackOk(),
+                audit.generatedCommandCount(),
+                audit.generatedDrawCount(),
+                audit.multiDrawIndirectCountCalled(),
+                audit.mdicSectionRendererCalled(),
+                audit.voxyRenderSystemCalled(),
+                audit.formalDrawPipelineReady(),
+                audit.formalRendererReady(),
+                audit.actualRendererDrawEnabled()
+        );
+    }
+
     private static String formatFormalRendererStatus(ForgeFormalRendererStats status) {
         return String.format(
-                "stage=%s formalRendererSkeletonReady=%s formalRendererReady=%s actualDrawEnabled=%s noDraw=%s enabled=%s lifecycleState=%s formalRendererOwnershipReady=%s lastEnableReason=%s lastDisableReason=%s lastClearReason=%s lastLifecycleEvent=%s lastCheckAt=%s lastCheckReason=%s lastStaleReason=%s requiresRecheck=%s readinessGeneration=%d lifecycleGeneration=%d geometryHeapReady=%s metadataReady=%s sectionGeometryManagerReady=%s mdicCommandReady=%s mdicDrawCountReady=%s modelBridgeReady=%s formalShaderInputBridgeReady=%s atlasReady=%s resourceReloadReady=%s worldEngineReady=%s dimensionReady=%s infrastructureReady=%s debugProofReady=%s sampleBridgeReady=%s oneBlockBakePrototypeReady=%s oneBlockFormalUploadReady=%s oneBlockFormalUploadAuditReady=%s multiBlockBakePrototypeReady=%s multiBlockFormalUploadReady=%s multiBlockFormalUploadAuditReady=%s formalModelBakeryLifecycleSkeletonReady=%s reloadRebuildPrototypeReady=%s aliasSafeDedupeReady=%s formalModelFactorySkeletonReady=%s formalModelFactoryLifecycleReady=%s formalModelStoreSkeletonReady=%s formalModelStoreOwnerReady=%s formalShaderInputConsumerReady=%s formalShaderInputBindingLayoutKnown=%s formalShaderInputBindingLayoutCompatible=%s formalShaderProgramValidatorReady=%s formalShaderProgramValidationReady=%s validationShaderCompileOk=%s validationProgramLinkOk=%s gpuValidationOk=%s formalTexturedShaderPrototypeReady=%s formalTexturedShaderPreviewReady=%s formalPackedQuadPreviewReady=%s packedQuadShaderPreviewReady=%s packedQuadModelIdBridgeReady=%s formalTerrainPackedRecordBridgeReady=%s realTerrainPackedRecordBridgeReady=%s temporaryFormalQuadBufferCreated=%s originalGeometryUntouched=%s originalGeometryHeapUntouched=%s realTerrainRecordsUsed=%s syntheticFallbackUsed=%s formalTerrainRendererOwnerReady=%s formalTerrainRendererLifecycleReady=%s k0AlignmentAuditReady=%s k0VerdictReadyForK1=%s originalVoxyAlignmentPreserved=%s formalViewportOwnerReady=%s formalCommandBufferOwnerReady=%s formalCommandGenerationOwnerReady=%s formalCommandGenerationContractReady=%s formalDrawCommandLayoutReady=%s formalDrawCountLayoutReady=%s formalVisibilityOwnerReady=%s formalRenderListOwnerReady=%s formalIndirectLookupOwnerReady=%s formalVisibilityContractReady=%s formalRenderListContractReady=%s formalVisibilityTraversalImplemented=%s formalHierarchicalOcclusionReady=%s formalRenderDistanceTrackerReady=%s cpuCandidateSnapshotReady=%s debugPlannerUsedAsFormal=%s formalDrawPipelineReady=%s globalFormalModelIdGeometryReady=%s formalTerrainShaderReady=%s previewSystemsSeparated=%s sampleSetUsedAsFormalSource=%s terrainDrawStarted=%s formalRendererDrawStarted=%s actualRendererDrawEnabled=%s formalShaderInputContractReady=%s formalPrerequisitesReady=%s realModelFactoryReady=%s realModelBakeryReady=%s realModelStoreReady=%s formalShaderReady=%s formalTextureAtlasReady=%s formalTexturedShaderReady=%s formalTraversalReady=%s formalVisibilityTraversalReady=%s formalVoxyRenderSystemReady=%s shaderpackIntegrationReady=%s blockerCount=%d p0BlockerCount=%d p1BlockerCount=%d p2BlockerCount=%d formalDrawBlockingBlockerCount=%d blockers=%s worldUnloadSeen=%s dimensionSwitchSeen=%s resourceReloadSeen=%s debugPipelineClearSeen=%s presetOffSeen=%s presetClearSeen=%s formalRendererStale=%s debugRenderersIsolated=%s existingMdicDebugTouched=%s texturedMdicDebugTouched=%s actualDrawStartedByFormalRenderer=%s renderer=formal-renderer-skeleton formalRenderer=false draw=false",
+                "stage=%s formalRendererSkeletonReady=%s formalRendererReady=%s actualDrawEnabled=%s noDraw=%s enabled=%s lifecycleState=%s formalRendererOwnershipReady=%s lastEnableReason=%s lastDisableReason=%s lastClearReason=%s lastLifecycleEvent=%s lastCheckAt=%s lastCheckReason=%s lastStaleReason=%s requiresRecheck=%s readinessGeneration=%d lifecycleGeneration=%d geometryHeapReady=%s metadataReady=%s sectionGeometryManagerReady=%s mdicCommandReady=%s mdicDrawCountReady=%s modelBridgeReady=%s formalShaderInputBridgeReady=%s atlasReady=%s resourceReloadReady=%s worldEngineReady=%s dimensionReady=%s infrastructureReady=%s debugProofReady=%s sampleBridgeReady=%s oneBlockBakePrototypeReady=%s oneBlockFormalUploadReady=%s oneBlockFormalUploadAuditReady=%s multiBlockBakePrototypeReady=%s multiBlockFormalUploadReady=%s multiBlockFormalUploadAuditReady=%s formalModelBakeryLifecycleSkeletonReady=%s reloadRebuildPrototypeReady=%s aliasSafeDedupeReady=%s formalModelFactorySkeletonReady=%s formalModelFactoryLifecycleReady=%s formalModelStoreSkeletonReady=%s formalModelStoreOwnerReady=%s formalShaderInputConsumerReady=%s formalShaderInputBindingLayoutKnown=%s formalShaderInputBindingLayoutCompatible=%s formalShaderProgramValidatorReady=%s formalShaderProgramValidationReady=%s validationShaderCompileOk=%s validationProgramLinkOk=%s gpuValidationOk=%s formalTexturedShaderPrototypeReady=%s formalTexturedShaderPreviewReady=%s formalPackedQuadPreviewReady=%s packedQuadShaderPreviewReady=%s packedQuadModelIdBridgeReady=%s formalTerrainPackedRecordBridgeReady=%s realTerrainPackedRecordBridgeReady=%s temporaryFormalQuadBufferCreated=%s originalGeometryUntouched=%s originalGeometryHeapUntouched=%s realTerrainRecordsUsed=%s syntheticFallbackUsed=%s formalTerrainRendererOwnerReady=%s formalTerrainRendererLifecycleReady=%s k0AlignmentAuditReady=%s k0VerdictReadyForK1=%s originalVoxyAlignmentPreserved=%s formalViewportOwnerReady=%s formalCommandBufferOwnerReady=%s formalCommandGenerationOwnerReady=%s formalCommandGenerationContractReady=%s formalDrawCommandLayoutReady=%s formalDrawCountLayoutReady=%s formalVisibilityOwnerReady=%s formalRenderListOwnerReady=%s formalIndirectLookupOwnerReady=%s formalVisibilityContractReady=%s formalRenderListContractReady=%s formalVisibilityTraversalImplemented=%s formalHierarchicalOcclusionReady=%s formalRenderDistanceTrackerReady=%s cpuCandidateSnapshotReady=%s debugPlannerUsedAsFormal=%s cmdgenValidationProgramReady=%s cmdgenValidationProgramCompileOk=%s cmdgenValidationProgramLinkOk=%s cmdgenValidationDispatchRun=%s cmdgenValidationReadbackOk=%s cmdgenValidationAuditOk=%s productionCmdgenReady=%s formalDrawPipelineReady=%s globalFormalModelIdGeometryReady=%s formalTerrainShaderReady=%s previewSystemsSeparated=%s sampleSetUsedAsFormalSource=%s terrainDrawStarted=%s formalRendererDrawStarted=%s actualRendererDrawEnabled=%s formalShaderInputContractReady=%s formalPrerequisitesReady=%s realModelFactoryReady=%s realModelBakeryReady=%s realModelStoreReady=%s formalShaderReady=%s formalTextureAtlasReady=%s formalTexturedShaderReady=%s formalTraversalReady=%s formalVisibilityTraversalReady=%s formalVoxyRenderSystemReady=%s shaderpackIntegrationReady=%s blockerCount=%d p0BlockerCount=%d p1BlockerCount=%d p2BlockerCount=%d formalDrawBlockingBlockerCount=%d blockers=%s worldUnloadSeen=%s dimensionSwitchSeen=%s resourceReloadSeen=%s debugPipelineClearSeen=%s presetOffSeen=%s presetClearSeen=%s formalRendererStale=%s debugRenderersIsolated=%s existingMdicDebugTouched=%s texturedMdicDebugTouched=%s actualDrawStartedByFormalRenderer=%s renderer=formal-renderer-skeleton formalRenderer=false draw=false",
                 status.stage(),
                 status.formalRendererSkeletonReady(),
                 status.formalRendererReady(),
@@ -7078,6 +7283,13 @@ public final class ForgeVoxyCommands {
                 status.formalRenderDistanceTrackerReady(),
                 status.cpuCandidateSnapshotReady(),
                 status.debugPlannerUsedAsFormal(),
+                status.cmdgenValidationProgramReady(),
+                status.cmdgenValidationProgramCompileOk(),
+                status.cmdgenValidationProgramLinkOk(),
+                status.cmdgenValidationDispatchRun(),
+                status.cmdgenValidationReadbackOk(),
+                status.cmdgenValidationAuditOk(),
+                status.productionCmdgenReady(),
                 status.formalDrawPipelineReady(),
                 status.globalFormalModelIdGeometryReady(),
                 status.formalTerrainShaderReady(),
@@ -8049,6 +8261,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getFormalMdicViewportOwner().markPresetOff();
         ForgeVoxyInstance.INSTANCE.getFormalCommandGenerationOwner().markPresetOff();
         ForgeVoxyInstance.INSTANCE.getFormalVisibilityOwner().markPresetOff();
+        ForgeVoxyInstance.INSTANCE.getFormalCmdgenGpuValidator().markPresetOff();
         ForgeVoxyInstance.INSTANCE.closeActiveWorld();
         source.sendSuccess(() -> Component.literal("Voxy preset off: runtime overrides disabled engine, auto ingest, auto CPU mesh build, auto BuiltSection build, auto geometry-manager consume, upload-only GL geometry heap, direct GL renderer skeleton, MDIC command skeleton/debug draw, simple GPU renderer, and debug renderer. Overrides are not written to toml."), false);
         return 1;
@@ -8612,6 +8825,35 @@ public final class ForgeVoxyCommands {
                 && !rendererStatus.formalRendererReady() ? 1 : 0;
     }
 
+    private static int applyPresetFormalCmdgenGpuValidationNoDraw(CommandSourceStack source) {
+        ForgeVoxyRuntimeOverrides.applyFormalCmdgenGpuValidationNoDrawPreset();
+        boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
+        ForgeFormalCmdgenGpuValidationStats status = ForgeVoxyInstance.INSTANCE.getFormalCmdgenGpuValidator().build();
+        ForgeFormalCmdgenGpuValidationAuditResult audit = ForgeVoxyInstance.INSTANCE.getFormalCmdgenGpuValidator().createAuditStatusSnapshot();
+        ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("preset-formal-cmdgen-gpu-validation-no-draw");
+        String message = "Voxy preset formal_cmdgen_gpu_validation_no_draw: runtime-only K5 formal command-generation GPU validation applied, not written to toml. "
+                + "The preset creates tiny isolated validation-only buffers, compiles and dispatches an audit-only compute shader, reads back DrawCommand/draw-count/position-scratch outputs, and does not submit those commands to a draw call. "
+                + (engineReady ? "WorldEngine is active. " : "No active client world was found; K5 uses a synthetic validation fixture and remains no-draw. ")
+                + formatFormalCmdgenGpuValidationStatus(status)
+                + " "
+                + formatFormalCmdgenGpuValidationAudit(audit)
+                + " "
+                + formatFormalRendererStatus(rendererStatus);
+        source.sendSuccess(() -> Component.literal(message), false);
+        return status.cmdgenValidationProgramReady()
+                && status.cmdgenValidationProgramCompileOk()
+                && status.cmdgenValidationProgramLinkOk()
+                && status.cmdgenValidationDispatchRun()
+                && status.cmdgenValidationReadbackOk()
+                && audit.success()
+                && !status.glMultiDrawElementsIndirectCountCalled()
+                && !status.actualRendererDrawEnabled()
+                && !status.formalDrawPipelineReady()
+                && !status.formalRendererReady()
+                && !rendererStatus.actualDrawEnabled()
+                && !rendererStatus.formalRendererReady() ? 1 : 0;
+    }
+
     private static int clearPreset(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.clear();
         ForgeVoxyInstance.INSTANCE.getGpuGeometryReadbackMeshCache().clear();
@@ -8645,6 +8887,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getFormalMdicViewportOwner().clear("preset-clear");
         ForgeVoxyInstance.INSTANCE.getFormalCommandGenerationOwner().clear("preset-clear");
         ForgeVoxyInstance.INSTANCE.getFormalVisibilityOwner().clear("preset-clear");
+        ForgeVoxyInstance.INSTANCE.getFormalCmdgenGpuValidator().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedDebugQuadRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedReadbackRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedMdicDebugRenderer().clear();
@@ -8667,6 +8910,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getFormalMdicViewportOwner().markPresetClear();
         ForgeVoxyInstance.INSTANCE.getFormalCommandGenerationOwner().markPresetClear();
         ForgeVoxyInstance.INSTANCE.getFormalVisibilityOwner().markPresetClear();
+        ForgeVoxyInstance.INSTANCE.getFormalCmdgenGpuValidator().markPresetClear();
         source.sendSuccess(() -> Component.literal("Voxy preset clear: runtime overrides cleared; effective values now come from the toml config."), false);
         return 1;
     }
@@ -9010,6 +9254,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getFormalMdicViewportOwner().markDebugPipelineClear();
         ForgeVoxyInstance.INSTANCE.getFormalCommandGenerationOwner().markDebugPipelineClear();
         ForgeVoxyInstance.INSTANCE.getFormalVisibilityOwner().markDebugPipelineClear();
+        ForgeVoxyInstance.INSTANCE.getFormalCmdgenGpuValidator().markDebugPipelineClear();
         ForgeVoxyInstance.INSTANCE.getTexturedDebugQuadRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedReadbackRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedMdicDebugRenderer().clear();
@@ -9100,6 +9345,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getFormalMdicViewportOwner().markDebugPipelineClear();
         ForgeVoxyInstance.INSTANCE.getFormalCommandGenerationOwner().markDebugPipelineClear();
         ForgeVoxyInstance.INSTANCE.getFormalVisibilityOwner().markDebugPipelineClear();
+        ForgeVoxyInstance.INSTANCE.getFormalCmdgenGpuValidator().markDebugPipelineClear();
         ForgeVoxyInstance.INSTANCE.getTexturedDebugQuadRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedReadbackRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedMdicDebugRenderer().clear();

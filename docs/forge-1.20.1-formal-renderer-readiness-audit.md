@@ -1041,3 +1041,43 @@ The remaining formal-renderer blockers are now more precise: formal visibility
 traversal implementation, formal command-generation GPU execution, global
 formal model-id geometry, formal terrain shader integration, and formal MDIC
 draw remain missing.
+
+## K5 readiness note
+
+K5 adds an audit-only GPU validation program for command generation. This proves
+that the Forge formal path can bind formal-style command-generation inputs and
+produce a `DrawCommand`, draw count, and position scratch output for readback.
+
+K5 intentionally does not run production `cmdgen.comp` as the renderer path and
+does not submit generated commands to any draw call. Its buffers are isolated
+from debug and live renderer resources:
+
+```text
+validationOnly=true
+liveRendererBuffer=false
+debugBuffer=false
+debugMdicCommandBuffersUsedAsFormal=false
+```
+
+K5 can now report:
+
+```text
+cmdgenValidationProgramReady=true
+cmdgenValidationProgramCompileOk=true
+cmdgenValidationProgramLinkOk=true
+cmdgenValidationDispatchRun=true
+cmdgenValidationReadbackOk=true
+cmdgenValidationAuditOk=true
+drawCommandReadbackOk=true
+drawCountReadbackOk=true
+productionCmdgenReady=false
+glMultiDrawElementsIndirectCountCalled=false
+formalDrawPipelineReady=false
+formalRendererReady=false
+actualRendererDrawEnabled=false
+```
+
+The blocker changes from "no GPU command-generation proof exists" to
+"production cmdgen is not operational." Formal visibility traversal, global
+formal model-id geometry, terrain shader integration, and formal MDIC draw are
+still absent.

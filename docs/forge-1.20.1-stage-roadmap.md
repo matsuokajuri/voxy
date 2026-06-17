@@ -457,3 +457,48 @@ actualRendererDrawEnabled=false
 
 The next safe work is an operational command-generation GPU-program skeleton or
 formal traversal hardening. Live terrain draw remains out of scope.
+
+## K5 status note
+
+K5 adds a no-draw formal command-generation GPU validation path. It does not
+make production `cmdgen.comp` operational. Instead, it creates tiny isolated
+validation buffers, dispatches an audit-only compute program, reads back a
+deterministic `DrawCommand`, draw count, and position scratch entry, then audits
+that no draw happened.
+
+The validation buffers are explicitly:
+
+```text
+validationOnly=true
+liveRendererBuffer=false
+debugBuffer=false
+```
+
+K5 may use a synthetic validation fixture because K4 owns only the
+visibility/render-list contract, not real traversal output. That fixture is
+reported as:
+
+```text
+validationInputSource=syntheticValidationFixture
+syntheticValidationFixtureUsed=true
+```
+
+Expected K5 status:
+
+```text
+cmdgenValidationProgramReady=true
+cmdgenValidationProgramCompileOk=true
+cmdgenValidationProgramLinkOk=true
+cmdgenValidationDispatchRun=true
+cmdgenValidationReadbackOk=true
+drawCommandReadbackOk=true
+drawCountReadbackOk=true
+productionCmdgenReady=false
+glMultiDrawElementsIndirectCountCalled=false
+formalDrawPipelineReady=false
+formalRendererReady=false
+actualRendererDrawEnabled=false
+```
+
+The next safe work is either production command-generation ownership hardening
+or formal traversal implementation. Live terrain draw remains blocked.

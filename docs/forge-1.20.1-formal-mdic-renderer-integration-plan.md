@@ -450,3 +450,34 @@ Intentional Forge deviation:
 After K4, ownership and contracts exist for visibility/render-list data, but
 operational traversal and GPU command generation are still missing. Live terrain
 draw remains blocked.
+
+## K5 formal cmdgen GPU validation note
+
+K5 adds the first GPU-side validation of command-generation output without
+starting a renderer. It compiles a small Forge-owned audit compute program that
+uses the same formal binding shape as the original command-generation path:
+
+- draw command buffer at binding 1,
+- draw count / parameter buffer at binding 2,
+- section metadata at binding 3,
+- visibility at binding 4,
+- render-list / indirect lookup at binding 5,
+- position scratch at binding 6.
+
+The K5 validation program writes one deterministic `DrawCommand`, updates the
+opaque draw count, writes one position scratch entry, and reads those outputs
+back on the CPU for audit.
+
+Intentional Forge deviation:
+
+- K5 uses isolated validation buffers, not live renderer buffers.
+- K5 may use a synthetic validation fixture because formal traversal output is
+  not implemented yet.
+- K5 does not run production `cmdgen.comp` as the live renderer path.
+- K5 does not submit generated commands to
+  `glMultiDrawElementsIndirectCountARB`.
+- K5 does not call `MDICSectionRenderer` or `VoxyRenderSystem`.
+
+After K5, the project has a command-generation GPU proof, but production
+command generation, formal traversal, formal terrain shader integration, and
+formal MDIC draw remain blocked.

@@ -18,7 +18,7 @@ final class ForgeFormalRendererManager {
             new ForgeFormalRendererBlocker("P0", "P0_RESOURCE_RELOAD_REBUILD_MISSING", "Resource reload rebuild path missing", "Reload invalidates sample resources but does not rebuild a formal model/atlas set.", "Define rebuild ownership for model store, atlas, shader inputs, and renderer state.", true),
             new ForgeFormalRendererBlocker("P0", "P0_FORMAL_SHADER_INPUT_CONTRACT_INCOMPLETE", "Formal shader input contract incomplete", "The sample bridge proves bindings but not complete light, material, tint, alpha, and model semantics.", "Complete the formal shader input contract audit and implementation.", true),
             new ForgeFormalRendererBlocker("P1", "P1_VISIBILITY_TRAVERSAL_MISSING", "Formal visibility / LOD traversal missing", "Current command selection is debug radius/frustum planning, not formal traversal.", "Add formal visibility and LOD traversal ownership.", false),
-            new ForgeFormalRendererBlocker("P1", "P1_FORMAL_COMMAND_GENERATION_GPU_PROGRAM_MISSING", "Formal command generation GPU program missing", "K3 separates formal command-generation ownership and layout, but no GPU program fills those resources yet.", "Add operational command generation after visibility and model-id geometry ownership are ready.", false),
+            new ForgeFormalRendererBlocker("P1", "P1_PRODUCTION_CMDGEN_NOT_OPERATIONAL", "Production command generation not operational", "K5 may validate a tiny audit-only GPU command generator, but the production cmdgen.comp path still does not fill formal renderer command resources.", "Add operational command generation after formal traversal and model-id geometry ownership are ready.", false),
             new ForgeFormalRendererBlocker("P1", "P1_BIOME_TINT_MODELCOLOUR_FORMAL_PATH_MISSING", "Biome tint / modelColour formal path missing", "Sample colours do not provide real biome tint or model colour lifecycle.", "Add formal modelColour and biome tint paths.", false),
             new ForgeFormalRendererBlocker("P1", "P1_LIGHTMAP_MISSING", "Lightmap missing", "The debug textured shaders do not carry formal lightmap input.", "Define and bind formal lightmap data.", false),
             new ForgeFormalRendererBlocker("P1", "P1_MATERIAL_ALPHA_CUTOUT_INCOMPLETE", "Material / alpha / cutout semantics incomplete", "Cutout, alpha, and material handling are debug-only.", "Implement formal material and alpha semantics.", false),
@@ -241,6 +241,13 @@ final class ForgeFormalRendererManager {
                 readiness.formalRenderDistanceTrackerReady(),
                 readiness.cpuCandidateSnapshotReady(),
                 readiness.debugPlannerUsedAsFormal(),
+                readiness.cmdgenValidationProgramReady(),
+                readiness.cmdgenValidationProgramCompileOk(),
+                readiness.cmdgenValidationProgramLinkOk(),
+                readiness.cmdgenValidationDispatchRun(),
+                readiness.cmdgenValidationReadbackOk(),
+                readiness.cmdgenValidationAuditOk(),
+                readiness.productionCmdgenReady(),
                 readiness.formalDrawPipelineReady(),
                 readiness.globalFormalModelIdGeometryReady(),
                 readiness.formalTerrainShaderReady(),
@@ -311,6 +318,7 @@ final class ForgeFormalRendererManager {
         ForgeFormalPackedQuadPreviewStats packedQuadPreview = this.instance.getFormalPackedQuadPreview().createStatusSnapshot();
         ForgeFormalTerrainPackedRecordBridgeStats terrainRecordBridge = this.instance.getFormalTerrainPackedRecordBridge().createStatusSnapshot();
         ForgeFormalTerrainRendererStats terrainRendererOwner = this.instance.getFormalTerrainRendererOwner().createStatusSnapshot();
+        ForgeFormalCmdgenGpuValidationStats cmdgenValidation = this.instance.getFormalCmdgenGpuValidator().createStatusSnapshot();
         ForgeModelAtlasSampleSetUploadStats atlas = this.instance.getModelAtlasSampleSetUploader().createStatusSnapshot();
         ForgeModelBridgeResourceReloadStats reload = this.instance.getModelBridgeResourceReloadTracker().createStatusSnapshot();
         String dimension = currentDimensionId();
@@ -406,6 +414,13 @@ final class ForgeFormalRendererManager {
                 terrainRendererOwner.formalRenderDistanceTrackerReady(),
                 terrainRendererOwner.cpuCandidateSnapshotReady(),
                 terrainRendererOwner.debugPlannerUsedAsFormal(),
+                cmdgenValidation.cmdgenValidationProgramReady(),
+                cmdgenValidation.cmdgenValidationProgramCompileOk(),
+                cmdgenValidation.cmdgenValidationProgramLinkOk(),
+                cmdgenValidation.cmdgenValidationDispatchRun(),
+                cmdgenValidation.cmdgenValidationReadbackOk(),
+                cmdgenValidation.cmdgenValidationAuditOk(),
+                cmdgenValidation.productionCmdgenReady(),
                 terrainRendererOwner.formalDrawPipelineReady(),
                 terrainRendererOwner.globalFormalModelIdGeometryReady(),
                 terrainRendererOwner.formalTerrainShaderReady(),
