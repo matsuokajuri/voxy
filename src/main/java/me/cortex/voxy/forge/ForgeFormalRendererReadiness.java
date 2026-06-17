@@ -28,6 +28,10 @@ record ForgeFormalRendererReadiness(
         boolean formalModelFactoryLifecycleReady,
         boolean formalModelStoreSkeletonReady,
         boolean formalModelStoreOwnerReady,
+        boolean formalShaderInputConsumerReady,
+        boolean formalShaderInputBindingLayoutKnown,
+        boolean formalShaderInputBindingLayoutCompatible,
+        boolean formalShaderInputContractReady,
         boolean formalPrerequisitesReady
 ) {
 }

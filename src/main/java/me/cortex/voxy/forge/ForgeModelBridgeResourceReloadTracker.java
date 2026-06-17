@@ -108,6 +108,7 @@ final class ForgeModelBridgeResourceReloadTracker {
             this.instance.getOneBlockFormalBakeUpload().markResourceReload();
             this.instance.getMultiBlockFormalBakeUpload().markResourceReload();
             this.instance.getFormalModelBakeryLifecycle().markResourceReload();
+            this.instance.getFormalShaderInputConsumer().markResourceReload();
             this.instance.getFormalRendererManager().markResourceReload();
             this.instance.getTexturedDebugQuadRenderer().markStale(staleReason);
             this.instance.getTexturedReadbackRenderer().markStale(staleReason);

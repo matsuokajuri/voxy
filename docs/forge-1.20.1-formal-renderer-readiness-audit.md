@@ -650,3 +650,38 @@ actualDrawEnabled=false
 Remaining formal renderer blockers include broad model coverage, full resource
 reload rebuild ownership, fluid/tint/material/light semantics, formal shader
 consumption, and formal MDIC renderer integration.
+
+## J1 readiness note
+
+J1 adds a formal shader input consumption skeleton. It validates that the I6
+safe-set records uploaded into the I2 formal `ModelStore` owner are addressable
+through formal model ids, and that the formal owner exposes usable
+modelData/modelColour buffers, atlas texture, and sampler handles for the known
+shader binding layout.
+
+The J1 path performs a no-draw bind/unbind validation of the formal resources.
+It does not bind a formal shader program, does not draw terrain, does not call
+`MDICSectionRenderer`, and does not call `VoxyRenderSystem`.
+
+The formal renderer manager can now report:
+
+```text
+formalShaderInputConsumerReady=true
+formalShaderInputBindingLayoutKnown=true
+formalShaderInputBindingLayoutCompatible=true
+```
+
+Those flags mean the formal input resources and binding layout have been
+validated against the formal owner. They do not mean the final formal shader or
+renderer is ready. The readiness boundary remains:
+
+```text
+formalShaderInputContractReady=false
+formalTexturedShaderReady=false
+formalRendererReady=false
+actualDrawEnabled=false
+```
+
+Remaining blockers include the actual formal shader draw program, full shader
+contract semantics for light/tint/material/alpha, formal MDIC renderer
+integration, and broader model lifecycle coverage.

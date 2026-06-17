@@ -689,3 +689,55 @@ actualDrawEnabled=false
 I6 is still not a renderer stage. It does not bind a formal shader, draw, call
 `MDICSectionRenderer`, call `VoxyRenderSystem`, start a full async bake thread,
 implement broad fluid/tint/material support, or touch shaderpack integration.
+
+## J1 formal shader input consumption skeleton
+
+J1 introduces a no-draw formal shader input consumer for the real formal
+`ModelStore` owner path proven by I2-I6. The chain is:
+
+```text
+I6 safe-set lifecycle rebuild
+ -> I2 formal ModelStore owner with modelData/modelColour/atlas/sampler
+ -> formal model ids and uploaded safe-set records
+ -> binding layout validation
+ -> GL bind/unbind validation without shader bind
+ -> audit/status/readiness aggregation
+```
+
+J1 validates the original shader input contract boundaries that are currently
+known: `MODEL_BUFFER_BINDING=3`, `MODEL_COLOUR_BUFFER_BINDING=4`,
+`BLOCK_MODEL_TEXTURE_BINDING=0`, and a 64-byte `BlockModel` record containing
+`faceData[6]`, `flagsA`, `colourTint`, and `customId`.
+
+The J1 consumer intentionally does not use the older sample-set
+`ForgeFormalShaderInputBridge` as the formal data source. That bridge remains a
+debug validation path from the extended G phase. J1 consumes the I2 formal owner
+resources and the I6 lifecycle safe-set state.
+
+Successful J1 status means:
+
+```text
+formalShaderInputConsumerReady=true
+modelDataBufferReady=true
+modelColourBufferReady=true
+atlasTextureReady=true
+samplerReady=true
+bindingLayoutKnown=true
+bindingLayoutCompatible=true
+safeSetModelIdsAddressable=true
+usesFormalModelIds=true
+```
+
+It must still keep:
+
+```text
+formalShaderInputReady=false
+formalShaderInputContractReady=false
+formalTexturedShaderReady=false
+formalRendererReady=false
+actualDrawEnabled=false
+```
+
+J1 is still not a renderer stage. It does not bind a formal shader program,
+draw terrain, call `MDICSectionRenderer`, call `VoxyRenderSystem`, add
+visibility traversal, or touch shaderpack integration.

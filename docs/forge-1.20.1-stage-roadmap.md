@@ -245,3 +245,15 @@ The intended next work remains in the I/J boundary:
 - broader real model lifecycle coverage before any formal draw claim,
 - formal shader input consumption when the model pipeline is sufficiently real,
 - formal renderer integration only after the model lifecycle boundary is stable.
+
+## J1 status note
+
+J1 introduces the formal shader input consumption skeleton. It validates the I2
+formal `ModelStore` owner resources produced through the I6 lifecycle safe-set
+path: modelData, modelColour, atlas texture, sampler, formal model ids, and the
+known binding layout.
+
+J1 is no-draw. It does not bind a formal shader program, draw terrain, call
+`MDICSectionRenderer`, call `VoxyRenderSystem`, or claim full formal renderer
+readiness. It is the bridge between the I-stage formal model lifecycle work and
+future J-stage formal shader work.

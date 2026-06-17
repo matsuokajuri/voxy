@@ -200,6 +200,10 @@ final class ForgeFormalRendererManager {
                 readiness.formalModelFactoryLifecycleReady(),
                 readiness.formalModelStoreSkeletonReady(),
                 readiness.formalModelStoreOwnerReady(),
+                readiness.formalShaderInputConsumerReady(),
+                readiness.formalShaderInputBindingLayoutKnown(),
+                readiness.formalShaderInputBindingLayoutCompatible(),
+                readiness.formalShaderInputContractReady(),
                 readiness.formalPrerequisitesReady(),
                 false,
                 false,
@@ -255,6 +259,7 @@ final class ForgeFormalRendererManager {
         ForgeOneBlockFormalBakeUploadStats oneBlock = this.instance.getOneBlockFormalBakeUpload().createStatusSnapshot();
         ForgeMultiBlockFormalBakeUploadStats multiBlock = this.instance.getMultiBlockFormalBakeUpload().createStatusSnapshot();
         ForgeFormalModelBakeryLifecycleStats bakeryLifecycle = this.instance.getFormalModelBakeryLifecycle().createStatusSnapshot();
+        ForgeFormalShaderInputConsumerStats shaderInputConsumer = this.instance.getFormalShaderInputConsumer().createStatusSnapshot();
         ForgeModelAtlasSampleSetUploadStats atlas = this.instance.getModelAtlasSampleSetUploader().createStatusSnapshot();
         ForgeModelBridgeResourceReloadStats reload = this.instance.getModelBridgeResourceReloadTracker().createStatusSnapshot();
         String dimension = currentDimensionId();
@@ -306,6 +311,10 @@ final class ForgeFormalRendererManager {
                 formalModelFactory.formalModelFactoryLifecycleReady(),
                 formalModelStore.formalModelStoreSkeletonReady(),
                 formalModelStore.formalModelStoreOwnerReady(),
+                shaderInputConsumer.formalShaderInputConsumerReady(),
+                shaderInputConsumer.bindingLayoutKnown(),
+                shaderInputConsumer.bindingLayoutCompatible(),
+                shaderInputConsumer.formalShaderInputContractReady(),
                 formalPrerequisitesReady
         );
     }
