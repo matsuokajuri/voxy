@@ -601,3 +601,36 @@ actualRendererDrawEnabled=false
 The next safe work is still production command generation, formal traversal,
 global formal model-id geometry, and production terrain shader integration
 before any visible LoD renderer can be considered.
+
+## K8 status note
+
+K8 adds an opt-in formal model-id section geometry path without live draw. It
+removes the previous reliance on one-off temporary preview rewrites by creating
+a K8-owned isolated formal geometry snapshot:
+
+```text
+real section / BuiltSection packed records
+ -> recover blockStateId from the legacy model-id source
+ -> look up the I3/I6 formal model id
+ -> rewrite model-id bits only in the K8 snapshot
+ -> upload/read back a K8 validation buffer
+ -> audit formal model-id decode
+```
+
+K8 success means:
+
+```text
+formalModelIdGeometryPathReady=true
+globalFormalModelIdGeometryPathReady=true
+globalFormalModelIdGeometryEnabledForLiveRenderer=false
+formalGeometrySnapshotCreated=true
+formalGeometrySnapshotRecordCount>=1
+usesFormalModelIds=true
+usesPlaceholderModelIds=false
+sampleSetModelIdsUsed=false
+originalGeometryHeapMutated=false
+```
+
+K8 is still not live terrain rendering. The formal geometry snapshot is isolated
+and validation-only; the live renderer does not consume it, `MDICSectionRenderer`
+and `VoxyRenderSystem` are not called, and renderer readiness remains false.

@@ -1173,3 +1173,36 @@ formalTerrainShaderReady=false
 The remaining blockers are production cmdgen, formal traversal, global formal
 model-id geometry, production terrain shader integration, live MDIC renderer
 integration, lightmap, biome tint, and material/alpha semantics.
+
+## K8 readiness note
+
+K8 adds the formal model-id section geometry path as an opt-in validation path.
+It consumes real section / BuiltSection packed records, recovers block-state
+source through the existing mapper, looks up formal model ids from the I3/I6
+model lifecycle, and writes those formal ids into a K8-owned isolated geometry
+snapshot.
+
+K8 can now report:
+
+```text
+formalModelIdGeometryPathReady=true
+globalFormalModelIdGeometryPathReady=true
+formalGeometrySnapshotCreated=true
+formalGeometryReadbackOk=true
+formalPackedRecordsAuditOk=true
+```
+
+The important boundary is unchanged:
+
+```text
+globalFormalModelIdGeometryEnabledForLiveRenderer=false
+formalDrawPipelineReady=false
+formalRendererReady=false
+actualRendererDrawEnabled=false
+```
+
+K8 does not mutate the original GL geometry heap, does not use sample-set data
+as a formal source, does not call `MDICSectionRenderer` or `VoxyRenderSystem`,
+and does not enable visible terrain rendering. The old blocker "global formal
+model-id geometry missing" is now more precise: the opt-in path exists, but it is
+not enabled for the live renderer.

@@ -551,6 +551,18 @@ public final class ForgeVoxyCommands {
                         .executes(ctx -> formalIsolatedMdicDrawClear(ctx.getSource())))
                 .then(Commands.literal("qa_k7_formal_isolated_mdic_draw")
                         .executes(ctx -> qaK7FormalIsolatedMdicDraw(ctx.getSource())))
+                .then(Commands.literal("formal_model_id_geometry_path_build")
+                        .executes(ctx -> formalModelIdGeometryPathBuild(ctx.getSource())))
+                .then(Commands.literal("formal_model_id_geometry_path_status")
+                        .executes(ctx -> formalModelIdGeometryPathStatus(ctx.getSource())))
+                .then(Commands.literal("formal_model_id_geometry_path_audit")
+                        .executes(ctx -> formalModelIdGeometryPathAudit(ctx.getSource())))
+                .then(Commands.literal("formal_model_id_geometry_path_dump")
+                        .executes(ctx -> formalModelIdGeometryPathDump(ctx.getSource())))
+                .then(Commands.literal("formal_model_id_geometry_path_clear")
+                        .executes(ctx -> formalModelIdGeometryPathClear(ctx.getSource())))
+                .then(Commands.literal("qa_k8_formal_model_id_geometry_path")
+                        .executes(ctx -> qaK8FormalModelIdGeometryPath(ctx.getSource())))
                 .then(Commands.literal("formal_renderer_check")
                         .executes(ctx -> formalRendererCheck(ctx.getSource())))
                 .then(Commands.literal("formal_renderer_status")
@@ -674,6 +686,8 @@ public final class ForgeVoxyCommands {
                                 .executes(ctx -> applyPresetFormalCmdgenRealSectionDryRunNoDraw(ctx.getSource())))
                         .then(Commands.literal("formal_isolated_mdic_draw_offscreen")
                                 .executes(ctx -> applyPresetFormalIsolatedMdicDrawOffscreen(ctx.getSource())))
+                        .then(Commands.literal("formal_model_id_geometry_path_no_live_draw")
+                                .executes(ctx -> applyPresetFormalModelIdGeometryPathNoLiveDraw(ctx.getSource())))
                         .then(Commands.literal("clear")
                                 .executes(ctx -> clearPreset(ctx.getSource())))
                         .then(Commands.literal("status")
@@ -5767,6 +5781,115 @@ public final class ForgeVoxyCommands {
                 && !rendererStatus.actualDrawEnabled() ? 1 : 0;
     }
 
+    private static int formalModelIdGeometryPathBuild(CommandSourceStack source) {
+        ForgeFormalModelIdSectionGeometryStats status = ForgeVoxyInstance.INSTANCE.getFormalModelIdSectionGeometryPath().build();
+        ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("k8-formal-model-id-geometry-path-build");
+        source.sendSuccess(() -> Component.literal("Voxy K8 formal model-id section geometry path build: "
+                + formatFormalModelIdGeometryPathStatus(status)
+                + " "
+                + formatFormalRendererStatus(rendererStatus)
+                + " K8 creates only an isolated formal geometry snapshot/validation buffer; it does not mutate the original GL geometry heap or enable live draw."), false);
+        return status.formalModelIdGeometryPathReady()
+                && status.globalFormalModelIdGeometryPathReady()
+                && status.formalGeometrySnapshotCreated()
+                && status.formalGeometrySnapshotRecordCount() >= 1
+                && status.usesFormalModelIds()
+                && !status.usesPlaceholderModelIds()
+                && !status.sampleSetModelIdsUsed()
+                && !status.originalGeometryHeapMutated()
+                && !status.liveRendererDrawExecuted()
+                && !status.formalRendererReady()
+                && !status.actualRendererDrawEnabled() ? 1 : 0;
+    }
+
+    private static int formalModelIdGeometryPathStatus(CommandSourceStack source) {
+        ForgeFormalModelIdSectionGeometryStats status = ForgeVoxyInstance.INSTANCE.getFormalModelIdSectionGeometryPath().createStatusSnapshot();
+        source.sendSuccess(() -> Component.literal("Voxy K8 formal model-id section geometry path status: " + formatFormalModelIdGeometryPathStatus(status)), false);
+        return status.formalModelIdGeometryPathReady() || status.stale() ? 1 : 0;
+    }
+
+    private static int formalModelIdGeometryPathAudit(CommandSourceStack source) {
+        ForgeFormalModelIdSectionGeometryAuditResult audit = ForgeVoxyInstance.INSTANCE.getFormalModelIdSectionGeometryPath().audit();
+        ForgeFormalModelIdSectionGeometryStats status = ForgeVoxyInstance.INSTANCE.getFormalModelIdSectionGeometryPath().createStatusSnapshot();
+        ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("k8-formal-model-id-geometry-path-audit");
+        source.sendSuccess(() -> Component.literal("Voxy K8 formal model-id section geometry path audit: "
+                + formatFormalModelIdGeometryPathAudit(audit)
+                + " "
+                + formatFormalModelIdGeometryPathStatus(status)
+                + " "
+                + formatFormalRendererStatus(rendererStatus)), false);
+        return audit.success() ? 1 : 0;
+    }
+
+    private static int formalModelIdGeometryPathDump(CommandSourceStack source) {
+        ForgeFormalModelIdSectionGeometryStats status = ForgeVoxyInstance.INSTANCE.getFormalModelIdSectionGeometryPath().createStatusSnapshot();
+        String dump = ForgeVoxyInstance.INSTANCE.getFormalModelIdSectionGeometryPath().dump();
+        source.sendSuccess(() -> Component.literal("Voxy K8 formal model-id section geometry path dump: " + dump + " " + formatFormalModelIdGeometryPathStatus(status)), false);
+        return status.blockerCount() > 0 || status.formalModelIdGeometryPathReady() ? 1 : 0;
+    }
+
+    private static int formalModelIdGeometryPathClear(CommandSourceStack source) {
+        ForgeVoxyInstance.INSTANCE.getFormalModelIdSectionGeometryPath().clear();
+        ForgeFormalModelIdSectionGeometryStats status = ForgeVoxyInstance.INSTANCE.getFormalModelIdSectionGeometryPath().createStatusSnapshot();
+        source.sendSuccess(() -> Component.literal("Voxy K8 formal model-id section geometry path clear: "
+                + formatFormalModelIdGeometryPathStatus(status)
+                + " Only K8 isolated formal geometry snapshot state and validation buffer were cleared; debug renderers, live GL geometry heap, formal ModelStore, K6/K7 resources, and MDIC command buffers were left unchanged."), false);
+        return 1;
+    }
+
+    private static int qaK8FormalModelIdGeometryPath(CommandSourceStack source) {
+        ForgeVoxyRuntimeOverrides.applyFormalModelIdGeometryPathNoLiveDrawPreset();
+        boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
+        ForgeFormalModelIdSectionGeometryStats status = ForgeVoxyInstance.INSTANCE.getFormalModelIdSectionGeometryPath().build();
+        ForgeFormalModelIdSectionGeometryAuditResult audit = ForgeVoxyInstance.INSTANCE.getFormalModelIdSectionGeometryPath().createAuditStatusSnapshot();
+        ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("qa-k8-formal-model-id-geometry-path");
+        String message = "Voxy QA K8 formal model-id section geometry path no live draw: "
+                + (engineReady ? "WorldEngine is active. " : "No active client world was found; K8 success requires real section input and should be treated as partial if ready=false. ")
+                + formatFormalModelIdGeometryPathStatus(status)
+                + " "
+                + formatFormalModelIdGeometryPathAudit(audit)
+                + " "
+                + formatFormalRendererStatus(rendererStatus)
+                + " The QA path builds a K8-owned isolated formal geometry snapshot with formal model ids, verifies readback, and does not mutate the original GL geometry heap, submit live draw, call MDICSectionRenderer, or call VoxyRenderSystem.";
+        VoxyForge.LOGGER.info(message);
+        source.sendSuccess(() -> Component.literal(message), false);
+        return status.formalTerrainRendererOwnerReady()
+                && status.formalModelStoreOwnerReady()
+                && status.formalModelBakeryLifecycleSkeletonReady()
+                && status.realTerrainPackedRecordBridgeReady()
+                && status.realSectionInputUsed()
+                && status.formalModelIdGeometryPathReady()
+                && status.globalFormalModelIdGeometryPathReady()
+                && !status.globalFormalModelIdGeometryEnabledForLiveRenderer()
+                && status.formalGeometrySnapshotCreated()
+                && status.formalGeometrySnapshotRecordCount() >= 1
+                && status.acceptedSectionCount() >= 1
+                && status.acceptedRecordCount() >= 1
+                && status.usesFormalModelIds()
+                && !status.usesPlaceholderModelIds()
+                && !status.sampleSetModelIdsUsed()
+                && !status.sampleSetUsedAsFormalSource()
+                && status.formalPackedRecordsAuditOk()
+                && status.formalModelIdDecodeOk()
+                && !status.originalGeometryHeapMutated()
+                && !status.liveGeometryHeapUsedAsMutableTarget()
+                && !status.debugGeometryHeapUsedAsFormal()
+                && !status.visibleTerrainDrawExecuted()
+                && !status.liveRendererDrawExecuted()
+                && !status.mdicSectionRendererCalled()
+                && !status.voxyRenderSystemCalled()
+                && !status.formalTerrainShaderReady()
+                && !status.formalDrawPipelineReady()
+                && !status.formalRendererReady()
+                && !status.actualRendererDrawEnabled()
+                && status.p0BlockerCount() >= 1
+                && audit.success()
+                && rendererStatus.globalFormalModelIdGeometryPathReady()
+                && !rendererStatus.globalFormalModelIdGeometryEnabledForLiveRenderer()
+                && !rendererStatus.formalRendererReady()
+                && !rendererStatus.actualDrawEnabled() ? 1 : 0;
+    }
+
     private static int formalRendererCheck(CommandSourceStack source) {
         ForgeFormalRendererStats status = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("command-check");
         source.sendSuccess(() -> Component.literal("Voxy formal renderer check: " + formatFormalRendererStatus(status)), false);
@@ -7704,9 +7827,116 @@ public final class ForgeVoxyCommands {
         );
     }
 
+    private static String formatFormalModelIdGeometryPathStatus(ForgeFormalModelIdSectionGeometryStats status) {
+        return String.format(
+                "stage=%s formalTerrainRendererOwnerReady=%s formalModelBakeryLifecycleSkeletonReady=%s formalModelStoreOwnerReady=%s realTerrainPackedRecordBridgeReady=%s realSectionDryRunReady=%s isolatedMdicDrawSmokeTestReady=%s formalModelIdGeometryPathReady=%s globalFormalModelIdGeometryPathReady=%s globalFormalModelIdGeometryEnabledForLiveRenderer=%s formalGeometrySnapshotCreated=%s formalGeometrySnapshotSectionCount=%d formalGeometrySnapshotRecordCount=%d formalGeometrySnapshotVertexCount=%d formalGeometrySnapshotByteSize=%d formalGeometryValidationBufferCreated=%s formalGeometryValidationBufferId=%d validationOnly=%s liveRendererBuffer=%s realSectionInputUsed=%s candidateSectionCount=%d acceptedSectionCount=%d rejectedSectionCount=%d acceptedRecordCount=%d rejectedRecordCount=%d candidateSectionSource=%s blockStateSourceAvailable=%s formalModelIdLookupOk=%s formalModelIdsBackedByRealBake=%s usesFormalModelIds=%s usesPlaceholderModelIds=%s sampleSetModelIdsUsed=%s sampleSetUsedAsFormalSource=%s recordsRejectedNoBlockState=%d recordsRejectedNoFormalModelId=%d recordsRejectedUnsafeModelId=%d recordsRejectedUnsupportedBlock=%d recordsRejectedPlaceholderModelId=%d recordsRejectedNoRealBake=%d formalPackedRecordsAuditOk=%s formalModelIdDecodeOk=%s formalGeometryReadbackOk=%s formalGeometryReadbackMismatchCount=%d formalGeometryModelIds=%s sampleOriginalRecord=%s sampleFormalRecord=%s sampleSectionPosition=%s originalGeometryHeapMutated=%s liveGeometryHeapUsedAsMutableTarget=%s debugGeometryHeapUsedAsFormal=%s optionalOffscreenValidationDrawExecuted=%s optionalOffscreenReadbackOk=%s visibleTerrainDrawExecuted=%s liveRendererDrawExecuted=%s formalTerrainShaderReady=%s productionTerrainShaderUsed=%s formalDrawPipelineReady=%s formalRendererReady=%s actualRendererDrawEnabled=%s MDICSectionRendererCalled=%s VoxyRenderSystemCalled=%s lifecycleState=%s lastLifecycleEvent=%s stale=%s requiresRebuild=%s blockerCount=%d p0BlockerCount=%d p1BlockerCount=%d p2BlockerCount=%d blockers=%s lastGlError=%s lastFailureReason=%s lastAuditOk=%s lastAuditError=%s lastAuditDurationMs=%.2f renderer=formal-model-id-section-geometry-path formalRenderer=false liveDraw=false",
+                status.stage(),
+                status.formalTerrainRendererOwnerReady(),
+                status.formalModelBakeryLifecycleSkeletonReady(),
+                status.formalModelStoreOwnerReady(),
+                status.realTerrainPackedRecordBridgeReady(),
+                status.realSectionDryRunReady(),
+                status.isolatedMdicDrawSmokeTestReady(),
+                status.formalModelIdGeometryPathReady(),
+                status.globalFormalModelIdGeometryPathReady(),
+                status.globalFormalModelIdGeometryEnabledForLiveRenderer(),
+                status.formalGeometrySnapshotCreated(),
+                status.formalGeometrySnapshotSectionCount(),
+                status.formalGeometrySnapshotRecordCount(),
+                status.formalGeometrySnapshotVertexCount(),
+                status.formalGeometrySnapshotByteSize(),
+                status.formalGeometryValidationBufferCreated(),
+                status.formalGeometryValidationBufferId(),
+                status.validationOnly(),
+                status.liveRendererBuffer(),
+                status.realSectionInputUsed(),
+                status.candidateSectionCount(),
+                status.acceptedSectionCount(),
+                status.rejectedSectionCount(),
+                status.acceptedRecordCount(),
+                status.rejectedRecordCount(),
+                status.candidateSectionSource(),
+                status.blockStateSourceAvailable(),
+                status.formalModelIdLookupOk(),
+                status.formalModelIdsBackedByRealBake(),
+                status.usesFormalModelIds(),
+                status.usesPlaceholderModelIds(),
+                status.sampleSetModelIdsUsed(),
+                status.sampleSetUsedAsFormalSource(),
+                status.recordsRejectedNoBlockState(),
+                status.recordsRejectedNoFormalModelId(),
+                status.recordsRejectedUnsafeModelId(),
+                status.recordsRejectedUnsupportedBlock(),
+                status.recordsRejectedPlaceholderModelId(),
+                status.recordsRejectedNoRealBake(),
+                status.formalPackedRecordsAuditOk(),
+                status.formalModelIdDecodeOk(),
+                status.formalGeometryReadbackOk(),
+                status.formalGeometryReadbackMismatchCount(),
+                status.formalGeometryModelIds(),
+                status.sampleOriginalRecord(),
+                status.sampleFormalRecord(),
+                status.sampleSectionPosition(),
+                status.originalGeometryHeapMutated(),
+                status.liveGeometryHeapUsedAsMutableTarget(),
+                status.debugGeometryHeapUsedAsFormal(),
+                status.optionalOffscreenValidationDrawExecuted(),
+                status.optionalOffscreenReadbackOk(),
+                status.visibleTerrainDrawExecuted(),
+                status.liveRendererDrawExecuted(),
+                status.formalTerrainShaderReady(),
+                status.productionTerrainShaderUsed(),
+                status.formalDrawPipelineReady(),
+                status.formalRendererReady(),
+                status.actualRendererDrawEnabled(),
+                status.mdicSectionRendererCalled(),
+                status.voxyRenderSystemCalled(),
+                status.lifecycleState(),
+                status.lastLifecycleEvent(),
+                status.stale(),
+                status.requiresRebuild(),
+                status.blockerCount(),
+                status.p0BlockerCount(),
+                status.p1BlockerCount(),
+                status.p2BlockerCount(),
+                status.blockers(),
+                status.lastGlError(),
+                status.lastFailureReason(),
+                status.lastAuditOk(),
+                status.lastAuditError(),
+                status.lastAuditDurationMs()
+        );
+    }
+
+    private static String formatFormalModelIdGeometryPathAudit(ForgeFormalModelIdSectionGeometryAuditResult audit) {
+        return String.format(
+                "k8AuditOk=%s k8AuditError=%s durationMs=%.2f originalRenderDataFactoryInspected=%s originalModelFactoryInspected=%s originalQuadFormatInspected=%s k8InputUsesRealSectionData=%s formalModelIdsBackedByRealBake=%s placeholderIdsUsedAsFormalIds=%s sampleSetUsedAsFormalSource=%s formalGeometrySnapshotIsolated=%s originalGeometryHeapMutated=%s liveRendererConsumesK8Geometry=%s mainFramebufferDraw=%s MDICSectionRendererCalled=%s VoxyRenderSystemCalled=%s formalModelIdDecodeOk=%s formalGeometryReadbackOk=%s formalRendererReady=%s actualRendererDrawEnabled=%s",
+                audit.success(),
+                audit.error(),
+                audit.durationMs(),
+                audit.originalRenderDataFactoryInspected(),
+                audit.originalModelFactoryInspected(),
+                audit.originalQuadFormatInspected(),
+                audit.k8InputUsesRealSectionData(),
+                audit.formalModelIdsBackedByRealBake(),
+                audit.placeholderIdsUsedAsFormalIds(),
+                audit.sampleSetUsedAsFormalSource(),
+                audit.formalGeometrySnapshotIsolated(),
+                audit.originalGeometryHeapMutated(),
+                audit.liveRendererConsumesK8Geometry(),
+                audit.mainFramebufferDraw(),
+                audit.mdicSectionRendererCalled(),
+                audit.voxyRenderSystemCalled(),
+                audit.formalModelIdDecodeOk(),
+                audit.formalGeometryReadbackOk(),
+                audit.formalRendererReady(),
+                audit.actualRendererDrawEnabled()
+        );
+    }
+
     private static String formatFormalRendererStatus(ForgeFormalRendererStats status) {
         return String.format(
-                "stage=%s formalRendererSkeletonReady=%s formalRendererReady=%s actualDrawEnabled=%s noDraw=%s enabled=%s lifecycleState=%s formalRendererOwnershipReady=%s lastEnableReason=%s lastDisableReason=%s lastClearReason=%s lastLifecycleEvent=%s lastCheckAt=%s lastCheckReason=%s lastStaleReason=%s requiresRecheck=%s readinessGeneration=%d lifecycleGeneration=%d geometryHeapReady=%s metadataReady=%s sectionGeometryManagerReady=%s mdicCommandReady=%s mdicDrawCountReady=%s modelBridgeReady=%s formalShaderInputBridgeReady=%s atlasReady=%s resourceReloadReady=%s worldEngineReady=%s dimensionReady=%s infrastructureReady=%s debugProofReady=%s sampleBridgeReady=%s oneBlockBakePrototypeReady=%s oneBlockFormalUploadReady=%s oneBlockFormalUploadAuditReady=%s multiBlockBakePrototypeReady=%s multiBlockFormalUploadReady=%s multiBlockFormalUploadAuditReady=%s formalModelBakeryLifecycleSkeletonReady=%s reloadRebuildPrototypeReady=%s aliasSafeDedupeReady=%s formalModelFactorySkeletonReady=%s formalModelFactoryLifecycleReady=%s formalModelStoreSkeletonReady=%s formalModelStoreOwnerReady=%s formalShaderInputConsumerReady=%s formalShaderInputBindingLayoutKnown=%s formalShaderInputBindingLayoutCompatible=%s formalShaderProgramValidatorReady=%s formalShaderProgramValidationReady=%s validationShaderCompileOk=%s validationProgramLinkOk=%s gpuValidationOk=%s formalTexturedShaderPrototypeReady=%s formalTexturedShaderPreviewReady=%s formalPackedQuadPreviewReady=%s packedQuadShaderPreviewReady=%s packedQuadModelIdBridgeReady=%s formalTerrainPackedRecordBridgeReady=%s realTerrainPackedRecordBridgeReady=%s temporaryFormalQuadBufferCreated=%s originalGeometryUntouched=%s originalGeometryHeapUntouched=%s realTerrainRecordsUsed=%s syntheticFallbackUsed=%s formalTerrainRendererOwnerReady=%s formalTerrainRendererLifecycleReady=%s k0AlignmentAuditReady=%s k0VerdictReadyForK1=%s originalVoxyAlignmentPreserved=%s formalViewportOwnerReady=%s formalCommandBufferOwnerReady=%s formalCommandGenerationOwnerReady=%s formalCommandGenerationContractReady=%s formalDrawCommandLayoutReady=%s formalDrawCountLayoutReady=%s formalVisibilityOwnerReady=%s formalRenderListOwnerReady=%s formalIndirectLookupOwnerReady=%s formalVisibilityContractReady=%s formalRenderListContractReady=%s formalVisibilityTraversalImplemented=%s formalHierarchicalOcclusionReady=%s formalRenderDistanceTrackerReady=%s cpuCandidateSnapshotReady=%s debugPlannerUsedAsFormal=%s cmdgenValidationProgramReady=%s cmdgenValidationProgramCompileOk=%s cmdgenValidationProgramLinkOk=%s cmdgenValidationDispatchRun=%s cmdgenValidationReadbackOk=%s cmdgenValidationAuditOk=%s productionCmdgenReady=%s formalCmdgenRealSectionDryRunReady=%s realSectionInputSnapshotReady=%s realSectionMetadataUsed=%s realSectionCandidateSnapshotUsed=%s cmdgenRealSectionDryRunAuditOk=%s formalIsolatedMdicDrawSmokeTestReady=%s offscreenValidationDrawReady=%s offscreenValidationDrawExecuted=%s offscreenValidationReadbackOk=%s offscreenValidationOnly=%s offscreenOnly=%s realSectionCommandUsedForOffscreenDraw=%s syntheticDrawFixtureUsed=%s formalDrawPipelineReady=%s globalFormalModelIdGeometryReady=%s formalTerrainShaderReady=%s previewSystemsSeparated=%s sampleSetUsedAsFormalSource=%s terrainDrawStarted=%s formalRendererDrawStarted=%s actualRendererDrawEnabled=%s formalShaderInputContractReady=%s formalPrerequisitesReady=%s realModelFactoryReady=%s realModelBakeryReady=%s realModelStoreReady=%s formalShaderReady=%s formalTextureAtlasReady=%s formalTexturedShaderReady=%s formalTraversalReady=%s formalVisibilityTraversalReady=%s formalVoxyRenderSystemReady=%s shaderpackIntegrationReady=%s blockerCount=%d p0BlockerCount=%d p1BlockerCount=%d p2BlockerCount=%d formalDrawBlockingBlockerCount=%d blockers=%s worldUnloadSeen=%s dimensionSwitchSeen=%s resourceReloadSeen=%s debugPipelineClearSeen=%s presetOffSeen=%s presetClearSeen=%s formalRendererStale=%s debugRenderersIsolated=%s existingMdicDebugTouched=%s texturedMdicDebugTouched=%s actualDrawStartedByFormalRenderer=%s renderer=formal-renderer-skeleton formalRenderer=false draw=false",
+                "stage=%s formalRendererSkeletonReady=%s formalRendererReady=%s actualDrawEnabled=%s noDraw=%s enabled=%s lifecycleState=%s formalRendererOwnershipReady=%s lastEnableReason=%s lastDisableReason=%s lastClearReason=%s lastLifecycleEvent=%s lastCheckAt=%s lastCheckReason=%s lastStaleReason=%s requiresRecheck=%s readinessGeneration=%d lifecycleGeneration=%d geometryHeapReady=%s metadataReady=%s sectionGeometryManagerReady=%s mdicCommandReady=%s mdicDrawCountReady=%s modelBridgeReady=%s formalShaderInputBridgeReady=%s atlasReady=%s resourceReloadReady=%s worldEngineReady=%s dimensionReady=%s infrastructureReady=%s debugProofReady=%s sampleBridgeReady=%s oneBlockBakePrototypeReady=%s oneBlockFormalUploadReady=%s oneBlockFormalUploadAuditReady=%s multiBlockBakePrototypeReady=%s multiBlockFormalUploadReady=%s multiBlockFormalUploadAuditReady=%s formalModelBakeryLifecycleSkeletonReady=%s reloadRebuildPrototypeReady=%s aliasSafeDedupeReady=%s formalModelFactorySkeletonReady=%s formalModelFactoryLifecycleReady=%s formalModelStoreSkeletonReady=%s formalModelStoreOwnerReady=%s formalShaderInputConsumerReady=%s formalShaderInputBindingLayoutKnown=%s formalShaderInputBindingLayoutCompatible=%s formalShaderProgramValidatorReady=%s formalShaderProgramValidationReady=%s validationShaderCompileOk=%s validationProgramLinkOk=%s gpuValidationOk=%s formalTexturedShaderPrototypeReady=%s formalTexturedShaderPreviewReady=%s formalPackedQuadPreviewReady=%s packedQuadShaderPreviewReady=%s packedQuadModelIdBridgeReady=%s formalTerrainPackedRecordBridgeReady=%s realTerrainPackedRecordBridgeReady=%s temporaryFormalQuadBufferCreated=%s originalGeometryUntouched=%s originalGeometryHeapUntouched=%s realTerrainRecordsUsed=%s syntheticFallbackUsed=%s formalTerrainRendererOwnerReady=%s formalTerrainRendererLifecycleReady=%s k0AlignmentAuditReady=%s k0VerdictReadyForK1=%s originalVoxyAlignmentPreserved=%s formalViewportOwnerReady=%s formalCommandBufferOwnerReady=%s formalCommandGenerationOwnerReady=%s formalCommandGenerationContractReady=%s formalDrawCommandLayoutReady=%s formalDrawCountLayoutReady=%s formalVisibilityOwnerReady=%s formalRenderListOwnerReady=%s formalIndirectLookupOwnerReady=%s formalVisibilityContractReady=%s formalRenderListContractReady=%s formalVisibilityTraversalImplemented=%s formalHierarchicalOcclusionReady=%s formalRenderDistanceTrackerReady=%s cpuCandidateSnapshotReady=%s debugPlannerUsedAsFormal=%s cmdgenValidationProgramReady=%s cmdgenValidationProgramCompileOk=%s cmdgenValidationProgramLinkOk=%s cmdgenValidationDispatchRun=%s cmdgenValidationReadbackOk=%s cmdgenValidationAuditOk=%s productionCmdgenReady=%s formalCmdgenRealSectionDryRunReady=%s realSectionInputSnapshotReady=%s realSectionMetadataUsed=%s realSectionCandidateSnapshotUsed=%s cmdgenRealSectionDryRunAuditOk=%s formalIsolatedMdicDrawSmokeTestReady=%s offscreenValidationDrawReady=%s offscreenValidationDrawExecuted=%s offscreenValidationReadbackOk=%s offscreenValidationOnly=%s offscreenOnly=%s realSectionCommandUsedForOffscreenDraw=%s syntheticDrawFixtureUsed=%s formalDrawPipelineReady=%s globalFormalModelIdGeometryReady=%s formalModelIdGeometryPathReady=%s globalFormalModelIdGeometryPathReady=%s globalFormalModelIdGeometryEnabledForLiveRenderer=%s formalGeometrySnapshotCreated=%s formalGeometrySnapshotRecordCount=%d formalPackedRecordsAuditOk=%s formalGeometryReadbackOk=%s originalGeometryHeapMutated=%s formalTerrainShaderReady=%s previewSystemsSeparated=%s sampleSetUsedAsFormalSource=%s terrainDrawStarted=%s formalRendererDrawStarted=%s actualRendererDrawEnabled=%s formalShaderInputContractReady=%s formalPrerequisitesReady=%s realModelFactoryReady=%s realModelBakeryReady=%s realModelStoreReady=%s formalShaderReady=%s formalTextureAtlasReady=%s formalTexturedShaderReady=%s formalTraversalReady=%s formalVisibilityTraversalReady=%s formalVoxyRenderSystemReady=%s shaderpackIntegrationReady=%s blockerCount=%d p0BlockerCount=%d p1BlockerCount=%d p2BlockerCount=%d formalDrawBlockingBlockerCount=%d blockers=%s worldUnloadSeen=%s dimensionSwitchSeen=%s resourceReloadSeen=%s debugPipelineClearSeen=%s presetOffSeen=%s presetClearSeen=%s formalRendererStale=%s debugRenderersIsolated=%s existingMdicDebugTouched=%s texturedMdicDebugTouched=%s actualDrawStartedByFormalRenderer=%s renderer=formal-renderer-skeleton formalRenderer=false draw=false",
                 status.stage(),
                 status.formalRendererSkeletonReady(),
                 status.formalRendererReady(),
@@ -7815,6 +8045,14 @@ public final class ForgeVoxyCommands {
                 status.syntheticDrawFixtureUsed(),
                 status.formalDrawPipelineReady(),
                 status.globalFormalModelIdGeometryReady(),
+                status.formalModelIdGeometryPathReady(),
+                status.globalFormalModelIdGeometryPathReady(),
+                status.globalFormalModelIdGeometryEnabledForLiveRenderer(),
+                status.formalGeometrySnapshotCreated(),
+                status.formalGeometrySnapshotRecordCount(),
+                status.formalPackedRecordsAuditOk(),
+                status.formalGeometryReadbackOk(),
+                status.originalGeometryHeapMutated(),
                 status.formalTerrainShaderReady(),
                 status.previewSystemsSeparated(),
                 status.sampleSetUsedAsFormalSource(),
@@ -8787,6 +9025,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getFormalCmdgenGpuValidator().markPresetOff();
         ForgeVoxyInstance.INSTANCE.getFormalCmdgenRealSectionDryRun().markPresetOff();
         ForgeVoxyInstance.INSTANCE.getFormalIsolatedMdicDrawSmokeTest().markPresetOff();
+        ForgeVoxyInstance.INSTANCE.getFormalModelIdSectionGeometryPath().markPresetOff();
         ForgeVoxyInstance.INSTANCE.closeActiveWorld();
         source.sendSuccess(() -> Component.literal("Voxy preset off: runtime overrides disabled engine, auto ingest, auto CPU mesh build, auto BuiltSection build, auto geometry-manager consume, upload-only GL geometry heap, direct GL renderer skeleton, MDIC command skeleton/debug draw, simple GPU renderer, and debug renderer. Overrides are not written to toml."), false);
         return 1;
@@ -9438,6 +9677,36 @@ public final class ForgeVoxyCommands {
                 && !rendererStatus.formalRendererReady() ? 1 : 0;
     }
 
+    private static int applyPresetFormalModelIdGeometryPathNoLiveDraw(CommandSourceStack source) {
+        ForgeVoxyRuntimeOverrides.applyFormalModelIdGeometryPathNoLiveDrawPreset();
+        boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
+        ForgeFormalModelIdSectionGeometryStats status = ForgeVoxyInstance.INSTANCE.getFormalModelIdSectionGeometryPath().build();
+        ForgeFormalModelIdSectionGeometryAuditResult audit = ForgeVoxyInstance.INSTANCE.getFormalModelIdSectionGeometryPath().createAuditStatusSnapshot();
+        ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("preset-formal-model-id-geometry-path-no-live-draw");
+        String message = "Voxy preset formal_model_id_geometry_path_no_live_draw: runtime-only K8 formal model-id section geometry path applied, not written to toml. "
+                + "The preset builds a K8-owned isolated formal geometry snapshot/validation buffer from real section records with formal model ids; it does not mutate the original GL geometry heap, submit live draw, call MDICSectionRenderer, or call VoxyRenderSystem. "
+                + (engineReady ? "WorldEngine is active. " : "No active client world was found; K8 success requires real section input and should be treated as partial if ready=false. ")
+                + formatFormalModelIdGeometryPathStatus(status)
+                + " "
+                + formatFormalModelIdGeometryPathAudit(audit)
+                + " "
+                + formatFormalRendererStatus(rendererStatus);
+        source.sendSuccess(() -> Component.literal(message), false);
+        return status.formalModelIdGeometryPathReady()
+                && status.globalFormalModelIdGeometryPathReady()
+                && !status.globalFormalModelIdGeometryEnabledForLiveRenderer()
+                && status.formalGeometrySnapshotCreated()
+                && status.formalGeometryReadbackOk()
+                && audit.success()
+                && !status.visibleTerrainDrawExecuted()
+                && !status.liveRendererDrawExecuted()
+                && !status.actualRendererDrawEnabled()
+                && !status.formalDrawPipelineReady()
+                && !status.formalRendererReady()
+                && !rendererStatus.actualDrawEnabled()
+                && !rendererStatus.formalRendererReady() ? 1 : 0;
+    }
+
     private static int clearPreset(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.clear();
         ForgeVoxyInstance.INSTANCE.getGpuGeometryReadbackMeshCache().clear();
@@ -9474,6 +9743,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getFormalCmdgenGpuValidator().clear();
         ForgeVoxyInstance.INSTANCE.getFormalCmdgenRealSectionDryRun().clear();
         ForgeVoxyInstance.INSTANCE.getFormalIsolatedMdicDrawSmokeTest().clear();
+        ForgeVoxyInstance.INSTANCE.getFormalModelIdSectionGeometryPath().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedDebugQuadRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedReadbackRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedMdicDebugRenderer().clear();
@@ -9499,6 +9769,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getFormalCmdgenGpuValidator().markPresetClear();
         ForgeVoxyInstance.INSTANCE.getFormalCmdgenRealSectionDryRun().markPresetClear();
         ForgeVoxyInstance.INSTANCE.getFormalIsolatedMdicDrawSmokeTest().markPresetClear();
+        ForgeVoxyInstance.INSTANCE.getFormalModelIdSectionGeometryPath().markPresetClear();
         source.sendSuccess(() -> Component.literal("Voxy preset clear: runtime overrides cleared; effective values now come from the toml config."), false);
         return 1;
     }
@@ -9845,6 +10116,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getFormalCmdgenGpuValidator().markDebugPipelineClear();
         ForgeVoxyInstance.INSTANCE.getFormalCmdgenRealSectionDryRun().markDebugPipelineClear();
         ForgeVoxyInstance.INSTANCE.getFormalIsolatedMdicDrawSmokeTest().markDebugPipelineClear();
+        ForgeVoxyInstance.INSTANCE.getFormalModelIdSectionGeometryPath().markDebugPipelineClear();
         ForgeVoxyInstance.INSTANCE.getTexturedDebugQuadRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedReadbackRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedMdicDebugRenderer().clear();
@@ -9938,6 +10210,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getFormalCmdgenGpuValidator().markDebugPipelineClear();
         ForgeVoxyInstance.INSTANCE.getFormalCmdgenRealSectionDryRun().markDebugPipelineClear();
         ForgeVoxyInstance.INSTANCE.getFormalIsolatedMdicDrawSmokeTest().markDebugPipelineClear();
+        ForgeVoxyInstance.INSTANCE.getFormalModelIdSectionGeometryPath().markDebugPipelineClear();
         ForgeVoxyInstance.INSTANCE.getTexturedDebugQuadRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedReadbackRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedMdicDebugRenderer().clear();

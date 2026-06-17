@@ -263,6 +263,14 @@ final class ForgeFormalRendererManager {
                 readiness.syntheticDrawFixtureUsed(),
                 readiness.formalDrawPipelineReady(),
                 readiness.globalFormalModelIdGeometryReady(),
+                readiness.formalModelIdGeometryPathReady(),
+                readiness.globalFormalModelIdGeometryPathReady(),
+                readiness.globalFormalModelIdGeometryEnabledForLiveRenderer(),
+                readiness.formalGeometrySnapshotCreated(),
+                readiness.formalGeometrySnapshotRecordCount(),
+                readiness.formalPackedRecordsAuditOk(),
+                readiness.formalGeometryReadbackOk(),
+                readiness.originalGeometryHeapMutated(),
                 readiness.formalTerrainShaderReady(),
                 readiness.previewSystemsSeparated(),
                 readiness.sampleSetUsedAsFormalSource(),
@@ -334,6 +342,7 @@ final class ForgeFormalRendererManager {
         ForgeFormalCmdgenGpuValidationStats cmdgenValidation = this.instance.getFormalCmdgenGpuValidator().createStatusSnapshot();
         ForgeFormalCmdgenRealSectionDryRunStats cmdgenRealSectionDryRun = this.instance.getFormalCmdgenRealSectionDryRun().createStatusSnapshot();
         ForgeFormalIsolatedMdicDrawSmokeTestStats isolatedMdicDraw = this.instance.getFormalIsolatedMdicDrawSmokeTest().createStatusSnapshot();
+        ForgeFormalModelIdSectionGeometryStats modelIdGeometry = this.instance.getFormalModelIdSectionGeometryPath().createStatusSnapshot();
         ForgeModelAtlasSampleSetUploadStats atlas = this.instance.getModelAtlasSampleSetUploader().createStatusSnapshot();
         ForgeModelBridgeResourceReloadStats reload = this.instance.getModelBridgeResourceReloadTracker().createStatusSnapshot();
         String dimension = currentDimensionId();
@@ -450,7 +459,15 @@ final class ForgeFormalRendererManager {
                 isolatedMdicDraw.realSectionCommandUsed(),
                 isolatedMdicDraw.syntheticDrawFixtureUsed(),
                 terrainRendererOwner.formalDrawPipelineReady(),
-                terrainRendererOwner.globalFormalModelIdGeometryReady(),
+                modelIdGeometry.globalFormalModelIdGeometryPathReady(),
+                modelIdGeometry.formalModelIdGeometryPathReady(),
+                modelIdGeometry.globalFormalModelIdGeometryPathReady(),
+                modelIdGeometry.globalFormalModelIdGeometryEnabledForLiveRenderer(),
+                modelIdGeometry.formalGeometrySnapshotCreated(),
+                modelIdGeometry.formalGeometrySnapshotRecordCount(),
+                modelIdGeometry.formalPackedRecordsAuditOk(),
+                modelIdGeometry.formalGeometryReadbackOk(),
+                modelIdGeometry.originalGeometryHeapMutated(),
                 terrainRendererOwner.formalTerrainShaderReady(),
                 terrainRendererOwner.previewSystemsSeparated(),
                 terrainRendererOwner.sampleSetUsedAsFormalSource(),

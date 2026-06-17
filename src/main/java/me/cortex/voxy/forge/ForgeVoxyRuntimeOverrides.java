@@ -430,6 +430,27 @@ public final class ForgeVoxyRuntimeOverrides {
         enableDebugMeshRenderer = false;
     }
 
+    public static synchronized void applyFormalModelIdGeometryPathNoLiveDrawPreset() {
+        clearInternal();
+        presetName = "formal_model_id_geometry_path_no_live_draw";
+        enableWorldEngineSkeleton = true;
+        enableAutoChunkIngest = false;
+        enableAutoCpuMeshBuild = false;
+        enableAutoBuiltSectionBuild = false;
+        enableAutoGeometryManagerConsume = false;
+        enableGeometryGpuUpload = false;
+        enableGeometryGpuVisualization = false;
+        enableGeometryGpuReadbackMeshAutoRefresh = false;
+        enableDirectGpuGeometryRenderer = false;
+        enableDirectGpuGeometryAutoPlan = false;
+        enableMdicCommandSkeleton = false;
+        enableMdicDebugDraw = false;
+        mdicDebugDrawActualDraw = false;
+        directGpuGeometryRendererActualDraw = false;
+        enableSimpleGpuMeshRenderer = false;
+        enableDebugMeshRenderer = false;
+    }
+
     public static synchronized void applyMdicSkeletonPreset() {
         clearInternal();
         presetName = "mdic_skeleton";

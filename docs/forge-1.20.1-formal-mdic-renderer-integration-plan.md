@@ -543,3 +543,32 @@ execute an isolated offscreen validation draw against formal ModelStore
 resources. Live renderer integration remains blocked on production cmdgen,
 formal traversal, global formal model-id geometry, production terrain shader
 semantics, and renderer lifecycle hardening.
+
+## K8 formal model-id section geometry path note
+
+K8 creates a K8-owned formal geometry snapshot path. It scans real
+BuiltSection packed records, recovers the source block state through the legacy
+model-id mapper, resolves the corresponding formal model id from the I3/I6
+model lifecycle, and writes formal-model-id records into an isolated snapshot
+and validation buffer.
+
+Intentional Forge deviation:
+
+- K8 does not globally rewrite existing live/debug geometry records.
+- K8 does not mutate the original GL geometry heap.
+- K8 does not submit K8 geometry to the live renderer.
+- K8 may use K7 offscreen evidence as dependency proof, but does not turn K7
+  preview resources into the renderer.
+- K8 does not call `MDICSectionRenderer` or `VoxyRenderSystem`.
+
+After K8, the project can distinguish:
+
+```text
+formalModelIdGeometryPathReady=true
+globalFormalModelIdGeometryPathReady=true
+globalFormalModelIdGeometryEnabledForLiveRenderer=false
+```
+
+The next renderer blockers remain production cmdgen, formal traversal,
+production terrain shader integration, live MDIC draw ownership, and full
+resource rebuild automation.
