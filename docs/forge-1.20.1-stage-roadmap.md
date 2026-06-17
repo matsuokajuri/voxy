@@ -348,3 +348,31 @@ actualRendererDrawEnabled=false
 
 Next work should harden formal viewport/command/visibility ownership before any
 live terrain draw is considered.
+
+## K2 status note
+
+K2 adds the formal MDIC viewport / command / visibility ownership skeleton. It
+creates no-draw logical owners for the resources that original Voxy keeps under
+`MDICViewport`:
+
+- draw command buffer,
+- draw count / parameter buffer,
+- visibility buffer,
+- render-list / indirect lookup buffer,
+- position scratch buffer.
+
+K2 does not allocate live formal GL draw resources yet. It records original
+capacity and ownership semantics, keeps allocation deferred, and reports the
+deferred reason explicitly. It also keeps command generation, visibility
+traversal, formal terrain shader integration, and live draw disabled:
+
+```text
+formalCommandGenerationOwnerReady=false
+formalDrawPipelineReady=false
+formalRendererReady=false
+actualRendererDrawEnabled=false
+```
+
+K2 must not be treated as `MDICSectionRenderer` integration. It only creates the
+formal control-room ownership boundary needed before command generation and draw
+can be considered.

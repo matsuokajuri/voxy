@@ -354,3 +354,30 @@ renderer.
 Do not wire `MDICSectionRenderer.renderTerrain(...)` after K1. The next safe
 step is to define formal viewport/command/visibility ownership and audit their
 cleanup order while keeping live terrain draw disabled.
+
+## K2 formal MDIC viewport ownership note
+
+K2 defines the formal ownership shell for the original Voxy MDIC viewport-side
+resources without using the debug MDIC command buffers as formal resources.
+
+Original alignment:
+
+- `MDICViewport.drawCallBuffer` maps to the formal draw command buffer owner.
+- `MDICViewport.drawCountCallBuffer` maps to the formal draw count / parameter
+  buffer owner.
+- `MDICViewport.visibilityBuffer` maps to the formal visibility owner.
+- `MDICViewport.indirectLookupBuffer` maps to the formal render-list / indirect
+  lookup owner.
+- `MDICViewport.positionScratchBuffer` maps to the formal position scratch owner.
+
+Intentional Forge deviation:
+
+- K2 is logical-only and no-draw.
+- K2 does not allocate live formal GL buffers yet.
+- K2 does not run `cmdgen.comp`.
+- K2 does not call `glMultiDrawElementsIndirectCountARB`.
+- K2 does not call `MDICSectionRenderer` or `VoxyRenderSystem`.
+
+The next safe work is command-generation ownership and visibility traversal
+design. Live draw remains out of scope until formal command resources are
+actually populated by a formal producer and consumed by a formal shader path.

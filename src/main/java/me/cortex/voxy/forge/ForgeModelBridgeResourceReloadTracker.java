@@ -114,6 +114,7 @@ final class ForgeModelBridgeResourceReloadTracker {
             this.instance.getFormalPackedQuadPreview().markResourceReload();
             this.instance.getFormalTerrainPackedRecordBridge().markResourceReload();
             this.instance.getFormalTerrainRendererOwner().markResourceReload();
+            this.instance.getFormalMdicViewportOwner().markResourceReload();
             this.instance.getFormalRendererManager().markResourceReload();
             this.instance.getTexturedDebugQuadRenderer().markStale(staleReason);
             this.instance.getTexturedReadbackRenderer().markStale(staleReason);

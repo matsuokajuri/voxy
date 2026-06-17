@@ -473,6 +473,20 @@ public final class ForgeVoxyCommands {
                         .executes(ctx -> formalTerrainRendererOwnerClear(ctx.getSource())))
                 .then(Commands.literal("qa_k1_formal_terrain_renderer_owner")
                         .executes(ctx -> qaK1FormalTerrainRendererOwner(ctx.getSource())))
+                .then(Commands.literal("formal_mdic_viewport_owner_enable")
+                        .executes(ctx -> formalMdicViewportOwnerEnable(ctx.getSource())))
+                .then(Commands.literal("formal_mdic_viewport_owner_status")
+                        .executes(ctx -> formalMdicViewportOwnerStatus(ctx.getSource())))
+                .then(Commands.literal("formal_mdic_viewport_owner_check")
+                        .executes(ctx -> formalMdicViewportOwnerCheck(ctx.getSource())))
+                .then(Commands.literal("formal_mdic_viewport_owner_audit")
+                        .executes(ctx -> formalMdicViewportOwnerAudit(ctx.getSource())))
+                .then(Commands.literal("formal_mdic_viewport_owner_dump")
+                        .executes(ctx -> formalMdicViewportOwnerDump(ctx.getSource())))
+                .then(Commands.literal("formal_mdic_viewport_owner_clear")
+                        .executes(ctx -> formalMdicViewportOwnerClear(ctx.getSource())))
+                .then(Commands.literal("qa_k2_formal_mdic_viewport_owner")
+                        .executes(ctx -> qaK2FormalMdicViewportOwner(ctx.getSource())))
                 .then(Commands.literal("formal_renderer_check")
                         .executes(ctx -> formalRendererCheck(ctx.getSource())))
                 .then(Commands.literal("formal_renderer_status")
@@ -584,6 +598,8 @@ public final class ForgeVoxyCommands {
                                 .executes(ctx -> applyPresetFormalTerrainRecordBridge(ctx.getSource())))
                         .then(Commands.literal("formal_terrain_renderer_owner_no_draw")
                                 .executes(ctx -> applyPresetFormalTerrainRendererOwnerNoDraw(ctx.getSource())))
+                        .then(Commands.literal("formal_mdic_viewport_owner_no_draw")
+                                .executes(ctx -> applyPresetFormalMdicViewportOwnerNoDraw(ctx.getSource())))
                         .then(Commands.literal("clear")
                                 .executes(ctx -> clearPreset(ctx.getSource())))
                         .then(Commands.literal("status")
@@ -5057,6 +5073,110 @@ public final class ForgeVoxyCommands {
                 && !rendererStatus.actualDrawEnabled() ? 1 : 0;
     }
 
+    private static int formalMdicViewportOwnerEnable(CommandSourceStack source) {
+        ForgeVoxyInstance.INSTANCE.getFormalTerrainRendererOwner().enable("k2-formal-mdic-viewport-owner-enable");
+        ForgeFormalMdicViewportStats status = ForgeVoxyInstance.INSTANCE.getFormalMdicViewportOwner().enable("command-enable");
+        ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("k2-formal-mdic-viewport-owner-enable");
+        source.sendSuccess(() -> Component.literal("Voxy K2 formal MDIC viewport owner enable: "
+                + formatFormalMdicViewportOwnerStatus(status)
+                + " "
+                + formatFormalRendererStatus(rendererStatus)
+                + " No formal draw, cmdgen, glMultiDrawElementsIndirectCountARB, MDICSectionRenderer, or VoxyRenderSystem call was started."), false);
+        return status.formalViewportOwnerReady()
+                && status.formalCommandBufferOwnerReady()
+                && status.formalVisibilityOwnerReady()
+                && status.noDraw()
+                && !status.actualRendererDrawEnabled()
+                && !rendererStatus.formalRendererReady()
+                && !rendererStatus.actualDrawEnabled() ? 1 : 0;
+    }
+
+    private static int formalMdicViewportOwnerStatus(CommandSourceStack source) {
+        ForgeFormalMdicViewportStats status = ForgeVoxyInstance.INSTANCE.getFormalMdicViewportOwner().createStatusSnapshot();
+        source.sendSuccess(() -> Component.literal("Voxy K2 formal MDIC viewport owner status: " + formatFormalMdicViewportOwnerStatus(status)), false);
+        return status.formalViewportOwnerReady() || status.stale() ? 1 : 0;
+    }
+
+    private static int formalMdicViewportOwnerCheck(CommandSourceStack source) {
+        ForgeFormalMdicViewportStats status = ForgeVoxyInstance.INSTANCE.getFormalMdicViewportOwner().check("command-check");
+        ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("k2-formal-mdic-viewport-owner-check");
+        source.sendSuccess(() -> Component.literal("Voxy K2 formal MDIC viewport owner check: "
+                + formatFormalMdicViewportOwnerStatus(status)
+                + " "
+                + formatFormalRendererStatus(rendererStatus)), false);
+        return status.formalViewportOwnerReady()
+                && status.formalCommandBufferOwnerReady()
+                && status.formalVisibilityOwnerReady()
+                && status.noDraw() ? 1 : 0;
+    }
+
+    private static int formalMdicViewportOwnerAudit(CommandSourceStack source) {
+        ForgeFormalMdicViewportAuditResult audit = ForgeVoxyInstance.INSTANCE.getFormalMdicViewportOwner().audit();
+        ForgeFormalMdicViewportStats status = ForgeVoxyInstance.INSTANCE.getFormalMdicViewportOwner().createStatusSnapshot();
+        ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("k2-formal-mdic-viewport-owner-audit");
+        source.sendSuccess(() -> Component.literal("Voxy K2 formal MDIC viewport owner audit: "
+                + formatFormalMdicViewportOwnerAudit(audit)
+                + " "
+                + formatFormalMdicViewportOwnerStatus(status)
+                + " "
+                + formatFormalRendererStatus(rendererStatus)), false);
+        return audit.success() ? 1 : 0;
+    }
+
+    private static int formalMdicViewportOwnerDump(CommandSourceStack source) {
+        ForgeFormalMdicViewportStats status = ForgeVoxyInstance.INSTANCE.getFormalMdicViewportOwner().check("command-dump");
+        String blockers = ForgeVoxyInstance.INSTANCE.getFormalMdicViewportOwner().dumpBlockers();
+        source.sendSuccess(() -> Component.literal("Voxy K2 formal MDIC viewport owner dump: blockers=" + blockers + " " + formatFormalMdicViewportOwnerStatus(status)), false);
+        return status.blockerCount() > 0 ? 1 : 0;
+    }
+
+    private static int formalMdicViewportOwnerClear(CommandSourceStack source) {
+        ForgeFormalMdicViewportStats status = ForgeVoxyInstance.INSTANCE.getFormalMdicViewportOwner().clear("command-clear");
+        source.sendSuccess(() -> Component.literal("Voxy K2 formal MDIC viewport owner clear: "
+                + formatFormalMdicViewportOwnerStatus(status)
+                + " Only K2 owner lifecycle/status was cleared; debug MDIC command buffers, GL geometry heap, J-stage previews, and formal ModelStore resources were left unchanged."), false);
+        return 1;
+    }
+
+    private static int qaK2FormalMdicViewportOwner(CommandSourceStack source) {
+        ForgeFormalTerrainRendererStats terrainStatus = ForgeVoxyInstance.INSTANCE.getFormalTerrainRendererOwner().enable("qa-k2-formal-mdic-viewport-owner");
+        ForgeFormalMdicViewportStats enableStatus = ForgeVoxyInstance.INSTANCE.getFormalMdicViewportOwner().enable("qa-k2-formal-mdic-viewport-owner");
+        ForgeFormalMdicViewportStats checkStatus = ForgeVoxyInstance.INSTANCE.getFormalMdicViewportOwner().check("qa-k2-formal-mdic-viewport-owner");
+        ForgeFormalMdicViewportAuditResult audit = ForgeVoxyInstance.INSTANCE.getFormalMdicViewportOwner().audit();
+        ForgeFormalMdicViewportStats status = ForgeVoxyInstance.INSTANCE.getFormalMdicViewportOwner().createStatusSnapshot();
+        ForgeFormalTerrainRendererStats terrainOwnerStatus = ForgeVoxyInstance.INSTANCE.getFormalTerrainRendererOwner().check("qa-k2-formal-mdic-viewport-owner");
+        ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("qa-k2-formal-mdic-viewport-owner");
+        String message = "Voxy QA K2 formal MDIC viewport / command / visibility owner no-draw skeleton: "
+                + formatFormalMdicViewportOwnerStatus(status)
+                + " "
+                + formatFormalMdicViewportOwnerAudit(audit)
+                + " "
+                + formatFormalTerrainRendererOwnerStatus(terrainOwnerStatus)
+                + " "
+                + formatFormalRendererStatus(rendererStatus)
+                + " K2 creates formal logical owners for viewport, draw command, draw count, visibility, render-list/indirect lookup, and position scratch resources; debug MDIC command buffers are not used as formal resources and no draw/cmdgen call is issued.";
+        VoxyForge.LOGGER.info(message);
+        source.sendSuccess(() -> Component.literal(message), false);
+        return terrainStatus.formalTerrainRendererOwnerReady()
+                && enableStatus.formalViewportOwnerReady()
+                && checkStatus.formalCommandBufferOwnerReady()
+                && status.formalDrawCommandBufferOwnerReady()
+                && status.formalDrawCountBufferOwnerReady()
+                && status.formalVisibilityOwnerReady()
+                && status.formalRenderListOwnerReady()
+                && status.formalPositionScratchOwnerReady()
+                && !status.debugMdicCommandBuffersUsedAsFormal()
+                && status.debugRendererIsolationOk()
+                && !status.formalDrawPipelineReady()
+                && !status.formalRendererReady()
+                && !status.actualRendererDrawEnabled()
+                && status.noDraw()
+                && status.p0BlockerCount() >= 1
+                && audit.success()
+                && !rendererStatus.formalRendererReady()
+                && !rendererStatus.actualDrawEnabled() ? 1 : 0;
+    }
+
     private static int formalRendererCheck(CommandSourceStack source) {
         ForgeFormalRendererStats status = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("command-check");
         source.sendSuccess(() -> Component.literal("Voxy formal renderer check: " + formatFormalRendererStatus(status)), false);
@@ -6297,6 +6417,110 @@ public final class ForgeVoxyCommands {
         );
     }
 
+    private static String formatFormalMdicViewportOwnerStatus(ForgeFormalMdicViewportStats status) {
+        return String.format(
+                "stage=%s formalTerrainRendererOwnerReady=%s formalViewportOwnerReady=%s formalCommandBufferOwnerReady=%s formalDrawCommandBufferOwnerReady=%s formalDrawCountBufferOwnerReady=%s formalVisibilityOwnerReady=%s formalRenderListOwnerReady=%s formalIndirectLookupOwnerReady=%s formalPositionScratchOwnerReady=%s formalCommandGenerationOwnerReady=%s formalDrawPipelineReady=%s formalRendererReady=%s actualRendererDrawEnabled=%s noDraw=%s enabled=%s originalVoxyMdicViewportAlignmentChecked=%s originalVoxyMdicSectionRendererAlignmentChecked=%s debugMdicCommandBuffersUsedAsFormal=%s debugRendererIsolationOk=%s drawCommandBufferCreated=%s drawCommandBufferAllocated=%s drawCommandBufferId=%d drawCommandBufferBytes=%d drawCommandCapacity=%d drawCommandLogicalOnly=%s drawCountBufferCreated=%s drawCountBufferAllocated=%s drawCountBufferId=%d drawCountBufferBytes=%d drawCountCapacity=%d drawCountLogicalOnly=%s visibilityBufferCreated=%s visibilityBufferAllocated=%s visibilityBufferId=%d visibilityBufferBytes=%d visibilityCapacity=%d visibilityLogicalOnly=%s renderListOrIndirectLookupCreated=%s renderListOrIndirectLookupAllocated=%s renderListOrIndirectLookupBufferId=%d renderListOrIndirectLookupBytes=%d renderListCapacity=%d renderListLogicalOnly=%s positionScratchCreated=%s positionScratchAllocated=%s positionScratchBufferId=%d positionScratchBytes=%d positionScratchCapacity=%d positionScratchLogicalOnly=%s allocationDeferredReason=%s lifecycleState=%s lastLifecycleEvent=%s lifecycleGeneration=%d stale=%s requiresRebuild=%s blockerCount=%d p0BlockerCount=%d p1BlockerCount=%d p2BlockerCount=%d blockers=%s resourceReloadSeen=%s worldUnloadSeen=%s dimensionSwitchSeen=%s debugPipelineClearSeen=%s presetOffSeen=%s presetClearSeen=%s drawCommandExecuted=%s multiDrawIndirectCountCalled=%s formalCmdgenExecuted=%s mdicSectionRendererCalled=%s voxyRenderSystemCalled=%s lastFailureReason=%s lastAuditOk=%s lastAuditError=%s renderer=formal-mdic-viewport-owner formalRenderer=false draw=false",
+                status.stage(),
+                status.formalTerrainRendererOwnerReady(),
+                status.formalViewportOwnerReady(),
+                status.formalCommandBufferOwnerReady(),
+                status.formalDrawCommandBufferOwnerReady(),
+                status.formalDrawCountBufferOwnerReady(),
+                status.formalVisibilityOwnerReady(),
+                status.formalRenderListOwnerReady(),
+                status.formalIndirectLookupOwnerReady(),
+                status.formalPositionScratchOwnerReady(),
+                status.formalCommandGenerationOwnerReady(),
+                status.formalDrawPipelineReady(),
+                status.formalRendererReady(),
+                status.actualRendererDrawEnabled(),
+                status.noDraw(),
+                status.enabled(),
+                status.originalVoxyMdicViewportAlignmentChecked(),
+                status.originalVoxyMdicSectionRendererAlignmentChecked(),
+                status.debugMdicCommandBuffersUsedAsFormal(),
+                status.debugRendererIsolationOk(),
+                status.drawCommandBufferCreated(),
+                status.drawCommandBufferAllocated(),
+                status.drawCommandBufferId(),
+                status.drawCommandBufferBytes(),
+                status.drawCommandCapacity(),
+                status.drawCommandLogicalOnly(),
+                status.drawCountBufferCreated(),
+                status.drawCountBufferAllocated(),
+                status.drawCountBufferId(),
+                status.drawCountBufferBytes(),
+                status.drawCountCapacity(),
+                status.drawCountLogicalOnly(),
+                status.visibilityBufferCreated(),
+                status.visibilityBufferAllocated(),
+                status.visibilityBufferId(),
+                status.visibilityBufferBytes(),
+                status.visibilityCapacity(),
+                status.visibilityLogicalOnly(),
+                status.renderListOrIndirectLookupCreated(),
+                status.renderListOrIndirectLookupAllocated(),
+                status.renderListOrIndirectLookupBufferId(),
+                status.renderListOrIndirectLookupBytes(),
+                status.renderListCapacity(),
+                status.renderListLogicalOnly(),
+                status.positionScratchCreated(),
+                status.positionScratchAllocated(),
+                status.positionScratchBufferId(),
+                status.positionScratchBytes(),
+                status.positionScratchCapacity(),
+                status.positionScratchLogicalOnly(),
+                status.allocationDeferredReason(),
+                status.lifecycleState(),
+                status.lastLifecycleEvent(),
+                status.lifecycleGeneration(),
+                status.stale(),
+                status.requiresRebuild(),
+                status.blockerCount(),
+                status.p0BlockerCount(),
+                status.p1BlockerCount(),
+                status.p2BlockerCount(),
+                status.blockers(),
+                status.resourceReloadSeen(),
+                status.worldUnloadSeen(),
+                status.dimensionSwitchSeen(),
+                status.debugPipelineClearSeen(),
+                status.presetOffSeen(),
+                status.presetClearSeen(),
+                status.drawCommandExecuted(),
+                status.multiDrawIndirectCountCalled(),
+                status.formalCmdgenExecuted(),
+                status.mdicSectionRendererCalled(),
+                status.voxyRenderSystemCalled(),
+                status.lastFailureReason(),
+                status.lastAuditOk(),
+                status.lastAuditError()
+        );
+    }
+
+    private static String formatFormalMdicViewportOwnerAudit(ForgeFormalMdicViewportAuditResult audit) {
+        return String.format(
+                "k2AuditOk=%s k2AuditError=%s k1OwnerExists=%s formalViewportOwnerExists=%s formalCommandOwnershipExplicit=%s formalVisibilityOwnershipExplicit=%s originalVoxyMdicViewportInspected=%s originalVoxyMdicSectionRendererInspected=%s debugMdicCommandBuffersUsedAsFormal=%s debugRendererStartedOrReplaced=%s drawCommandExecuted=%s multiDrawIndirectCountCalled=%s formalCmdgenExecuted=%s mdicSectionRendererCalled=%s voxyRenderSystemCalled=%s formalRendererReady=%s actualRendererDrawEnabled=%s",
+                audit.success(),
+                audit.error(),
+                audit.k1OwnerExists(),
+                audit.formalViewportOwnerExists(),
+                audit.formalCommandOwnershipExplicit(),
+                audit.formalVisibilityOwnershipExplicit(),
+                audit.originalVoxyMdicViewportInspected(),
+                audit.originalVoxyMdicSectionRendererInspected(),
+                audit.debugMdicCommandBuffersUsedAsFormal(),
+                audit.debugRendererStartedOrReplaced(),
+                audit.drawCommandExecuted(),
+                audit.multiDrawIndirectCountCalled(),
+                audit.formalCmdgenExecuted(),
+                audit.mdicSectionRendererCalled(),
+                audit.voxyRenderSystemCalled(),
+                audit.formalRendererReady(),
+                audit.actualRendererDrawEnabled()
+        );
+    }
+
     private static String formatFormalRendererStatus(ForgeFormalRendererStats status) {
         return String.format(
                 "stage=%s formalRendererSkeletonReady=%s formalRendererReady=%s actualDrawEnabled=%s noDraw=%s enabled=%s lifecycleState=%s formalRendererOwnershipReady=%s lastEnableReason=%s lastDisableReason=%s lastClearReason=%s lastLifecycleEvent=%s lastCheckAt=%s lastCheckReason=%s lastStaleReason=%s requiresRecheck=%s readinessGeneration=%d lifecycleGeneration=%d geometryHeapReady=%s metadataReady=%s sectionGeometryManagerReady=%s mdicCommandReady=%s mdicDrawCountReady=%s modelBridgeReady=%s formalShaderInputBridgeReady=%s atlasReady=%s resourceReloadReady=%s worldEngineReady=%s dimensionReady=%s infrastructureReady=%s debugProofReady=%s sampleBridgeReady=%s oneBlockBakePrototypeReady=%s oneBlockFormalUploadReady=%s oneBlockFormalUploadAuditReady=%s multiBlockBakePrototypeReady=%s multiBlockFormalUploadReady=%s multiBlockFormalUploadAuditReady=%s formalModelBakeryLifecycleSkeletonReady=%s reloadRebuildPrototypeReady=%s aliasSafeDedupeReady=%s formalModelFactorySkeletonReady=%s formalModelFactoryLifecycleReady=%s formalModelStoreSkeletonReady=%s formalModelStoreOwnerReady=%s formalShaderInputConsumerReady=%s formalShaderInputBindingLayoutKnown=%s formalShaderInputBindingLayoutCompatible=%s formalShaderProgramValidatorReady=%s formalShaderProgramValidationReady=%s validationShaderCompileOk=%s validationProgramLinkOk=%s gpuValidationOk=%s formalTexturedShaderPrototypeReady=%s formalTexturedShaderPreviewReady=%s formalPackedQuadPreviewReady=%s packedQuadShaderPreviewReady=%s packedQuadModelIdBridgeReady=%s formalTerrainPackedRecordBridgeReady=%s realTerrainPackedRecordBridgeReady=%s temporaryFormalQuadBufferCreated=%s originalGeometryUntouched=%s originalGeometryHeapUntouched=%s realTerrainRecordsUsed=%s syntheticFallbackUsed=%s formalTerrainRendererOwnerReady=%s formalTerrainRendererLifecycleReady=%s k0AlignmentAuditReady=%s k0VerdictReadyForK1=%s originalVoxyAlignmentPreserved=%s formalViewportOwnerReady=%s formalCommandBufferOwnerReady=%s formalVisibilityOwnerReady=%s formalDrawPipelineReady=%s globalFormalModelIdGeometryReady=%s formalTerrainShaderReady=%s previewSystemsSeparated=%s sampleSetUsedAsFormalSource=%s terrainDrawStarted=%s formalRendererDrawStarted=%s actualRendererDrawEnabled=%s formalShaderInputContractReady=%s formalPrerequisitesReady=%s realModelFactoryReady=%s realModelBakeryReady=%s realModelStoreReady=%s formalShaderReady=%s formalTextureAtlasReady=%s formalTexturedShaderReady=%s formalTraversalReady=%s formalVisibilityTraversalReady=%s formalVoxyRenderSystemReady=%s shaderpackIntegrationReady=%s blockerCount=%d p0BlockerCount=%d p1BlockerCount=%d p2BlockerCount=%d formalDrawBlockingBlockerCount=%d blockers=%s worldUnloadSeen=%s dimensionSwitchSeen=%s resourceReloadSeen=%s debugPipelineClearSeen=%s presetOffSeen=%s presetClearSeen=%s formalRendererStale=%s debugRenderersIsolated=%s existingMdicDebugTouched=%s texturedMdicDebugTouched=%s actualDrawStartedByFormalRenderer=%s renderer=formal-renderer-skeleton formalRenderer=false draw=false",
@@ -7341,6 +7565,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getFormalPackedQuadPreview().markPresetOff();
         ForgeVoxyInstance.INSTANCE.getFormalTerrainPackedRecordBridge().markPresetOff();
         ForgeVoxyInstance.INSTANCE.getFormalTerrainRendererOwner().markPresetOff();
+        ForgeVoxyInstance.INSTANCE.getFormalMdicViewportOwner().markPresetOff();
         ForgeVoxyInstance.INSTANCE.closeActiveWorld();
         source.sendSuccess(() -> Component.literal("Voxy preset off: runtime overrides disabled engine, auto ingest, auto CPU mesh build, auto BuiltSection build, auto geometry-manager consume, upload-only GL geometry heap, direct GL renderer skeleton, MDIC command skeleton/debug draw, simple GPU renderer, and debug renderer. Overrides are not written to toml."), false);
         return 1;
@@ -7791,6 +8016,38 @@ public final class ForgeVoxyCommands {
                 && !rendererStatus.formalRendererReady() ? 1 : 0;
     }
 
+    private static int applyPresetFormalMdicViewportOwnerNoDraw(CommandSourceStack source) {
+        ForgeVoxyRuntimeOverrides.applyFormalMdicViewportOwnerNoDrawPreset();
+        boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
+        ForgeFormalTerrainRendererStats terrainStatus = ForgeVoxyInstance.INSTANCE.getFormalTerrainRendererOwner().enable("preset-formal-mdic-viewport-owner-no-draw");
+        ForgeFormalMdicViewportStats enableStatus = ForgeVoxyInstance.INSTANCE.getFormalMdicViewportOwner().enable("preset-formal-mdic-viewport-owner-no-draw");
+        ForgeFormalMdicViewportStats checkStatus = ForgeVoxyInstance.INSTANCE.getFormalMdicViewportOwner().check("preset-formal-mdic-viewport-owner-no-draw");
+        ForgeFormalMdicViewportAuditResult audit = ForgeVoxyInstance.INSTANCE.getFormalMdicViewportOwner().audit();
+        ForgeFormalMdicViewportStats status = ForgeVoxyInstance.INSTANCE.getFormalMdicViewportOwner().createStatusSnapshot();
+        ForgeFormalTerrainRendererStats terrainOwnerStatus = ForgeVoxyInstance.INSTANCE.getFormalTerrainRendererOwner().check("preset-formal-mdic-viewport-owner-no-draw");
+        ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("preset-formal-mdic-viewport-owner-no-draw");
+        String message = "Voxy preset formal_mdic_viewport_owner_no_draw: runtime-only K2 formal viewport / command / visibility ownership skeleton applied, not written to toml. "
+                + "The preset enables only no-draw formal owners, records MDICViewport-shaped logical resources, keeps draw command/count/visibility/render-list/position scratch allocations deferred, and does not run cmdgen, glMultiDrawElementsIndirectCountARB, MDICSectionRenderer, VoxyRenderSystem, or debug renderers. "
+                + (engineReady ? "WorldEngine is active. " : "No active client world was found; K2 owner remains no-draw and can still report static readiness. ")
+                + formatFormalMdicViewportOwnerStatus(status)
+                + " "
+                + formatFormalMdicViewportOwnerAudit(audit)
+                + " "
+                + formatFormalTerrainRendererOwnerStatus(terrainOwnerStatus)
+                + " "
+                + formatFormalRendererStatus(rendererStatus);
+        source.sendSuccess(() -> Component.literal(message), false);
+        return terrainStatus.formalTerrainRendererOwnerReady()
+                && enableStatus.formalViewportOwnerReady()
+                && checkStatus.formalCommandBufferOwnerReady()
+                && audit.success()
+                && status.noDraw()
+                && !status.actualRendererDrawEnabled()
+                && !status.formalRendererReady()
+                && !rendererStatus.actualDrawEnabled()
+                && !rendererStatus.formalRendererReady() ? 1 : 0;
+    }
+
     private static int clearPreset(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.clear();
         ForgeVoxyInstance.INSTANCE.getGpuGeometryReadbackMeshCache().clear();
@@ -7821,6 +8078,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getFormalPackedQuadPreview().clear();
         ForgeVoxyInstance.INSTANCE.getFormalTerrainPackedRecordBridge().clear();
         ForgeVoxyInstance.INSTANCE.getFormalTerrainRendererOwner().clear("preset-clear");
+        ForgeVoxyInstance.INSTANCE.getFormalMdicViewportOwner().clear("preset-clear");
         ForgeVoxyInstance.INSTANCE.getTexturedDebugQuadRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedReadbackRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedMdicDebugRenderer().clear();
@@ -7840,6 +8098,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getFormalPackedQuadPreview().markPresetClear();
         ForgeVoxyInstance.INSTANCE.getFormalTerrainPackedRecordBridge().markPresetClear();
         ForgeVoxyInstance.INSTANCE.getFormalTerrainRendererOwner().markPresetClear();
+        ForgeVoxyInstance.INSTANCE.getFormalMdicViewportOwner().markPresetClear();
         source.sendSuccess(() -> Component.literal("Voxy preset clear: runtime overrides cleared; effective values now come from the toml config."), false);
         return 1;
     }
@@ -8180,6 +8439,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getFormalPackedQuadPreview().markDebugPipelineClear();
         ForgeVoxyInstance.INSTANCE.getFormalTerrainPackedRecordBridge().markDebugPipelineClear();
         ForgeVoxyInstance.INSTANCE.getFormalTerrainRendererOwner().markDebugPipelineClear();
+        ForgeVoxyInstance.INSTANCE.getFormalMdicViewportOwner().markDebugPipelineClear();
         ForgeVoxyInstance.INSTANCE.getTexturedDebugQuadRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedReadbackRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedMdicDebugRenderer().clear();
@@ -8267,6 +8527,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getFormalPackedQuadPreview().markDebugPipelineClear();
         ForgeVoxyInstance.INSTANCE.getFormalTerrainPackedRecordBridge().markDebugPipelineClear();
         ForgeVoxyInstance.INSTANCE.getFormalTerrainRendererOwner().markDebugPipelineClear();
+        ForgeVoxyInstance.INSTANCE.getFormalMdicViewportOwner().markDebugPipelineClear();
         ForgeVoxyInstance.INSTANCE.getTexturedDebugQuadRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedReadbackRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedMdicDebugRenderer().clear();

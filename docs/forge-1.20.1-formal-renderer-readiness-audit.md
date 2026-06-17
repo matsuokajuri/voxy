@@ -899,3 +899,53 @@ audit. They do not mean formal terrain draw is ready. Remaining P0 blockers
 include formal viewport ownership, formal command buffer ownership, formal
 visibility ownership, global formal model-id geometry, formal terrain shader
 integration, and formal MDIC renderer integration.
+
+## K2 readiness note
+
+K2 adds formal MDIC-side ownership skeletons under the K1 terrain renderer owner.
+The ownership shape is aligned with original Voxy `MDICViewport` and
+`MDICSectionRenderer` expectations:
+
+```text
+formalViewportOwner
+ -> formalDrawCommandBufferOwner
+ -> formalDrawCountBufferOwner
+ -> formalVisibilityBufferOwner
+ -> formalRenderListOrIndirectLookupOwner
+ -> formalPositionScratchOwner
+```
+
+These owners are logical-only in K2. Their capacities mirror the original Voxy
+shape, but allocation is deliberately deferred:
+
+```text
+drawCommandBufferAllocated=false
+drawCountBufferAllocated=false
+visibilityBufferAllocated=false
+renderListOrIndirectLookupAllocated=false
+positionScratchAllocated=false
+allocationDeferredReason=K2-no-draw-logical-owner
+```
+
+K2 can now report:
+
+```text
+formalViewportOwnerReady=true
+formalCommandBufferOwnerReady=true
+formalDrawCommandBufferOwnerReady=true
+formalDrawCountBufferOwnerReady=true
+formalVisibilityOwnerReady=true
+formalRenderListOwnerReady=true
+formalIndirectLookupOwnerReady=true
+formalPositionScratchOwnerReady=true
+debugMdicCommandBuffersUsedAsFormal=false
+formalCommandGenerationOwnerReady=false
+formalDrawPipelineReady=false
+formalRendererReady=false
+actualRendererDrawEnabled=false
+```
+
+The blocker boundary shifts from missing owner shells to missing producers and
+draw integration: formal command generation, formal visibility traversal, global
+formal model-id geometry, formal terrain shader integration, and formal MDIC
+draw remain absent.

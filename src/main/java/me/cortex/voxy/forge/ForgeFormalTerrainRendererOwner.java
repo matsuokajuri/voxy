@@ -16,9 +16,7 @@ final class ForgeFormalTerrainRendererOwner {
             Path.of("..", "docs", "forge-1.20.1-k0-original-voxy-renderer-alignment-audit.md")
     );
     private static final List<ForgeFormalRendererBlocker> BLOCKERS = List.of(
-            new ForgeFormalRendererBlocker("P0", "P0_FORMAL_VIEWPORT_OWNER_MISSING", "Formal viewport owner missing", "K1 defines the owner boundary, but no MDICViewport-equivalent resource owner exists yet.", "Add a formal viewport resource owner before live terrain draw.", true),
-            new ForgeFormalRendererBlocker("P0", "P0_FORMAL_COMMAND_BUFFER_OWNER_MISSING", "Formal command buffer owner missing", "Debug command buffers are still separate proof resources and are not formal DrawCommand ownership.", "Create formal DrawCommand and draw-count buffer ownership.", true),
-            new ForgeFormalRendererBlocker("P0", "P0_FORMAL_VISIBILITY_OWNER_MISSING", "Formal visibility owner missing", "No formal visibility buffer or render-list owner exists.", "Add formal visibility/render-list ownership before command generation.", true),
+            new ForgeFormalRendererBlocker("P0", "P0_FORMAL_COMMAND_GENERATION_MISSING", "Formal command generation missing", "K2 can own formal MDIC-side resources, but no formal command generation fills them yet.", "Add formal command generation after visibility and geometry model-id ownership are ready.", true),
             new ForgeFormalRendererBlocker("P0", "P0_GLOBAL_FORMAL_MODEL_ID_GEOMETRY_MISSING", "Global formal model-id geometry missing", "J5 rewrites only isolated temporary preview buffers; live geometry still must be produced with formal ids globally.", "Move formal model id assignment into the formal BuiltSection/RenderDataFactory path.", true),
             new ForgeFormalRendererBlocker("P0", "P0_FORMAL_TERRAIN_SHADER_INTEGRATION_MISSING", "Formal terrain shader integration missing", "J-stage shaders are validation/preview programs, not the live terrain shader.", "Integrate a formal terrain shader after command and geometry ownership exist.", true),
             new ForgeFormalRendererBlocker("P0", "P0_FORMAL_MDIC_RENDERER_INTEGRATION_MISSING", "Formal MDIC renderer integration missing", "K1 does not call MDICSectionRenderer and does not own an equivalent renderer path.", "Add a formal MDIC renderer integration only after viewport, command, and visibility owners are ready.", true),
@@ -190,6 +188,7 @@ final class ForgeFormalTerrainRendererOwner {
         ForgeFormalTerrainPackedRecordBridgeStats terrainBridge = this.instance.getFormalTerrainPackedRecordBridge().createStatusSnapshot();
         ForgeGpuGeometryStats geometry = this.instance.getGpuGeometryUploadManager().createStatusSnapshot();
         ForgeSectionGeometryStats section = this.instance.getSectionGeometryManager().createStatusSnapshot();
+        ForgeFormalMdicViewportStats mdicViewport = this.instance.getFormalMdicViewportOwner().createStatusSnapshot();
         boolean previewSystemsSeparated = !texturedPreview.formalTexturedShaderReady()
                 && !texturedPreview.formalRendererReady()
                 && !packedPreview.formalTexturedShaderReady()
@@ -238,10 +237,10 @@ final class ForgeFormalTerrainRendererOwner {
                 packedPreview.formalPackedQuadPreviewReady(),
                 geometry.heapCreated(),
                 section.maxSections() > 0,
-                false,
-                false,
-                false,
-                false,
+                mdicViewport.formalViewportOwnerReady(),
+                mdicViewport.formalCommandBufferOwnerReady(),
+                mdicViewport.formalVisibilityOwnerReady(),
+                mdicViewport.formalDrawPipelineReady(),
                 false,
                 false,
                 true,
