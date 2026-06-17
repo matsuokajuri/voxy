@@ -31,6 +31,11 @@ record ForgeFormalRendererReadiness(
         boolean formalShaderInputConsumerReady,
         boolean formalShaderInputBindingLayoutKnown,
         boolean formalShaderInputBindingLayoutCompatible,
+        boolean formalShaderProgramValidatorReady,
+        boolean formalShaderProgramValidationReady,
+        boolean validationShaderCompileOk,
+        boolean validationProgramLinkOk,
+        boolean gpuValidationOk,
         boolean formalShaderInputContractReady,
         boolean formalPrerequisitesReady
 ) {

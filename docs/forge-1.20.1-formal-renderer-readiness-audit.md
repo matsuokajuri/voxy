@@ -685,3 +685,40 @@ actualDrawEnabled=false
 Remaining blockers include the actual formal shader draw program, full shader
 contract semantics for light/tint/material/alpha, formal MDIC renderer
 integration, and broader model lifecycle coverage.
+
+## J2 readiness note
+
+J2 adds an audit-only formal shader program validator. It compiles and links a
+small validation program, binds the I2 formal `ModelStore` owner resources
+validated by J1, runs a compact GPU readback validation for several formal model
+ids, and confirms that the formal shader side can read selected modelData,
+modelColour, and atlas values.
+
+The J2 path is still not a terrain renderer. The validation program is not
+`MDICSectionRenderer`, does not call `VoxyRenderSystem`, does not start a visible
+draw, and does not claim the final formal shader contract is complete.
+
+The formal renderer manager can now report:
+
+```text
+formalShaderProgramValidatorReady=true
+formalShaderProgramValidationReady=true
+validationShaderCompileOk=true
+validationProgramLinkOk=true
+gpuValidationOk=true
+```
+
+Those flags mean an audit-only program can consume the current formal resources.
+They do not mean the formal textured shader or renderer is ready. The readiness
+boundary remains:
+
+```text
+formalShaderInputContractReady=false
+formalTexturedShaderReady=false
+formalRendererReady=false
+actualDrawEnabled=false
+```
+
+Remaining blockers include the actual terrain shader program, full formal shader
+semantics for light/tint/material/alpha, formal MDIC renderer integration,
+visibility traversal, and broader model lifecycle coverage.

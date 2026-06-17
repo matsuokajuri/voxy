@@ -741,3 +741,59 @@ actualDrawEnabled=false
 J1 is still not a renderer stage. It does not bind a formal shader program,
 draw terrain, call `MDICSectionRenderer`, call `VoxyRenderSystem`, add
 visibility traversal, or touch shaderpack integration.
+
+## J2 formal shader program validation prototype
+
+J2 adds an audit-only shader program validator on top of the J1 formal input
+consumer. The chain is:
+
+```text
+I6 safe-set lifecycle rebuild
+ -> J1 formal shader input resources
+ -> audit-only compute shader compile/link
+ -> bind formal modelData/modelColour/atlas/sampler
+ -> validate a small set of formal model ids on GPU
+ -> read back compact validation results
+ -> audit/status/readiness aggregation
+```
+
+The validation program consumes the I2 formal `ModelStore` owner resources. It
+does not use the older sample-set bridge as a formal source. It checks the known
+formal binding contract:
+
+```text
+MODEL_BUFFER_BINDING = 3
+MODEL_COLOUR_BUFFER_BINDING = 4
+BLOCK_MODEL_TEXTURE_BINDING = 0
+BlockModel record size = 64 bytes
+```
+
+The GPU validation reads selected `faceData`, `flagsA`, `colourTint`,
+`modelColour`, and one atlas texel for several formal model ids, then writes a
+small result buffer for CPU readback. It is deliberately not a terrain draw.
+
+Successful J2 status means:
+
+```text
+formalShaderProgramValidatorReady=true
+validationShaderCompileOk=true
+validationProgramLinkOk=true
+gpuValidationOk=true
+validationReadbackOk=true
+usesFormalModelIds=true
+sampleSetModelIdsUsed=false
+```
+
+It must still keep:
+
+```text
+formalShaderInputContractReady=false
+formalTexturedShaderReady=false
+formalRendererReady=false
+actualDrawEnabled=false
+```
+
+J2 is not a renderer stage. It does not draw terrain, call `MDICSectionRenderer`,
+call `VoxyRenderSystem`, implement visibility traversal, or touch shaderpack
+integration. The next risky boundary is a real formal textured shader prototype,
+not more debug renderer expansion.

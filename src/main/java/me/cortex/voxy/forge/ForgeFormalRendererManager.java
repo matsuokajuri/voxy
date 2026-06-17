@@ -203,6 +203,11 @@ final class ForgeFormalRendererManager {
                 readiness.formalShaderInputConsumerReady(),
                 readiness.formalShaderInputBindingLayoutKnown(),
                 readiness.formalShaderInputBindingLayoutCompatible(),
+                readiness.formalShaderProgramValidatorReady(),
+                readiness.formalShaderProgramValidationReady(),
+                readiness.validationShaderCompileOk(),
+                readiness.validationProgramLinkOk(),
+                readiness.gpuValidationOk(),
                 readiness.formalShaderInputContractReady(),
                 readiness.formalPrerequisitesReady(),
                 false,
@@ -260,6 +265,7 @@ final class ForgeFormalRendererManager {
         ForgeMultiBlockFormalBakeUploadStats multiBlock = this.instance.getMultiBlockFormalBakeUpload().createStatusSnapshot();
         ForgeFormalModelBakeryLifecycleStats bakeryLifecycle = this.instance.getFormalModelBakeryLifecycle().createStatusSnapshot();
         ForgeFormalShaderInputConsumerStats shaderInputConsumer = this.instance.getFormalShaderInputConsumer().createStatusSnapshot();
+        ForgeFormalShaderProgramStats shaderProgram = this.instance.getFormalShaderProgramValidator().createStatusSnapshot();
         ForgeModelAtlasSampleSetUploadStats atlas = this.instance.getModelAtlasSampleSetUploader().createStatusSnapshot();
         ForgeModelBridgeResourceReloadStats reload = this.instance.getModelBridgeResourceReloadTracker().createStatusSnapshot();
         String dimension = currentDimensionId();
@@ -314,6 +320,11 @@ final class ForgeFormalRendererManager {
                 shaderInputConsumer.formalShaderInputConsumerReady(),
                 shaderInputConsumer.bindingLayoutKnown(),
                 shaderInputConsumer.bindingLayoutCompatible(),
+                shaderProgram.formalShaderProgramValidatorReady(),
+                shaderProgram.formalShaderProgramValidationReady(),
+                shaderProgram.validationShaderCompileOk(),
+                shaderProgram.validationProgramLinkOk(),
+                shaderProgram.gpuValidationOk(),
                 shaderInputConsumer.formalShaderInputContractReady(),
                 formalPrerequisitesReady
         );

@@ -257,3 +257,15 @@ J1 is no-draw. It does not bind a formal shader program, draw terrain, call
 `MDICSectionRenderer`, call `VoxyRenderSystem`, or claim full formal renderer
 readiness. It is the bridge between the I-stage formal model lifecycle work and
 future J-stage formal shader work.
+
+## J2 status note
+
+J2 adds the formal shader program validation prototype. It compiles and links an
+audit-only validation program, binds the I2 formal `ModelStore` owner resources
+validated by J1, and reads back compact GPU validation results for formal model
+ids produced by the I6 lifecycle safe-set path.
+
+J2 is still not a renderer stage. It does not draw terrain, call
+`MDICSectionRenderer`, call `VoxyRenderSystem`, integrate shaderpacks, or claim
+`formalTexturedShaderReady` / `formalRendererReady`. It proves shader-side
+resource consumption, not visible LoD rendering.
