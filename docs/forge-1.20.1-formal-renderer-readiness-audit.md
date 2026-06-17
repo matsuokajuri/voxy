@@ -722,3 +722,39 @@ actualDrawEnabled=false
 Remaining blockers include the actual terrain shader program, full formal shader
 semantics for light/tint/material/alpha, formal MDIC renderer integration,
 visibility traversal, and broader model lifecycle coverage.
+
+## J3 readiness note
+
+J3 adds a formal textured shader preview prototype. It compiles and links a
+small vertex/fragment preview program, binds the I2 formal `ModelStore` owner
+resources validated by J1/J2, renders selected I6 safe-set formal model ids into
+a small offscreen framebuffer, and reads back preview checksums.
+
+The J3 preview is deliberately isolated. It is `previewDrawOnly=true`; it does
+not render terrain, does not call `MDICSectionRenderer`, does not call
+`VoxyRenderSystem`, does not use formal MDIC command buffers, and does not start
+the formal renderer draw path.
+
+The formal renderer manager can now report:
+
+```text
+formalTexturedShaderPrototypeReady=true
+formalTexturedShaderPreviewReady=true
+terrainDrawStarted=false
+formalRendererDrawStarted=false
+actualRendererDrawEnabled=false
+```
+
+Those flags mean the current formal shader resources can produce audited
+textured preview pixels offscreen. They do not mean the formal textured shader
+or renderer is ready. The readiness boundary remains:
+
+```text
+formalTexturedShaderReady=false
+formalRendererReady=false
+actualDrawEnabled=false
+```
+
+Remaining blockers include formal MDIC renderer integration, terrain shader
+semantics, lightmap, biome tint, material/alpha behavior, visibility traversal,
+and shaderpack integration.

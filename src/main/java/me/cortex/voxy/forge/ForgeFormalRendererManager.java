@@ -208,6 +208,11 @@ final class ForgeFormalRendererManager {
                 readiness.validationShaderCompileOk(),
                 readiness.validationProgramLinkOk(),
                 readiness.gpuValidationOk(),
+                readiness.formalTexturedShaderPrototypeReady(),
+                readiness.formalTexturedShaderPreviewReady(),
+                readiness.terrainDrawStarted(),
+                readiness.formalRendererDrawStarted(),
+                readiness.actualRendererDrawEnabled(),
                 readiness.formalShaderInputContractReady(),
                 readiness.formalPrerequisitesReady(),
                 false,
@@ -266,6 +271,7 @@ final class ForgeFormalRendererManager {
         ForgeFormalModelBakeryLifecycleStats bakeryLifecycle = this.instance.getFormalModelBakeryLifecycle().createStatusSnapshot();
         ForgeFormalShaderInputConsumerStats shaderInputConsumer = this.instance.getFormalShaderInputConsumer().createStatusSnapshot();
         ForgeFormalShaderProgramStats shaderProgram = this.instance.getFormalShaderProgramValidator().createStatusSnapshot();
+        ForgeFormalTexturedShaderPreviewStats texturedShaderPreview = this.instance.getFormalTexturedShaderPreview().createStatusSnapshot();
         ForgeModelAtlasSampleSetUploadStats atlas = this.instance.getModelAtlasSampleSetUploader().createStatusSnapshot();
         ForgeModelBridgeResourceReloadStats reload = this.instance.getModelBridgeResourceReloadTracker().createStatusSnapshot();
         String dimension = currentDimensionId();
@@ -325,6 +331,11 @@ final class ForgeFormalRendererManager {
                 shaderProgram.validationShaderCompileOk(),
                 shaderProgram.validationProgramLinkOk(),
                 shaderProgram.gpuValidationOk(),
+                texturedShaderPreview.formalTexturedShaderPrototypeReady(),
+                texturedShaderPreview.formalTexturedShaderPreviewReady(),
+                texturedShaderPreview.terrainDrawStarted(),
+                texturedShaderPreview.formalRendererDrawStarted(),
+                texturedShaderPreview.actualRendererDrawEnabled(),
                 shaderInputConsumer.formalShaderInputContractReady(),
                 formalPrerequisitesReady
         );

@@ -797,3 +797,52 @@ J2 is not a renderer stage. It does not draw terrain, call `MDICSectionRenderer`
 call `VoxyRenderSystem`, implement visibility traversal, or touch shaderpack
 integration. The next risky boundary is a real formal textured shader prototype,
 not more debug renderer expansion.
+
+## J3 formal textured shader preview prototype
+
+J3 adds the first controlled formal textured shader preview. The chain is:
+
+```text
+I6 safe-set lifecycle rebuild
+ -> I2 formal ModelStore owner
+ -> J2 formal shader-side validation
+ -> formal textured preview vertex/fragment program
+ -> bind formal modelData/modelColour/atlas/sampler
+ -> draw selected formal model ids into a small offscreen framebuffer
+ -> read back preview pixels/checksums
+ -> audit/status/readiness aggregation
+```
+
+The preview uses formal resources only. It does not use the sample-set atlas or
+the sample-set formal input bridge as a formal source. The shader addresses
+models by I3/I6 formal model ids, reads `faceData` from the 64-byte model record
+to derive atlas UVs, reads `modelColour`, and samples the I2 formal Voxy-style
+atlas.
+
+Successful J3 status means:
+
+```text
+formalTexturedShaderPrototypeReady=true
+offscreenPreviewReady=true
+previewReadbackOk=true
+previewPixelMismatches=0
+usesFormalModelIds=true
+sampleSetModelIdsUsed=false
+```
+
+It must still keep:
+
+```text
+formalTexturedShaderReady=false
+formalRendererReady=false
+actualRendererDrawEnabled=false
+terrainDrawStarted=false
+formalRendererDrawStarted=false
+```
+
+J3 is a preview stage, not a terrain renderer stage. It does not call
+`MDICSectionRenderer`, does not call `VoxyRenderSystem`, does not consume formal
+MDIC command buffers, does not implement visibility traversal, and does not
+touch shaderpack integration. Lightmap, biome LUT, material semantics,
+alpha/cutout, translucent handling, and shaderpack behavior remain explicit
+future work.

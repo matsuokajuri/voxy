@@ -269,3 +269,15 @@ J2 is still not a renderer stage. It does not draw terrain, call
 `MDICSectionRenderer`, call `VoxyRenderSystem`, integrate shaderpacks, or claim
 `formalTexturedShaderReady` / `formalRendererReady`. It proves shader-side
 resource consumption, not visible LoD rendering.
+
+## J3 status note
+
+J3 adds the formal textured shader preview prototype. It uses the I2 formal
+`ModelStore` owner and I6 safe-set formal model ids, compiles a preview
+vertex/fragment program, renders selected formal model previews into a small
+offscreen framebuffer, and audits the readback checksums.
+
+J3 is a controlled preview stage, not a terrain renderer stage. It may perform an
+isolated offscreen preview draw, but it does not draw LoD terrain, call
+`MDICSectionRenderer`, call `VoxyRenderSystem`, use formal MDIC command buffers,
+or claim `formalTexturedShaderReady` / `formalRendererReady`.

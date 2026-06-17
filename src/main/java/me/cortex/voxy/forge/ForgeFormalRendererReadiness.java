@@ -36,6 +36,11 @@ record ForgeFormalRendererReadiness(
         boolean validationShaderCompileOk,
         boolean validationProgramLinkOk,
         boolean gpuValidationOk,
+        boolean formalTexturedShaderPrototypeReady,
+        boolean formalTexturedShaderPreviewReady,
+        boolean terrainDrawStarted,
+        boolean formalRendererDrawStarted,
+        boolean actualRendererDrawEnabled,
         boolean formalShaderInputContractReady,
         boolean formalPrerequisitesReady
 ) {
