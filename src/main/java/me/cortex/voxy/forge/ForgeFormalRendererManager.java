@@ -210,6 +210,11 @@ final class ForgeFormalRendererManager {
                 readiness.gpuValidationOk(),
                 readiness.formalTexturedShaderPrototypeReady(),
                 readiness.formalTexturedShaderPreviewReady(),
+                readiness.formalPackedQuadPreviewReady(),
+                readiness.packedQuadShaderPreviewReady(),
+                readiness.packedQuadModelIdBridgeReady(),
+                readiness.realTerrainRecordsUsed(),
+                readiness.syntheticFallbackUsed(),
                 readiness.terrainDrawStarted(),
                 readiness.formalRendererDrawStarted(),
                 readiness.actualRendererDrawEnabled(),
@@ -272,6 +277,7 @@ final class ForgeFormalRendererManager {
         ForgeFormalShaderInputConsumerStats shaderInputConsumer = this.instance.getFormalShaderInputConsumer().createStatusSnapshot();
         ForgeFormalShaderProgramStats shaderProgram = this.instance.getFormalShaderProgramValidator().createStatusSnapshot();
         ForgeFormalTexturedShaderPreviewStats texturedShaderPreview = this.instance.getFormalTexturedShaderPreview().createStatusSnapshot();
+        ForgeFormalPackedQuadPreviewStats packedQuadPreview = this.instance.getFormalPackedQuadPreview().createStatusSnapshot();
         ForgeModelAtlasSampleSetUploadStats atlas = this.instance.getModelAtlasSampleSetUploader().createStatusSnapshot();
         ForgeModelBridgeResourceReloadStats reload = this.instance.getModelBridgeResourceReloadTracker().createStatusSnapshot();
         String dimension = currentDimensionId();
@@ -333,9 +339,17 @@ final class ForgeFormalRendererManager {
                 shaderProgram.gpuValidationOk(),
                 texturedShaderPreview.formalTexturedShaderPrototypeReady(),
                 texturedShaderPreview.formalTexturedShaderPreviewReady(),
-                texturedShaderPreview.terrainDrawStarted(),
-                texturedShaderPreview.formalRendererDrawStarted(),
-                texturedShaderPreview.actualRendererDrawEnabled(),
+                packedQuadPreview.formalPackedQuadPreviewReady(),
+                packedQuadPreview.packedQuadShaderPreviewReady(),
+                packedQuadPreview.usesFormalModelIds()
+                        && !packedQuadPreview.usesPlaceholderModelIds()
+                        && !packedQuadPreview.sampleSetModelIdsUsed()
+                        && packedQuadPreview.originalGeometryUntouched(),
+                packedQuadPreview.realTerrainRecordsUsed(),
+                packedQuadPreview.syntheticFallbackUsed(),
+                texturedShaderPreview.terrainDrawStarted() || packedQuadPreview.terrainDrawStarted(),
+                texturedShaderPreview.formalRendererDrawStarted() || packedQuadPreview.formalRendererDrawStarted(),
+                texturedShaderPreview.actualRendererDrawEnabled() || packedQuadPreview.actualRendererDrawEnabled(),
                 shaderInputConsumer.formalShaderInputContractReady(),
                 formalPrerequisitesReady
         );

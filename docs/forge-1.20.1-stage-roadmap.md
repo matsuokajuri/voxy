@@ -281,3 +281,18 @@ J3 is a controlled preview stage, not a terrain renderer stage. It may perform a
 isolated offscreen preview draw, but it does not draw LoD terrain, call
 `MDICSectionRenderer`, call `VoxyRenderSystem`, use formal MDIC command buffers,
 or claim `formalTexturedShaderReady` / `formalRendererReady`.
+
+## J4 status note
+
+J4 adds the formal packed-quad shader geometry preview. It takes the formal
+model lifecycle and shader preview work from I6-J3, maps a small packed-quad
+style batch to I3/I6 formal model ids, rewrites only a temporary isolated
+preview buffer, renders that buffer into an offscreen framebuffer, and audits
+the readback checksums.
+
+J4 is still not a terrain renderer stage. It does not render live LoD terrain,
+does not call `MDICSectionRenderer`, does not call `VoxyRenderSystem`, does not
+use formal MDIC command buffers as a renderer, and does not claim
+`formalTexturedShaderReady` / `formalRendererReady`. If no real terrain packed
+records can be safely mapped, the synthetic fallback is reported as a fallback
+rather than as real terrain record preview.

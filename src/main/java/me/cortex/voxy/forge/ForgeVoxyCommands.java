@@ -435,6 +435,18 @@ public final class ForgeVoxyCommands {
                         .executes(ctx -> formalTexturedShaderPreviewDisable(ctx.getSource())))
                 .then(Commands.literal("qa_j3_formal_textured_shader_preview")
                         .executes(ctx -> qaJ3FormalTexturedShaderPreview(ctx.getSource())))
+                .then(Commands.literal("formal_packed_quad_preview_build")
+                        .executes(ctx -> formalPackedQuadPreviewBuild(ctx.getSource())))
+                .then(Commands.literal("formal_packed_quad_preview_status")
+                        .executes(ctx -> formalPackedQuadPreviewStatus(ctx.getSource())))
+                .then(Commands.literal("formal_packed_quad_preview_audit")
+                        .executes(ctx -> formalPackedQuadPreviewAudit(ctx.getSource())))
+                .then(Commands.literal("formal_packed_quad_preview_dump")
+                        .executes(ctx -> formalPackedQuadPreviewDump(ctx.getSource())))
+                .then(Commands.literal("formal_packed_quad_preview_clear")
+                        .executes(ctx -> formalPackedQuadPreviewClear(ctx.getSource())))
+                .then(Commands.literal("qa_j4_formal_packed_quad_preview")
+                        .executes(ctx -> qaJ4FormalPackedQuadPreview(ctx.getSource())))
                 .then(Commands.literal("formal_renderer_check")
                         .executes(ctx -> formalRendererCheck(ctx.getSource())))
                 .then(Commands.literal("formal_renderer_status")
@@ -540,6 +552,8 @@ public final class ForgeVoxyCommands {
                                 .executes(ctx -> applyPresetFormalShaderProgramValidation(ctx.getSource())))
                         .then(Commands.literal("formal_textured_shader_preview")
                                 .executes(ctx -> applyPresetFormalTexturedShaderPreview(ctx.getSource())))
+                        .then(Commands.literal("formal_packed_quad_preview")
+                                .executes(ctx -> applyPresetFormalPackedQuadPreview(ctx.getSource())))
                         .then(Commands.literal("clear")
                                 .executes(ctx -> clearPreset(ctx.getSource())))
                         .then(Commands.literal("status")
@@ -4715,6 +4729,103 @@ public final class ForgeVoxyCommands {
                 && !rendererStatus.actualDrawEnabled() ? 1 : 0;
     }
 
+    private static int formalPackedQuadPreviewBuild(CommandSourceStack source) {
+        ForgeFormalPackedQuadPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalPackedQuadPreview().build();
+        ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("j4-formal-packed-quad-preview-build-command");
+        source.sendSuccess(() -> Component.literal("Voxy J4 formal packed quad preview build: "
+                + formatFormalPackedQuadPreviewStatus(status)
+                + " "
+                + formatFormalRendererStatus(rendererStatus)
+                + " Offscreen packed-quad preview only; no terrain draw, formal renderer draw, MDICSectionRenderer, or VoxyRenderSystem call was started."), false);
+        return status.formalPackedQuadPreviewReady()
+                && status.packedQuadShaderPreviewReady()
+                && status.temporaryFormalQuadBufferCreated()
+                && status.temporaryFormalQuadCount() > 0
+                && status.usesFormalModelIds()
+                && !status.usesPlaceholderModelIds()
+                && !status.sampleSetModelIdsUsed()
+                && status.originalGeometryUntouched()
+                && status.previewReadbackOk()
+                && status.previewPixelMismatches() == 0
+                && !status.terrainDrawStarted()
+                && !status.formalRendererDrawStarted()
+                && !status.actualRendererDrawEnabled()
+                && !status.formalTexturedShaderReady()
+                && !status.formalRendererReady() ? 1 : 0;
+    }
+
+    private static int formalPackedQuadPreviewStatus(CommandSourceStack source) {
+        ForgeFormalPackedQuadPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalPackedQuadPreview().createStatusSnapshot();
+        source.sendSuccess(() -> Component.literal("Voxy J4 formal packed quad preview status: " + formatFormalPackedQuadPreviewStatus(status)), false);
+        return status.formalPackedQuadPreviewReady() || status.stale() ? 1 : 0;
+    }
+
+    private static int formalPackedQuadPreviewAudit(CommandSourceStack source) {
+        ForgeFormalPackedQuadPreviewAuditResult audit = ForgeVoxyInstance.INSTANCE.getFormalPackedQuadPreview().audit();
+        ForgeFormalPackedQuadPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalPackedQuadPreview().createStatusSnapshot();
+        ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("j4-formal-packed-quad-preview-audit-command");
+        source.sendSuccess(() -> Component.literal("Voxy J4 formal packed quad preview audit: "
+                + formatFormalPackedQuadPreviewAudit(audit)
+                + " "
+                + formatFormalPackedQuadPreviewStatus(status)
+                + " "
+                + formatFormalRendererStatus(rendererStatus)), false);
+        return audit.success() ? 1 : 0;
+    }
+
+    private static int formalPackedQuadPreviewDump(CommandSourceStack source) {
+        String message = ForgeVoxyInstance.INSTANCE.getFormalPackedQuadPreview().dump();
+        source.sendSuccess(() -> Component.literal(message), false);
+        return ForgeVoxyInstance.INSTANCE.getFormalPackedQuadPreview().createStatusSnapshot().formalPackedQuadPreviewReady() ? 1 : 0;
+    }
+
+    private static int formalPackedQuadPreviewClear(CommandSourceStack source) {
+        ForgeVoxyInstance.INSTANCE.getFormalPackedQuadPreview().clear();
+        ForgeFormalPackedQuadPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalPackedQuadPreview().createStatusSnapshot();
+        source.sendSuccess(() -> Component.literal("Voxy J4 formal packed quad preview clear: "
+                + formatFormalPackedQuadPreviewStatus(status)
+                + " Formal ModelStore owner, original GL geometry heap, debug renderers, and sample-set resources were left unchanged."), false);
+        return 1;
+    }
+
+    private static int qaJ4FormalPackedQuadPreview(CommandSourceStack source) {
+        ForgeFormalPackedQuadPreviewStats buildStatus = ForgeVoxyInstance.INSTANCE.getFormalPackedQuadPreview().build();
+        ForgeFormalPackedQuadPreviewAuditResult audit = ForgeVoxyInstance.INSTANCE.getFormalPackedQuadPreview().createAuditStatusSnapshot();
+        ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("qa-j4-formal-packed-quad-preview");
+        ForgeFormalPackedQuadPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalPackedQuadPreview().createStatusSnapshot();
+        String message = "Voxy QA J4 formal packed quad preview: "
+                + formatFormalPackedQuadPreviewStatus(status)
+                + " "
+                + formatFormalPackedQuadPreviewAudit(audit)
+                + " "
+                + formatFormalRendererStatus(rendererStatus)
+                + " The QA path rebuilt the I6 safe set if needed, validated J3 formal textured preview resources, mapped packed quad-style records to formal model ids in a temporary isolated buffer, rendered only to an offscreen framebuffer, and did not touch the original geometry heap, draw terrain, call MDICSectionRenderer, call VoxyRenderSystem, or use sample-set data as a formal source.";
+        source.sendSuccess(() -> Component.literal(message), false);
+        return buildStatus.formalPackedQuadPreviewReady()
+                && status.packedQuadShaderPreviewReady()
+                && status.temporaryFormalQuadBufferCreated()
+                && status.temporaryFormalQuadCount() >= 1
+                && status.usesFormalModelIds()
+                && !status.usesPlaceholderModelIds()
+                && !status.sampleSetModelIdsUsed()
+                && !status.sampleSetBridgeUsedAsFormalSource()
+                && status.originalGeometryUntouched()
+                && status.quadRecordDecodeOk()
+                && status.modelIdDecodeOk()
+                && status.faceDecodeOk()
+                && status.previewFramebufferComplete()
+                && status.previewReadbackOk()
+                && status.previewPixelMismatches() == 0
+                && !status.terrainDrawStarted()
+                && !status.formalRendererDrawStarted()
+                && !status.actualRendererDrawEnabled()
+                && !status.formalTexturedShaderReady()
+                && !status.formalRendererReady()
+                && audit.success()
+                && !rendererStatus.formalRendererReady()
+                && !rendererStatus.actualDrawEnabled() ? 1 : 0;
+    }
+
     private static int formalRendererCheck(CommandSourceStack source) {
         ForgeFormalRendererStats status = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("command-check");
         source.sendSuccess(() -> Component.literal("Voxy formal renderer check: " + formatFormalRendererStatus(status)), false);
@@ -5660,9 +5771,120 @@ public final class ForgeVoxyCommands {
         );
     }
 
+    private static String formatFormalPackedQuadPreviewStatus(ForgeFormalPackedQuadPreviewStats status) {
+        return String.format(
+                "stage=%s buildRuns=%d auditRuns=%d clearRuns=%d auditFailures=%d formalPackedQuadPreviewReady=%s packedQuadShaderPreviewReady=%s formalTexturedShaderReady=%s formalRendererReady=%s previewDrawOnly=%s offscreenPreviewReady=%s terrainDrawStarted=%s formalRendererDrawStarted=%s actualRendererDrawEnabled=%s originalGeometryUntouched=%s sourceRecordsScanned=%d sourceRecordsAccepted=%d sourceRecordsRejected=%d recordsRejectedNoBlockState=%d recordsRejectedNoFormalModelId=%d recordsRejectedUnsafeModelId=%d realTerrainRecordsUsed=%s syntheticFallbackUsed=%s syntheticFallbackReason=%s temporaryFormalQuadBufferCreated=%s temporaryFormalQuadBufferId=%d temporaryFormalQuadCount=%d temporaryFormalVertexCount=%d temporaryFormalModelIds=%s usesFormalModelIds=%s usesPlaceholderModelIds=%s sampleSetModelIdsUsed=%s sampleSetBridgeUsedAsFormalSource=%s shaderCompileOk=%s programLinkOk=%s previewProgramId=%d modelDataBindingOk=%s modelColourBindingOk=%s atlasTextureBindingOk=%s samplerBindingOk=%s bindingLayoutCompatible=%s quadRecordDecodeOk=%s modelIdDecodeOk=%s faceDecodeOk=%s faceDataUsed=%s atlasSampleUsed=%s modelColourUsed=%s previewFramebufferCreated=%s previewFramebufferComplete=%s previewFramebufferId=%d previewTextureId=%d previewWidth=%d previewHeight=%d previewReadbackOk=%s previewPixelMismatches=%d previewChecksumCount=%d previewChecksums=%s lightmapReady=%s biomeLutReady=%s materialSemanticsReady=%s alphaCutoutReady=%s translucentReady=%s shaderpackReady=%s stale=%s requiresRebuild=%s lifecycleState=%s lastLifecycleEvent=%s staleReason=%s lastGlError=%s lastFailureReason=%s lastAuditOk=%s lastAuditError=%s lastAuditDurationMs=%.2f renderer=packed-quad-preview-only terrainDraw=false formalRendererDraw=false MDICSectionRenderer=false VoxyRenderSystem=false originalGeometryHeapModified=false sampleSetBridgeFormalSource=false",
+                status.stage(),
+                status.buildRuns(),
+                status.auditRuns(),
+                status.clearRuns(),
+                status.auditFailures(),
+                status.formalPackedQuadPreviewReady(),
+                status.packedQuadShaderPreviewReady(),
+                status.formalTexturedShaderReady(),
+                status.formalRendererReady(),
+                status.previewDrawOnly(),
+                status.offscreenPreviewReady(),
+                status.terrainDrawStarted(),
+                status.formalRendererDrawStarted(),
+                status.actualRendererDrawEnabled(),
+                status.originalGeometryUntouched(),
+                status.sourceRecordsScanned(),
+                status.sourceRecordsAccepted(),
+                status.sourceRecordsRejected(),
+                status.recordsRejectedNoBlockState(),
+                status.recordsRejectedNoFormalModelId(),
+                status.recordsRejectedUnsafeModelId(),
+                status.realTerrainRecordsUsed(),
+                status.syntheticFallbackUsed(),
+                status.syntheticFallbackReason(),
+                status.temporaryFormalQuadBufferCreated(),
+                status.temporaryFormalQuadBufferId(),
+                status.temporaryFormalQuadCount(),
+                status.temporaryFormalVertexCount(),
+                status.temporaryFormalModelIds(),
+                status.usesFormalModelIds(),
+                status.usesPlaceholderModelIds(),
+                status.sampleSetModelIdsUsed(),
+                status.sampleSetBridgeUsedAsFormalSource(),
+                status.shaderCompileOk(),
+                status.programLinkOk(),
+                status.previewProgramId(),
+                status.modelDataBindingOk(),
+                status.modelColourBindingOk(),
+                status.atlasTextureBindingOk(),
+                status.samplerBindingOk(),
+                status.bindingLayoutCompatible(),
+                status.quadRecordDecodeOk(),
+                status.modelIdDecodeOk(),
+                status.faceDecodeOk(),
+                status.faceDataUsed(),
+                status.atlasSampleUsed(),
+                status.modelColourUsed(),
+                status.previewFramebufferCreated(),
+                status.previewFramebufferComplete(),
+                status.previewFramebufferId(),
+                status.previewTextureId(),
+                status.previewWidth(),
+                status.previewHeight(),
+                status.previewReadbackOk(),
+                status.previewPixelMismatches(),
+                status.previewChecksumCount(),
+                status.previewChecksums(),
+                status.lightmapReady(),
+                status.biomeLutReady(),
+                status.materialSemanticsReady(),
+                status.alphaCutoutReady(),
+                status.translucentReady(),
+                status.shaderpackReady(),
+                status.stale(),
+                status.requiresRebuild(),
+                status.lifecycleState(),
+                status.lastLifecycleEvent(),
+                status.staleReason(),
+                status.lastGlError(),
+                status.lastFailureReason(),
+                status.lastAuditOk(),
+                status.lastAuditError(),
+                status.lastAuditDurationMs()
+        );
+    }
+
+    private static String formatFormalPackedQuadPreviewAudit(ForgeFormalPackedQuadPreviewAuditResult audit) {
+        return String.format(
+                "auditSuccess=%s auditError=%s auditDurationMs=%.2f i6SafeSetExists=%s j3PreviewWorks=%s packedQuadRecordsMapped=%s placeholderIdUsed=%s sampleSetIdUsed=%s sampleSetBridgeUsedAsFormalSource=%s originalGeometryUntouched=%s temporaryFormalQuadBufferIsolated=%s temporaryFormalQuadBufferCreated=%s quadRecordDecodeOk=%s modelIdDecodeOk=%s faceDecodeOk=%s offscreenPreviewReady=%s previewFramebufferComplete=%s previewReadbackOk=%s previewPixelMismatches=%d previewChecksumCount=%d previewDrawOnly=%s terrainDrawStarted=%s formalRendererDrawStarted=%s actualRendererDrawEnabled=%s formalTexturedShaderReady=%s formalRendererReady=%s",
+                audit.success(),
+                audit.error(),
+                audit.durationMs(),
+                audit.i6SafeSetExists(),
+                audit.j3PreviewWorks(),
+                audit.packedQuadRecordsMapped(),
+                audit.placeholderIdUsed(),
+                audit.sampleSetIdUsed(),
+                audit.sampleSetBridgeUsedAsFormalSource(),
+                audit.originalGeometryUntouched(),
+                audit.temporaryFormalQuadBufferIsolated(),
+                audit.temporaryFormalQuadBufferCreated(),
+                audit.quadRecordDecodeOk(),
+                audit.modelIdDecodeOk(),
+                audit.faceDecodeOk(),
+                audit.offscreenPreviewReady(),
+                audit.previewFramebufferComplete(),
+                audit.previewReadbackOk(),
+                audit.previewPixelMismatches(),
+                audit.previewChecksumCount(),
+                audit.previewDrawOnly(),
+                audit.terrainDrawStarted(),
+                audit.formalRendererDrawStarted(),
+                audit.actualRendererDrawEnabled(),
+                audit.formalTexturedShaderReady(),
+                audit.formalRendererReady()
+        );
+    }
+
     private static String formatFormalRendererStatus(ForgeFormalRendererStats status) {
         return String.format(
-                "stage=%s formalRendererSkeletonReady=%s formalRendererReady=%s actualDrawEnabled=%s noDraw=%s enabled=%s lifecycleState=%s formalRendererOwnershipReady=%s lastEnableReason=%s lastDisableReason=%s lastClearReason=%s lastLifecycleEvent=%s lastCheckAt=%s lastCheckReason=%s lastStaleReason=%s requiresRecheck=%s readinessGeneration=%d lifecycleGeneration=%d geometryHeapReady=%s metadataReady=%s sectionGeometryManagerReady=%s mdicCommandReady=%s mdicDrawCountReady=%s modelBridgeReady=%s formalShaderInputBridgeReady=%s atlasReady=%s resourceReloadReady=%s worldEngineReady=%s dimensionReady=%s infrastructureReady=%s debugProofReady=%s sampleBridgeReady=%s oneBlockBakePrototypeReady=%s oneBlockFormalUploadReady=%s oneBlockFormalUploadAuditReady=%s multiBlockBakePrototypeReady=%s multiBlockFormalUploadReady=%s multiBlockFormalUploadAuditReady=%s formalModelBakeryLifecycleSkeletonReady=%s reloadRebuildPrototypeReady=%s aliasSafeDedupeReady=%s formalModelFactorySkeletonReady=%s formalModelFactoryLifecycleReady=%s formalModelStoreSkeletonReady=%s formalModelStoreOwnerReady=%s formalShaderInputConsumerReady=%s formalShaderInputBindingLayoutKnown=%s formalShaderInputBindingLayoutCompatible=%s formalShaderProgramValidatorReady=%s formalShaderProgramValidationReady=%s validationShaderCompileOk=%s validationProgramLinkOk=%s gpuValidationOk=%s formalTexturedShaderPrototypeReady=%s formalTexturedShaderPreviewReady=%s terrainDrawStarted=%s formalRendererDrawStarted=%s actualRendererDrawEnabled=%s formalShaderInputContractReady=%s formalPrerequisitesReady=%s realModelFactoryReady=%s realModelBakeryReady=%s realModelStoreReady=%s formalShaderReady=%s formalTextureAtlasReady=%s formalTexturedShaderReady=%s formalTraversalReady=%s formalVisibilityTraversalReady=%s formalVoxyRenderSystemReady=%s shaderpackIntegrationReady=%s blockerCount=%d p0BlockerCount=%d p1BlockerCount=%d p2BlockerCount=%d formalDrawBlockingBlockerCount=%d blockers=%s worldUnloadSeen=%s dimensionSwitchSeen=%s resourceReloadSeen=%s debugPipelineClearSeen=%s presetOffSeen=%s presetClearSeen=%s formalRendererStale=%s debugRenderersIsolated=%s existingMdicDebugTouched=%s texturedMdicDebugTouched=%s actualDrawStartedByFormalRenderer=%s renderer=formal-renderer-skeleton formalRenderer=false draw=false",
+                "stage=%s formalRendererSkeletonReady=%s formalRendererReady=%s actualDrawEnabled=%s noDraw=%s enabled=%s lifecycleState=%s formalRendererOwnershipReady=%s lastEnableReason=%s lastDisableReason=%s lastClearReason=%s lastLifecycleEvent=%s lastCheckAt=%s lastCheckReason=%s lastStaleReason=%s requiresRecheck=%s readinessGeneration=%d lifecycleGeneration=%d geometryHeapReady=%s metadataReady=%s sectionGeometryManagerReady=%s mdicCommandReady=%s mdicDrawCountReady=%s modelBridgeReady=%s formalShaderInputBridgeReady=%s atlasReady=%s resourceReloadReady=%s worldEngineReady=%s dimensionReady=%s infrastructureReady=%s debugProofReady=%s sampleBridgeReady=%s oneBlockBakePrototypeReady=%s oneBlockFormalUploadReady=%s oneBlockFormalUploadAuditReady=%s multiBlockBakePrototypeReady=%s multiBlockFormalUploadReady=%s multiBlockFormalUploadAuditReady=%s formalModelBakeryLifecycleSkeletonReady=%s reloadRebuildPrototypeReady=%s aliasSafeDedupeReady=%s formalModelFactorySkeletonReady=%s formalModelFactoryLifecycleReady=%s formalModelStoreSkeletonReady=%s formalModelStoreOwnerReady=%s formalShaderInputConsumerReady=%s formalShaderInputBindingLayoutKnown=%s formalShaderInputBindingLayoutCompatible=%s formalShaderProgramValidatorReady=%s formalShaderProgramValidationReady=%s validationShaderCompileOk=%s validationProgramLinkOk=%s gpuValidationOk=%s formalTexturedShaderPrototypeReady=%s formalTexturedShaderPreviewReady=%s formalPackedQuadPreviewReady=%s packedQuadShaderPreviewReady=%s packedQuadModelIdBridgeReady=%s realTerrainRecordsUsed=%s syntheticFallbackUsed=%s terrainDrawStarted=%s formalRendererDrawStarted=%s actualRendererDrawEnabled=%s formalShaderInputContractReady=%s formalPrerequisitesReady=%s realModelFactoryReady=%s realModelBakeryReady=%s realModelStoreReady=%s formalShaderReady=%s formalTextureAtlasReady=%s formalTexturedShaderReady=%s formalTraversalReady=%s formalVisibilityTraversalReady=%s formalVoxyRenderSystemReady=%s shaderpackIntegrationReady=%s blockerCount=%d p0BlockerCount=%d p1BlockerCount=%d p2BlockerCount=%d formalDrawBlockingBlockerCount=%d blockers=%s worldUnloadSeen=%s dimensionSwitchSeen=%s resourceReloadSeen=%s debugPipelineClearSeen=%s presetOffSeen=%s presetClearSeen=%s formalRendererStale=%s debugRenderersIsolated=%s existingMdicDebugTouched=%s texturedMdicDebugTouched=%s actualDrawStartedByFormalRenderer=%s renderer=formal-renderer-skeleton formalRenderer=false draw=false",
                 status.stage(),
                 status.formalRendererSkeletonReady(),
                 status.formalRendererReady(),
@@ -5718,6 +5940,11 @@ public final class ForgeVoxyCommands {
                 status.gpuValidationOk(),
                 status.formalTexturedShaderPrototypeReady(),
                 status.formalTexturedShaderPreviewReady(),
+                status.formalPackedQuadPreviewReady(),
+                status.packedQuadShaderPreviewReady(),
+                status.packedQuadModelIdBridgeReady(),
+                status.realTerrainRecordsUsed(),
+                status.syntheticFallbackUsed(),
                 status.terrainDrawStarted(),
                 status.formalRendererDrawStarted(),
                 status.actualRendererDrawEnabled(),
@@ -6678,6 +6905,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getFormalShaderInputConsumer().markPresetOff();
         ForgeVoxyInstance.INSTANCE.getFormalShaderProgramValidator().markPresetOff();
         ForgeVoxyInstance.INSTANCE.getFormalTexturedShaderPreview().markPresetOff();
+        ForgeVoxyInstance.INSTANCE.getFormalPackedQuadPreview().markPresetOff();
         ForgeVoxyInstance.INSTANCE.closeActiveWorld();
         source.sendSuccess(() -> Component.literal("Voxy preset off: runtime overrides disabled engine, auto ingest, auto CPU mesh build, auto BuiltSection build, auto geometry-manager consume, upload-only GL geometry heap, direct GL renderer skeleton, MDIC command skeleton/debug draw, simple GPU renderer, and debug renderer. Overrides are not written to toml."), false);
         return 1;
@@ -7034,6 +7262,41 @@ public final class ForgeVoxyCommands {
                 && !rendererStatus.formalRendererReady() ? 1 : 0;
     }
 
+    private static int applyPresetFormalPackedQuadPreview(CommandSourceStack source) {
+        ForgeVoxyRuntimeOverrides.applyFormalPackedQuadPreviewPreset();
+        boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
+        ForgeFormalPackedQuadPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalPackedQuadPreview().build();
+        ForgeFormalPackedQuadPreviewAuditResult audit = ForgeVoxyInstance.INSTANCE.getFormalPackedQuadPreview().createAuditStatusSnapshot();
+        ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("preset-formal-packed-quad-preview");
+        String message = "Voxy preset formal_packed_quad_preview: runtime-only J4 formal packed-quad shader geometry preview applied, not written to toml. "
+                + "The preset rebuilds the I6 safe set if needed, validates J3 formal textured preview resources, maps packed quad-style records to formal model ids in an isolated temporary buffer, renders only to an offscreen preview framebuffer, and performs no live terrain draw or formal renderer draw. "
+                + (status.syntheticFallbackUsed() ? "Synthetic packed-quad fallback was used and is reported as such. " : "")
+                + (engineReady ? "WorldEngine is active. " : "No active client world was found; safe fallback block selection may still use vanilla registry. ")
+                + formatFormalPackedQuadPreviewStatus(status)
+                + " "
+                + formatFormalPackedQuadPreviewAudit(audit)
+                + " "
+                + formatFormalRendererStatus(rendererStatus);
+        source.sendSuccess(() -> Component.literal(message), false);
+        return status.formalPackedQuadPreviewReady()
+                && status.packedQuadShaderPreviewReady()
+                && status.temporaryFormalQuadBufferCreated()
+                && status.temporaryFormalQuadCount() >= 1
+                && status.usesFormalModelIds()
+                && !status.usesPlaceholderModelIds()
+                && !status.sampleSetModelIdsUsed()
+                && status.originalGeometryUntouched()
+                && status.previewReadbackOk()
+                && status.previewPixelMismatches() == 0
+                && audit.success()
+                && !status.terrainDrawStarted()
+                && !status.formalRendererDrawStarted()
+                && !status.actualRendererDrawEnabled()
+                && rendererStatus.noDraw()
+                && !rendererStatus.actualDrawEnabled()
+                && !rendererStatus.formalRendererReady() ? 1 : 0;
+    }
+
     private static int clearPreset(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.clear();
         ForgeVoxyInstance.INSTANCE.getGpuGeometryReadbackMeshCache().clear();
@@ -7061,6 +7324,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getFormalShaderInputConsumer().clear();
         ForgeVoxyInstance.INSTANCE.getFormalShaderProgramValidator().clear();
         ForgeVoxyInstance.INSTANCE.getFormalTexturedShaderPreview().clear();
+        ForgeVoxyInstance.INSTANCE.getFormalPackedQuadPreview().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedDebugQuadRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedReadbackRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedMdicDebugRenderer().clear();
@@ -7077,6 +7341,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getFormalShaderInputConsumer().markPresetClear();
         ForgeVoxyInstance.INSTANCE.getFormalShaderProgramValidator().markPresetClear();
         ForgeVoxyInstance.INSTANCE.getFormalTexturedShaderPreview().markPresetClear();
+        ForgeVoxyInstance.INSTANCE.getFormalPackedQuadPreview().markPresetClear();
         source.sendSuccess(() -> Component.literal("Voxy preset clear: runtime overrides cleared; effective values now come from the toml config."), false);
         return 1;
     }
@@ -7414,6 +7679,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getFormalShaderInputConsumer().markDebugPipelineClear();
         ForgeVoxyInstance.INSTANCE.getFormalShaderProgramValidator().markDebugPipelineClear();
         ForgeVoxyInstance.INSTANCE.getFormalTexturedShaderPreview().markDebugPipelineClear();
+        ForgeVoxyInstance.INSTANCE.getFormalPackedQuadPreview().markDebugPipelineClear();
         ForgeVoxyInstance.INSTANCE.getTexturedDebugQuadRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedReadbackRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedMdicDebugRenderer().clear();
@@ -7498,6 +7764,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getFormalShaderInputConsumer().markDebugPipelineClear();
         ForgeVoxyInstance.INSTANCE.getFormalShaderProgramValidator().markDebugPipelineClear();
         ForgeVoxyInstance.INSTANCE.getFormalTexturedShaderPreview().markDebugPipelineClear();
+        ForgeVoxyInstance.INSTANCE.getFormalPackedQuadPreview().markDebugPipelineClear();
         ForgeVoxyInstance.INSTANCE.getTexturedDebugQuadRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedReadbackRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedMdicDebugRenderer().clear();

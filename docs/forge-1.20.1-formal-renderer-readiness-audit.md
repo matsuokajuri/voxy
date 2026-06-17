@@ -758,3 +758,47 @@ actualDrawEnabled=false
 Remaining blockers include formal MDIC renderer integration, terrain shader
 semantics, lightmap, biome tint, material/alpha behavior, visibility traversal,
 and shaderpack integration.
+
+## J4 readiness note
+
+J4 adds a formal packed-quad shader geometry preview. It reuses the I2 formal
+`ModelStore` owner, the I6 safe-set formal model ids, and the J3 formal
+textured preview resources, then renders a small packed-quad-style batch into an
+offscreen framebuffer for readback audit.
+
+The J4 preview deliberately keeps the formal terrain renderer boundary intact.
+It may scan existing CPU/BuiltSection packed records, but only accepts a record
+when it can map the legacy source model id back to a block-state id and then to
+an I3/I6 formal model id. The model id rewrite happens only in a temporary
+preview buffer; the original geometry heap remains untouched. If no real terrain
+record can be mapped safely, the preview may use a synthetic packed-quad
+fallback and reports that explicitly.
+
+The formal renderer manager can now report:
+
+```text
+formalPackedQuadPreviewReady=true
+packedQuadShaderPreviewReady=true
+packedQuadModelIdBridgeReady=true
+realTerrainRecordsUsed=true/false
+syntheticFallbackUsed=true/false
+terrainDrawStarted=false
+formalRendererDrawStarted=false
+actualRendererDrawEnabled=false
+```
+
+Those flags mean the current formal shader preview can consume packed-quad-style
+geometry with formal model ids in an isolated offscreen audit. They do not mean
+the formal textured shader or terrain renderer is ready. The readiness boundary
+remains:
+
+```text
+formalTexturedShaderReady=false
+formalRendererReady=false
+actualDrawEnabled=false
+```
+
+Remaining blockers include the real formal geometry model-id pipeline, formal
+MDIC renderer integration, formal command-buffer ownership, visibility/LOD
+traversal, lightmap, biome tint, material/alpha semantics, translucent handling,
+and shaderpack integration.

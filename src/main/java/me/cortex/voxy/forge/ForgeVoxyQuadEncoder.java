@@ -179,6 +179,16 @@ public final class ForgeVoxyQuadEncoder {
         return extract(record, LIGHT_BITS, LIGHT_SHIFT);
     }
 
+    static long replaceModelId(long record, int modelId) {
+        long cleared = record & ~mask(MODEL_ID_BITS, MODEL_ID_SHIFT);
+        int safeModelId = Math.max(0, Math.min(MAX_MODEL_ID, modelId));
+        return cleared | ((long) safeModelId << MODEL_ID_SHIFT);
+    }
+
+    static long packPreviewRecord(int face, int localX, int localY, int localZ, int length, int width, int modelId, int biomeId, int light) {
+        return packRecord(face, localX, localY, localZ, length, width, modelId, biomeId, light);
+    }
+
     private static long packRecord(int face, int localX, int localY, int localZ, int length, int width, int modelId, int biomeId, int light) {
         length = Math.max(1, Math.min(MAX_ORIGINAL_QUAD_SPAN, length));
         width = Math.max(1, Math.min(MAX_ORIGINAL_QUAD_SPAN, width));

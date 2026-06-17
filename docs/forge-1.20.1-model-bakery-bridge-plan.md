@@ -846,3 +846,59 @@ MDIC command buffers, does not implement visibility traversal, and does not
 touch shaderpack integration. Lightmap, biome LUT, material semantics,
 alpha/cutout, translucent handling, and shaderpack behavior remain explicit
 future work.
+
+## J4 formal packed-quad shader geometry preview
+
+J4 extends the J3 offscreen preview from selected model ids to a small isolated
+packed-quad-style geometry batch. The chain is:
+
+```text
+I6 safe-set lifecycle rebuild
+ -> I2 formal ModelStore owner
+ -> J3 formal textured preview shader resources
+ -> scan safe packed quad records when they can be mapped
+ -> rewrite only the temporary preview records to I3/I6 formal model ids
+ -> render those records into an offscreen framebuffer
+ -> read back preview checksums
+ -> audit/status/readiness aggregation
+```
+
+The important boundary is model id safety. Existing terrain records may still
+contain legacy placeholder/debug model ids, so J4 never treats them as formal
+ids. The preview path maps a source record back to a block-state id when
+possible, checks that the I3/I6 lifecycle owns a matching formal model id, and
+rewrites the id only in the temporary preview buffer. The original geometry heap
+is left untouched. If no source terrain records can be mapped safely, J4 may use
+a synthetic packed-quad preview fallback, and the status reports that fallback
+explicitly.
+
+Successful J4 status means:
+
+```text
+formalPackedQuadPreviewReady=true
+packedQuadShaderPreviewReady=true
+temporaryFormalQuadBufferCreated=true
+usesFormalModelIds=true
+usesPlaceholderModelIds=false
+sampleSetModelIdsUsed=false
+originalGeometryUntouched=true
+previewReadbackOk=true
+previewPixelMismatches=0
+```
+
+It must still keep:
+
+```text
+formalTexturedShaderReady=false
+formalRendererReady=false
+terrainDrawStarted=false
+formalRendererDrawStarted=false
+actualRendererDrawEnabled=false
+```
+
+J4 is still not a terrain renderer stage. It does not call
+`MDICSectionRenderer`, does not call `VoxyRenderSystem`, does not use formal
+MDIC command buffers as a renderer, does not enable visibility traversal, and
+does not replace any debug renderer. Lightmap, biome LUT, material semantics,
+alpha/cutout, translucent handling, shaderpack behavior, and the formal MDIC
+terrain integration remain future work.
