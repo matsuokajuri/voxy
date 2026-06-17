@@ -213,6 +213,11 @@ final class ForgeFormalRendererManager {
                 readiness.formalPackedQuadPreviewReady(),
                 readiness.packedQuadShaderPreviewReady(),
                 readiness.packedQuadModelIdBridgeReady(),
+                readiness.formalTerrainPackedRecordBridgeReady(),
+                readiness.realTerrainPackedRecordBridgeReady(),
+                readiness.temporaryFormalQuadBufferCreated(),
+                readiness.originalGeometryUntouched(),
+                readiness.originalGeometryHeapUntouched(),
                 readiness.realTerrainRecordsUsed(),
                 readiness.syntheticFallbackUsed(),
                 readiness.terrainDrawStarted(),
@@ -278,6 +283,7 @@ final class ForgeFormalRendererManager {
         ForgeFormalShaderProgramStats shaderProgram = this.instance.getFormalShaderProgramValidator().createStatusSnapshot();
         ForgeFormalTexturedShaderPreviewStats texturedShaderPreview = this.instance.getFormalTexturedShaderPreview().createStatusSnapshot();
         ForgeFormalPackedQuadPreviewStats packedQuadPreview = this.instance.getFormalPackedQuadPreview().createStatusSnapshot();
+        ForgeFormalTerrainPackedRecordBridgeStats terrainRecordBridge = this.instance.getFormalTerrainPackedRecordBridge().createStatusSnapshot();
         ForgeModelAtlasSampleSetUploadStats atlas = this.instance.getModelAtlasSampleSetUploader().createStatusSnapshot();
         ForgeModelBridgeResourceReloadStats reload = this.instance.getModelBridgeResourceReloadTracker().createStatusSnapshot();
         String dimension = currentDimensionId();
@@ -345,8 +351,13 @@ final class ForgeFormalRendererManager {
                         && !packedQuadPreview.usesPlaceholderModelIds()
                         && !packedQuadPreview.sampleSetModelIdsUsed()
                         && packedQuadPreview.originalGeometryUntouched(),
-                packedQuadPreview.realTerrainRecordsUsed(),
-                packedQuadPreview.syntheticFallbackUsed(),
+                terrainRecordBridge.formalTerrainPackedRecordBridgeReady(),
+                terrainRecordBridge.realTerrainPackedRecordBridgeReady(),
+                terrainRecordBridge.temporaryFormalQuadBufferCreated(),
+                terrainRecordBridge.originalGeometryUntouched(),
+                terrainRecordBridge.originalGeometryHeapUntouched(),
+                terrainRecordBridge.realTerrainRecordsUsed(),
+                terrainRecordBridge.syntheticFallbackUsed(),
                 texturedShaderPreview.terrainDrawStarted() || packedQuadPreview.terrainDrawStarted(),
                 texturedShaderPreview.formalRendererDrawStarted() || packedQuadPreview.formalRendererDrawStarted(),
                 texturedShaderPreview.actualRendererDrawEnabled() || packedQuadPreview.actualRendererDrawEnabled(),

@@ -902,3 +902,34 @@ MDIC command buffers as a renderer, does not enable visibility traversal, and
 does not replace any debug renderer. Lightmap, biome LUT, material semantics,
 alpha/cutout, translucent handling, shaderpack behavior, and the formal MDIC
 terrain integration remain future work.
+
+## J5 real terrain packed-record formal model-id bridge
+
+J5 removes the J4 synthetic fallback from the QA success path. It creates real
+current-world BuiltSection packed records through the existing ingest -> CPU
+mesh -> BuiltSection path, recovers each record's legacy model-id source back to
+a block-state id, verifies that the I3/I6 formal lifecycle owns a real-baked
+formal model id for that block-state, and rewrites only a temporary isolated
+preview buffer before handing it to the J4 offscreen shader preview.
+
+Successful J5 status requires:
+
+```text
+realTerrainRecordsUsed=true
+syntheticFallbackUsed=false
+sourceRecordsAccepted>=1
+temporaryFormalQuadBufferCreated=true
+temporaryFormalQuadCount>=1
+previewReadbackOk=true
+previewPixelMismatches=0
+originalRecordUnchanged=true
+originalGeometryHeapUntouched=true
+```
+
+This is still not the formal terrain renderer. J5 does not mutate the original
+GL geometry heap, does not globally switch geometry encoding to formal model ids,
+does not use formal MDIC command buffers as a renderer, does not call
+`MDICSectionRenderer`, does not call `VoxyRenderSystem`, and does not claim
+`formalTexturedShaderReady` or `formalRendererReady`. It proves that a real
+terrain/BuiltSection-derived packed record can be bridged into formal model-id
+space for an isolated offscreen preview only.

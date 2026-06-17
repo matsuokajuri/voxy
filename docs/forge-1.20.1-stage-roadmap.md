@@ -296,3 +296,18 @@ use formal MDIC command buffers as a renderer, and does not claim
 `formalTexturedShaderReady` / `formalRendererReady`. If no real terrain packed
 records can be safely mapped, the synthetic fallback is reported as a fallback
 rather than as real terrain record preview.
+
+## J5 status note
+
+J5 adds the real terrain packed-record formal model-id bridge. It uses the
+current-world ingest -> CPU mesh -> BuiltSection path to produce real packed
+records, maps their recovered block-state source to I3/I6 formal model ids, and
+rewrites only a temporary preview buffer before using the J4 offscreen shader
+preview path.
+
+J5 is still not a formal terrain renderer stage. It does not render live LoD
+terrain, mutate the original GL geometry heap, globally switch geometry encoding
+to formal model ids, call `MDICSectionRenderer`, call `VoxyRenderSystem`, or
+claim `formalTexturedShaderReady` / `formalRendererReady`. Unlike J4, synthetic
+fallback is not acceptable as J5 success; the QA path must report
+`realTerrainRecordsUsed=true` and `syntheticFallbackUsed=false`.

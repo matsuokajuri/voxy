@@ -55,6 +55,7 @@ public final class ForgeVoxyInstance {
     private final ForgeFormalShaderProgramValidator formalShaderProgramValidator = new ForgeFormalShaderProgramValidator(this);
     private final ForgeFormalTexturedShaderPreview formalTexturedShaderPreview = new ForgeFormalTexturedShaderPreview(this);
     private final ForgeFormalPackedQuadPreview formalPackedQuadPreview = new ForgeFormalPackedQuadPreview(this);
+    private final ForgeFormalTerrainPackedRecordBridge formalTerrainPackedRecordBridge = new ForgeFormalTerrainPackedRecordBridge(this);
     private final ForgeFormalRendererManager formalRendererManager = new ForgeFormalRendererManager(this);
     private final ForgeTexturedDebugQuadRenderer texturedDebugQuadRenderer = new ForgeTexturedDebugQuadRenderer(this);
     private final ForgeTexturedReadbackRenderer texturedReadbackRenderer = new ForgeTexturedReadbackRenderer(this);
@@ -257,6 +258,10 @@ public final class ForgeVoxyInstance {
         return this.formalPackedQuadPreview;
     }
 
+    public ForgeFormalTerrainPackedRecordBridge getFormalTerrainPackedRecordBridge() {
+        return this.formalTerrainPackedRecordBridge;
+    }
+
     public ForgeFormalRendererManager getFormalRendererManager() {
         return this.formalRendererManager;
     }
@@ -332,6 +337,7 @@ public final class ForgeVoxyInstance {
         this.formalShaderProgramValidator.markDimensionSwitch();
         this.formalTexturedShaderPreview.markDimensionSwitch();
         this.formalPackedQuadPreview.markDimensionSwitch();
+        this.formalTerrainPackedRecordBridge.markDimensionSwitch();
         this.formalRendererManager.markDimensionSwitch();
         this.texturedDebugQuadRenderer.clear();
         this.texturedReadbackRenderer.clear();
@@ -432,6 +438,7 @@ public final class ForgeVoxyInstance {
         this.formalShaderProgramValidator.markWorldUnload();
         this.formalTexturedShaderPreview.markWorldUnload();
         this.formalPackedQuadPreview.markWorldUnload();
+        this.formalTerrainPackedRecordBridge.markWorldUnload();
         this.formalRendererManager.markWorldUnload();
         this.texturedDebugQuadRenderer.clear();
         this.texturedReadbackRenderer.clear();

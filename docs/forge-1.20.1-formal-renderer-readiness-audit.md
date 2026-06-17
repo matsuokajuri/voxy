@@ -802,3 +802,53 @@ Remaining blockers include the real formal geometry model-id pipeline, formal
 MDIC renderer integration, formal command-buffer ownership, visibility/LOD
 traversal, lightmap, biome tint, material/alpha semantics, translucent handling,
 and shaderpack integration.
+
+## J5 readiness note
+
+J5 adds the real terrain packed-record formal model-id bridge. It keeps the J4
+offscreen preview boundary, but the QA path must now produce and consume real
+current-world BuiltSection packed records instead of accepting the synthetic
+fallback. The source path is:
+
+```text
+current loaded chunk
+ -> Voxy ingest
+ -> CPU mesh
+ -> BuiltSection packed records
+ -> blockStateId recovery
+ -> I3/I6 formal model id lookup
+ -> temporary formal packed-quad buffer
+ -> J4 offscreen preview/readback
+```
+
+The formal renderer manager can now report:
+
+```text
+formalTerrainPackedRecordBridgeReady=true
+realTerrainPackedRecordBridgeReady=true
+realTerrainRecordsUsed=true
+syntheticFallbackUsed=false
+temporaryFormalQuadBufferCreated=true
+originalGeometryUntouched=true
+originalGeometryHeapUntouched=true
+terrainDrawStarted=false
+formalRendererDrawStarted=false
+actualRendererDrawEnabled=false
+```
+
+Those flags mean the isolated preview can consume real terrain/BuiltSection
+records after safely rewriting only temporary record copies to formal model ids.
+They do not mean the global geometry model-id pipeline, formal MDIC command
+ownership, formal textured terrain shader, or formal renderer is ready. The
+readiness boundary remains:
+
+```text
+formalTexturedShaderReady=false
+formalRendererReady=false
+actualDrawEnabled=false
+```
+
+Remaining blockers include making the formal model-id geometry path global,
+formal MDIC renderer integration, command-buffer ownership, visibility/LOD
+traversal, lightmap, biome tint, material/alpha semantics, translucent handling,
+and shaderpack integration.
