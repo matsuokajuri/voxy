@@ -104,6 +104,7 @@ final class ForgeModelBridgeResourceReloadTracker {
             this.instance.getModelAtlasSampleSetUploader().markStale(staleReason);
             this.instance.getFormalShaderInputBridge().markStale(staleReason);
             this.instance.getFormalModelStore().markResourceReload();
+            this.instance.getFormalModelFactory().markResourceReload();
             this.instance.getFormalRendererManager().markResourceReload();
             this.instance.getTexturedDebugQuadRenderer().markStale(staleReason);
             this.instance.getTexturedReadbackRenderer().markStale(staleReason);

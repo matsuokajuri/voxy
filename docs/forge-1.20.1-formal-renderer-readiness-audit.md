@@ -491,11 +491,42 @@ The owner exists, but no real `ModelFactory` has populated model records, no
 formal bake lifecycle exists, and resource reload still cannot rebuild real
 model/atlas data.
 
+## I3 formal ModelFactory lifecycle note
+
+I3 adds a formal `ModelFactory` lifecycle skeleton. It can request a
+`blockStateId`, track seen/pending/in-flight/completed skeleton state, assign a
+formal model id placeholder, and populate placeholder `metadataCache`,
+`fluidStateLUT`, and `modelTexture2id` structures.
+
+It remains no-bake, no-upload, and no-draw. It does not call Forge `BakedModel`
+logic, does not write real formal ModelStore records, does not upload atlas
+pixels, and does not bind a formal shader.
+
+The formal renderer manager can now report:
+
+```text
+formalModelFactorySkeletonReady
+formalModelFactoryLifecycleReady
+realModelFactoryReady=false
+realModelBakeryReady=false
+formalRendererReady=false
+```
+
+The blocker list is refined. The old generic ModelFactory blocker becomes:
+
+```text
+P0_REAL_MODEL_FACTORY_REAL_BAKE_MISSING
+P0_REAL_MODEL_FACTORY_UPLOAD_PIPELINE_MISSING
+```
+
+This means the lifecycle shell exists, but formal draw is still blocked until
+real bake results can populate the formal ModelStore and atlas.
+
 ## Blocker list
 
 P0 blockers before formal draw:
 
-- Real `ModelFactory` / `ModelBakerySubsystem` bridge or compatible Forge owner.
+- Real `ModelFactory` bake path and upload pipeline.
 - Formal `ModelStore` ownership and rebuild lifecycle.
 - Formal shader input contract beyond sample-set buffers.
 - Renderer ownership boundary and lifecycle.

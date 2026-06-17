@@ -10,7 +10,8 @@ final class ForgeFormalRendererManager {
     static final String STAGE = "H2_FORMAL_RENDERER_LIFECYCLE_STATUS_HARDENING";
 
     private static final List<ForgeFormalRendererBlocker> BLOCKERS = List.of(
-            new ForgeFormalRendererBlocker("P0", "P0_REAL_MODEL_FACTORY_MISSING", "Real ModelFactory bridge missing", "Forge has no real ModelFactory / ModelBakery bridge for stable model ids.", "Build the real ModelFactory / ModelBakery bridge before formal draw.", true),
+            new ForgeFormalRendererBlocker("P0", "P0_REAL_MODEL_FACTORY_REAL_BAKE_MISSING", "Real ModelFactory bake missing", "The formal ModelFactory skeleton can assign placeholder formal ids, but it does not bake real BakedModel data.", "Add the real Forge ModelFactory / ModelBakery bake path before formal draw.", true),
+            new ForgeFormalRendererBlocker("P0", "P0_REAL_MODEL_FACTORY_UPLOAD_PIPELINE_MISSING", "Real ModelFactory upload pipeline missing", "The formal ModelFactory skeleton does not upload model records, model colours, or atlas pixels into the formal ModelStore.", "Connect real bake results to the formal ModelStore upload pipeline.", true),
             new ForgeFormalRendererBlocker("P0", "P0_FORMAL_MODELSTORE_REAL_DATA_MISSING", "Formal ModelStore real data missing", "The formal ModelStore owner can exist, but no real ModelFactory-owned model records or atlas pixels are uploaded.", "Populate the formal ModelStore from the real ModelFactory / ModelBakery bridge before formal draw.", true),
             new ForgeFormalRendererBlocker("P0", "P0_FORMAL_MODELSTORE_REBUILD_MISSING", "Formal ModelStore rebuild path missing", "Resource reload can stale the formal ModelStore owner, but it cannot rebuild real model records or atlas data yet.", "Add resource reload rebuild ownership for formal model data and atlas resources.", true),
             new ForgeFormalRendererBlocker("P0", "P0_FORMAL_SHADER_MISSING", "Formal textured shader missing", "Current textured shaders are debug variants and do not implement the full formal contract.", "Add a formal shader after real model inputs exist.", true),
@@ -186,6 +187,8 @@ final class ForgeFormalRendererManager {
                 readiness.infrastructureReady(),
                 readiness.debugProofReady(),
                 readiness.sampleBridgeReady(),
+                readiness.formalModelFactorySkeletonReady(),
+                readiness.formalModelFactoryLifecycleReady(),
                 readiness.formalModelStoreSkeletonReady(),
                 readiness.formalModelStoreOwnerReady(),
                 readiness.formalPrerequisitesReady(),
@@ -238,6 +241,7 @@ final class ForgeFormalRendererManager {
         ForgeMdicDebugDrawStats mdicDraw = this.instance.getMdicDebugRenderer().createStatusSnapshot();
         ForgeModelBridgeReadinessStats modelBridge = this.instance.getModelBridgeReadiness().createStatusSnapshot();
         ForgeFormalShaderInputStats shaderInput = this.instance.getFormalShaderInputBridge().createStatusSnapshot();
+        ForgeFormalModelFactoryStats formalModelFactory = this.instance.getFormalModelFactory().createStatusSnapshot();
         ForgeFormalModelStoreStats formalModelStore = this.instance.getFormalModelStore().createStatusSnapshot();
         ForgeModelAtlasSampleSetUploadStats atlas = this.instance.getModelAtlasSampleSetUploader().createStatusSnapshot();
         ForgeModelBridgeResourceReloadStats reload = this.instance.getModelBridgeResourceReloadTracker().createStatusSnapshot();
@@ -277,6 +281,8 @@ final class ForgeFormalRendererManager {
                 infrastructureReady,
                 debugProofReady,
                 sampleBridgeReady,
+                formalModelFactory.formalModelFactorySkeletonReady(),
+                formalModelFactory.formalModelFactoryLifecycleReady(),
                 formalModelStore.formalModelStoreSkeletonReady(),
                 formalModelStore.formalModelStoreOwnerReady(),
                 formalPrerequisitesReady

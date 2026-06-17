@@ -425,3 +425,94 @@ I3: Forge ModelFactory skeleton
 I3 should create the block-state-to-model-id lifecycle shell: mappings, pending
 queues, in-flight tracking, metadata cache placeholder, fluid LUT placeholder,
 and dedupe placeholder. It should still avoid formal draw.
+
+## I3 status: Forge ModelFactory lifecycle skeleton
+
+I3 adds a no-bake, no-upload lifecycle owner for the future Forge-side
+`ModelFactory`. It is intentionally separate from the older placeholder
+`ForgeVoxyModelIdMapper` and from the sample-set debug model ids.
+
+The I3 skeleton tracks:
+
+- `blockStateId -> formalModelId` skeleton mappings,
+- seen block state ids,
+- pending bake requests,
+- synchronous in-flight skeleton processing,
+- completed skeleton mappings,
+- placeholder `metadataCache` entries,
+- placeholder `fluidStateLUT` entries,
+- placeholder `modelTexture2id` entries.
+
+The current process is:
+
+```text
+blockStateId
+ -> request
+ -> seen / pending
+ -> process_skeleton
+ -> assign formalModelId skeleton
+ -> placeholder metadataCache / fluidStateLUT / modelTexture2id
+ -> audit
+```
+
+It does not:
+
+- call Minecraft or Forge `BakedModel` bake logic,
+- upload formal model records,
+- upload formal atlas pixels,
+- write real formal ModelStore data,
+- bind a formal shader,
+- draw,
+- call `MDICSectionRenderer`,
+- call `VoxyRenderSystem`.
+
+ID semantics are explicit:
+
+- `ForgeVoxyModelIdMapper` ids remain legacy placeholder/debug ids.
+- sample-set ids remain debug/validation ids.
+- I3 formal ids are lifecycle skeleton ids only.
+
+The status must therefore keep:
+
+```text
+formalModelIdsAssigned=true/false
+formalModelIdsBackedByRealBake=false
+usesPlaceholderModelIds=false
+usesFormalModelIds=true/false
+sampleSetModelIdsUsed=false
+formalModelFactoryReady=false
+```
+
+Reload and world lifecycle events mark the skeleton stale and clear mappings so
+old block-state-to-model-id assignments do not leak across resource packs,
+worlds, or dimensions. This is still only invalidation; rebuild with real bake
+results is left for later.
+
+Formal renderer readiness can now report:
+
+```text
+formalModelFactorySkeletonReady
+formalModelFactoryLifecycleReady
+realModelFactoryReady=false
+realModelBakeryReady=false
+formalRendererReady=false
+```
+
+The blocker wording changes from a generic missing ModelFactory to two more
+precise P0 blockers:
+
+```text
+P0_REAL_MODEL_FACTORY_REAL_BAKE_MISSING
+P0_REAL_MODEL_FACTORY_UPLOAD_PIPELINE_MISSING
+```
+
+Recommended next stage:
+
+```text
+I4: Real one-block bake/upload prototype
+```
+
+I4 should take exactly one safe solid `BlockState` through the real Forge
+`BakedModel` / `BakedQuad` read path, build one formal record, and upload it
+through the I2 formal ModelStore owner. It should still avoid broad renderer
+integration until the one-block bake/upload path audits cleanly.

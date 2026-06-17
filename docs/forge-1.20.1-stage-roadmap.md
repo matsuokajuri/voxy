@@ -184,3 +184,21 @@ The intended next work is:
 
 - I3 for a Forge `ModelFactory` lifecycle skeleton.
 - I4 for a one-block real bake/upload prototype after the lifecycle shell exists.
+
+## I3 status note
+
+I3 creates the Forge formal `ModelFactory` lifecycle skeleton. It tracks
+block-state requests, pending/in-flight/completed skeleton states, formal model
+id skeleton assignment, placeholder metadata cache entries, placeholder fluid
+state LUT entries, and placeholder texture-dedupe entries.
+
+I3 is still no-bake, no-upload, and no-draw. It does not call real Forge
+`BakedModel` baking, does not upload real model records or atlas pixels, does
+not bind a formal shader, does not draw, and does not call `MDICSectionRenderer`
+or `VoxyRenderSystem`.
+
+The intended next work is:
+
+- I4 for a one-block real bake/upload prototype through the formal ModelStore
+  owner.
+- I5 for multi-block bake/upload, dedupe, tint, fluids, and reload rebuild.

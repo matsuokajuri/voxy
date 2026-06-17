@@ -47,6 +47,7 @@ public final class ForgeVoxyInstance {
     private final ForgeModelAtlasSampleSetUploader modelAtlasSampleSetUploader = new ForgeModelAtlasSampleSetUploader(this);
     private final ForgeFormalShaderInputBridge formalShaderInputBridge = new ForgeFormalShaderInputBridge(this);
     private final ForgeFormalModelStore formalModelStore = new ForgeFormalModelStore();
+    private final ForgeFormalModelFactory formalModelFactory = new ForgeFormalModelFactory(this);
     private final ForgeFormalRendererManager formalRendererManager = new ForgeFormalRendererManager(this);
     private final ForgeTexturedDebugQuadRenderer texturedDebugQuadRenderer = new ForgeTexturedDebugQuadRenderer(this);
     private final ForgeTexturedReadbackRenderer texturedReadbackRenderer = new ForgeTexturedReadbackRenderer(this);
@@ -217,6 +218,10 @@ public final class ForgeVoxyInstance {
         return this.formalModelStore;
     }
 
+    public ForgeFormalModelFactory getFormalModelFactory() {
+        return this.formalModelFactory;
+    }
+
     public ForgeFormalRendererManager getFormalRendererManager() {
         return this.formalRendererManager;
     }
@@ -284,6 +289,7 @@ public final class ForgeVoxyInstance {
         this.modelAtlasSampleSetUploader.clear();
         this.formalShaderInputBridge.clear();
         this.formalModelStore.markDimensionSwitch();
+        this.formalModelFactory.markDimensionSwitch();
         this.formalRendererManager.markDimensionSwitch();
         this.texturedDebugQuadRenderer.clear();
         this.texturedReadbackRenderer.clear();
@@ -376,6 +382,7 @@ public final class ForgeVoxyInstance {
         this.modelAtlasSampleSetUploader.clear();
         this.formalShaderInputBridge.clear();
         this.formalModelStore.markWorldUnload();
+        this.formalModelFactory.markWorldUnload();
         this.formalRendererManager.markWorldUnload();
         this.texturedDebugQuadRenderer.clear();
         this.texturedReadbackRenderer.clear();
