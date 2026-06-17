@@ -311,3 +311,40 @@ to formal model ids, call `MDICSectionRenderer`, call `VoxyRenderSystem`, or
 claim `formalTexturedShaderReady` / `formalRendererReady`. Unlike J4, synthetic
 fallback is not acceptable as J5 success; the QA path must report
 `realTerrainRecordsUsed=true` and `syntheticFallbackUsed=false`.
+
+## K0 status note
+
+K0 audits the original Voxy renderer architecture against the current Forge
+path before crossing the terrain renderer boundary. Its verdict is:
+
+```text
+K0_VERDICT_READY_FOR_K1_NO_DRAW_FORMAL_RENDERER_OWNER
+```
+
+That verdict only permits a no-draw formal terrain renderer owner. It does not
+permit live LoD terrain draw, direct `MDICSectionRenderer` wiring, direct
+`VoxyRenderSystem` wiring, shaderpack integration, or treating J-stage previews
+as formal renderer readiness.
+
+## K1 status note
+
+K1 introduces the formal terrain renderer owner no-draw skeleton. It defines the
+owner boundary that will eventually hold formal viewport, command-buffer,
+visibility, and draw-pipeline resources, while reporting those resources as
+missing blockers today.
+
+K1 references, but does not own, the formal ModelStore, formal ModelFactory /
+ModelBakery lifecycle, J-stage shader validation/preview resources, J5 terrain
+record bridge, GL geometry heap, and section geometry manager. It keeps debug
+renderers and J-stage preview systems separated.
+
+K1 remains no-draw:
+
+```text
+formalTerrainRendererReady=false
+formalRendererReady=false
+actualRendererDrawEnabled=false
+```
+
+Next work should harden formal viewport/command/visibility ownership before any
+live terrain draw is considered.

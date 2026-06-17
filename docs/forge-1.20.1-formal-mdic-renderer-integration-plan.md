@@ -331,3 +331,26 @@ Original code that should not be copied directly yet:
 - `HierarchicalOcclusionTraverser`, because HiZ/full traversal is outside the
   current scope.
 - Iris/Sodium/shaderpack integration paths, because they are explicitly excluded.
+
+## K1 formal terrain renderer owner note
+
+K1 adds a no-draw formal terrain renderer owner. It is a boundary and lifecycle
+holder, not the formal MDIC renderer. It records which future resources belong
+under the formal terrain renderer:
+
+- formal viewport owner,
+- formal command buffer and draw-count owner,
+- formal visibility/render-list owner,
+- formal draw pipeline owner,
+- global formal model-id geometry path,
+- formal terrain shader integration.
+
+All of those remain missing in K1 and are reported as blockers. K1 may reference
+the formal ModelStore, model lifecycle, shader validation, J5 terrain record
+bridge, GL geometry heap, and section geometry manager readiness, but it must
+not use the debug MDIC command buffers or J-stage preview buffers as the formal
+renderer.
+
+Do not wire `MDICSectionRenderer.renderTerrain(...)` after K1. The next safe
+step is to define formal viewport/command/visibility ownership and audit their
+cleanup order while keeping live terrain draw disabled.

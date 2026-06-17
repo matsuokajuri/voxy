@@ -852,3 +852,50 @@ Remaining blockers include making the formal model-id geometry path global,
 formal MDIC renderer integration, command-buffer ownership, visibility/LOD
 traversal, lightmap, biome tint, material/alpha semantics, translucent handling,
 and shaderpack integration.
+
+## K1 readiness note
+
+K1 adds the formal terrain renderer owner no-draw skeleton. This is the first
+K-stage owner boundary after the K0 original Voxy alignment audit, but it is
+still not a live terrain renderer. It checks that the K0 audit document exists
+and carries the `K0_VERDICT_READY_FOR_K1_NO_DRAW_FORMAL_RENDERER_OWNER`
+verdict, then reports a formal terrain renderer owner lifecycle and blocker
+set.
+
+The K1 owner owns only:
+
+- formal terrain renderer lifecycle/status,
+- readiness aggregation for the terrain renderer boundary,
+- blocker reporting,
+- placeholder status for formal viewport, command-buffer, visibility, and draw
+  pipeline ownership.
+
+The K1 owner references, but does not own, the formal ModelStore, formal
+ModelFactory / ModelBakery lifecycle, J1-J5 shader/preview/terrain-record
+validation resources, GL geometry heap, and section geometry manager.
+
+The formal renderer manager can now report:
+
+```text
+formalTerrainRendererOwnerReady=true
+formalTerrainRendererLifecycleReady=true
+k0AlignmentAuditReady=true
+k0VerdictReadyForK1=true
+originalVoxyAlignmentPreserved=true
+formalViewportOwnerReady=false
+formalCommandBufferOwnerReady=false
+formalVisibilityOwnerReady=false
+formalDrawPipelineReady=false
+globalFormalModelIdGeometryReady=false
+formalTerrainShaderReady=false
+previewSystemsSeparated=true
+sampleSetUsedAsFormalSource=false
+formalRendererReady=false
+actualDrawEnabled=false
+```
+
+Those flags mean the owner boundary exists and remains aligned with the K0
+audit. They do not mean formal terrain draw is ready. Remaining P0 blockers
+include formal viewport ownership, formal command buffer ownership, formal
+visibility ownership, global formal model-id geometry, formal terrain shader
+integration, and formal MDIC renderer integration.
