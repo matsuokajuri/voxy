@@ -464,6 +464,33 @@ the P0 `real ModelFactory / ModelBakery bridge missing` blocker as a design
 audit only. It does not implement Java, draw, bind a formal shader, call
 `MDICSectionRenderer`, or treat sample-set model data as a formal `ModelStore`.
 
+## I2 formal ModelStore ownership note
+
+I2 adds a formal ModelStore ownership skeleton. It owns the empty formal
+`modelData` buffer, `modelColour` buffer, Voxy-style atlas texture, and sampler
+as lifecycle-managed resources. It remains no-bake and no-draw.
+
+The formal renderer manager can now report:
+
+```text
+formalModelStoreSkeletonReady
+formalModelStoreOwnerReady
+realModelStoreReady=false
+formalRendererReady=false
+```
+
+This changes the blocker shape but not the formal readiness conclusion. The old
+"formal ModelStore missing" blocker becomes more precise:
+
+```text
+P0_FORMAL_MODELSTORE_REAL_DATA_MISSING
+P0_FORMAL_MODELSTORE_REBUILD_MISSING
+```
+
+The owner exists, but no real `ModelFactory` has populated model records, no
+formal bake lifecycle exists, and resource reload still cannot rebuild real
+model/atlas data.
+
 ## Blocker list
 
 P0 blockers before formal draw:

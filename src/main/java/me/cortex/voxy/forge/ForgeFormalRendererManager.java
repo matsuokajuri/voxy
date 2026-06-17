@@ -11,7 +11,8 @@ final class ForgeFormalRendererManager {
 
     private static final List<ForgeFormalRendererBlocker> BLOCKERS = List.of(
             new ForgeFormalRendererBlocker("P0", "P0_REAL_MODEL_FACTORY_MISSING", "Real ModelFactory bridge missing", "Forge has no real ModelFactory / ModelBakery bridge for stable model ids.", "Build the real ModelFactory / ModelBakery bridge before formal draw.", true),
-            new ForgeFormalRendererBlocker("P0", "P0_FORMAL_MODELSTORE_MISSING", "Formal ModelStore missing", "Only placeholder and sample-set records exist; no owned formal ModelStore is available.", "Introduce formal ModelStore ownership and record population.", true),
+            new ForgeFormalRendererBlocker("P0", "P0_FORMAL_MODELSTORE_REAL_DATA_MISSING", "Formal ModelStore real data missing", "The formal ModelStore owner can exist, but no real ModelFactory-owned model records or atlas pixels are uploaded.", "Populate the formal ModelStore from the real ModelFactory / ModelBakery bridge before formal draw.", true),
+            new ForgeFormalRendererBlocker("P0", "P0_FORMAL_MODELSTORE_REBUILD_MISSING", "Formal ModelStore rebuild path missing", "Resource reload can stale the formal ModelStore owner, but it cannot rebuild real model records or atlas data yet.", "Add resource reload rebuild ownership for formal model data and atlas resources.", true),
             new ForgeFormalRendererBlocker("P0", "P0_FORMAL_SHADER_MISSING", "Formal textured shader missing", "Current textured shaders are debug variants and do not implement the full formal contract.", "Add a formal shader after real model inputs exist.", true),
             new ForgeFormalRendererBlocker("P0", "P0_RESOURCE_RELOAD_REBUILD_MISSING", "Resource reload rebuild path missing", "Reload invalidates sample resources but does not rebuild a formal model/atlas set.", "Define rebuild ownership for model store, atlas, shader inputs, and renderer state.", true),
             new ForgeFormalRendererBlocker("P0", "P0_FORMAL_SHADER_INPUT_CONTRACT_INCOMPLETE", "Formal shader input contract incomplete", "The sample bridge proves bindings but not complete light, material, tint, alpha, and model semantics.", "Complete the formal shader input contract audit and implementation.", true),
@@ -185,6 +186,8 @@ final class ForgeFormalRendererManager {
                 readiness.infrastructureReady(),
                 readiness.debugProofReady(),
                 readiness.sampleBridgeReady(),
+                readiness.formalModelStoreSkeletonReady(),
+                readiness.formalModelStoreOwnerReady(),
                 readiness.formalPrerequisitesReady(),
                 false,
                 false,
@@ -235,6 +238,7 @@ final class ForgeFormalRendererManager {
         ForgeMdicDebugDrawStats mdicDraw = this.instance.getMdicDebugRenderer().createStatusSnapshot();
         ForgeModelBridgeReadinessStats modelBridge = this.instance.getModelBridgeReadiness().createStatusSnapshot();
         ForgeFormalShaderInputStats shaderInput = this.instance.getFormalShaderInputBridge().createStatusSnapshot();
+        ForgeFormalModelStoreStats formalModelStore = this.instance.getFormalModelStore().createStatusSnapshot();
         ForgeModelAtlasSampleSetUploadStats atlas = this.instance.getModelAtlasSampleSetUploader().createStatusSnapshot();
         ForgeModelBridgeResourceReloadStats reload = this.instance.getModelBridgeResourceReloadTracker().createStatusSnapshot();
         String dimension = currentDimensionId();
@@ -273,6 +277,8 @@ final class ForgeFormalRendererManager {
                 infrastructureReady,
                 debugProofReady,
                 sampleBridgeReady,
+                formalModelStore.formalModelStoreSkeletonReady(),
+                formalModelStore.formalModelStoreOwnerReady(),
                 formalPrerequisitesReady
         );
     }

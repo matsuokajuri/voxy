@@ -33,6 +33,8 @@ record ForgeFormalRendererStats(
         boolean infrastructureReady,
         boolean debugProofReady,
         boolean sampleBridgeReady,
+        boolean formalModelStoreSkeletonReady,
+        boolean formalModelStoreOwnerReady,
         boolean formalPrerequisitesReady,
         boolean realModelFactoryReady,
         boolean realModelBakeryReady,

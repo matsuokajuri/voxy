@@ -343,3 +343,85 @@ I2 should remain no-draw. It should create the formal owner for model data,
 model colour, atlas texture, sampler, lifecycle, and reload invalidation. That
 gives I3 and I4 a correct target for model ids and uploads without adding more
 behavior to debug renderers.
+
+## I2 status: Formal ModelStore ownership skeleton
+
+I2 creates a formal ModelStore owner as an empty resource shell. It is the
+future upload target for the real Forge `ModelFactory` / `ModelBakery` bridge,
+but it still does not bake models, upload real model records, upload real atlas
+pixels, bind a formal shader, or draw.
+
+The I2 owner is separate from the older sample-set bridge:
+
+- sample-set classes remain debug/validation tools,
+- `ForgeFormalShaderInputBridge` still reports sample-set input bridge status,
+- the formal ModelStore owner reports ownership of formal resources only,
+- `formalModelStoreReady=false` remains true until real model records and real
+  atlas pixels are produced by a formal bake lifecycle.
+
+The new owner tracks:
+
+- formal 64-byte model record layout,
+- `modelData` buffer ownership,
+- `modelColour` buffer ownership,
+- Voxy-style 3-by-2 face-tile atlas texture ownership,
+- sampler ownership,
+- allocation sizes and fallback state,
+- lifecycle stale/clear/rebuild requirements,
+- audit state.
+
+The expected formal sizes are:
+
+```text
+MODEL_SIZE = 64
+MODEL_COUNT = 65536
+modelDataBytes = 4194304
+modelColourBytes = 262144
+atlasWidth = 12288
+atlasHeight = 8192
+atlasFormat = RGBA8
+```
+
+The full atlas is large, so I2 keeps a conservative fallback policy. If full
+atlas allocation fails, the owner must report the failure or debug-small-atlas
+fallback explicitly. A fallback allocation does not make the formal atlas ready.
+
+Lifecycle rules:
+
+- resource reload stales the owner and requires rebuild,
+- world unload and dimension switch stale/clear the owner resources,
+- debug pipeline clear and preset clear invalidate the owner without touching
+  unrelated renderers,
+- cleanup is render-thread aware,
+- GL geometry heap, MDIC command buffers, existing MDIC debug renderer, textured
+  MDIC debug renderer, sample-set resources, simple renderer, and CPU caches are
+  not owned by the formal ModelStore.
+
+H1/H2 formal renderer readiness now sees:
+
+```text
+formalModelStoreSkeletonReady
+formalModelStoreOwnerReady
+realModelStoreReady=false
+formalRendererReady=false
+```
+
+The blocker wording changes from "no formal ModelStore owner exists" to the
+more precise blockers:
+
+```text
+P0_FORMAL_MODELSTORE_REAL_DATA_MISSING
+P0_FORMAL_MODELSTORE_REBUILD_MISSING
+```
+
+This is intentional. I2 solves ownership, not real data population.
+
+Recommended next stage:
+
+```text
+I3: Forge ModelFactory skeleton
+```
+
+I3 should create the block-state-to-model-id lifecycle shell: mappings, pending
+queues, in-flight tracking, metadata cache placeholder, fluid LUT placeholder,
+and dedupe placeholder. It should still avoid formal draw.

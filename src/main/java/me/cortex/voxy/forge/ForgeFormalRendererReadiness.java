@@ -15,6 +15,8 @@ record ForgeFormalRendererReadiness(
         boolean infrastructureReady,
         boolean debugProofReady,
         boolean sampleBridgeReady,
+        boolean formalModelStoreSkeletonReady,
+        boolean formalModelStoreOwnerReady,
         boolean formalPrerequisitesReady
 ) {
 }

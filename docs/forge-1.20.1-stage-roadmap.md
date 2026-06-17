@@ -171,3 +171,16 @@ The intended next work moves into the I-stage model lifecycle boundary:
 
 - I2 for a formal `ModelStore` ownership skeleton, still no draw.
 - I3 for a Forge `ModelFactory` lifecycle skeleton.
+
+## I2 status note
+
+I2 creates the formal `ModelStore` ownership skeleton. It introduces an owner
+for the future formal modelData buffer, modelColour buffer, Voxy-style atlas
+texture, and sampler. It is still no-bake and no-draw: it does not implement
+real `ModelFactory`, real `ModelBakerySubsystem`, formal shader binding, formal
+MDIC draw, `MDICSectionRenderer`, or `VoxyRenderSystem`.
+
+The intended next work is:
+
+- I3 for a Forge `ModelFactory` lifecycle skeleton.
+- I4 for a one-block real bake/upload prototype after the lifecycle shell exists.
