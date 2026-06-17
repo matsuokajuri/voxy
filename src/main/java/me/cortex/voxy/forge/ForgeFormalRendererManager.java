@@ -193,6 +193,9 @@ final class ForgeFormalRendererManager {
                 readiness.multiBlockBakePrototypeReady(),
                 readiness.multiBlockFormalUploadReady(),
                 readiness.multiBlockFormalUploadAuditReady(),
+                readiness.formalModelBakeryLifecycleSkeletonReady(),
+                readiness.reloadRebuildPrototypeReady(),
+                readiness.aliasSafeDedupeReady(),
                 readiness.formalModelFactorySkeletonReady(),
                 readiness.formalModelFactoryLifecycleReady(),
                 readiness.formalModelStoreSkeletonReady(),
@@ -251,6 +254,7 @@ final class ForgeFormalRendererManager {
         ForgeFormalModelStoreStats formalModelStore = this.instance.getFormalModelStore().createStatusSnapshot();
         ForgeOneBlockFormalBakeUploadStats oneBlock = this.instance.getOneBlockFormalBakeUpload().createStatusSnapshot();
         ForgeMultiBlockFormalBakeUploadStats multiBlock = this.instance.getMultiBlockFormalBakeUpload().createStatusSnapshot();
+        ForgeFormalModelBakeryLifecycleStats bakeryLifecycle = this.instance.getFormalModelBakeryLifecycle().createStatusSnapshot();
         ForgeModelAtlasSampleSetUploadStats atlas = this.instance.getModelAtlasSampleSetUploader().createStatusSnapshot();
         ForgeModelBridgeResourceReloadStats reload = this.instance.getModelBridgeResourceReloadTracker().createStatusSnapshot();
         String dimension = currentDimensionId();
@@ -295,6 +299,9 @@ final class ForgeFormalRendererManager {
                 multiBlock.multiBlockBakePrototypeReady(),
                 multiBlock.multiBlockFormalUploadReady(),
                 multiBlock.multiBlockFormalUploadAuditReady(),
+                bakeryLifecycle.formalModelBakeryLifecycleSkeletonReady(),
+                bakeryLifecycle.reloadRebuildPrototypeReady(),
+                bakeryLifecycle.aliasSafeDedupeReady(),
                 formalModelFactory.formalModelFactorySkeletonReady(),
                 formalModelFactory.formalModelFactoryLifecycleReady(),
                 formalModelStore.formalModelStoreSkeletonReady(),

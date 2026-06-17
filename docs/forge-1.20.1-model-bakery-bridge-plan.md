@@ -632,3 +632,60 @@ actualDrawEnabled=false
 I5 is still not a renderer stage. It does not bind a formal shader, draw, call
 `MDICSectionRenderer`, call `VoxyRenderSystem`, implement fluid rendering,
 implement a broad biome LUT, or touch shaderpack integration.
+
+## I6 formal ModelBakery lifecycle rebuild and alias-safe dedupe
+
+I6 hardens the I5 multi-block formal bake/upload path with a lifecycle
+coordinator. The coordinator references the I2 formal `ModelStore` owner, the
+I3 formal `ModelFactory` lifecycle, and the I5 multi-block upload path. It does
+not replace those components and does not introduce renderer behavior.
+
+The I6 chain is:
+
+```text
+formal ModelStore owner
+ + formal ModelFactory lifecycle
+ + I5 multi-block formal bake/upload
+ -> formal ModelBakery lifecycle coordinator
+ -> safe-set upload
+ -> reload invalidation
+ -> deterministic safe-set rebuild
+ -> generation tracking
+ -> alias-safe dedupe audit
+```
+
+The rebuild prototype is command-driven. The QA command runs a safe-set upload,
+simulates resource reload invalidation, rebuilds the same safe set, and audits
+that modelData, modelColour, and atlas readback are still valid after rebuild.
+
+I6 also makes dedupe alias semantics explicit. Multiple block-state requests may
+share a formal model id only when an explicit alias record exists. If no natural
+duplicate model appears in the safe set, the QA path uses a duplicate request of
+the first accepted block state to prove alias handling without merging uncertain
+models. Illegal duplicate mappings remain audit failures.
+
+Successful I6 status means:
+
+```text
+formalModelBakeryLifecycleSkeletonReady=true
+reloadRebuildPrototypeReady=true
+aliasSafeDedupeReady=true
+multiBlockFormalUploadAuditReady=true
+lastRebuildAuditOk=true
+illegalDuplicateMappingCount=0
+```
+
+It must still keep:
+
+```text
+realModelFactoryReady=false
+realModelBakeryReady=false
+realModelStoreReady=false
+formalTexturedShaderReady=false
+formalRendererReady=false
+actualDrawEnabled=false
+```
+
+I6 is still not a renderer stage. It does not bind a formal shader, draw, call
+`MDICSectionRenderer`, call `VoxyRenderSystem`, start a full async bake thread,
+implement broad fluid/tint/material support, or touch shaderpack integration.

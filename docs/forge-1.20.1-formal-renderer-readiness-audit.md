@@ -616,3 +616,37 @@ The remaining blocker is still the full real `ModelFactory` /
 `ModelBakerySubsystem` lifecycle, including rebuild after resource reload,
 broader block coverage, fluid/tint/material handling, and formal shader
 consumption.
+
+## I6 readiness note
+
+I6 adds a formal ModelBakery lifecycle coordinator for the already proven I5
+safe-set bake/upload path. It tracks lifecycle, resource, and upload
+generations, proves command-driven rebuild after reload invalidation, and audits
+alias-safe dedupe mapping semantics.
+
+The formal renderer manager can now report:
+
+```text
+formalModelBakeryLifecycleSkeletonReady=true
+reloadRebuildPrototypeReady=true
+aliasSafeDedupeReady=true
+```
+
+These flags mean the lifecycle prototype can invalidate and rebuild the safe set
+deterministically. They do not mean the full real `ModelFactory`,
+`ModelBakerySubsystem`, or `ModelStore` is ready.
+
+The readiness boundary remains:
+
+```text
+realModelFactoryReady=false
+realModelBakeryReady=false
+realModelStoreReady=false
+formalTexturedShaderReady=false
+formalRendererReady=false
+actualDrawEnabled=false
+```
+
+Remaining formal renderer blockers include broad model coverage, full resource
+reload rebuild ownership, fluid/tint/material/light semantics, formal shader
+consumption, and formal MDIC renderer integration.

@@ -182,6 +182,19 @@ final class ForgeMultiBlockFormalBakeUpload {
         return this.lastAudit;
     }
 
+    List<ForgeFormalUploadedModelSummary> uploadedModelSummaries() {
+        return this.acceptedModels.stream()
+                .map(model -> new ForgeFormalUploadedModelSummary(
+                        model.candidate().blockStateId(),
+                        model.candidate().state().toString(),
+                        model.formalModelId(),
+                        model.build().signature(),
+                        model.build().primarySprite(),
+                        ForgeModelStoreFormalLayout.MODEL_RECORD_BYTES
+                ))
+                .toList();
+    }
+
     ForgeMultiBlockFormalBakeUploadStats createStatusSnapshot() {
         ForgeFormalModelStoreStats store = this.instance.getFormalModelStore().createStatusSnapshot();
         boolean recordsUploaded = this.uploadedModelRecordCount == this.acceptedModels.size() && !this.acceptedModels.isEmpty();

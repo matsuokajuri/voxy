@@ -226,3 +226,22 @@ I5 is still not a renderer stage. It does not draw, bind a formal shader, call
 `MDICSectionRenderer`, call `VoxyRenderSystem`, or claim full real
 `ModelFactory`, `ModelBakerySubsystem`, `ModelStore`, or formal renderer
 readiness.
+
+## I6 status note
+
+I6 adds the formal `ModelBakery` lifecycle rebuild and alias-safe dedupe
+prototype. It coordinates the I2 formal `ModelStore`, I3 formal `ModelFactory`
+lifecycle, and I5 multi-block formal upload path. It proves that the safe set can
+be invalidated by reload simulation and rebuilt deterministically, with explicit
+dedupe alias records and generation counters.
+
+I6 is still not a renderer stage. It does not draw, bind a formal shader, call
+`MDICSectionRenderer`, call `VoxyRenderSystem`, start full async baking, or claim
+full real `ModelFactory`, `ModelBakerySubsystem`, `ModelStore`, or formal
+renderer readiness.
+
+The intended next work remains in the I/J boundary:
+
+- broader real model lifecycle coverage before any formal draw claim,
+- formal shader input consumption when the model pipeline is sufficiently real,
+- formal renderer integration only after the model lifecycle boundary is stable.
