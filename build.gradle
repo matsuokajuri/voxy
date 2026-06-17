@@ -77,6 +77,8 @@ minecraft {
 
         client {
             property 'forge.enabledGameTestNamespaces', project.mod_id
+            def quickPlayWorld = (project.findProperty('voxyQuickPlayWorld') ?: '新的世界').toString()
+            args '--quickPlaySingleplayer', quickPlayWorld
         }
 
         server {

@@ -151,6 +151,9 @@ status, readiness aggregation, lifecycle stale tracking, blocker reporting, and 
 `MDICSectionRenderer`, call `VoxyRenderSystem`, or replace any existing debug
 renderer.
 
+QA1 is a test-harness reliability task for `runClient` quick-play world entry.
+It does not advance H-stage renderer functionality.
+
 The intended next work remains in the H/I boundary:
 
 - H2 for lifecycle/status hardening if the shell needs refinement.
