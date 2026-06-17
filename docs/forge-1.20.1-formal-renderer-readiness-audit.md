@@ -386,6 +386,77 @@ H2 candidates:
 - add prerequisite reports for formal ownership without drawing,
 - define the exact H/I boundary for real `ModelFactory` / `ModelBakery` work.
 
+## H2 formal renderer lifecycle/status hardening
+
+H2 keeps the H1 boundary intact and does not add draw behavior. The work hardens
+the formal renderer shell so it behaves like a future renderer owner even while
+`formalRendererReady=false`.
+
+The formal manager lifecycle is now reported with a small explicit state set:
+
+```text
+DISABLED
+ENABLED_NO_DRAW
+STALE
+CLEARED
+```
+
+Status also reports the latest readiness check, stale reason, and generation
+counters:
+
+```text
+lastCheckAt
+lastCheckReason
+lastStaleReason
+requiresRecheck
+readinessGeneration
+lifecycleGeneration
+```
+
+This makes it clear whether the no-draw manager was merely enabled, whether a
+resource reload or dimension/world lifecycle event invalidated it, and whether a
+new `/voxy formal_renderer_check` is needed before trusting the readiness
+snapshot.
+
+Readiness aggregation is split into layers:
+
+- `infrastructureReady`: GL heap, metadata, section manager, world/dimension,
+  and reload listener are present.
+- `debugProofReady`: debug MDIC command and draw-count proof artifacts exist.
+- `sampleBridgeReady`: sample-set formal input bridge and sample atlas upload are
+  ready.
+- `formalPrerequisitesReady`: real formal prerequisites are ready.
+
+`formalPrerequisitesReady` remains `false` because real `ModelFactory`,
+`ModelStore`, formal shader, and formal traversal are still missing. This
+separation prevents sample bridge success from being confused with a formal
+renderer.
+
+Blockers now carry structured fields:
+
+```text
+id
+severity
+title
+reason
+nextAction
+formalDrawBlocking
+```
+
+The P0 blockers still block formal draw. H2 intentionally does not reduce the
+blocker list to make the status look better.
+
+The `formal_renderer_skeleton` preset remains no-draw. It only enables the formal
+manager, runs a readiness check, and prints blocker/readiness status. It must not
+enable the existing MDIC debug renderer, textured MDIC debug renderer, sample-set
+build, atlas upload, or any draw path.
+
+H3 / I1 candidates:
+
+- H3: prerequisite wiring reports for formal ownership, still no draw.
+- I1: real `ModelFactory` / `ModelBakerySubsystem` bridge plan.
+- I2: formal `ModelStore` ownership skeleton.
+
 ## Blocker list
 
 P0 blockers before formal draw:

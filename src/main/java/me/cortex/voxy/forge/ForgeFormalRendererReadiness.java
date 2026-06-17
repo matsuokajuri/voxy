@@ -11,6 +11,10 @@ record ForgeFormalRendererReadiness(
         boolean atlasReady,
         boolean resourceReloadReady,
         boolean worldEngineReady,
-        boolean dimensionReady
+        boolean dimensionReady,
+        boolean infrastructureReady,
+        boolean debugProofReady,
+        boolean sampleBridgeReady,
+        boolean formalPrerequisitesReady
 ) {
 }

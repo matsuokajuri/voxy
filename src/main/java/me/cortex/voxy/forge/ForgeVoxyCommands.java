@@ -4052,7 +4052,7 @@ public final class ForgeVoxyCommands {
 
     private static int formalRendererClear(CommandSourceStack source) {
         ForgeFormalRendererStats status = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().clear("command-clear");
-        source.sendSuccess(() -> Component.literal("Voxy formal renderer clear: " + formatFormalRendererStatus(status) + " Only the H1 formal renderer skeleton state was cleared; GL heap, MDIC command buffer, existing MDIC debug renderer, textured MDIC debug renderer, simple renderer, model bridge samples, and atlas samples were left unchanged."), false);
+        source.sendSuccess(() -> Component.literal("Voxy formal renderer clear: " + formatFormalRendererStatus(status) + " Only the H2 formal renderer skeleton status/lifecycle state was cleared; GL heap, MDIC command buffer, existing MDIC debug renderer, textured MDIC debug renderer, simple renderer, model bridge samples, and atlas samples were left unchanged."), false);
         return 1;
     }
 
@@ -4225,7 +4225,7 @@ public final class ForgeVoxyCommands {
 
     private static String formatFormalRendererStatus(ForgeFormalRendererStats status) {
         return String.format(
-                "stage=%s formalRendererSkeletonReady=%s formalRendererReady=%s actualDrawEnabled=%s noDraw=%s enabled=%s lifecycleState=%s formalRendererOwnershipReady=%s lastEnableReason=%s lastDisableReason=%s lastClearReason=%s lastLifecycleEvent=%s geometryHeapReady=%s metadataReady=%s sectionGeometryManagerReady=%s mdicCommandReady=%s mdicDrawCountReady=%s modelBridgeReady=%s formalShaderInputBridgeReady=%s atlasReady=%s resourceReloadReady=%s worldEngineReady=%s dimensionReady=%s realModelFactoryReady=%s realModelBakeryReady=%s realModelStoreReady=%s formalTextureAtlasReady=%s formalTexturedShaderReady=%s formalVisibilityTraversalReady=%s formalVoxyRenderSystemReady=%s shaderpackIntegrationReady=%s blockerCount=%d p0BlockerCount=%d p1BlockerCount=%d p2BlockerCount=%d blockers=%s worldUnloadSeen=%s dimensionSwitchSeen=%s resourceReloadSeen=%s debugPipelineClearSeen=%s presetOffSeen=%s presetClearSeen=%s formalRendererStale=%s debugRenderersIsolated=%s existingMdicDebugTouched=%s texturedMdicDebugTouched=%s actualDrawStartedByFormalRenderer=%s renderer=formal-renderer-skeleton formalRenderer=false draw=false",
+                "stage=%s formalRendererSkeletonReady=%s formalRendererReady=%s actualDrawEnabled=%s noDraw=%s enabled=%s lifecycleState=%s formalRendererOwnershipReady=%s lastEnableReason=%s lastDisableReason=%s lastClearReason=%s lastLifecycleEvent=%s lastCheckAt=%s lastCheckReason=%s lastStaleReason=%s requiresRecheck=%s readinessGeneration=%d lifecycleGeneration=%d geometryHeapReady=%s metadataReady=%s sectionGeometryManagerReady=%s mdicCommandReady=%s mdicDrawCountReady=%s modelBridgeReady=%s formalShaderInputBridgeReady=%s atlasReady=%s resourceReloadReady=%s worldEngineReady=%s dimensionReady=%s infrastructureReady=%s debugProofReady=%s sampleBridgeReady=%s formalPrerequisitesReady=%s realModelFactoryReady=%s realModelBakeryReady=%s realModelStoreReady=%s formalShaderReady=%s formalTextureAtlasReady=%s formalTexturedShaderReady=%s formalTraversalReady=%s formalVisibilityTraversalReady=%s formalVoxyRenderSystemReady=%s shaderpackIntegrationReady=%s blockerCount=%d p0BlockerCount=%d p1BlockerCount=%d p2BlockerCount=%d formalDrawBlockingBlockerCount=%d blockers=%s worldUnloadSeen=%s dimensionSwitchSeen=%s resourceReloadSeen=%s debugPipelineClearSeen=%s presetOffSeen=%s presetClearSeen=%s formalRendererStale=%s debugRenderersIsolated=%s existingMdicDebugTouched=%s texturedMdicDebugTouched=%s actualDrawStartedByFormalRenderer=%s renderer=formal-renderer-skeleton formalRenderer=false draw=false",
                 status.stage(),
                 status.formalRendererSkeletonReady(),
                 status.formalRendererReady(),
@@ -4238,6 +4238,12 @@ public final class ForgeVoxyCommands {
                 status.lastDisableReason(),
                 status.lastClearReason(),
                 status.lastLifecycleEvent(),
+                status.lastCheckAt(),
+                status.lastCheckReason(),
+                status.lastStaleReason(),
+                status.requiresRecheck(),
+                status.readinessGeneration(),
+                status.lifecycleGeneration(),
                 status.geometryHeapReady(),
                 status.metadataReady(),
                 status.sectionGeometryManagerReady(),
@@ -4249,11 +4255,17 @@ public final class ForgeVoxyCommands {
                 status.resourceReloadReady(),
                 status.worldEngineReady(),
                 status.dimensionReady(),
+                status.infrastructureReady(),
+                status.debugProofReady(),
+                status.sampleBridgeReady(),
+                status.formalPrerequisitesReady(),
                 status.realModelFactoryReady(),
                 status.realModelBakeryReady(),
                 status.realModelStoreReady(),
+                status.formalShaderReady(),
                 status.formalTextureAtlasReady(),
                 status.formalTexturedShaderReady(),
+                status.formalTraversalReady(),
                 status.formalVisibilityTraversalReady(),
                 status.formalVoxyRenderSystemReady(),
                 status.shaderpackIntegrationReady(),
@@ -4261,6 +4273,7 @@ public final class ForgeVoxyCommands {
                 status.p0BlockerCount(),
                 status.p1BlockerCount(),
                 status.p2BlockerCount(),
+                status.formalDrawBlockingBlockerCount(),
                 status.blockers(),
                 status.worldUnloadSeen(),
                 status.dimensionSwitchSeen(),
@@ -5357,7 +5370,7 @@ public final class ForgeVoxyCommands {
         boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
         ForgeVoxyInstance.INSTANCE.getFormalRendererManager().enable("preset-formal-renderer-skeleton");
         ForgeFormalRendererStats status = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("preset-formal-renderer-skeleton");
-        String message = "Voxy preset formal_renderer_skeleton: runtime-only H1 formal renderer no-draw skeleton applied, not written to toml. "
+        String message = "Voxy preset formal_renderer_skeleton: runtime-only H2 formal renderer no-draw lifecycle/status skeleton applied, not written to toml. "
                 + "No formal draw is enabled, no shader is bound, MDICSectionRenderer and VoxyRenderSystem are not called, and existing debug renderers are not enabled by this preset. "
                 + (engineReady ? "WorldEngine is active. " : "No active client world was found; enter or re-enter a world to create the WorldEngine. ")
                 + formatFormalRendererStatus(status);

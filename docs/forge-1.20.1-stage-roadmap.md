@@ -154,7 +154,16 @@ renderer.
 QA1 is a test-harness reliability task for `runClient` quick-play world entry.
 It does not advance H-stage renderer functionality.
 
+## H2 status note
+
+H2 hardens the H1 no-draw formal renderer manager. It improves lifecycle states,
+readiness generations, recheck/stale reporting, structured blockers, and
+readiness aggregation layers. It still does not draw, bind a formal shader, call
+`MDICSectionRenderer`, call `VoxyRenderSystem`, or modify existing debug renderer
+draw behavior.
+
 The intended next work remains in the H/I boundary:
 
-- H2 for lifecycle/status hardening if the shell needs refinement.
+- H3 for prerequisite wiring if the formal shell needs more no-draw ownership
+  reporting.
 - I1 for the real `ModelFactory` / `ModelBakerySubsystem` bridge plan.

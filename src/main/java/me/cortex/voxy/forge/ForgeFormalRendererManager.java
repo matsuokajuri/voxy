@@ -2,39 +2,44 @@ package me.cortex.voxy.forge;
 
 import net.minecraft.client.Minecraft;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.stream.Collectors;
 
 final class ForgeFormalRendererManager {
-    static final String STAGE = "H1_FORMAL_RENDERER_NO_DRAW_SKELETON";
+    static final String STAGE = "H2_FORMAL_RENDERER_LIFECYCLE_STATUS_HARDENING";
 
     private static final List<ForgeFormalRendererBlocker> BLOCKERS = List.of(
-            new ForgeFormalRendererBlocker("P0", "real-model-factory-modelbakery-bridge-missing", "real ModelFactory / ModelBakery bridge missing"),
-            new ForgeFormalRendererBlocker("P0", "formal-modelstore-missing", "formal ModelStore missing"),
-            new ForgeFormalRendererBlocker("P0", "formal-textured-shader-missing", "formal textured shader missing"),
-            new ForgeFormalRendererBlocker("P0", "formal-renderer-ownership-partial", "formal renderer ownership incomplete / partial"),
-            new ForgeFormalRendererBlocker("P0", "resource-reload-rebuild-path-missing", "resource reload rebuild path missing"),
-            new ForgeFormalRendererBlocker("P0", "formal-shader-input-contract-incomplete", "formal shader input contract incomplete"),
-            new ForgeFormalRendererBlocker("P1", "formal-visibility-lod-traversal-missing", "formal visibility / LOD traversal missing"),
-            new ForgeFormalRendererBlocker("P1", "formal-command-buffer-ownership-separation-missing", "formal command buffer ownership separation missing"),
-            new ForgeFormalRendererBlocker("P1", "biome-tint-modelcolour-formal-path-missing", "biome tint / modelColour formal path missing"),
-            new ForgeFormalRendererBlocker("P1", "lightmap-missing", "lightmap missing"),
-            new ForgeFormalRendererBlocker("P1", "material-alpha-cutout-semantics-incomplete", "material / alpha / cutout semantics incomplete"),
-            new ForgeFormalRendererBlocker("P1", "formal-world-lifecycle-stress-missing", "dimension/world unload stress under formal ownership missing"),
-            new ForgeFormalRendererBlocker("P2", "shaderpack-integration-missing", "shaderpack integration"),
-            new ForgeFormalRendererBlocker("P2", "embeddium-oculus-iris-integration-missing", "Embeddium / Oculus / Iris integration"),
-            new ForgeFormalRendererBlocker("P2", "advanced-occlusion-performance-missing", "advanced occlusion performance"),
-            new ForgeFormalRendererBlocker("P2", "translucent-sorting-quality-missing", "translucent sorting quality"),
-            new ForgeFormalRendererBlocker("P2", "full-renderer-performance-tuning-missing", "full renderer performance tuning")
+            new ForgeFormalRendererBlocker("P0", "P0_REAL_MODEL_FACTORY_MISSING", "Real ModelFactory bridge missing", "Forge has no real ModelFactory / ModelBakery bridge for stable model ids.", "Build the real ModelFactory / ModelBakery bridge before formal draw.", true),
+            new ForgeFormalRendererBlocker("P0", "P0_FORMAL_MODELSTORE_MISSING", "Formal ModelStore missing", "Only placeholder and sample-set records exist; no owned formal ModelStore is available.", "Introduce formal ModelStore ownership and record population.", true),
+            new ForgeFormalRendererBlocker("P0", "P0_FORMAL_SHADER_MISSING", "Formal textured shader missing", "Current textured shaders are debug variants and do not implement the full formal contract.", "Add a formal shader after real model inputs exist.", true),
+            new ForgeFormalRendererBlocker("P0", "P0_RESOURCE_RELOAD_REBUILD_MISSING", "Resource reload rebuild path missing", "Reload invalidates sample resources but does not rebuild a formal model/atlas set.", "Define rebuild ownership for model store, atlas, shader inputs, and renderer state.", true),
+            new ForgeFormalRendererBlocker("P0", "P0_FORMAL_SHADER_INPUT_CONTRACT_INCOMPLETE", "Formal shader input contract incomplete", "The sample bridge proves bindings but not complete light, material, tint, alpha, and model semantics.", "Complete the formal shader input contract audit and implementation.", true),
+            new ForgeFormalRendererBlocker("P1", "P1_VISIBILITY_TRAVERSAL_MISSING", "Formal visibility / LOD traversal missing", "Current command selection is debug radius/frustum planning, not formal traversal.", "Add formal visibility and LOD traversal ownership.", false),
+            new ForgeFormalRendererBlocker("P1", "P1_COMMAND_BUFFER_OWNERSHIP_SEPARATION_MISSING", "Formal command buffer ownership missing", "Debug MDIC command buffers are not separated from future formal renderer ownership.", "Separate formal DrawCommand and draw count ownership from debug paths.", false),
+            new ForgeFormalRendererBlocker("P1", "P1_BIOME_TINT_MODELCOLOUR_FORMAL_PATH_MISSING", "Biome tint / modelColour formal path missing", "Sample colours do not provide real biome tint or model colour lifecycle.", "Add formal modelColour and biome tint paths.", false),
+            new ForgeFormalRendererBlocker("P1", "P1_LIGHTMAP_MISSING", "Lightmap missing", "The debug textured shaders do not carry formal lightmap input.", "Define and bind formal lightmap data.", false),
+            new ForgeFormalRendererBlocker("P1", "P1_MATERIAL_ALPHA_CUTOUT_INCOMPLETE", "Material / alpha / cutout semantics incomplete", "Cutout, alpha, and material handling are debug-only.", "Implement formal material and alpha semantics.", false),
+            new ForgeFormalRendererBlocker("P1", "P1_FORMAL_WORLD_LIFECYCLE_STRESS_MISSING", "Formal lifecycle stress missing", "Dimension/world unload tests have covered debug paths, not a formal owner.", "Stress the formal manager once it owns resources.", false),
+            new ForgeFormalRendererBlocker("P2", "P2_SHADERPACK_INTEGRATION_MISSING", "Shaderpack integration missing", "No shaderpack renderer is connected.", "Handle shaderpack integration after a baseline formal renderer exists.", false),
+            new ForgeFormalRendererBlocker("P2", "P2_EMBEDDIUM_OCULUS_IRIS_INTEGRATION_MISSING", "Embeddium / Oculus / Iris integration missing", "Optimization and shader-mod integration is out of scope for the skeleton.", "Defer until the renderer baseline is stable.", false),
+            new ForgeFormalRendererBlocker("P2", "P2_ADVANCED_OCCLUSION_PERFORMANCE_MISSING", "Advanced occlusion performance missing", "HiZ and advanced occlusion are not implemented.", "Optimize after correctness and ownership are in place.", false),
+            new ForgeFormalRendererBlocker("P2", "P2_TRANSLUCENT_SORTING_QUALITY_MISSING", "Translucent sorting quality missing", "Formal translucent sorting is not implemented.", "Design translucent handling after opaque renderer baseline.", false),
+            new ForgeFormalRendererBlocker("P2", "P2_FULL_RENDERER_PERFORMANCE_TUNING_MISSING", "Full renderer performance tuning missing", "No formal renderer performance pass has happened.", "Tune after formal renderer correctness.", false)
     );
 
     private final ForgeVoxyInstance instance;
     private boolean enabled;
-    private ForgeFormalRendererLifecycleState lifecycleState = ForgeFormalRendererLifecycleState.INITIALIZED_NO_DRAW;
+    private ForgeFormalRendererLifecycleState lifecycleState = ForgeFormalRendererLifecycleState.DISABLED;
     private String lastEnableReason = "none";
     private String lastDisableReason = "none";
     private String lastClearReason = "none";
     private String lastLifecycleEvent = "initialized";
+    private String lastCheckAt = "none";
+    private String lastCheckReason = "none";
+    private String lastStaleReason = "none";
+    private long readinessGeneration;
+    private long lifecycleGeneration;
     private boolean worldUnloadSeen;
     private boolean dimensionSwitchSeen;
     private boolean resourceReloadSeen;
@@ -51,12 +56,20 @@ final class ForgeFormalRendererManager {
     }
 
     ForgeFormalRendererStats checkReadiness(String reason) {
+        this.lastCheckReason = safeReason(reason);
+        this.lastCheckAt = Instant.now().toString();
+        this.readinessGeneration++;
         if (this.enabled) {
             this.lifecycleState = ForgeFormalRendererLifecycleState.ENABLED_NO_DRAW;
-        } else if (!this.formalRendererStale) {
-            this.lifecycleState = ForgeFormalRendererLifecycleState.CHECKED_NO_DRAW;
+        } else if (this.formalRendererStale) {
+            this.lifecycleState = ForgeFormalRendererLifecycleState.STALE;
+        } else if (this.lifecycleState != ForgeFormalRendererLifecycleState.CLEARED) {
+            this.lifecycleState = ForgeFormalRendererLifecycleState.DISABLED;
         }
-        this.lastLifecycleEvent = "readiness-check:" + safeReason(reason);
+        if (!this.formalRendererStale) {
+            this.lastStaleReason = "none";
+        }
+        this.lastLifecycleEvent = "readiness-check:" + this.lastCheckReason;
         return this.createStatusSnapshot();
     }
 
@@ -65,15 +78,18 @@ final class ForgeFormalRendererManager {
         this.formalRendererStale = false;
         this.lifecycleState = ForgeFormalRendererLifecycleState.ENABLED_NO_DRAW;
         this.lastEnableReason = safeReason(reason);
+        this.lastStaleReason = "none";
         this.lastLifecycleEvent = "enable:" + this.lastEnableReason;
+        this.lifecycleGeneration++;
         return this.createStatusSnapshot();
     }
 
     ForgeFormalRendererStats disable(String reason) {
         this.enabled = false;
-        this.lifecycleState = ForgeFormalRendererLifecycleState.DISABLED_NO_DRAW;
+        this.lifecycleState = ForgeFormalRendererLifecycleState.DISABLED;
         this.lastDisableReason = safeReason(reason);
         this.lastLifecycleEvent = "disable:" + this.lastDisableReason;
+        this.lifecycleGeneration++;
         return this.createStatusSnapshot();
     }
 
@@ -83,6 +99,11 @@ final class ForgeFormalRendererManager {
         this.lastClearReason = safeReason(reason);
         this.lastLifecycleEvent = "clear:" + this.lastClearReason;
         this.formalRendererStale = false;
+        this.lastCheckAt = "none";
+        this.lastCheckReason = "none";
+        this.lastStaleReason = "none";
+        this.readinessGeneration = 0L;
+        this.lifecycleGeneration++;
         this.worldUnloadSeen = false;
         this.dimensionSwitchSeen = false;
         this.resourceReloadSeen = false;
@@ -130,6 +151,7 @@ final class ForgeFormalRendererManager {
         int p0 = countBlockers("P0");
         int p1 = countBlockers("P1");
         int p2 = countBlockers("P2");
+        int formalDrawBlocking = countFormalDrawBlockingBlockers();
         return new ForgeFormalRendererStats(
                 STAGE,
                 true,
@@ -143,6 +165,12 @@ final class ForgeFormalRendererManager {
                 this.lastDisableReason,
                 this.lastClearReason,
                 this.lastLifecycleEvent,
+                this.lastCheckAt,
+                this.lastCheckReason,
+                this.lastStaleReason,
+                this.requiresRecheck(),
+                this.readinessGeneration,
+                this.lifecycleGeneration,
                 readiness.geometryHeapReady(),
                 readiness.metadataReady(),
                 readiness.sectionGeometryManagerReady(),
@@ -154,6 +182,12 @@ final class ForgeFormalRendererManager {
                 readiness.resourceReloadReady(),
                 readiness.worldEngineReady(),
                 readiness.dimensionReady(),
+                readiness.infrastructureReady(),
+                readiness.debugProofReady(),
+                readiness.sampleBridgeReady(),
+                readiness.formalPrerequisitesReady(),
+                false,
+                false,
                 false,
                 false,
                 false,
@@ -166,6 +200,7 @@ final class ForgeFormalRendererManager {
                 p0,
                 p1,
                 p2,
+                formalDrawBlocking,
                 compactBlockers(),
                 this.worldUnloadSeen,
                 this.dimensionSwitchSeen,
@@ -184,9 +219,9 @@ final class ForgeFormalRendererManager {
     String dumpBlockers() {
         return BLOCKERS.stream()
                 .collect(Collectors.groupingBy(
-                        ForgeFormalRendererBlocker::priority,
+                        ForgeFormalRendererBlocker::severity,
                         java.util.TreeMap::new,
-                        Collectors.mapping(blocker -> blocker.id() + "=\"" + blocker.description() + "\"", Collectors.joining(","))))
+                        Collectors.mapping(ForgeFormalRendererBlocker::detailed, Collectors.joining(","))))
                 .entrySet()
                 .stream()
                 .map(entry -> entry.getKey() + "[" + entry.getValue() + "]")
@@ -212,6 +247,17 @@ final class ForgeFormalRendererManager {
                 && atlas.atlasTextureObjectCreated()
                 && atlas.atlasPixelsUploaded()
                 && !atlas.atlasSampleSetStale();
+        boolean infrastructureReady = geometry.heapCreated()
+                && (geometry.metadataWrites() > 0L || section.metadataValid() > 0)
+                && section.maxSections() > 0
+                && reload.resourceReloadReady()
+                && this.instance.getCurrentEngineOptional().isPresent()
+                && !"none".equals(dimension);
+        boolean debugProofReady = mdicCommandReady && mdicDrawCountReady;
+        boolean sampleBridgeReady = shaderInput.formalShaderInputBridgeReady()
+                && !shaderInput.formalShaderInputBridgeStale()
+                && atlasReady;
+        boolean formalPrerequisitesReady = false;
         return new ForgeFormalRendererReadiness(
                 geometry.heapCreated(),
                 geometry.metadataWrites() > 0L || section.metadataValid() > 0,
@@ -223,15 +269,21 @@ final class ForgeFormalRendererManager {
                 atlasReady,
                 reload.resourceReloadReady(),
                 this.instance.getCurrentEngineOptional().isPresent(),
-                !"none".equals(dimension)
+                !"none".equals(dimension),
+                infrastructureReady,
+                debugProofReady,
+                sampleBridgeReady,
+                formalPrerequisitesReady
         );
     }
 
     private void markLifecycleStale(String event) {
         this.enabled = false;
         this.formalRendererStale = true;
-        this.lifecycleState = ForgeFormalRendererLifecycleState.STALE_DISABLED;
-        this.lastLifecycleEvent = event;
+        this.lifecycleState = ForgeFormalRendererLifecycleState.STALE;
+        this.lastStaleReason = safeReason(event);
+        this.lastLifecycleEvent = this.lastStaleReason;
+        this.lifecycleGeneration++;
     }
 
     private static int countBlockers(String priority) {
@@ -242,6 +294,20 @@ final class ForgeFormalRendererManager {
             }
         }
         return count;
+    }
+
+    private static int countFormalDrawBlockingBlockers() {
+        int count = 0;
+        for (ForgeFormalRendererBlocker blocker : BLOCKERS) {
+            if (blocker.formalDrawBlocking()) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private boolean requiresRecheck() {
+        return this.formalRendererStale || "none".equals(this.lastCheckAt);
     }
 
     private static String compactBlockers() {
