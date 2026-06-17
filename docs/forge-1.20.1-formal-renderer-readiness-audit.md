@@ -333,6 +333,59 @@ Why no-draw: the project now needs an ownership boundary before more rendering.
 Without that boundary, the debug renderer will keep expanding and make the final
 renderer harder to reason about.
 
+## H1 formal renderer no-draw skeleton
+
+H1 adds a formal renderer ownership shell without adding any rendering path. The
+shell is represented by `ForgeFormalRendererManager` and related status/readiness
+records. Its purpose is to give future formal renderer work a place to attach
+lifecycle, readiness, blockers, and preset plumbing without continuing to expand
+the debug renderers.
+
+H1 explicitly does not:
+
+- draw,
+- bind a formal shader,
+- call `MDICSectionRenderer`,
+- call `VoxyRenderSystem`,
+- replace the existing MDIC debug renderer,
+- replace the textured MDIC debug renderer,
+- promote sample-set data to a real `ModelStore`.
+
+The H1 manager aggregates readiness from existing systems such as the GL geometry
+heap, metadata, section geometry manager, MDIC command buffer, draw count proof,
+model bridge status, sample-set shader input bridge, atlas sample-set upload,
+resource reload listener, current dimension, and WorldEngine skeleton. It reports
+these as prerequisites and blockers only. A ready skeleton can therefore report
+`formalRendererSkeletonReady=true` while still keeping:
+
+```text
+formalRendererReady=false
+actualDrawEnabled=false
+noDraw=true
+```
+
+The manager also records lifecycle events that should disable or stale the future
+formal renderer owner:
+
+- world unload,
+- dimension switch,
+- resource reload,
+- debug pipeline clear,
+- preset off,
+- preset clear.
+
+Debug renderer isolation is part of the H1 contract. Enabling or clearing the H1
+formal renderer skeleton must not start or clear the existing MDIC debug renderer,
+the textured MDIC debug renderer, the GL heap, the simple renderer, or sample
+model/atlas data.
+
+H2 candidates:
+
+- harden lifecycle/status reporting around the no-draw manager,
+- split command formatting if `ForgeVoxyCommands` keeps growing,
+- add prerequisite reports for formal ownership without drawing,
+- define the exact H/I boundary for real `ModelFactory` / `ModelBakery` work.
+
 ## Blocker list
 
 P0 blockers before formal draw:

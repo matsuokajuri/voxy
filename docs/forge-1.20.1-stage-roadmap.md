@@ -142,3 +142,16 @@ The H1 boundary is strict:
 
 H1 exists to create a formal owner and status surface before any new rendering
 work is added.
+
+## H1 completion note
+
+H1 implements the formal renderer ownership shell as a no-draw manager. It adds
+status, readiness aggregation, lifecycle stale tracking, blocker reporting, and a
+`formal_renderer_skeleton` preset. It does not draw, bind a formal shader, call
+`MDICSectionRenderer`, call `VoxyRenderSystem`, or replace any existing debug
+renderer.
+
+The intended next work remains in the H/I boundary:
+
+- H2 for lifecycle/status hardening if the shell needs refinement.
+- I1 for the real `ModelFactory` / `ModelBakerySubsystem` bridge plan.

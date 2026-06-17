@@ -46,6 +46,7 @@ public final class ForgeVoxyInstance {
     private final ForgeModelAtlasPixelUploader modelAtlasPixelUploader = new ForgeModelAtlasPixelUploader(this);
     private final ForgeModelAtlasSampleSetUploader modelAtlasSampleSetUploader = new ForgeModelAtlasSampleSetUploader(this);
     private final ForgeFormalShaderInputBridge formalShaderInputBridge = new ForgeFormalShaderInputBridge(this);
+    private final ForgeFormalRendererManager formalRendererManager = new ForgeFormalRendererManager(this);
     private final ForgeTexturedDebugQuadRenderer texturedDebugQuadRenderer = new ForgeTexturedDebugQuadRenderer(this);
     private final ForgeTexturedReadbackRenderer texturedReadbackRenderer = new ForgeTexturedReadbackRenderer(this);
     private final ForgeTexturedMdicDebugRenderer texturedMdicDebugRenderer = new ForgeTexturedMdicDebugRenderer(this);
@@ -211,6 +212,10 @@ public final class ForgeVoxyInstance {
         return this.formalShaderInputBridge;
     }
 
+    public ForgeFormalRendererManager getFormalRendererManager() {
+        return this.formalRendererManager;
+    }
+
     public ForgeTexturedDebugQuadRenderer getTexturedDebugQuadRenderer() {
         return this.texturedDebugQuadRenderer;
     }
@@ -273,6 +278,7 @@ public final class ForgeVoxyInstance {
         this.modelAtlasPixelUploader.clear();
         this.modelAtlasSampleSetUploader.clear();
         this.formalShaderInputBridge.clear();
+        this.formalRendererManager.markDimensionSwitch();
         this.texturedDebugQuadRenderer.clear();
         this.texturedReadbackRenderer.clear();
         this.texturedMdicDebugRenderer.clear();
@@ -363,6 +369,7 @@ public final class ForgeVoxyInstance {
         this.modelAtlasPixelUploader.clear();
         this.modelAtlasSampleSetUploader.clear();
         this.formalShaderInputBridge.clear();
+        this.formalRendererManager.markWorldUnload();
         this.texturedDebugQuadRenderer.clear();
         this.texturedReadbackRenderer.clear();
         this.texturedMdicDebugRenderer.clear();
