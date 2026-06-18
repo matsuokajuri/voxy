@@ -1285,3 +1285,47 @@ The K10 readiness fields are evidence that the preview hook and formal inputs
 can produce a visible debug preview. They must not be treated as production
 LoD renderer readiness until production cmdgen, traversal, shader semantics,
 and live MDIC renderer ownership are complete.
+
+## K10.1 observe/performance hotfix note
+
+K10.1 is a hotfix on the K10 visible preview, not a new renderer stage. It
+preserves the successful main-framebuffer preview while adding explicit observe
+mode and frame-cost diagnostics.
+
+New status evidence includes:
+
+```text
+observeModeEnabled
+observeModeDebugTintUsed
+observeModeScale
+observeModeCameraRelative
+previewWorldBounds
+previewCameraDistance
+renderFrameCount
+previewBuildCount
+previewRebuildCount
+perFrameRebuildDetected
+perFrameReadbackDetected
+perFrameShaderCompileDetected
+perFrameGlAllocationDetected
+perFrameLogSpamDetected
+duplicateHookRegistrationDetected
+lastFrameDrawTimeNanos
+averageFrameDrawTimeNanos
+maxFrameDrawTimeNanos
+renderHookEarlyReturnWhenDisabled
+renderHookEarlyReturnWhenStale
+```
+
+The hotfix keeps readback/audit work out of the manual observe render loop.
+Manual observe mode draws only after explicit opt-in and returns early when
+disabled or stale. QA may still request readback explicitly to verify pixels.
+
+Readiness remains unchanged:
+
+```text
+formalDrawPipelineReady=false
+formalRendererReady=false
+actualRendererDrawEnabled=false
+productionLiveRendererDrawExecuted=false
+```

@@ -44,6 +44,10 @@ final class ForgeFormalVisibleLodPreview {
     private static final int BYTES_PER_PIXEL = 4;
     private static final int DRAW_COMMAND_FIELD_COUNT = 5;
     private static final int OPAQUE_DRAW_COUNT_OFFSET_BYTES = 3 * Integer.BYTES;
+    private static final float NORMAL_PREVIEW_DISTANCE = 8.0F;
+    private static final float NORMAL_PREVIEW_SCALE = 1.45F;
+    private static final float OBSERVE_PREVIEW_DISTANCE = 5.0F;
+    private static final float OBSERVE_PREVIEW_SCALE = 3.25F;
     private static final String DRAW_INPUT_SOURCE = "K8FormalGeometryAndK9Shader";
     private static final String RENDER_HOOK_NAME = "RenderLevelStageEvent.AFTER_TRANSLUCENT_BLOCKS";
     private static final String RENDER_HOOK_SCOPE = "K10_visible_preview_only";
@@ -75,6 +79,7 @@ final class ForgeFormalVisibleLodPreview {
             uniform vec3 previewRight;
             uniform vec3 previewUp;
             uniform float previewScale;
+            uniform uint observeMode;
             uniform uint recordCount;
             uniform uint baseVertexBias;
 
@@ -156,6 +161,9 @@ final class ForgeFormalVisibleLodPreview {
                 float jitter = float((positionScratch[0].x ^ positionScratch[0].y) & 3u) * 0.04;
                 vec2 local = (corner - vec2(0.5)) * previewScale
                     + vec2((slot - 1.5) * previewScale * 1.16 + jitter, row * previewScale * 1.16);
+                if (observeMode != 0u) {
+                    local.y += previewScale * 0.35;
+                }
                 vec3 worldPos = previewCenter + previewRight * local.x + previewUp * local.y;
                 gl_Position = projectionMatrix * modelViewMatrix * vec4(worldPos, 1.0);
             }
@@ -172,12 +180,18 @@ final class ForgeFormalVisibleLodPreview {
             flat in uint vFace;
             flat in uint vFaceData;
 
+            uniform uint observeMode;
+            uniform vec3 observeTint;
+
             out vec4 fragColor;
 
             void main() {
                 vec4 texel = texture(blockModelAtlas, vAtlasUv);
                 float marker = float((vModelId ^ (vFace << 3u) ^ vFaceData) & 15u) / 180.0;
                 vec3 rgb = max(texel.rgb * vTint.rgb + vec3(marker, marker * 0.45, 0.04), vec3(0.08, 0.04, 0.02));
+                if (observeMode != 0u) {
+                    rgb = max(mix(rgb, observeTint, 0.68), observeTint * 0.55);
+                }
                 fragColor = vec4(rgb, 1.0);
             }
             """;
@@ -204,15 +218,33 @@ final class ForgeFormalVisibleLodPreview {
     private long auditRuns;
     private long clearRuns;
     private long auditFailures;
+    private long previewRebuildRuns;
+    private long shaderCompileRuns;
+    private long glAllocationRuns;
+    private long readbackRuns;
+    private long renderLogRuns;
+    private long renderHookInvocationCount;
+    private long renderHookDisabledEarlyReturnCount;
+    private long renderHookStaleEarlyReturnCount;
     private boolean renderHookRegistered;
+    private boolean duplicateHookRegistrationDetected;
     private boolean ownerReady;
     private boolean visiblePreviewEnabled;
+    private boolean observeModeEnabled;
+    private boolean observeModeDebugTintUsed;
+    private float observeModeScale = OBSERVE_PREVIEW_SCALE;
+    private boolean observeModeCameraRelative;
+    private String previewWorldBounds = "none";
+    private double previewCameraDistance;
     private boolean visiblePreviewDefaultDisabledVerified = true;
     private boolean visiblePreviewWasEnabledDuringQa;
     private boolean visiblePreviewDisabledAfterQa;
     private boolean qaAutoDisablePending;
     private int qaFramesRemaining;
+    private boolean readbackPending;
+    private boolean qaReadbackAllowed;
     private boolean deferredQaPending;
+    private boolean deferredObserveQa;
     private int deferredQaStep;
     private boolean firstDrawLogged;
     private boolean k8FormalGeometryUsed;
@@ -228,6 +260,17 @@ final class ForgeFormalVisibleLodPreview {
     private boolean visiblePreviewShaderProgramCompileOk;
     private boolean visiblePreviewShaderProgramLinkOk;
     private int visiblePreviewShaderProgramId;
+    private int uniformModelViewMatrix = -1;
+    private int uniformProjectionMatrix = -1;
+    private int uniformPreviewCenter = -1;
+    private int uniformPreviewRight = -1;
+    private int uniformPreviewUp = -1;
+    private int uniformPreviewScale = -1;
+    private int uniformObserveMode = -1;
+    private int uniformObserveTint = -1;
+    private int uniformRecordCount = -1;
+    private int uniformBaseVertexBias = -1;
+    private int uniformBlockModelAtlas = -1;
     private boolean visiblePreviewDrawExecuted;
     private int visiblePreviewFrameCount;
     private boolean minecraftMainFramebufferDrawn;
@@ -256,6 +299,16 @@ final class ForgeFormalVisibleLodPreview {
     private int k6FirstCommandBaseInstance;
     private int acceptedDrawCommandCount;
     private boolean drawCommandMatchesK6;
+    private boolean perFrameRebuildDetected;
+    private boolean perFrameReadbackDetected;
+    private boolean perFrameShaderCompileDetected;
+    private boolean perFrameGlAllocationDetected;
+    private boolean perFrameLogSpamDetected;
+    private long lastFrameDrawTimeNanos;
+    private long totalFrameDrawTimeNanos;
+    private long maxFrameDrawTimeNanos;
+    private boolean renderHookEarlyReturnWhenDisabled;
+    private boolean renderHookEarlyReturnWhenStale;
     private boolean stale;
     private boolean requiresRebuild;
     private String lifecycleState = "UNINITIALIZED";
@@ -270,12 +323,19 @@ final class ForgeFormalVisibleLodPreview {
     }
 
     void register() {
+        if (this.renderHookRegistered) {
+            this.duplicateHookRegistrationDetected = true;
+            return;
+        }
         MinecraftForge.EVENT_BUS.addListener(this::onRenderLevelStage);
         this.renderHookRegistered = true;
     }
 
     ForgeFormalVisibleLodPreviewStats build() {
         this.buildRuns++;
+        if (this.buildRuns > 1) {
+            this.previewRebuildRuns++;
+        }
         this.lifecycleState = "BUILDING";
         this.lastLifecycleEvent = "build";
         this.lastFailureReason = "none";
@@ -355,7 +415,34 @@ final class ForgeFormalVisibleLodPreview {
             return this.createStatusSnapshot();
         }
         this.visiblePreviewEnabled = true;
+        this.observeModeEnabled = false;
+        this.observeModeDebugTintUsed = false;
+        this.observeModeCameraRelative = false;
+        this.observeModeScale = NORMAL_PREVIEW_SCALE;
+        this.readbackPending = false;
+        this.qaReadbackAllowed = false;
         this.lifecycleState = "VISIBLE_PREVIEW_ENABLED";
+        this.lastLifecycleEvent = safeReason(reason);
+        this.lastFailureReason = "none";
+        return this.createStatusSnapshot();
+    }
+
+    ForgeFormalVisibleLodPreviewStats observeEnable(String reason) {
+        this.enableRuns++;
+        ForgeFormalVisibleLodPreviewStats status = this.ownerReady && !this.stale
+                ? this.createStatusSnapshot()
+                : this.build();
+        if (!status.visibleLodPreviewOwnerReady()) {
+            return this.createStatusSnapshot();
+        }
+        this.visiblePreviewEnabled = true;
+        this.observeModeEnabled = true;
+        this.observeModeDebugTintUsed = true;
+        this.observeModeCameraRelative = true;
+        this.observeModeScale = OBSERVE_PREVIEW_SCALE;
+        this.readbackPending = false;
+        this.qaReadbackAllowed = false;
+        this.lifecycleState = "VISIBLE_PREVIEW_OBSERVE_ENABLED";
         this.lastLifecycleEvent = safeReason(reason);
         this.lastFailureReason = "none";
         return this.createStatusSnapshot();
@@ -374,6 +461,7 @@ final class ForgeFormalVisibleLodPreview {
             return this.createStatusSnapshot();
         }
         this.deferredQaPending = true;
+        this.deferredObserveQa = false;
         this.deferredQaStep = 0;
         this.visiblePreviewWasEnabledDuringQa = false;
         this.visiblePreviewDisabledAfterQa = false;
@@ -388,11 +476,47 @@ final class ForgeFormalVisibleLodPreview {
         return this.createStatusSnapshot();
     }
 
+    ForgeFormalVisibleLodPreviewStats runObservePerformanceQa() {
+        this.visiblePreviewDefaultDisabledVerified = !this.visiblePreviewEnabled && !DEFAULT_ENABLED;
+        if (!RenderSystem.isOnRenderThread()) {
+            this.fail("not-render-thread");
+            this.audit();
+            return this.createStatusSnapshot();
+        }
+        if (!this.instance.ensureActiveWorldSkeletonForCurrentWorldIfAllowed()) {
+            this.fail("world-engine-skeleton-not-ready");
+            this.audit();
+            return this.createStatusSnapshot();
+        }
+        this.deferredQaPending = true;
+        this.deferredObserveQa = true;
+        this.deferredQaStep = 0;
+        this.visiblePreviewWasEnabledDuringQa = false;
+        this.visiblePreviewDisabledAfterQa = false;
+        this.qaAutoDisablePending = false;
+        this.qaFramesRemaining = 0;
+        this.readbackPending = false;
+        this.qaReadbackAllowed = false;
+        this.firstDrawLogged = false;
+        this.lifecycleState = "VISIBLE_PREVIEW_OBSERVE_QA_SCHEDULED";
+        this.lastLifecycleEvent = "observe-performance-qa-scheduled";
+        this.lastFailureReason = "none";
+        VoxyForge.LOGGER.info("Voxy K10.1 visible LoD preview observe/performance QA scheduled: stepCount=5 previewDefaultEnabled=false debugOptInOnly=true");
+        this.instance.getFormalRendererManager().checkReadiness("qa-k10-visible-preview-observe-performance-scheduled");
+        return this.createStatusSnapshot();
+    }
+
     ForgeFormalVisibleLodPreviewStats disable(String reason) {
         this.disableRuns++;
         this.visiblePreviewEnabled = false;
+        this.observeModeEnabled = false;
+        this.observeModeDebugTintUsed = false;
+        this.observeModeCameraRelative = false;
+        this.readbackPending = false;
+        this.qaReadbackAllowed = false;
         this.qaAutoDisablePending = false;
         this.qaFramesRemaining = 0;
+        this.renderHookEarlyReturnWhenDisabled = true;
         this.lifecycleState = "DISABLED";
         this.lastLifecycleEvent = safeReason(reason);
         this.lastFailureReason = "none";
@@ -438,6 +562,14 @@ final class ForgeFormalVisibleLodPreview {
                 this.auditRuns,
                 this.clearRuns,
                 this.auditFailures,
+                this.buildRuns,
+                this.previewRebuildRuns,
+                this.visiblePreviewFrameCount,
+                this.renderHookInvocationCount,
+                this.shaderCompileRuns,
+                this.glAllocationRuns,
+                this.readbackRuns,
+                this.renderLogRuns,
                 k1.formalTerrainRendererOwnerReady(),
                 k2.formalViewportOwnerReady(),
                 k3.formalCommandGenerationOwnerReady(),
@@ -451,6 +583,12 @@ final class ForgeFormalVisibleLodPreview {
                 DEFAULT_ENABLED,
                 this.visiblePreviewDefaultDisabledVerified,
                 DEBUG_OPT_IN_ONLY,
+                this.observeModeEnabled,
+                this.observeModeDebugTintUsed,
+                this.observeModeScale,
+                this.observeModeCameraRelative,
+                this.previewWorldBounds,
+                this.previewCameraDistance,
                 this.visiblePreviewWasEnabledDuringQa,
                 this.visiblePreviewDisabledAfterQa,
                 this.visiblePreviewDrawExecuted,
@@ -502,6 +640,17 @@ final class ForgeFormalVisibleLodPreview {
                 this.k6FirstCommandBaseInstance,
                 this.acceptedDrawCommandCount,
                 this.drawCommandMatchesK6,
+                this.perFrameRebuildDetected,
+                this.perFrameReadbackDetected,
+                this.perFrameShaderCompileDetected,
+                this.perFrameGlAllocationDetected,
+                this.perFrameLogSpamDetected,
+                this.duplicateHookRegistrationDetected,
+                this.lastFrameDrawTimeNanos,
+                this.visiblePreviewFrameCount <= 0 ? 0L : this.totalFrameDrawTimeNanos / this.visiblePreviewFrameCount,
+                this.maxFrameDrawTimeNanos,
+                this.renderHookEarlyReturnWhenDisabled,
+                this.renderHookEarlyReturnWhenStale,
                 false,
                 false,
                 false,
@@ -561,6 +710,7 @@ final class ForgeFormalVisibleLodPreview {
         this.lastLifecycleEvent = "clear";
         this.lastFailureReason = "none";
         this.resetBuildFlags();
+        this.renderHookEarlyReturnWhenDisabled = true;
         this.lastAudit = ForgeFormalVisibleLodPreviewAuditResult.failure("cleared", 0.0D);
         this.scheduleCleanup("clear");
     }
@@ -593,6 +743,7 @@ final class ForgeFormalVisibleLodPreview {
         if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_TRANSLUCENT_BLOCKS) {
             return;
         }
+        this.renderHookInvocationCount++;
         if (!RenderSystem.isOnRenderThread()) {
             this.lastFailureReason = "render-hook-not-render-thread";
             return;
@@ -606,21 +757,41 @@ final class ForgeFormalVisibleLodPreview {
             this.runDeferredQaStep();
         }
         if (!this.visiblePreviewEnabled) {
+            this.renderHookDisabledEarlyReturnCount++;
+            this.renderHookEarlyReturnWhenDisabled = true;
             return;
         }
         if (!this.ownerReady || this.stale) {
             this.lastFailureReason = "render-hook-owner-not-ready";
             this.visiblePreviewEnabled = false;
+            this.renderHookStaleEarlyReturnCount++;
+            this.renderHookEarlyReturnWhenStale = true;
             return;
         }
         ForgeFormalModelStoreStats store = this.instance.getFormalModelStore().createStatusSnapshot();
         ForgeFormalModelIdSectionGeometryStats k8 = this.instance.getFormalModelIdSectionGeometryPath().createStatusSnapshot();
         try {
+            long buildRunsBeforeFrame = this.buildRuns;
+            long readbackRunsBeforeFrame = this.readbackRuns;
+            long shaderCompileRunsBeforeFrame = this.shaderCompileRuns;
+            long glAllocationRunsBeforeFrame = this.glAllocationRuns;
+            long renderLogRunsBeforeFrame = this.renderLogRuns;
+            long startNanos = System.nanoTime();
             this.executeVisiblePreviewDraw(event, minecraft, store, k8);
+            long elapsed = System.nanoTime() - startNanos;
+            this.lastFrameDrawTimeNanos = elapsed;
+            this.totalFrameDrawTimeNanos += elapsed;
+            this.maxFrameDrawTimeNanos = Math.max(this.maxFrameDrawTimeNanos, elapsed);
             this.visiblePreviewFrameCount++;
+            this.perFrameRebuildDetected |= this.buildRuns != buildRunsBeforeFrame;
+            this.perFrameReadbackDetected |= this.readbackRuns != readbackRunsBeforeFrame && this.visiblePreviewFrameCount > 1;
+            this.perFrameShaderCompileDetected |= this.shaderCompileRuns != shaderCompileRunsBeforeFrame;
+            this.perFrameGlAllocationDetected |= this.glAllocationRuns != glAllocationRunsBeforeFrame;
+            this.perFrameLogSpamDetected |= this.renderLogRuns - renderLogRunsBeforeFrame > 1;
             if (!this.firstDrawLogged) {
                 this.firstDrawLogged = true;
                 ForgeFormalRendererStats rendererStatus = this.instance.getFormalRendererManager().checkReadiness("k10-visible-preview-first-draw");
+                this.renderLogRuns++;
                 VoxyForge.LOGGER.info("Voxy K10 visible LoD preview first draw: {} {}", this.dump(), ForgeVoxyCommands.formatFormalRendererStatusForLog(rendererStatus));
             }
             if (this.qaAutoDisablePending) {
@@ -629,10 +800,14 @@ final class ForgeFormalVisibleLodPreview {
                     this.visiblePreviewEnabled = false;
                     this.visiblePreviewDisabledAfterQa = true;
                     this.qaAutoDisablePending = false;
+                    this.readbackPending = false;
+                    this.qaReadbackAllowed = false;
+                    this.renderHookEarlyReturnWhenDisabled = true;
                     this.lifecycleState = "DISABLED_AFTER_QA";
                     this.lastLifecycleEvent = "qa-auto-disable-after-visible-preview";
                     ForgeFormalVisibleLodPreviewAuditResult audit = this.audit();
                     ForgeFormalRendererStats rendererStatus = this.instance.getFormalRendererManager().checkReadiness("k10-visible-preview-qa-auto-disabled");
+                    this.renderLogRuns++;
                     VoxyForge.LOGGER.info("Voxy K10 visible LoD preview auto-disabled: {} k10AuditOk={} k10AuditError={} {}",
                             this.dump(),
                             audit.success(),
@@ -688,29 +863,39 @@ final class ForgeFormalVisibleLodPreview {
                     this.deferredQaStep++;
                 }
                 case 4 -> {
-                    ForgeFormalVisibleLodPreviewStats status = this.enable("qa-k10-formal-visible-lod-preview");
+                    ForgeFormalVisibleLodPreviewStats status = this.deferredObserveQa
+                            ? this.observeEnable("qa-k10-visible-preview-observe-performance")
+                            : this.enable("qa-k10-formal-visible-lod-preview");
                     if (status.visibleLodPreviewOwnerReady()) {
                         this.visiblePreviewWasEnabledDuringQa = true;
                         this.visiblePreviewDisabledAfterQa = false;
                         this.qaAutoDisablePending = true;
-                        this.qaFramesRemaining = QA_VISIBLE_FRAMES;
+                        this.qaFramesRemaining = this.deferredObserveQa ? Math.max(QA_VISIBLE_FRAMES, 3) : QA_VISIBLE_FRAMES;
+                        this.readbackPending = true;
+                        this.qaReadbackAllowed = true;
                         this.firstDrawLogged = false;
-                        this.lifecycleState = "VISIBLE_PREVIEW_QA_ENABLED";
-                        this.lastLifecycleEvent = "qa-enable";
+                        this.lifecycleState = this.deferredObserveQa ? "VISIBLE_PREVIEW_OBSERVE_QA_ENABLED" : "VISIBLE_PREVIEW_QA_ENABLED";
+                        this.lastLifecycleEvent = this.deferredObserveQa ? "observe-performance-qa-enable" : "qa-enable";
                         this.deferredQaPending = false;
+                        this.deferredObserveQa = false;
                         this.instance.getFormalRendererManager().checkReadiness("qa-k10-formal-visible-lod-preview-enabled");
                         VoxyForge.LOGGER.info("Voxy K10 visible LoD preview QA enabled: {}", this.dump());
                     } else {
                         this.deferredQaPending = false;
+                        this.deferredObserveQa = false;
                         this.audit();
                         this.instance.getFormalRendererManager().checkReadiness("qa-k10-formal-visible-lod-preview-enable-failed");
                         VoxyForge.LOGGER.info("Voxy K10 visible LoD preview QA enable failed: {}", this.dump());
                     }
                 }
-                default -> this.deferredQaPending = false;
+                default -> {
+                    this.deferredQaPending = false;
+                    this.deferredObserveQa = false;
+                }
             }
         } catch (RuntimeException e) {
             this.deferredQaPending = false;
+            this.deferredObserveQa = false;
             this.fail(e.getClass().getSimpleName() + ":" + e.getMessage());
             this.visiblePreviewEnabled = false;
             VoxyForge.LOGGER.error("K10 formal visible LoD preview deferred QA failed.", e);
@@ -849,6 +1034,12 @@ final class ForgeFormalVisibleLodPreview {
                 && this.modelDataReadOk
                 && this.modelColourReadOk
                 && qaDisableRequirementMet
+                && !this.perFrameRebuildDetected
+                && !this.perFrameReadbackDetected
+                && !this.perFrameShaderCompileDetected
+                && !this.perFrameGlAllocationDetected
+                && !this.perFrameLogSpamDetected
+                && !this.duplicateHookRegistrationDetected
                 && "none".equals(this.lastGlError);
         return new ForgeFormalVisibleLodPreviewAuditResult(
                 success,
@@ -874,6 +1065,7 @@ final class ForgeFormalVisibleLodPreview {
 
     private int compileVisiblePreviewShaderProgram() {
         this.visiblePreviewShaderProgramCompileAttempted = true;
+        this.shaderCompileRuns++;
         int vertex = 0;
         int fragment = 0;
         int program = 0;
@@ -891,9 +1083,9 @@ final class ForgeFormalVisibleLodPreview {
             this.visiblePreviewShaderProgramLinkOk = true;
             int oldProgram = GL11C.glGetInteger(GL20C.GL_CURRENT_PROGRAM);
             GL20C.glUseProgram(program);
-            int samplerLocation = GL20C.glGetUniformLocation(program, "blockModelAtlas");
-            if (samplerLocation >= 0) {
-                GL20C.glUniform1i(samplerLocation, ForgeFormalShaderInputBindingLayout.BLOCK_MODEL_ATLAS_TEXTURE_UNIT);
+            this.captureVisiblePreviewUniformLocations(program);
+            if (this.uniformBlockModelAtlas >= 0) {
+                GL20C.glUniform1i(this.uniformBlockModelAtlas, ForgeFormalShaderInputBindingLayout.BLOCK_MODEL_ATLAS_TEXTURE_UNIT);
             }
             GL20C.glUseProgram(oldProgram);
             return program;
@@ -926,6 +1118,7 @@ final class ForgeFormalVisibleLodPreview {
     }
 
     private void createValidationDrawBuffers(ForgeFormalCmdgenRealSectionDryRunStats k6) {
+        this.glAllocationRuns++;
         this.commandBufferId = GL45C.glCreateBuffers();
         this.drawCountBufferId = GL45C.glCreateBuffers();
         this.indexBufferId = GL45C.glCreateBuffers();
@@ -998,7 +1191,12 @@ final class ForgeFormalVisibleLodPreview {
             }
             right = right.normalize();
             Vec3 up = right.cross(look).normalize();
-            Vec3 center = cameraPos.add(look.scale(8.0D)).add(0.0D, 0.25D, 0.0D);
+            float previewScale = this.observeModeEnabled ? this.observeModeScale : NORMAL_PREVIEW_SCALE;
+            double previewDistance = this.observeModeEnabled ? OBSERVE_PREVIEW_DISTANCE : NORMAL_PREVIEW_DISTANCE;
+            Vec3 center = cameraPos.add(look.scale(previewDistance)).add(0.0D, this.observeModeEnabled ? 0.8D : 0.25D, 0.0D);
+            this.previewCameraDistance = center.distanceTo(cameraPos);
+            this.observeModeCameraRelative = this.observeModeEnabled;
+            this.previewWorldBounds = formatPreviewBounds(center, previewScale);
 
             poseStack.pushPose();
             try {
@@ -1006,14 +1204,16 @@ final class ForgeFormalVisibleLodPreview {
                 Matrix4f modelView = poseStack.last().pose();
                 Matrix4f projection = event.getProjectionMatrix();
                 GL20C.glUseProgram(this.visiblePreviewShaderProgramId);
-                uniformMatrix4f(this.visiblePreviewShaderProgramId, "modelViewMatrix", modelView);
-                uniformMatrix4f(this.visiblePreviewShaderProgramId, "projectionMatrix", projection);
-                uniform3f(this.visiblePreviewShaderProgramId, "previewCenter", center);
-                uniform3f(this.visiblePreviewShaderProgramId, "previewRight", right);
-                uniform3f(this.visiblePreviewShaderProgramId, "previewUp", up);
-                uniform1f(this.visiblePreviewShaderProgramId, "previewScale", 1.45F);
-                uniform1ui(this.visiblePreviewShaderProgramId, "recordCount", Math.max(1, k8.formalGeometrySnapshotRecordCount()));
-                uniform1ui(this.visiblePreviewShaderProgramId, "baseVertexBias", Math.max(0, this.k6FirstCommandBaseVertex));
+                uniformMatrix4f(this.uniformModelViewMatrix, modelView);
+                uniformMatrix4f(this.uniformProjectionMatrix, projection);
+                uniform3f(this.uniformPreviewCenter, center);
+                uniform3f(this.uniformPreviewRight, right);
+                uniform3f(this.uniformPreviewUp, up);
+                uniform1f(this.uniformPreviewScale, previewScale);
+                uniform1ui(this.uniformObserveMode, this.observeModeEnabled ? 1 : 0);
+                uniform3f(this.uniformObserveTint, 0.18F, 1.0F, 0.25F);
+                uniform1ui(this.uniformRecordCount, Math.max(1, k8.formalGeometrySnapshotRecordCount()));
+                uniform1ui(this.uniformBaseVertexBias, Math.max(0, this.k6FirstCommandBaseVertex));
 
                 GL30C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, ForgeFormalShaderInputBindingLayout.QUAD_BUFFER_BINDING_INDEX, k8.formalGeometryValidationBufferId());
                 GL30C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, ForgeFormalShaderInputBindingLayout.MODEL_DATA_BINDING_INDEX, store.modelDataBufferId());
@@ -1024,16 +1224,18 @@ final class ForgeFormalVisibleLodPreview {
                 GL15C.glBindBuffer(GL40C.GL_DRAW_INDIRECT_BUFFER, this.commandBufferId);
                 GL15C.glBindBuffer(GL_PARAMETER_BUFFER_ARB, this.drawCountBufferId);
 
-                boolean bindingsOk = GL30C.glGetIntegeri(GL43C.GL_SHADER_STORAGE_BUFFER_BINDING, ForgeFormalShaderInputBindingLayout.QUAD_BUFFER_BINDING_INDEX) == k8.formalGeometryValidationBufferId()
-                        && GL30C.glGetIntegeri(GL43C.GL_SHADER_STORAGE_BUFFER_BINDING, ForgeFormalShaderInputBindingLayout.MODEL_DATA_BINDING_INDEX) == store.modelDataBufferId()
-                        && GL30C.glGetIntegeri(GL43C.GL_SHADER_STORAGE_BUFFER_BINDING, ForgeFormalShaderInputBindingLayout.MODEL_COLOUR_BINDING_INDEX) == store.modelColourBufferId()
-                        && GL30C.glGetIntegeri(GL43C.GL_SHADER_STORAGE_BUFFER_BINDING, ForgeFormalShaderInputBindingLayout.POSITION_SCRATCH_BINDING_INDEX) == this.positionScratchBufferId
-                        && GL11C.glGetInteger(GL11C.GL_TEXTURE_BINDING_2D) == store.atlasTextureId()
-                        && GL30C.glGetIntegeri(GL33C.GL_SAMPLER_BINDING, ForgeFormalShaderInputBindingLayout.BLOCK_MODEL_ATLAS_TEXTURE_UNIT) == store.samplerId()
-                        && GL11C.glGetInteger(GL40C.GL_DRAW_INDIRECT_BUFFER_BINDING) == this.commandBufferId
-                        && GL11C.glGetInteger(GL_PARAMETER_BUFFER_BINDING_ARB) == this.drawCountBufferId;
-                if (!bindingsOk) {
-                    throw new IllegalStateException("k10-formal-resource-binding-failed");
+                if (this.qaReadbackAllowed || !this.visiblePreviewDrawCallOk) {
+                    boolean bindingsOk = GL30C.glGetIntegeri(GL43C.GL_SHADER_STORAGE_BUFFER_BINDING, ForgeFormalShaderInputBindingLayout.QUAD_BUFFER_BINDING_INDEX) == k8.formalGeometryValidationBufferId()
+                            && GL30C.glGetIntegeri(GL43C.GL_SHADER_STORAGE_BUFFER_BINDING, ForgeFormalShaderInputBindingLayout.MODEL_DATA_BINDING_INDEX) == store.modelDataBufferId()
+                            && GL30C.glGetIntegeri(GL43C.GL_SHADER_STORAGE_BUFFER_BINDING, ForgeFormalShaderInputBindingLayout.MODEL_COLOUR_BINDING_INDEX) == store.modelColourBufferId()
+                            && GL30C.glGetIntegeri(GL43C.GL_SHADER_STORAGE_BUFFER_BINDING, ForgeFormalShaderInputBindingLayout.POSITION_SCRATCH_BINDING_INDEX) == this.positionScratchBufferId
+                            && GL11C.glGetInteger(GL11C.GL_TEXTURE_BINDING_2D) == store.atlasTextureId()
+                            && GL30C.glGetIntegeri(GL33C.GL_SAMPLER_BINDING, ForgeFormalShaderInputBindingLayout.BLOCK_MODEL_ATLAS_TEXTURE_UNIT) == store.samplerId()
+                            && GL11C.glGetInteger(GL40C.GL_DRAW_INDIRECT_BUFFER_BINDING) == this.commandBufferId
+                            && GL11C.glGetInteger(GL_PARAMETER_BUFFER_BINDING_ARB) == this.drawCountBufferId;
+                    if (!bindingsOk) {
+                        throw new IllegalStateException("k10-formal-resource-binding-failed");
+                    }
                 }
 
                 GL43C.glMemoryBarrier(GL43C.GL_SHADER_STORAGE_BARRIER_BIT | GL43C.GL_TEXTURE_FETCH_BARRIER_BIT | GL43C.GL_COMMAND_BARRIER_BIT);
@@ -1050,7 +1252,8 @@ final class ForgeFormalVisibleLodPreview {
                 if (error != GL11C.GL_NO_ERROR) {
                     throw new IllegalStateException("k10-visible-preview-draw-gl-error-" + this.lastGlError);
                 }
-                if (!this.visiblePreviewReadbackOk) {
+                if (this.readbackPending && this.qaReadbackAllowed) {
+                    this.readbackPending = false;
                     this.readbackMainFramebufferSample();
                 }
             } finally {
@@ -1077,6 +1280,7 @@ final class ForgeFormalVisibleLodPreview {
     }
 
     private void readbackMainFramebufferSample() {
+        this.readbackRuns++;
         int[] viewport = new int[4];
         GL11C.glGetIntegerv(GL11C.GL_VIEWPORT, viewport);
         int width = Math.max(1, Math.min(READBACK_SIZE, viewport[2]));
@@ -1128,6 +1332,7 @@ final class ForgeFormalVisibleLodPreview {
         this.visiblePreviewEnabled = false;
         this.ownerReady = false;
         this.resetBuildFlags();
+        this.renderHookEarlyReturnWhenStale = true;
         this.stale = true;
         this.requiresRebuild = true;
         this.lifecycleState = "STALE";
@@ -1171,6 +1376,9 @@ final class ForgeFormalVisibleLodPreview {
         this.commandBufferId = 0;
         this.drawCountBufferId = 0;
         this.positionScratchBufferId = 0;
+        this.readbackPending = false;
+        this.qaReadbackAllowed = false;
+        this.resetVisiblePreviewUniformLocations();
     }
 
     private void resetBuildFlags() {
@@ -1182,7 +1390,15 @@ final class ForgeFormalVisibleLodPreview {
         this.visiblePreviewDisabledAfterQa = false;
         this.qaAutoDisablePending = false;
         this.qaFramesRemaining = 0;
+        this.readbackPending = false;
+        this.qaReadbackAllowed = false;
         this.firstDrawLogged = false;
+        this.observeModeEnabled = false;
+        this.observeModeDebugTintUsed = false;
+        this.observeModeScale = OBSERVE_PREVIEW_SCALE;
+        this.observeModeCameraRelative = false;
+        this.previewWorldBounds = "none";
+        this.previewCameraDistance = 0.0D;
         this.k8FormalGeometryUsed = false;
         this.k9TerrainShaderIntegrationUsed = false;
         this.k6RealSectionCommandUsed = false;
@@ -1215,6 +1431,16 @@ final class ForgeFormalVisibleLodPreview {
         this.k6FirstCommandBaseInstance = 0;
         this.acceptedDrawCommandCount = 0;
         this.drawCommandMatchesK6 = false;
+        this.perFrameRebuildDetected = false;
+        this.perFrameReadbackDetected = false;
+        this.perFrameShaderCompileDetected = false;
+        this.perFrameGlAllocationDetected = false;
+        this.perFrameLogSpamDetected = false;
+        this.lastFrameDrawTimeNanos = 0L;
+        this.totalFrameDrawTimeNanos = 0L;
+        this.maxFrameDrawTimeNanos = 0L;
+        this.renderHookEarlyReturnWhenDisabled = false;
+        this.renderHookEarlyReturnWhenStale = false;
         this.lastGlError = "none";
     }
 
@@ -1258,8 +1484,47 @@ final class ForgeFormalVisibleLodPreview {
         }
     }
 
+    private void captureVisiblePreviewUniformLocations(int program) {
+        this.uniformModelViewMatrix = GL20C.glGetUniformLocation(program, "modelViewMatrix");
+        this.uniformProjectionMatrix = GL20C.glGetUniformLocation(program, "projectionMatrix");
+        this.uniformPreviewCenter = GL20C.glGetUniformLocation(program, "previewCenter");
+        this.uniformPreviewRight = GL20C.glGetUniformLocation(program, "previewRight");
+        this.uniformPreviewUp = GL20C.glGetUniformLocation(program, "previewUp");
+        this.uniformPreviewScale = GL20C.glGetUniformLocation(program, "previewScale");
+        this.uniformObserveMode = GL20C.glGetUniformLocation(program, "observeMode");
+        this.uniformObserveTint = GL20C.glGetUniformLocation(program, "observeTint");
+        this.uniformRecordCount = GL20C.glGetUniformLocation(program, "recordCount");
+        this.uniformBaseVertexBias = GL20C.glGetUniformLocation(program, "baseVertexBias");
+        this.uniformBlockModelAtlas = GL20C.glGetUniformLocation(program, "blockModelAtlas");
+    }
+
+    private void resetVisiblePreviewUniformLocations() {
+        this.uniformModelViewMatrix = -1;
+        this.uniformProjectionMatrix = -1;
+        this.uniformPreviewCenter = -1;
+        this.uniformPreviewRight = -1;
+        this.uniformPreviewUp = -1;
+        this.uniformPreviewScale = -1;
+        this.uniformObserveMode = -1;
+        this.uniformObserveTint = -1;
+        this.uniformRecordCount = -1;
+        this.uniformBaseVertexBias = -1;
+        this.uniformBlockModelAtlas = -1;
+    }
+
     private static void uniformMatrix4f(int program, String name, Matrix4f matrix) {
         int location = GL20C.glGetUniformLocation(program, name);
+        if (location < 0) {
+            return;
+        }
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            FloatBuffer buffer = stack.mallocFloat(16);
+            matrix.get(buffer);
+            GL20C.glUniformMatrix4fv(location, false, buffer);
+        }
+    }
+
+    private static void uniformMatrix4f(int location, Matrix4f matrix) {
         if (location < 0) {
             return;
         }
@@ -1277,6 +1542,25 @@ final class ForgeFormalVisibleLodPreview {
         }
     }
 
+    private static void uniform3f(int location, Vec3 value) {
+        if (location >= 0) {
+            GL20C.glUniform3f(location, (float) value.x, (float) value.y, (float) value.z);
+        }
+    }
+
+    private static void uniform3f(int program, String name, float x, float y, float z) {
+        int location = GL20C.glGetUniformLocation(program, name);
+        if (location >= 0) {
+            GL20C.glUniform3f(location, x, y, z);
+        }
+    }
+
+    private static void uniform3f(int location, float x, float y, float z) {
+        if (location >= 0) {
+            GL20C.glUniform3f(location, x, y, z);
+        }
+    }
+
     private static void uniform1f(int program, String name, float value) {
         int location = GL20C.glGetUniformLocation(program, name);
         if (location >= 0) {
@@ -1284,8 +1568,20 @@ final class ForgeFormalVisibleLodPreview {
         }
     }
 
+    private static void uniform1f(int location, float value) {
+        if (location >= 0) {
+            GL20C.glUniform1f(location, value);
+        }
+    }
+
     private static void uniform1ui(int program, String name, int value) {
         int location = GL20C.glGetUniformLocation(program, name);
+        if (location >= 0) {
+            GL30C.glUniform1ui(location, value);
+        }
+    }
+
+    private static void uniform1ui(int location, int value) {
         if (location >= 0) {
             GL30C.glUniform1ui(location, value);
         }
@@ -1301,6 +1597,19 @@ final class ForgeFormalVisibleLodPreview {
         } catch (NumberFormatException ignored) {
             return 0;
         }
+    }
+
+    private static String formatPreviewBounds(Vec3 center, float scale) {
+        double radius = Math.max(0.25D, scale * 2.25D);
+        return String.format(
+                "min=(%.2f,%.2f,%.2f),max=(%.2f,%.2f,%.2f)",
+                center.x - radius,
+                center.y - radius,
+                center.z - radius,
+                center.x + radius,
+                center.y + radius,
+                center.z + radius
+        ).replace(' ', '_');
     }
 
     private static int parseSampleFace(String sampleFormalRecord) {

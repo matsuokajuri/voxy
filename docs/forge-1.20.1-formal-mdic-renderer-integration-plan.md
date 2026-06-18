@@ -636,3 +636,33 @@ the game framebuffer, but the remaining blockers are still production cmdgen,
 formal hierarchical traversal, live MDIC renderer integration, full terrain
 shader semantics, lightmap, biome tint, material/alpha behavior, translucency,
 and resource rebuild automation.
+
+## K10.1 visible preview observe/performance hotfix note
+
+K10.1 is a hotfix to the K10 preview loop. It does not add production MDIC
+rendering and does not advance to K11.
+
+The visible preview now has an explicit observe mode that remains disabled by
+default and must be enabled with a command. Observe mode increases preview
+scale, applies a bright debug tint, and reports camera-relative placement and
+world bounds so manual validation can distinguish the preview from ordinary
+terrain.
+
+The render hook is kept narrow:
+
+- build/rebuild work stays in build, QA, or enable paths;
+- shader compilation and GL allocation are not expected in the per-frame draw;
+- framebuffer readback is QA/audit-only, not part of manual observe frames;
+- repeated hook registration is detected and reported;
+- disabled or stale preview state returns from the hook before drawing.
+
+The same hard boundary remains:
+
+```text
+MDICSectionRendererCalled=false
+VoxyRenderSystemCalled=false
+productionLiveRendererDrawExecuted=false
+formalDrawPipelineReady=false
+formalRendererReady=false
+actualRendererDrawEnabled=false
+```

@@ -707,3 +707,38 @@ formalRendererReady=false
 actualRendererDrawEnabled=false
 productionTerrainShaderReady=false
 ```
+
+## K10.1 hotfix note
+
+K10.1 keeps the K10 visible preview path but tightens observation and frame
+cost. Manual observation after K10 showed that the preview was truly visible in
+the main framebuffer, but the visible mode could be hard to inspect and could
+drop the client to roughly 5-10 FPS.
+
+The hotfix adds explicit observe commands:
+
+```text
+/voxy formal_visible_lod_preview_observe_enable
+/voxy formal_visible_lod_preview_observe_disable
+/voxy formal_visible_lod_preview_observe_status
+/voxy qa_k10_visible_preview_observe_performance
+```
+
+Observe mode is still debug opt-in only. It uses a brighter tint, larger
+world-space scale, and camera-relative placement, while reporting bounds,
+camera distance, frame counters, draw timing, and per-frame rebuild/readback/
+shader-compile/GL-allocation detection. Manual observe mode avoids the QA
+readback path; framebuffer readback remains QA/audit-only.
+
+K10.1 still does not enter K11, does not call `MDICSectionRenderer` or
+`VoxyRenderSystem`, and does not change renderer readiness:
+
+```text
+visibleTerrainPreviewOnly=true
+debugOptInOnly=true
+visiblePreviewDefaultEnabled=false
+productionLiveRendererDrawExecuted=false
+formalDrawPipelineReady=false
+formalRendererReady=false
+actualRendererDrawEnabled=false
+```
