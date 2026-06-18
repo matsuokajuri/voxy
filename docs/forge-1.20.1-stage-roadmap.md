@@ -964,3 +964,28 @@ not a production MDIC renderer input. The stage does not call
 `MDICSectionRenderer`, does not call `VoxyRenderSystem`, does not run production
 `cmdgen.comp`, and does not change `formalDrawPipelineReady=false`,
 `formalRendererReady=false`, or `actualRendererDrawEnabled=false`.
+
+## K19/K20 status note
+
+K19/K20 tightens the K17/K18 visible preview by replacing the main placement
+evidence from a float section sidecar with a preview-only section metadata and
+position-scratch contract aligned with original Voxy concepts. K10 now uploads a
+bounded `SectionMeta`-shaped buffer for the selected preview records and a
+matching per-record position scratch buffer. The visible shader derives LoD
+level, section position, section base, and LoD scale from those raw section
+position words before applying the packed quad local position.
+
+New compact commands:
+
+```text
+/voxy qa_k19_k20_section_metadata_visible_preview
+/voxy formal_visible_lod_preview_section_metadata_status
+```
+
+This remains preview-only. `sectionMetadataPreviewReady=true` means the K10
+visible preview can consume a preview-shaped section metadata/position scratch
+contract; it does not mean production `BasicSectionGeometryData` metadata,
+production `cmdgen.comp`, formal traversal, `MDICSectionRenderer`, or
+`VoxyRenderSystem` are live. The required renderer readiness values remain:
+`formalDrawPipelineReady=false`, `formalRendererReady=false`, and
+`actualRendererDrawEnabled=false`.

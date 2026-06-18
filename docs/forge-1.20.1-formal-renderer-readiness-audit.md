@@ -997,6 +997,40 @@ formalRendererReady=false
 actualRendererDrawEnabled=false
 ```
 
+## K19/K20 section metadata preview alignment note
+
+K19/K20 keeps the K10 visible preview default-disabled and preview-only, but
+brings the shader input contract closer to original Voxy. Instead of treating
+the K17/K18 world placement sidecar as the primary proof, K10 now creates:
+
+```text
+preview SectionMeta-shaped buffer
+preview positionScratch buffer
+packed formal quad records
+formal ModelStore modelData/modelColour/atlas
+```
+
+The visible preview shader derives LoD level and section base from
+`SectionMeta.a.xy` / `positionScratch[]`, matching the role those raw section
+position words play in original `cmdgen.comp`, `section.glsl`, and
+`quad_util.glsl`. The compact status reports:
+
+```text
+sectionMetadataPreviewReady
+sectionMetadataPathUsed
+positionScratchPathUsed
+previewSectionMetadataBufferCreated
+originalSectionMetadataLayoutUsed
+cmdgenPositionScratchSemanticsUsed
+previewSectionSidecarFallbackUsed
+```
+
+This is not a production section metadata owner and does not promote renderer
+readiness. Formal visibility traversal, production command generation, live MDIC
+draw ownership, and full terrain shader semantics still block
+`formalDrawPipelineReady`, `formalRendererReady`, and
+`actualRendererDrawEnabled`.
+
 ## K10.3 observe prepare hotfix note
 
 K10.3 fixes the gap left by K10.2: a manual observe command could return

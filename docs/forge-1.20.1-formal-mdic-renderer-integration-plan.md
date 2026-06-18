@@ -839,3 +839,25 @@ production section metadata buffer, not a formal MDIC command resource, and not
 owned by the live renderer. Production integration still requires a formal
 section metadata owner, operational production cmdgen, and live MDIC draw
 ownership.
+
+## K19/K20 section metadata / position scratch preview note
+
+K19/K20 keeps K10 on the preview side of the renderer boundary while reducing
+the K17/K18 sidecar drift from original Voxy. The visible preview now uploads a
+bounded, K10-owned `SectionMeta`-shaped metadata buffer plus a matching
+position-scratch buffer for the selected preview records:
+
+```text
+K8 formal packed records
+ + K8 section positions
+ -> K10 preview SectionMeta buffer
+ -> K10 preview positionScratch buffer
+ -> visible shader derives section base and LoD scale
+```
+
+This matches the original concept where `cmdgen.comp` writes
+`positionScratch[drawId] = extractRawPos(meta)` and `quads3.vert` /
+`quad_util.glsl` derive world placement from that raw section position. The K10
+buffers remain validation resources: they are not `BasicSectionGeometryData`,
+not production MDIC command resources, not a live renderer input, and not a
+replacement for formal visibility traversal or production command generation.

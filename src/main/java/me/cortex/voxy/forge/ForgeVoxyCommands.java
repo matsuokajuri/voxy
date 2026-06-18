@@ -621,6 +621,10 @@ public final class ForgeVoxyCommands {
                         .executes(ctx -> formalVisibleLodPreviewWorldPlacedStatus(ctx.getSource())))
                 .then(Commands.literal("qa_k17_k18_world_placed_visible_preview")
                         .executes(ctx -> qaK17K18WorldPlacedVisiblePreview(ctx.getSource())))
+                .then(Commands.literal("formal_visible_lod_preview_section_metadata_status")
+                        .executes(ctx -> formalVisibleLodPreviewSectionMetadataStatus(ctx.getSource())))
+                .then(Commands.literal("qa_k19_k20_section_metadata_visible_preview")
+                        .executes(ctx -> qaK19K20SectionMetadataVisiblePreview(ctx.getSource())))
                 .then(Commands.literal("formal_renderer_check")
                         .executes(ctx -> formalRendererCheck(ctx.getSource())))
                 .then(Commands.literal("formal_renderer_status")
@@ -6466,6 +6470,36 @@ public final class ForgeVoxyCommands {
                 && !status.actualRendererDrawEnabled() ? 1 : 0;
     }
 
+    private static int formalVisibleLodPreviewSectionMetadataStatus(CommandSourceStack source) {
+        ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview().createStatusSnapshot();
+        source.sendSuccess(() -> Component.literal("Voxy K19/K20 section metadata visible preview status: "
+                + formatFormalVisibleLodPreviewSectionMetadataStatus(status)), false);
+        return status.sectionMetadataPreviewReady()
+                && !status.previewSectionSidecarFallbackUsed()
+                && !status.formalRendererReady()
+                && !status.actualRendererDrawEnabled() ? 1 : 0;
+    }
+
+    private static int qaK19K20SectionMetadataVisiblePreview(CommandSourceStack source) {
+        ForgeVoxyRuntimeOverrides.applyFormalVisibleLodPreviewDebugPreset();
+        boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
+        ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview()
+                .requestPreviewPrepare("qa-k19-k20-section-metadata-visible-preview");
+        boolean previewPrepared = status.visibleLodPreviewOwnerReady() && !status.stale();
+        source.sendSuccess(() -> Component.literal("Voxy QA K19/K20 section metadata visible preview: "
+                + (engineReady ? "WorldEngine active. " : "No active client world; prepare may wait/fail safely. ")
+                + formatFormalVisibleLodPreviewSectionMetadataStatus(status)
+                + " next=/voxy formal_visible_lod_preview_section_metadata_status; after prepared, use /voxy formal_visible_lod_preview_observe_enable"), false);
+        return (previewPrepared || status.observePrepareRequested() || status.observePrepareInProgress())
+                && status.observeEnableCommandReturnedQuickly()
+                && !status.observeEnableDidGlWorkOnCommandThread()
+                && !status.observeEnableDidReadbackOnCommandThread()
+                && !status.observeEnableDidSynchronousRebuild()
+                && !status.previewSectionSidecarFallbackUsed()
+                && !status.formalRendererReady()
+                && !status.actualRendererDrawEnabled() ? 1 : 0;
+    }
+
     private static int formalRendererCheck(CommandSourceStack source) {
         ForgeFormalRendererStats status = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("command-check");
         source.sendSuccess(() -> Component.literal("Voxy formal renderer check: " + formatFormalRendererStatus(status)), false);
@@ -8718,6 +8752,60 @@ public final class ForgeVoxyCommands {
                 status.sectionLodScaleUsed(),
                 status.previewSectionSidecarBufferCreated(),
                 status.previewSectionDataBufferId(),
+                status.worldPlacedPreviewRecordCount(),
+                status.worldPlacedPreviewSectionBases(),
+                status.cameraBillboardFallbackUsed(),
+                status.multiSectionPreviewPipelineReady(),
+                status.multiSectionPreviewSectionCount(),
+                status.multiSectionPreviewDrawRecordCount(),
+                status.multiSectionPreviewDrawCapped(),
+                status.visiblePreviewEnabled(),
+                status.visiblePreviewDrawExecuted(),
+                status.visiblePreviewFrameCount(),
+                status.k8FormalGeometryUsed(),
+                status.k9TerrainShaderIntegrationUsed(),
+                status.k6RealSectionCommandUsed(),
+                status.syntheticDrawFixtureUsed(),
+                status.originalGeometryHeapMutated(),
+                status.debugMdicCommandBuffersUsedAsFormal(),
+                status.lastFailureReason()
+        );
+    }
+
+    private static String formatFormalVisibleLodPreviewSectionMetadataStatus(ForgeFormalVisibleLodPreviewStats status) {
+        return String.format(
+                "stage=%s k19_k20_stage=%s previewPrepared=%s prepareRequested=%s prepareInProgress=%s prepareCompleted=%s "
+                        + "sectionMetadataPreviewReady=%s sectionMetadataPathUsed=%s positionScratchPathUsed=%s previewSectionMetadataBufferCreated=%s previewSectionMetadataBufferId=%d "
+                        + "previewSectionMetadataRecordCount=%d positionScratchEntryCount=%d previewSectionMetadataRawPositions=%s originalSectionMetadataLayoutUsed=%s "
+                        + "cmdgenPositionScratchSemanticsUsed=%s previewSectionSidecarFallbackUsed=%s "
+                        + "worldPlacedPreviewReady=%s worldPlacedPreviewUsed=%s packedQuadLocalPositionUsed=%s sectionWorldBaseUsed=%s sectionLodScaleUsed=%s "
+                        + "worldPlacedPreviewRecordCount=%d worldPlacedPreviewSectionBases=%s cameraBillboardFallbackUsed=%s "
+                        + "multiSectionPreviewPipelineReady=%s multiSectionPreviewSectionCount=%d multiSectionPreviewDrawRecordCount=%d multiSectionPreviewDrawCapped=%s "
+                        + "visiblePreviewEnabled=%s visiblePreviewDrawExecuted=%s visiblePreviewFrameCount=%d k8FormalGeometryUsed=%s k9TerrainShaderIntegrationUsed=%s k6RealSectionCommandUsed=%s "
+                        + "syntheticDrawFixtureUsed=%s originalGeometryHeapMutated=%s debugMdicCommandBuffersUsedAsFormal=%s visibleTerrainPreviewOnly=true "
+                        + "productionLiveRendererDrawExecuted=false formalDrawPipelineReady=false formalRendererReady=false actualRendererDrawEnabled=false lastFailureReason=%s",
+                status.stage(),
+                status.k19K20Stage(),
+                status.visibleLodPreviewOwnerReady() && !status.stale(),
+                status.observePrepareRequested(),
+                status.observePrepareInProgress(),
+                status.observePrepareCompleted(),
+                status.sectionMetadataPreviewReady(),
+                status.sectionMetadataPathUsed(),
+                status.positionScratchPathUsed(),
+                status.previewSectionMetadataBufferCreated(),
+                status.previewSectionMetadataBufferId(),
+                status.previewSectionMetadataRecordCount(),
+                status.positionScratchEntryCount(),
+                status.previewSectionMetadataRawPositions(),
+                status.originalSectionMetadataLayoutUsed(),
+                status.cmdgenPositionScratchSemanticsUsed(),
+                status.previewSectionSidecarFallbackUsed(),
+                status.worldPlacedPreviewReady(),
+                status.worldPlacedPreviewUsed(),
+                status.packedQuadLocalPositionUsed(),
+                status.sectionWorldBaseUsed(),
+                status.sectionLodScaleUsed(),
                 status.worldPlacedPreviewRecordCount(),
                 status.worldPlacedPreviewSectionBases(),
                 status.cameraBillboardFallbackUsed(),
