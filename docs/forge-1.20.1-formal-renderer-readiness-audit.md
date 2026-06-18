@@ -1619,3 +1619,34 @@ formal command buffer owner from K2, not production `cmdgen.comp` output, and
 not submitted through `MDICSectionRenderer`. Readiness remains blocked by
 production command generation, formal visibility traversal, full terrain shader
 semantics, and live MDIC renderer integration.
+
+## K23-K30 minimal formal LoD renderer prototype note
+
+K23-K30 introduces a bounded, opt-in minimal formal LoD renderer prototype. The
+prototype still reuses the K10 visible-preview hook, but its input is now large
+enough to read as a real LoD patch rather than a single validation block:
+
+```text
+minimalFormalLodRendererPrototypeReady
+boundedFormalLodPatchReady
+patchRecordLimit=96
+patchRecordCount>=48
+patchDrawIndexCount>=192
+reducedObserveTint=true
+```
+
+This positive status means the current formal path can draw a small,
+world-space, real-section-derived formal LoD patch into the main framebuffer
+after explicit opt-in. It does not mean the production renderer is ready.
+Readiness remains blocked by production command generation, full formal
+visibility traversal, full terrain shader semantics, material/light/biome
+handling, and production live MDIC ownership. The required safety values remain:
+
+```text
+productionRenderer=false
+formalDrawPipelineReady=false
+formalRendererReady=false
+actualRendererDrawEnabled=false
+MDICSectionRendererCalled=false
+VoxyRenderSystemCalled=false
+```

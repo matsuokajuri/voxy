@@ -886,3 +886,26 @@ This is not production indirect rendering. K21/K22 does not run production
 `cmdgen.comp`, does not bind the K2 formal command buffers as live renderer
 inputs, does not call `MDICSectionRenderer`, and does not call
 `glMultiDrawElementsIndirectCountARB` for terrain rendering.
+
+## K23-K30 minimal formal LoD prototype note
+
+K23-K30 keeps the renderer on the safe side of the production MDIC boundary but
+raises the visible proof from a command-aligned sample to a bounded formal LoD
+patch:
+
+```text
+K8 formal model-id section geometry snapshot
+ -> K10/K23 bounded contiguous bucket copy
+ -> preview SectionMeta + positionScratch
+ -> K10-owned DrawCommand
+ -> direct visible prototype draw
+```
+
+The patch cap is deliberately small (`96` records) and uses one accepted
+section/bucket so the current `baseInstance -> positionScratch` contract stays
+honest. The draw remains direct and prototype-scoped; K23-K30 does not submit
+production indirect draw calls, does not run live production `cmdgen.comp`,
+does not call `MDICSectionRenderer`, and does not make the formal renderer
+default-enabled. The next production-facing step is still to move from this
+prototype-owned bounded copy into formal renderer-owned section geometry,
+visibility, and command resources.

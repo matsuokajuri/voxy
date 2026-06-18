@@ -809,6 +809,34 @@ K10.3 remains below K11: it does not call `MDICSectionRenderer`, does not call
 `formalDrawPipelineReady=false`, `formalRendererReady=false`, and
 `actualRendererDrawEnabled=false`.
 
+## K23-K30 status note
+
+K23-K30 creates the first minimal formal LoD renderer prototype, still bounded
+and opt-in. It grows the K21/K22 command-driven visible preview from a tiny
+proof into a small world-space formal LoD patch by allowing up to 96 formal
+packed records from one accepted real section/bucket. The shader keeps using
+formal model ids, formal `ModelStore` resources, preview-shaped section
+metadata, position scratch, and the K10-owned `DrawCommand` contract.
+
+New compact commands:
+
+```text
+/voxy qa_k23_k30_minimal_formal_lod_renderer
+/voxy formal_minimal_lod_renderer_prepare
+/voxy formal_minimal_lod_renderer_enable
+/voxy formal_minimal_lod_renderer_disable
+/voxy formal_minimal_lod_renderer_status
+```
+
+This is intended to be visibly more like a small LoD terrain patch than the
+earlier green validation block. The observe tint is reduced so formal atlas
+texture remains visible. It is still not the production renderer: default
+enable remains false, vanilla terrain is not replaced, production
+`cmdgen.comp` is not used as the live renderer path, `MDICSectionRenderer` and
+`VoxyRenderSystem` are not called, and renderer readiness remains
+`formalDrawPipelineReady=false`, `formalRendererReady=false`, and
+`actualRendererDrawEnabled=false`.
+
 ## K21/K22 status note
 
 K21/K22 keeps the visible preview path below production MDIC renderer
