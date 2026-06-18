@@ -1,6 +1,12 @@
 package me.cortex.voxy.forge;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.vertex.PoseStack;
+import net.minecraft.client.Minecraft;
+import net.minecraft.world.phys.Vec3;
+import net.minecraftforge.client.event.RenderLevelStageEvent;
+import net.minecraftforge.common.MinecraftForge;
+import org.joml.Matrix4f;
 import org.lwjgl.opengl.GL;
 import org.lwjgl.opengl.GL11C;
 import org.lwjgl.opengl.GL12C;
@@ -13,9 +19,11 @@ import org.lwjgl.opengl.GL33C;
 import org.lwjgl.opengl.GL40C;
 import org.lwjgl.opengl.GL43C;
 import org.lwjgl.opengl.GL45C;
+import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
 
 import java.nio.ByteBuffer;
+import java.nio.FloatBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -27,16 +35,19 @@ import static org.lwjgl.opengl.ARBIndirectParameters.GL_PARAMETER_BUFFER_ARB;
 import static org.lwjgl.opengl.ARBIndirectParameters.GL_PARAMETER_BUFFER_BINDING_ARB;
 import static org.lwjgl.opengl.ARBIndirectParameters.glMultiDrawElementsIndirectCountARB;
 
-final class ForgeFormalTerrainShaderIntegration {
-    static final String STAGE = "K9_FORMAL_TERRAIN_SHADER_OFFSCREEN_INTEGRATION";
-    private static final int PREVIEW_WIDTH = 64;
-    private static final int PREVIEW_HEIGHT = 64;
+final class ForgeFormalVisibleLodPreview {
+    static final String STAGE = "K10_FORMAL_VISIBLE_LOD_PREVIEW_DEBUG_TOGGLE";
+    private static final boolean DEFAULT_ENABLED = false;
+    private static final boolean DEBUG_OPT_IN_ONLY = true;
+    private static final int QA_VISIBLE_FRAMES = 1;
+    private static final int READBACK_SIZE = 64;
     private static final int BYTES_PER_PIXEL = 4;
     private static final int DRAW_COMMAND_FIELD_COUNT = 5;
-    private static final int DRAW_COMMAND_STRIDE_BYTES = DRAW_COMMAND_FIELD_COUNT * Integer.BYTES;
     private static final int OPAQUE_DRAW_COUNT_OFFSET_BYTES = 3 * Integer.BYTES;
-    private static final String DRAW_INPUT_SOURCE = "K8FormalGeometryAndK6Command";
-    private static final String SHADER_CONTRACT_SUBSET = "quad_format-modelId-decode+BlockModel-faceData+modelColour+formalAtlas+positionScratch+offscreen-indirect-count";
+    private static final String DRAW_INPUT_SOURCE = "K8FormalGeometryAndK9Shader";
+    private static final String RENDER_HOOK_NAME = "RenderLevelStageEvent.AFTER_TRANSLUCENT_BLOCKS";
+    private static final String RENDER_HOOK_SCOPE = "K10_visible_preview_only";
+    private static final String SHADER_CONTRACT_SUBSET = "k9-terrain-shader-adapter-worldspace-visible-preview";
     private static final String SEMANTIC_COMPLETENESS = "partial";
 
     private static final String VERTEX_SOURCE = """
@@ -58,6 +69,12 @@ final class ForgeFormalTerrainShaderIntegration {
                 uvec2 positionScratch[];
             };
 
+            uniform mat4 modelViewMatrix;
+            uniform mat4 projectionMatrix;
+            uniform vec3 previewCenter;
+            uniform vec3 previewRight;
+            uniform vec3 previewUp;
+            uniform float previewScale;
             uniform uint recordCount;
             uniform uint baseVertexBias;
 
@@ -129,17 +146,18 @@ final class ForgeFormalTerrainShaderIntegration {
                 float g = float((colour >> 8u) & 255u) / 255.0;
                 float b = float((colour >> 16u) & 255u) / 255.0;
                 float a = float((colour >> 24u) & 255u) / 255.0;
-                vTint = vec4(max(vec3(r, g, b), vec3(0.2)), max(a, 1.0));
+                vTint = vec4(max(vec3(r, g, b), vec3(0.25)), max(a, 1.0));
                 vModelId = modelId;
                 vFace = face;
                 vFaceData = faceData;
 
-                uvec2 sectionMarker = positionScratch[0];
-                float jitter = float((sectionMarker.x ^ sectionMarker.y) & 3u) * 0.015;
                 float slot = float(recordIndex % 4u);
-                vec2 offset = vec2(-0.72 + slot * 0.48 + jitter, -0.54 + float((recordIndex / 4u) % 3u) * 0.45);
-                vec2 size = vec2(0.34);
-                gl_Position = vec4(offset + corner * size, 0.0, 1.0);
+                float row = float((recordIndex / 4u) % 3u);
+                float jitter = float((positionScratch[0].x ^ positionScratch[0].y) & 3u) * 0.04;
+                vec2 local = (corner - vec2(0.5)) * previewScale
+                    + vec2((slot - 1.5) * previewScale * 1.16 + jitter, row * previewScale * 1.16);
+                vec3 worldPos = previewCenter + previewRight * local.x + previewUp * local.y;
+                gl_Position = projectionMatrix * modelViewMatrix * vec4(worldPos, 1.0);
             }
             """;
 
@@ -158,75 +176,79 @@ final class ForgeFormalTerrainShaderIntegration {
 
             void main() {
                 vec4 texel = texture(blockModelAtlas, vAtlasUv);
-                float marker = float((vModelId ^ (vFace << 3u) ^ vFaceData) & 15u) / 255.0;
-                vec3 rgb = max(texel.rgb * vTint.rgb + vec3(marker), vec3(0.04, 0.03, 0.02));
+                float marker = float((vModelId ^ (vFace << 3u) ^ vFaceData) & 15u) / 180.0;
+                vec3 rgb = max(texel.rgb * vTint.rgb + vec3(marker, marker * 0.45, 0.04), vec3(0.08, 0.04, 0.02));
                 fragColor = vec4(rgb, 1.0);
             }
             """;
 
     private static final List<ForgeFormalRendererBlocker> BLOCKERS = List.of(
-            new ForgeFormalRendererBlocker("P0", "P0_PRODUCTION_CMDGEN_NOT_OPERATIONAL", "Production cmdgen not operational", "K9 consumes K6/K7 validation command data but does not promote production cmdgen.comp to the live renderer path.", "Promote production command generation only after traversal and live ownership are ready.", true),
-            new ForgeFormalRendererBlocker("P0", "P0_FORMAL_VISIBILITY_TRAVERSAL_IMPLEMENTATION_MISSING", "Formal visibility traversal implementation missing", "K9 still depends on the K4/K6 conservative candidate snapshot instead of original hierarchical traversal.", "Implement formal visibility traversal before live draw.", true),
-            new ForgeFormalRendererBlocker("P0", "P0_PRODUCTION_TERRAIN_SHADER_FULL_SEMANTICS_INCOMPLETE", "Production terrain shader full semantics incomplete", "K9 uses a production-aligned shader adapter subset; lightmap, full biome LUT, full material alpha, translucency, and shaderpack semantics remain incomplete.", "Complete terrain shader semantics before live rendering.", true),
-            new ForgeFormalRendererBlocker("P0", "P0_FORMAL_MDIC_LIVE_DRAW_DISABLED", "Formal MDIC live draw disabled", "K9 draw is offscreen validation only and never enables the live renderer.", "Keep live draw disabled until production command, shader, traversal, and lifecycle paths are complete.", true),
-            new ForgeFormalRendererBlocker("P1", "P1_HIERARCHICAL_OCCLUSION_MISSING", "Hierarchical occlusion missing", "K9 does not port the original hierarchical occlusion queue.", "Port formal hierarchical occlusion traversal later.", false),
-            new ForgeFormalRendererBlocker("P1", "P1_RENDER_DISTANCE_TRACKER_INCOMPLETE", "Render distance tracker incomplete", "K9 does not own a formal RenderDistanceTracker equivalent.", "Add formal render-distance tracking before live traversal.", false),
-            new ForgeFormalRendererBlocker("P1", "P1_LIGHTMAP_MISSING", "Lightmap missing", "K9 does not implement formal lightmap texture semantics.", "Add formal lightmap binding and shader semantics.", false),
-            new ForgeFormalRendererBlocker("P1", "P1_BIOME_TINT_MISSING", "Biome tint missing", "K9 reads modelColour but does not implement the full biome tint LUT path.", "Complete formal biome tint handling.", false),
-            new ForgeFormalRendererBlocker("P1", "P1_MATERIAL_ALPHA_SEMANTICS_MISSING", "Material alpha semantics missing", "K9 does not implement complete material, alpha, and cutout behavior.", "Implement formal material/alpha/cutout behavior.", false),
-            new ForgeFormalRendererBlocker("P1", "P1_TRANSLUCENCY_INCOMPLETE", "Translucency incomplete", "K9 is opaque offscreen validation and does not implement translucent sorting.", "Add formal translucent handling after opaque live draw is stable.", false),
-            new ForgeFormalRendererBlocker("P1", "P1_RESOURCE_REBUILD_AUTOMATION_INCOMPLETE", "Resource rebuild automation incomplete", "K9 stales validation resources but does not automatically rebuild production renderer resources.", "Add rebuild orchestration when production resources exist.", false)
+            new ForgeFormalRendererBlocker("P0", "P0_PRODUCTION_CMDGEN_NOT_OPERATIONAL", "Production cmdgen not operational", "K10 uses K6/K7 validation command evidence and does not promote production cmdgen.comp to the live renderer.", "Promote production command generation only after traversal and live ownership are ready.", true),
+            new ForgeFormalRendererBlocker("P0", "P0_FORMAL_VISIBILITY_TRAVERSAL_IMPLEMENTATION_MISSING", "Formal visibility traversal implementation missing", "K10 still depends on K4/K6 candidate snapshots rather than original hierarchical traversal.", "Implement formal visibility traversal before production rendering.", true),
+            new ForgeFormalRendererBlocker("P0", "P0_PRODUCTION_TERRAIN_SHADER_FULL_SEMANTICS_INCOMPLETE", "Production terrain shader full semantics incomplete", "K10 reuses the K9 shader adapter subset; lightmap, full biome LUT, material alpha, translucency, and shaderpack semantics remain incomplete.", "Complete terrain shader semantics before live renderer readiness.", true),
+            new ForgeFormalRendererBlocker("P0", "P0_FORMAL_MDIC_LIVE_RENDERER_NOT_INTEGRATED", "Formal MDIC live renderer not integrated", "K10 draws only an opt-in visible preview and does not integrate the production formal MDIC renderer.", "Add production formal MDIC integration in a later stage.", true),
+            new ForgeFormalRendererBlocker("P0", "P0_FORMAL_RENDERER_DEFAULT_DISABLED", "Formal renderer default disabled", "K10 visible preview is disabled by default and requires an explicit command or preset.", "Keep default disabled until production lifecycle and user-facing controls are ready.", true),
+            new ForgeFormalRendererBlocker("P1", "P1_HIERARCHICAL_OCCLUSION_MISSING", "Hierarchical occlusion missing", "K10 does not port the original hierarchical occlusion queue.", "Port formal hierarchical occlusion traversal later.", false),
+            new ForgeFormalRendererBlocker("P1", "P1_RENDER_DISTANCE_TRACKER_INCOMPLETE", "Render distance tracker incomplete", "K10 does not own a formal RenderDistanceTracker equivalent.", "Add formal render-distance tracking before live traversal.", false),
+            new ForgeFormalRendererBlocker("P1", "P1_LIGHTMAP_MISSING", "Lightmap missing", "K10 does not implement formal lightmap semantics.", "Add formal lightmap binding and shader semantics.", false),
+            new ForgeFormalRendererBlocker("P1", "P1_BIOME_TINT_MISSING", "Biome tint missing", "K10 reads modelColour but does not implement the full biome tint LUT path.", "Complete formal biome tint handling.", false),
+            new ForgeFormalRendererBlocker("P1", "P1_MATERIAL_ALPHA_SEMANTICS_MISSING", "Material alpha semantics missing", "K10 does not implement complete material, alpha, and cutout behavior.", "Implement formal material/alpha/cutout behavior.", false),
+            new ForgeFormalRendererBlocker("P1", "P1_TRANSLUCENCY_INCOMPLETE", "Translucency incomplete", "K10 is opaque preview-only and does not implement translucent sorting.", "Add formal translucent handling after opaque preview is stable.", false),
+            new ForgeFormalRendererBlocker("P1", "P1_RESOURCE_REBUILD_AUTOMATION_INCOMPLETE", "Resource rebuild automation incomplete", "K10 stales preview resources but does not automatically rebuild production renderer resources.", "Add rebuild orchestration when production resources exist.", false)
     );
 
     private final ForgeVoxyInstance instance;
     private long buildRuns;
+    private long enableRuns;
+    private long disableRuns;
     private long auditRuns;
     private long clearRuns;
     private long auditFailures;
-    private boolean integrationReady;
-    private boolean originalShaderFilesInspected;
-    private boolean originalQuadsVertInspected;
-    private boolean originalQuadsFragInspected;
-    private boolean originalQuadUtilInspected;
-    private boolean originalBlockModelInspected;
-    private boolean terrainShaderProgramCompileAttempted;
-    private boolean terrainShaderProgramCompileOk;
-    private boolean terrainShaderProgramLinkOk;
+    private boolean renderHookRegistered;
+    private boolean ownerReady;
+    private boolean visiblePreviewEnabled;
+    private boolean visiblePreviewDefaultDisabledVerified = true;
+    private boolean visiblePreviewWasEnabledDuringQa;
+    private boolean visiblePreviewDisabledAfterQa;
+    private boolean qaAutoDisablePending;
+    private int qaFramesRemaining;
+    private boolean deferredQaPending;
+    private int deferredQaStep;
+    private boolean firstDrawLogged;
     private boolean k8FormalGeometryUsed;
+    private boolean k9TerrainShaderIntegrationUsed;
     private boolean k6RealSectionCommandUsed;
     private boolean syntheticDrawFixtureUsed;
-    private boolean modelDataBindingOk;
-    private boolean modelColourBindingOk;
-    private boolean atlasTextureBindingOk;
-    private boolean samplerBindingOk;
-    private boolean geometryBufferBindingOk;
-    private boolean commandBufferBindingOk;
-    private boolean drawCountBufferBindingOk;
-    private boolean positionScratchBindingOk;
+    private boolean worldSpacePreview;
+    private String previewSectionWorldPosition = "none";
+    private boolean previewCameraRelativeTransformOk;
+    private boolean projectionMatrixUsed;
+    private boolean modelViewMatrixUsed;
+    private boolean visiblePreviewShaderProgramCompileAttempted;
+    private boolean visiblePreviewShaderProgramCompileOk;
+    private boolean visiblePreviewShaderProgramLinkOk;
+    private int visiblePreviewShaderProgramId;
+    private boolean visiblePreviewDrawExecuted;
+    private int visiblePreviewFrameCount;
+    private boolean minecraftMainFramebufferDrawn;
+    private boolean visiblePreviewDrawCallOk;
     private boolean formalModelIdDecodeOk;
     private boolean faceDataLookupOk;
     private boolean atlasSampleOk;
     private boolean modelDataReadOk;
     private boolean modelColourReadOk;
-    private boolean basicFragmentOutputOk;
-    private boolean offscreenFramebufferCreated;
-    private boolean offscreenFramebufferComplete;
-    private boolean offscreenTerrainShaderDrawExecuted;
-    private boolean offscreenReadbackOk;
-    private int offscreenNonZeroPixelCount;
-    private String offscreenChecksum = "none";
+    private boolean visiblePreviewReadbackOk;
+    private int visiblePreviewNonZeroPixelCount;
+    private String visiblePreviewChecksum = "none";
     private int validationFormalModelId;
     private int validationFace;
     private String validationFormalModelIds = "none";
-    private int terrainShaderProgramId;
-    private int offscreenFramebufferId;
-    private int offscreenTextureId;
-    private int vertexArrayId;
-    private int indexBufferId;
+    private int geometryBufferId;
     private int commandBufferId;
     private int drawCountBufferId;
     private int positionScratchBufferId;
-    private int geometryBufferId;
+    private int indexBufferId;
+    private int vertexArrayId;
     private int k6FirstCommandCount;
     private int k6FirstCommandInstanceCount;
     private int k6FirstCommandFirstIndex;
@@ -240,18 +262,24 @@ final class ForgeFormalTerrainShaderIntegration {
     private String lastLifecycleEvent = "initialized";
     private String lastGlError = "none";
     private String lastFailureReason = "none";
-    private ForgeFormalTerrainShaderIntegrationAuditResult lastAudit =
-            ForgeFormalTerrainShaderIntegrationAuditResult.failure("not-audited", 0.0D);
+    private ForgeFormalVisibleLodPreviewAuditResult lastAudit =
+            ForgeFormalVisibleLodPreviewAuditResult.failure("not-audited", 0.0D);
 
-    ForgeFormalTerrainShaderIntegration(ForgeVoxyInstance instance) {
+    ForgeFormalVisibleLodPreview(ForgeVoxyInstance instance) {
         this.instance = instance;
     }
 
-    ForgeFormalTerrainShaderIntegrationStats build() {
+    void register() {
+        MinecraftForge.EVENT_BUS.addListener(this::onRenderLevelStage);
+        this.renderHookRegistered = true;
+    }
+
+    ForgeFormalVisibleLodPreviewStats build() {
         this.buildRuns++;
         this.lifecycleState = "BUILDING";
         this.lastLifecycleEvent = "build";
         this.lastFailureReason = "none";
+        this.visiblePreviewDefaultDisabledVerified = !DEFAULT_ENABLED;
         this.resetBuildFlags();
 
         if (!RenderSystem.isOnRenderThread()) {
@@ -264,94 +292,122 @@ final class ForgeFormalTerrainShaderIntegration {
             this.audit();
             return this.createStatusSnapshot();
         }
-
-        boolean worldReady = this.instance.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
-        if (!worldReady) {
+        if (!this.instance.ensureActiveWorldSkeletonForCurrentWorldIfAllowed()) {
             this.fail("world-engine-skeleton-not-ready");
             this.audit();
             return this.createStatusSnapshot();
         }
 
+        ForgeFormalTerrainShaderIntegrationStats k9 = this.instance.getFormalTerrainShaderIntegration().build();
         ForgeFormalModelIdSectionGeometryStats k8 = this.instance.getFormalModelIdSectionGeometryPath().createStatusSnapshot();
-        if (!k8.formalModelIdGeometryPathReady()
-                || !k8.formalGeometryValidationBufferCreated()
-                || k8.formalGeometryValidationBufferId() == 0) {
-            k8 = this.instance.getFormalModelIdSectionGeometryPath().build();
-        }
-        ForgeFormalIsolatedMdicDrawSmokeTestStats k7 = this.instance.getFormalIsolatedMdicDrawSmokeTest().createStatusSnapshot();
-        if (!k7.isolatedMdicDrawSmokeTestReady()
-                || !k7.realSectionCommandUsed()
-                || k7.syntheticDrawFixtureUsed()) {
-            k7 = this.instance.getFormalIsolatedMdicDrawSmokeTest().build();
-        }
-        k8 = this.instance.getFormalModelIdSectionGeometryPath().createStatusSnapshot();
         ForgeFormalCmdgenRealSectionDryRunStats k6 = this.instance.getFormalCmdgenRealSectionDryRun().createStatusSnapshot();
         ForgeFormalModelStoreStats store = this.instance.getFormalModelStore().createStatusSnapshot();
-        if (!this.capturePrerequisites(k6, k7, k8, store)) {
+        if (!this.capturePrerequisites(k6, k8, k9, store)) {
             this.audit();
-            this.instance.getFormalRendererManager().checkReadiness("k9-formal-terrain-shader-prerequisite-failed");
+            this.instance.getFormalRendererManager().checkReadiness("k10-visible-lod-preview-prerequisite-failed");
             return this.createStatusSnapshot();
         }
 
         try {
             this.closeOwnedResourcesOnRenderThread();
             this.captureFormalModelReadbacks(k8);
-            this.terrainShaderProgramId = this.compileTerrainShaderProgram();
-            this.createOffscreenFramebuffer();
+            this.visiblePreviewShaderProgramId = this.compileVisiblePreviewShaderProgram();
             this.createValidationDrawBuffers(k6);
-            this.executeOffscreenTerrainShaderDraw(store, k8);
-            this.readbackOffscreenFramebuffer();
-            this.integrationReady = this.terrainShaderProgramCompileOk
-                    && this.terrainShaderProgramLinkOk
+            this.ownerReady = this.renderHookRegistered
+                    && this.visiblePreviewDefaultDisabledVerified
+                    && this.visiblePreviewShaderProgramCompileOk
+                    && this.visiblePreviewShaderProgramLinkOk
                     && this.k8FormalGeometryUsed
+                    && this.k9TerrainShaderIntegrationUsed
                     && this.k6RealSectionCommandUsed
                     && !this.syntheticDrawFixtureUsed
-                    && this.modelDataBindingOk
-                    && this.modelColourBindingOk
-                    && this.atlasTextureBindingOk
-                    && this.samplerBindingOk
-                    && this.geometryBufferBindingOk
-                    && this.commandBufferBindingOk
-                    && this.drawCountBufferBindingOk
-                    && this.positionScratchBindingOk
                     && this.formalModelIdDecodeOk
                     && this.faceDataLookupOk
                     && this.atlasSampleOk
                     && this.modelDataReadOk
                     && this.modelColourReadOk
-                    && this.basicFragmentOutputOk
-                    && this.offscreenFramebufferComplete
-                    && this.offscreenTerrainShaderDrawExecuted
-                    && this.offscreenReadbackOk
-                    && this.offscreenNonZeroPixelCount > 0
                     && this.drawCommandMatchesK6
-                    && this.acceptedDrawCommandCount >= 1
-                    && "none".equals(this.lastGlError);
-            if (this.integrationReady) {
+                    && this.acceptedDrawCommandCount >= 1;
+            if (this.ownerReady) {
                 this.stale = false;
                 this.requiresRebuild = false;
-                this.lifecycleState = "BUILT";
+                this.lifecycleState = "BUILT_DISABLED";
                 this.lastLifecycleEvent = "build-complete";
                 this.lastFailureReason = "none";
             } else {
-                this.fail("formal-terrain-shader-integration-incomplete");
+                this.fail("visible-lod-preview-owner-incomplete");
             }
         } catch (RuntimeException e) {
             this.fail(e.getClass().getSimpleName() + ":" + e.getMessage());
         }
 
         this.audit();
-        this.instance.getFormalRendererManager().checkReadiness("k9-formal-terrain-shader-offscreen-integration-build");
+        this.instance.getFormalRendererManager().checkReadiness("k10-formal-visible-lod-preview-build");
         return this.createStatusSnapshot();
     }
 
-    ForgeFormalTerrainShaderIntegrationAuditResult audit() {
+    ForgeFormalVisibleLodPreviewStats enable(String reason) {
+        this.enableRuns++;
+        ForgeFormalVisibleLodPreviewStats status = this.ownerReady && !this.stale
+                ? this.createStatusSnapshot()
+                : this.build();
+        if (!status.visibleLodPreviewOwnerReady()) {
+            return this.createStatusSnapshot();
+        }
+        this.visiblePreviewEnabled = true;
+        this.lifecycleState = "VISIBLE_PREVIEW_ENABLED";
+        this.lastLifecycleEvent = safeReason(reason);
+        this.lastFailureReason = "none";
+        return this.createStatusSnapshot();
+    }
+
+    ForgeFormalVisibleLodPreviewStats runQa() {
+        this.visiblePreviewDefaultDisabledVerified = !this.visiblePreviewEnabled && !DEFAULT_ENABLED;
+        if (!RenderSystem.isOnRenderThread()) {
+            this.fail("not-render-thread");
+            this.audit();
+            return this.createStatusSnapshot();
+        }
+        if (!this.instance.ensureActiveWorldSkeletonForCurrentWorldIfAllowed()) {
+            this.fail("world-engine-skeleton-not-ready");
+            this.audit();
+            return this.createStatusSnapshot();
+        }
+        this.deferredQaPending = true;
+        this.deferredQaStep = 0;
+        this.visiblePreviewWasEnabledDuringQa = false;
+        this.visiblePreviewDisabledAfterQa = false;
+        this.qaAutoDisablePending = false;
+        this.qaFramesRemaining = 0;
+        this.firstDrawLogged = false;
+        this.lifecycleState = "VISIBLE_PREVIEW_QA_SCHEDULED";
+        this.lastLifecycleEvent = "qa-scheduled";
+        this.lastFailureReason = "none";
+        VoxyForge.LOGGER.info("Voxy K10 visible LoD preview QA scheduled: stepCount=5 previewDefaultEnabled=false debugOptInOnly=true");
+        this.instance.getFormalRendererManager().checkReadiness("qa-k10-formal-visible-lod-preview-scheduled");
+        return this.createStatusSnapshot();
+    }
+
+    ForgeFormalVisibleLodPreviewStats disable(String reason) {
+        this.disableRuns++;
+        this.visiblePreviewEnabled = false;
+        this.qaAutoDisablePending = false;
+        this.qaFramesRemaining = 0;
+        this.lifecycleState = "DISABLED";
+        this.lastLifecycleEvent = safeReason(reason);
+        this.lastFailureReason = "none";
+        this.audit();
+        this.instance.getFormalRendererManager().checkReadiness("k10-visible-lod-preview-disable");
+        return this.createStatusSnapshot();
+    }
+
+    ForgeFormalVisibleLodPreviewAuditResult audit() {
         this.auditRuns++;
         long start = System.nanoTime();
         try {
             this.lastAudit = this.auditInternal(start);
         } catch (RuntimeException e) {
-            this.lastAudit = ForgeFormalTerrainShaderIntegrationAuditResult.failure(e.getClass().getSimpleName() + ":" + e.getMessage(), elapsedMs(start));
+            this.lastAudit = ForgeFormalVisibleLodPreviewAuditResult.failure(e.getClass().getSimpleName() + ":" + e.getMessage(), elapsedMs(start));
         }
         if (!this.lastAudit.success()) {
             this.auditFailures++;
@@ -360,11 +416,11 @@ final class ForgeFormalTerrainShaderIntegration {
         return this.lastAudit;
     }
 
-    ForgeFormalTerrainShaderIntegrationAuditResult createAuditStatusSnapshot() {
+    ForgeFormalVisibleLodPreviewAuditResult createAuditStatusSnapshot() {
         return this.lastAudit;
     }
 
-    ForgeFormalTerrainShaderIntegrationStats createStatusSnapshot() {
+    ForgeFormalVisibleLodPreviewStats createStatusSnapshot() {
         ForgeFormalTerrainRendererStats k1 = this.instance.getFormalTerrainRendererOwner().createStatusSnapshot();
         ForgeFormalMdicViewportStats k2 = this.instance.getFormalMdicViewportOwner().createStatusSnapshot();
         ForgeFormalCommandGenerationStats k3 = this.instance.getFormalCommandGenerationOwner().createStatusSnapshot();
@@ -372,10 +428,13 @@ final class ForgeFormalTerrainShaderIntegration {
         ForgeFormalCmdgenRealSectionDryRunStats k6 = this.instance.getFormalCmdgenRealSectionDryRun().createStatusSnapshot();
         ForgeFormalIsolatedMdicDrawSmokeTestStats k7 = this.instance.getFormalIsolatedMdicDrawSmokeTest().createStatusSnapshot();
         ForgeFormalModelIdSectionGeometryStats k8 = this.instance.getFormalModelIdSectionGeometryPath().createStatusSnapshot();
-        boolean ready = this.integrationReady && !this.stale;
-        return new ForgeFormalTerrainShaderIntegrationStats(
+        ForgeFormalTerrainShaderIntegrationStats k9 = this.instance.getFormalTerrainShaderIntegration().createStatusSnapshot();
+        boolean ready = this.ownerReady && !this.stale;
+        return new ForgeFormalVisibleLodPreviewStats(
                 STAGE,
                 this.buildRuns,
+                this.enableRuns,
+                this.disableRuns,
                 this.auditRuns,
                 this.clearRuns,
                 this.auditFailures,
@@ -386,46 +445,47 @@ final class ForgeFormalTerrainShaderIntegration {
                 k6.realSectionDryRunReady(),
                 k7.isolatedMdicDrawSmokeTestReady(),
                 k8.formalModelIdGeometryPathReady(),
+                k9.formalTerrainShaderIntegrationReady(),
                 ready,
-                false,
-                SEMANTIC_COMPLETENESS,
+                this.visiblePreviewEnabled,
+                DEFAULT_ENABLED,
+                this.visiblePreviewDefaultDisabledVerified,
+                DEBUG_OPT_IN_ONLY,
+                this.visiblePreviewWasEnabledDuringQa,
+                this.visiblePreviewDisabledAfterQa,
+                this.visiblePreviewDrawExecuted,
+                this.visiblePreviewFrameCount,
                 true,
-                SHADER_CONTRACT_SUBSET,
-                this.originalShaderFilesInspected,
-                this.originalQuadsVertInspected,
-                this.originalQuadsFragInspected,
-                this.originalQuadUtilInspected,
-                this.originalBlockModelInspected,
-                this.terrainShaderProgramCompileAttempted,
-                this.terrainShaderProgramCompileOk,
-                this.terrainShaderProgramLinkOk,
-                this.terrainShaderProgramId,
-                this.k8FormalGeometryUsed,
-                this.k6RealSectionCommandUsed,
+                this.minecraftMainFramebufferDrawn,
+                false,
+                this.renderHookRegistered,
+                RENDER_HOOK_NAME,
+                RENDER_HOOK_SCOPE,
                 DRAW_INPUT_SOURCE,
+                this.k8FormalGeometryUsed,
+                this.k9TerrainShaderIntegrationUsed,
+                this.k6RealSectionCommandUsed,
                 this.syntheticDrawFixtureUsed,
-                this.modelDataBindingOk,
-                this.modelColourBindingOk,
-                this.atlasTextureBindingOk,
-                this.samplerBindingOk,
-                this.geometryBufferBindingOk,
-                this.commandBufferBindingOk,
-                this.drawCountBufferBindingOk,
-                this.positionScratchBindingOk,
+                this.worldSpacePreview,
+                this.previewSectionWorldPosition,
+                this.previewCameraRelativeTransformOk,
+                this.projectionMatrixUsed,
+                this.modelViewMatrixUsed,
+                true,
+                this.visiblePreviewShaderProgramCompileAttempted,
+                this.visiblePreviewShaderProgramCompileOk,
+                this.visiblePreviewShaderProgramLinkOk,
+                this.visiblePreviewShaderProgramId,
+                this.visiblePreviewDrawCallOk,
+                this.lastGlError,
                 this.formalModelIdDecodeOk,
                 this.faceDataLookupOk,
                 this.atlasSampleOk,
                 this.modelDataReadOk,
                 this.modelColourReadOk,
-                this.basicFragmentOutputOk,
-                this.offscreenFramebufferCreated,
-                this.offscreenFramebufferComplete,
-                this.offscreenTerrainShaderDrawExecuted,
-                this.offscreenReadbackOk,
-                this.offscreenNonZeroPixelCount,
-                this.offscreenChecksum,
-                PREVIEW_WIDTH,
-                PREVIEW_HEIGHT,
+                this.visiblePreviewReadbackOk,
+                this.visiblePreviewNonZeroPixelCount,
+                this.visiblePreviewChecksum,
                 this.validationFormalModelId,
                 this.validationFace,
                 this.validationFormalModelIds,
@@ -435,8 +495,6 @@ final class ForgeFormalTerrainShaderIntegration {
                 this.positionScratchBufferId,
                 this.indexBufferId,
                 this.vertexArrayId,
-                this.offscreenFramebufferId,
-                this.offscreenTextureId,
                 this.k6FirstCommandCount,
                 this.k6FirstCommandInstanceCount,
                 this.k6FirstCommandFirstIndex,
@@ -455,15 +513,12 @@ final class ForgeFormalTerrainShaderIntegration {
                 false,
                 false,
                 false,
+                SEMANTIC_COMPLETENESS,
                 false,
                 false,
                 false,
                 false,
                 false,
-                false,
-                false,
-                true,
-                true,
                 this.lifecycleState,
                 this.lastLifecycleEvent,
                 this.stale,
@@ -473,7 +528,6 @@ final class ForgeFormalTerrainShaderIntegration {
                 countBlockers("P1"),
                 countBlockers("P2"),
                 compactBlockers(),
-                this.lastGlError,
                 this.lastFailureReason,
                 this.lastAudit.success(),
                 this.lastAudit.error(),
@@ -482,32 +536,32 @@ final class ForgeFormalTerrainShaderIntegration {
     }
 
     String dump() {
-        ForgeFormalTerrainShaderIntegrationStats status = this.createStatusSnapshot();
-        return "K9 formal terrain shader offscreen integration: stage=" + status.stage()
-                + " ready=" + status.formalTerrainShaderIntegrationReady()
-                + " semanticCompleteness=" + status.formalTerrainShaderSemanticCompleteness()
-                + " adapter=" + status.terrainShaderAdapterUsed()
+        ForgeFormalVisibleLodPreviewStats status = this.createStatusSnapshot();
+        return "K10 formal visible LoD preview: stage=" + status.stage()
+                + " ownerReady=" + status.visibleLodPreviewOwnerReady()
+                + " enabled=" + status.visiblePreviewEnabled()
+                + " defaultEnabled=false optInOnly=true"
+                + " drawExecuted=" + status.visiblePreviewDrawExecuted()
+                + " mainFramebufferDrawn=" + status.minecraftMainFramebufferDrawn()
+                + " disabledAfterQa=" + status.visiblePreviewDisabledAfterQa()
                 + " input=" + status.drawInputSource()
-                + " k8Geometry=" + status.k8FormalGeometryUsed()
-                + " k6Command=" + status.k6RealSectionCommandUsed()
-                + " formalModelIds=" + status.validationFormalModelIds()
-                + " shaderProgram=" + status.terrainShaderProgramId()
+                + " shaderProgram=" + status.visiblePreviewShaderProgramId()
                 + " geometryBuffer=" + status.geometryBufferId()
-                + " checksum=" + status.offscreenChecksum()
-                + " nonZeroPixels=" + status.offscreenNonZeroPixelCount()
-                + " productionTerrainShaderReady=false formalRendererReady=false actualRendererDrawEnabled=false offscreenOnly=true validationOnly=true";
+                + " checksum=" + status.visiblePreviewChecksum()
+                + " formalRendererReady=false actualRendererDrawEnabled=false productionLiveRenderer=false";
     }
 
     void clear() {
         this.clearRuns++;
-        this.integrationReady = false;
+        this.visiblePreviewEnabled = false;
+        this.ownerReady = false;
         this.stale = false;
         this.requiresRebuild = false;
         this.lifecycleState = "CLEARED";
         this.lastLifecycleEvent = "clear";
         this.lastFailureReason = "none";
         this.resetBuildFlags();
-        this.lastAudit = ForgeFormalTerrainShaderIntegrationAuditResult.failure("cleared", 0.0D);
+        this.lastAudit = ForgeFormalVisibleLodPreviewAuditResult.failure("cleared", 0.0D);
         this.scheduleCleanup("clear");
     }
 
@@ -535,25 +589,149 @@ final class ForgeFormalTerrainShaderIntegration {
         this.markStale("preset-clear");
     }
 
+    private void onRenderLevelStage(RenderLevelStageEvent event) {
+        if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_TRANSLUCENT_BLOCKS) {
+            return;
+        }
+        if (!RenderSystem.isOnRenderThread()) {
+            this.lastFailureReason = "render-hook-not-render-thread";
+            return;
+        }
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft.level == null || minecraft.player == null || event.getCamera() == null) {
+            this.lastFailureReason = "render-hook-world-missing";
+            return;
+        }
+        if (this.deferredQaPending) {
+            this.runDeferredQaStep();
+        }
+        if (!this.visiblePreviewEnabled) {
+            return;
+        }
+        if (!this.ownerReady || this.stale) {
+            this.lastFailureReason = "render-hook-owner-not-ready";
+            this.visiblePreviewEnabled = false;
+            return;
+        }
+        ForgeFormalModelStoreStats store = this.instance.getFormalModelStore().createStatusSnapshot();
+        ForgeFormalModelIdSectionGeometryStats k8 = this.instance.getFormalModelIdSectionGeometryPath().createStatusSnapshot();
+        try {
+            this.executeVisiblePreviewDraw(event, minecraft, store, k8);
+            this.visiblePreviewFrameCount++;
+            if (!this.firstDrawLogged) {
+                this.firstDrawLogged = true;
+                ForgeFormalRendererStats rendererStatus = this.instance.getFormalRendererManager().checkReadiness("k10-visible-preview-first-draw");
+                VoxyForge.LOGGER.info("Voxy K10 visible LoD preview first draw: {} {}", this.dump(), ForgeVoxyCommands.formatFormalRendererStatusForLog(rendererStatus));
+            }
+            if (this.qaAutoDisablePending) {
+                this.qaFramesRemaining--;
+                if (this.qaFramesRemaining <= 0) {
+                    this.visiblePreviewEnabled = false;
+                    this.visiblePreviewDisabledAfterQa = true;
+                    this.qaAutoDisablePending = false;
+                    this.lifecycleState = "DISABLED_AFTER_QA";
+                    this.lastLifecycleEvent = "qa-auto-disable-after-visible-preview";
+                    ForgeFormalVisibleLodPreviewAuditResult audit = this.audit();
+                    ForgeFormalRendererStats rendererStatus = this.instance.getFormalRendererManager().checkReadiness("k10-visible-preview-qa-auto-disabled");
+                    VoxyForge.LOGGER.info("Voxy K10 visible LoD preview auto-disabled: {} k10AuditOk={} k10AuditError={} {}",
+                            this.dump(),
+                            audit.success(),
+                            audit.error(),
+                            ForgeVoxyCommands.formatFormalRendererStatusForLog(rendererStatus));
+                }
+            }
+        } catch (RuntimeException e) {
+            this.fail(e.getClass().getSimpleName() + ":" + e.getMessage());
+            this.visiblePreviewEnabled = false;
+            VoxyForge.LOGGER.error("K10 formal visible LoD preview draw failed.", e);
+        }
+    }
+
+    private void runDeferredQaStep() {
+        try {
+            switch (this.deferredQaStep) {
+                case 0 -> {
+                    ForgeFormalCmdgenRealSectionDryRunStats k6 = this.instance.getFormalCmdgenRealSectionDryRun().build();
+                    VoxyForge.LOGGER.info("Voxy K10 visible LoD preview QA step K6: realSectionDryRunReady={} auditOk={} source={} acceptedSections={}",
+                            k6.realSectionDryRunReady(),
+                            k6.cmdgenDryRunAuditOk(),
+                            k6.validationInputSource(),
+                            k6.acceptedSectionCount());
+                    this.deferredQaStep++;
+                }
+                case 1 -> {
+                    ForgeFormalIsolatedMdicDrawSmokeTestStats k7 = this.instance.getFormalIsolatedMdicDrawSmokeTest().build();
+                    VoxyForge.LOGGER.info("Voxy K10 visible LoD preview QA step K7: isolatedDrawReady={} offscreenDraw={} readbackOk={} realSectionCommandUsed={}",
+                            k7.isolatedMdicDrawSmokeTestReady(),
+                            k7.offscreenValidationDrawExecuted(),
+                            k7.offscreenReadbackOk(),
+                            k7.realSectionCommandUsed());
+                    this.deferredQaStep++;
+                }
+                case 2 -> {
+                    ForgeFormalModelIdSectionGeometryStats k8 = this.instance.getFormalModelIdSectionGeometryPath().build();
+                    VoxyForge.LOGGER.info("Voxy K10 visible LoD preview QA step K8: geometryPathReady={} snapshotRecords={} usesFormalModelIds={} originalHeapMutated={}",
+                            k8.formalModelIdGeometryPathReady(),
+                            k8.formalGeometrySnapshotRecordCount(),
+                            k8.usesFormalModelIds(),
+                            k8.originalGeometryHeapMutated());
+                    this.deferredQaStep++;
+                }
+                case 3 -> {
+                    ForgeFormalTerrainShaderIntegrationStats k9 = this.instance.getFormalTerrainShaderIntegration().build();
+                    VoxyForge.LOGGER.info("Voxy K10 visible LoD preview QA step K9: shaderIntegrationReady={} compileOk={} linkOk={} offscreenReadbackOk={} lastFailureReason={}",
+                            k9.formalTerrainShaderIntegrationReady(),
+                            k9.terrainShaderProgramCompileOk(),
+                            k9.terrainShaderProgramLinkOk(),
+                            k9.offscreenReadbackOk(),
+                            k9.lastFailureReason());
+                    this.deferredQaStep++;
+                }
+                case 4 -> {
+                    ForgeFormalVisibleLodPreviewStats status = this.enable("qa-k10-formal-visible-lod-preview");
+                    if (status.visibleLodPreviewOwnerReady()) {
+                        this.visiblePreviewWasEnabledDuringQa = true;
+                        this.visiblePreviewDisabledAfterQa = false;
+                        this.qaAutoDisablePending = true;
+                        this.qaFramesRemaining = QA_VISIBLE_FRAMES;
+                        this.firstDrawLogged = false;
+                        this.lifecycleState = "VISIBLE_PREVIEW_QA_ENABLED";
+                        this.lastLifecycleEvent = "qa-enable";
+                        this.deferredQaPending = false;
+                        this.instance.getFormalRendererManager().checkReadiness("qa-k10-formal-visible-lod-preview-enabled");
+                        VoxyForge.LOGGER.info("Voxy K10 visible LoD preview QA enabled: {}", this.dump());
+                    } else {
+                        this.deferredQaPending = false;
+                        this.audit();
+                        this.instance.getFormalRendererManager().checkReadiness("qa-k10-formal-visible-lod-preview-enable-failed");
+                        VoxyForge.LOGGER.info("Voxy K10 visible LoD preview QA enable failed: {}", this.dump());
+                    }
+                }
+                default -> this.deferredQaPending = false;
+            }
+        } catch (RuntimeException e) {
+            this.deferredQaPending = false;
+            this.fail(e.getClass().getSimpleName() + ":" + e.getMessage());
+            this.visiblePreviewEnabled = false;
+            VoxyForge.LOGGER.error("K10 formal visible LoD preview deferred QA failed.", e);
+        }
+    }
+
     private boolean capturePrerequisites(
             ForgeFormalCmdgenRealSectionDryRunStats k6,
-            ForgeFormalIsolatedMdicDrawSmokeTestStats k7,
             ForgeFormalModelIdSectionGeometryStats k8,
+            ForgeFormalTerrainShaderIntegrationStats k9,
             ForgeFormalModelStoreStats store
     ) {
-        this.originalQuadsVertInspected = fileContains("src/main/resources/assets/voxy/shaders/lod/gl46/quads3.vert", "#define MODEL_BUFFER_BINDING 3")
-                && fileContains("src/main/resources/assets/voxy/shaders/lod/gl46/quads3.vert", "#define MODEL_COLOUR_BUFFER_BINDING 4");
-        this.originalQuadsFragInspected = fileContains("src/main/resources/assets/voxy/shaders/lod/gl46/quads.frag", "layout(binding = 0) uniform sampler2D blockModelAtlas");
-        this.originalQuadUtilInspected = fileContains("src/main/resources/assets/voxy/shaders/lod/quad_util.glsl", "modelData[modelId]")
-                && fileContains("src/main/resources/assets/voxy/shaders/lod/quad_util.glsl", "faceData");
-        this.originalBlockModelInspected = fileContains("src/main/resources/assets/voxy/shaders/lod/block_model.glsl", "struct BlockModel")
-                && fileContains("src/main/resources/assets/voxy/shaders/lod/block_model.glsl", "uint faceData[6]");
-        this.originalShaderFilesInspected = this.originalQuadsVertInspected
-                && this.originalQuadsFragInspected
-                && this.originalQuadUtilInspected
-                && this.originalBlockModelInspected
-                && fileContains("src/main/resources/assets/voxy/shaders/lod/gl46/bindings.glsl", "MODEL_BUFFER_BINDING")
-                && fileContains("src/main/resources/assets/voxy/shaders/lod/quad_format.glsl", "extractStateId");
+        boolean originalRendererHooksInspected = fileContains("src/main/java/me/cortex/voxy/client/core/VoxyRenderSystem.java", "renderOpaque")
+                && fileContains("src/main/java/me/cortex/voxy/client/core/rendering/section/backend/mdic/MDICSectionRenderer.java", "glMultiDrawElementsIndirectCountARB")
+                && fileContains("src/main/resources/assets/voxy/shaders/lod/gl46/quads3.vert", "MODEL_BUFFER_BINDING")
+                && fileContains("src/main/resources/assets/voxy/shaders/lod/gl46/quads.frag", "blockModelAtlas")
+                && fileContains("src/main/java/me/cortex/voxy/forge/ForgeTexturedMdicDebugRenderer.java", "RenderLevelStageEvent.Stage.AFTER_TRANSLUCENT_BLOCKS");
+        if (!originalRendererHooksInspected) {
+            this.fail("original-visible-renderer-contract-not-inspected");
+            return false;
+        }
 
         this.k6FirstCommandCount = k6.firstCommandCount();
         this.k6FirstCommandInstanceCount = k6.firstCommandInstanceCount();
@@ -565,7 +743,7 @@ final class ForgeFormalTerrainShaderIntegration {
                 && k6.firstCommandUsesRealSectionMetadata()
                 && "realSectionCandidateSnapshot".equals(k6.validationInputSource())
                 && !k6.syntheticValidationFixtureUsed();
-        this.syntheticDrawFixtureUsed = k6.syntheticValidationFixtureUsed() || k7.syntheticDrawFixtureUsed();
+        this.syntheticDrawFixtureUsed = k6.syntheticValidationFixtureUsed() || k9.syntheticDrawFixtureUsed();
         this.k8FormalGeometryUsed = k8.formalModelIdGeometryPathReady()
                 && k8.formalGeometryValidationBufferCreated()
                 && k8.formalGeometryValidationBufferId() != 0
@@ -577,22 +755,33 @@ final class ForgeFormalTerrainShaderIntegration {
                 && k8.formalModelIdDecodeOk()
                 && k8.formalGeometryReadbackOk()
                 && !k8.originalGeometryHeapMutated();
+        this.k9TerrainShaderIntegrationUsed = k9.formalTerrainShaderIntegrationReady()
+                && k9.terrainShaderProgramCompileOk()
+                && k9.terrainShaderProgramLinkOk()
+                && k9.k8FormalGeometryUsed()
+                && k9.k6RealSectionCommandUsed()
+                && !k9.syntheticDrawFixtureUsed()
+                && k9.modelDataBindingOk()
+                && k9.modelColourBindingOk()
+                && k9.atlasTextureBindingOk()
+                && k9.formalModelIdDecodeOk()
+                && k9.faceDataLookupOk()
+                && k9.atlasSampleOk()
+                && !k9.minecraftMainFramebufferDrawn()
+                && !k9.liveRendererDrawExecuted();
         this.geometryBufferId = k8.formalGeometryValidationBufferId();
         this.validationFormalModelIds = k8.formalGeometryModelIds();
         this.validationFormalModelId = parseFirstFormalModelId(this.validationFormalModelIds);
         this.validationFace = parseSampleFace(k8.sampleFormalRecord());
+        this.previewSectionWorldPosition = k8.sampleSectionPosition();
         this.formalModelIdDecodeOk = k8.formalModelIdDecodeOk()
                 && ForgeModelAtlasLayout.isValidModelId(this.validationFormalModelId)
                 && this.validationFormalModelId > 0
                 && this.validationFace >= 0
                 && this.validationFace < ForgeModelAtlasLayout.FACE_COUNT;
 
-        if (!this.originalShaderFilesInspected) {
-            this.fail("original-shader-contract-not-inspected");
-            return false;
-        }
-        if (!k7.isolatedMdicDrawSmokeTestReady() || !k7.realSectionCommandUsed() || k7.syntheticDrawFixtureUsed()) {
-            this.fail("k7-isolated-mdic-draw-not-ready:" + k7.lastFailureReason());
+        if (!this.k9TerrainShaderIntegrationUsed) {
+            this.fail("k9-terrain-shader-integration-not-ready:" + k9.lastFailureReason());
             return false;
         }
         if (!this.k6RealSectionCommandUsed || this.k6FirstCommandCount <= 0 || this.k6FirstCommandInstanceCount <= 0) {
@@ -636,56 +825,46 @@ final class ForgeFormalTerrainShaderIntegration {
         }
     }
 
-    private ForgeFormalTerrainShaderIntegrationAuditResult auditInternal(long startNanos) {
-        boolean formalBindings = this.modelDataBindingOk
-                && this.modelColourBindingOk
-                && this.atlasTextureBindingOk
-                && this.samplerBindingOk
-                && this.geometryBufferBindingOk
-                && this.commandBufferBindingOk
-                && this.drawCountBufferBindingOk
-                && this.positionScratchBindingOk;
-        boolean inputUsesK8K6 = this.k8FormalGeometryUsed
+    private ForgeFormalVisibleLodPreviewAuditResult auditInternal(long startNanos) {
+        boolean prerequisitesChecked = this.ownerReady
+                && this.k8FormalGeometryUsed
+                && this.k9TerrainShaderIntegrationUsed
+                && this.k6RealSectionCommandUsed;
+        boolean drawInputUsesK8K9 = DRAW_INPUT_SOURCE.equals(DRAW_INPUT_SOURCE)
+                && this.k8FormalGeometryUsed
+                && this.k9TerrainShaderIntegrationUsed
                 && this.k6RealSectionCommandUsed
-                && DRAW_INPUT_SOURCE.equals(DRAW_INPUT_SOURCE)
                 && !this.syntheticDrawFixtureUsed;
-        boolean success = this.integrationReady
-                && !this.stale
-                && this.originalShaderFilesInspected
-                && formalBindings
-                && inputUsesK8K6
+        boolean qaDisableRequirementMet = !this.visiblePreviewWasEnabledDuringQa || this.visiblePreviewDisabledAfterQa;
+        boolean success = prerequisitesChecked
+                && this.visiblePreviewDefaultDisabledVerified
+                && DEBUG_OPT_IN_ONLY
+                && drawInputUsesK8K9
+                && this.visiblePreviewDrawExecuted
+                && this.minecraftMainFramebufferDrawn
+                && this.visiblePreviewDrawCallOk
                 && this.formalModelIdDecodeOk
                 && this.faceDataLookupOk
                 && this.atlasSampleOk
                 && this.modelDataReadOk
                 && this.modelColourReadOk
-                && this.offscreenFramebufferComplete
-                && this.offscreenTerrainShaderDrawExecuted
-                && this.offscreenReadbackOk
-                && this.offscreenNonZeroPixelCount > 0
+                && qaDisableRequirementMet
                 && "none".equals(this.lastGlError);
-        return new ForgeFormalTerrainShaderIntegrationAuditResult(
+        return new ForgeFormalVisibleLodPreviewAuditResult(
                 success,
-                success ? "none" : "k9-formal-terrain-shader-integration-audit-failed",
+                success ? "none" : "k10-formal-visible-lod-preview-audit-failed",
                 elapsedMs(startNanos),
-                this.originalShaderFilesInspected,
-                formalBindings,
-                inputUsesK8K6,
+                prerequisitesChecked,
+                this.visiblePreviewDefaultDisabledVerified,
+                DEBUG_OPT_IN_ONLY,
+                drawInputUsesK8K9,
                 false,
                 false,
-                this.k8FormalGeometryUsed,
                 false,
                 false,
-                this.offscreenFramebufferComplete,
-                this.offscreenTerrainShaderDrawExecuted,
-                this.offscreenReadbackOk,
-                this.offscreenNonZeroPixelCount,
-                this.formalModelIdDecodeOk,
-                this.faceDataLookupOk,
-                this.atlasSampleOk,
-                this.modelDataReadOk,
-                this.modelColourReadOk,
-                false,
+                this.visiblePreviewDrawExecuted,
+                this.minecraftMainFramebufferDrawn,
+                this.visiblePreviewDisabledAfterQa,
                 false,
                 false,
                 false,
@@ -693,23 +872,23 @@ final class ForgeFormalTerrainShaderIntegration {
         );
     }
 
-    private int compileTerrainShaderProgram() {
-        this.terrainShaderProgramCompileAttempted = true;
+    private int compileVisiblePreviewShaderProgram() {
+        this.visiblePreviewShaderProgramCompileAttempted = true;
         int vertex = 0;
         int fragment = 0;
         int program = 0;
         try {
             vertex = compileShader(GL20C.GL_VERTEX_SHADER, VERTEX_SOURCE, "vertex");
             fragment = compileShader(GL20C.GL_FRAGMENT_SHADER, FRAGMENT_SOURCE, "fragment");
-            this.terrainShaderProgramCompileOk = true;
+            this.visiblePreviewShaderProgramCompileOk = true;
             program = GL20C.glCreateProgram();
             GL20C.glAttachShader(program, vertex);
             GL20C.glAttachShader(program, fragment);
             GL20C.glLinkProgram(program);
             if (GL20C.glGetProgrami(program, GL20C.GL_LINK_STATUS) == GL11C.GL_FALSE) {
-                throw new IllegalStateException("k9-terrain-shader-link-failed:" + sanitize(GL20C.glGetProgramInfoLog(program)));
+                throw new IllegalStateException("k10-visible-preview-shader-link-failed:" + sanitize(GL20C.glGetProgramInfoLog(program)));
             }
-            this.terrainShaderProgramLinkOk = true;
+            this.visiblePreviewShaderProgramLinkOk = true;
             int oldProgram = GL11C.glGetInteger(GL20C.GL_CURRENT_PROGRAM);
             GL20C.glUseProgram(program);
             int samplerLocation = GL20C.glGetUniformLocation(program, "blockModelAtlas");
@@ -741,35 +920,9 @@ final class ForgeFormalTerrainShaderIntegration {
         if (GL20C.glGetShaderi(shader, GL20C.GL_COMPILE_STATUS) == GL11C.GL_FALSE) {
             String log = sanitize(GL20C.glGetShaderInfoLog(shader));
             GL20C.glDeleteShader(shader);
-            throw new IllegalStateException("k9-terrain-shader-" + name + "-compile-failed:" + log);
+            throw new IllegalStateException("k10-visible-preview-shader-" + name + "-compile-failed:" + log);
         }
         return shader;
-    }
-
-    private void createOffscreenFramebuffer() {
-        int oldTexture = GL11C.glGetInteger(GL11C.GL_TEXTURE_BINDING_2D);
-        int oldDrawFramebuffer = GL11C.glGetInteger(GL30C.GL_DRAW_FRAMEBUFFER_BINDING);
-        try {
-            this.offscreenTextureId = GL11C.glGenTextures();
-            GL11C.glBindTexture(GL11C.GL_TEXTURE_2D, this.offscreenTextureId);
-            GL11C.glTexParameteri(GL11C.GL_TEXTURE_2D, GL11C.GL_TEXTURE_MIN_FILTER, GL11C.GL_NEAREST);
-            GL11C.glTexParameteri(GL11C.GL_TEXTURE_2D, GL11C.GL_TEXTURE_MAG_FILTER, GL11C.GL_NEAREST);
-            GL11C.glTexParameteri(GL11C.GL_TEXTURE_2D, GL11C.GL_TEXTURE_WRAP_S, GL12C.GL_CLAMP_TO_EDGE);
-            GL11C.glTexParameteri(GL11C.GL_TEXTURE_2D, GL11C.GL_TEXTURE_WRAP_T, GL12C.GL_CLAMP_TO_EDGE);
-            GL11C.glTexImage2D(GL11C.GL_TEXTURE_2D, 0, GL30C.GL_RGBA8, PREVIEW_WIDTH, PREVIEW_HEIGHT, 0, GL11C.GL_RGBA, GL11C.GL_UNSIGNED_BYTE, (ByteBuffer) null);
-            this.offscreenFramebufferId = GL30C.glGenFramebuffers();
-            GL30C.glBindFramebuffer(GL30C.GL_FRAMEBUFFER, this.offscreenFramebufferId);
-            GL30C.glFramebufferTexture2D(GL30C.GL_FRAMEBUFFER, GL30C.GL_COLOR_ATTACHMENT0, GL11C.GL_TEXTURE_2D, this.offscreenTextureId, 0);
-            GL20C.glDrawBuffers(GL30C.GL_COLOR_ATTACHMENT0);
-            this.offscreenFramebufferCreated = this.offscreenTextureId != 0 && this.offscreenFramebufferId != 0;
-            this.offscreenFramebufferComplete = GL30C.glCheckFramebufferStatus(GL30C.GL_FRAMEBUFFER) == GL30C.GL_FRAMEBUFFER_COMPLETE;
-            if (!this.offscreenFramebufferComplete) {
-                throw new IllegalStateException("k9-offscreen-framebuffer-incomplete");
-            }
-        } finally {
-            GL30C.glBindFramebuffer(GL30C.GL_DRAW_FRAMEBUFFER, oldDrawFramebuffer);
-            GL11C.glBindTexture(GL11C.GL_TEXTURE_2D, oldTexture);
-        }
     }
 
     private void createValidationDrawBuffers(ForgeFormalCmdgenRealSectionDryRunStats k6) {
@@ -777,6 +930,7 @@ final class ForgeFormalTerrainShaderIntegration {
         this.drawCountBufferId = GL45C.glCreateBuffers();
         this.indexBufferId = GL45C.glCreateBuffers();
         this.positionScratchBufferId = GL45C.glCreateBuffers();
+        this.vertexArrayId = GL30C.glGenVertexArrays();
         uploadInts(this.commandBufferId, new int[] {
                 this.k6FirstCommandCount,
                 this.k6FirstCommandInstanceCount,
@@ -798,7 +952,12 @@ final class ForgeFormalTerrainShaderIntegration {
         }
     }
 
-    private void executeOffscreenTerrainShaderDraw(ForgeFormalModelStoreStats store, ForgeFormalModelIdSectionGeometryStats k8) {
+    private void executeVisiblePreviewDraw(
+            RenderLevelStageEvent event,
+            Minecraft minecraft,
+            ForgeFormalModelStoreStats store,
+            ForgeFormalModelIdSectionGeometryStats k8
+    ) {
         int oldProgram = GL11C.glGetInteger(GL20C.GL_CURRENT_PROGRAM);
         int oldVertexArray = GL11C.glGetInteger(GL30C.GL_VERTEX_ARRAY_BINDING);
         int oldElementArray = GL11C.glGetInteger(GL15C.GL_ELEMENT_ARRAY_BUFFER_BINDING);
@@ -812,77 +971,90 @@ final class ForgeFormalTerrainShaderIntegration {
         GL13C.glActiveTexture(GL13C.GL_TEXTURE0 + ForgeFormalShaderInputBindingLayout.BLOCK_MODEL_ATLAS_TEXTURE_UNIT);
         int oldTexture = GL11C.glGetInteger(GL11C.GL_TEXTURE_BINDING_2D);
         int oldSampler = GL30C.glGetIntegeri(GL33C.GL_SAMPLER_BINDING, ForgeFormalShaderInputBindingLayout.BLOCK_MODEL_ATLAS_TEXTURE_UNIT);
-        int oldDrawFramebuffer = GL11C.glGetInteger(GL30C.GL_DRAW_FRAMEBUFFER_BINDING);
-        int oldReadFramebuffer = GL11C.glGetInteger(GL30C.GL_READ_FRAMEBUFFER_BINDING);
-        int oldDrawBuffer = GL11C.glGetInteger(GL11C.GL_DRAW_BUFFER);
-        int oldReadBuffer = GL11C.glGetInteger(GL11C.GL_READ_BUFFER);
-        int[] oldViewport = new int[4];
-        float[] oldClearColor = new float[4];
-        GL11C.glGetIntegerv(GL11C.GL_VIEWPORT, oldViewport);
-        GL11C.glGetFloatv(GL11C.GL_COLOR_CLEAR_VALUE, oldClearColor);
         boolean depthEnabled = GL11C.glIsEnabled(GL11C.GL_DEPTH_TEST);
         boolean blendEnabled = GL11C.glIsEnabled(GL11C.GL_BLEND);
         boolean cullEnabled = GL11C.glIsEnabled(GL11C.GL_CULL_FACE);
+        boolean depthMask = GL11C.glGetBoolean(GL11C.GL_DEPTH_WRITEMASK);
         try {
             clearGlErrors();
-            this.vertexArrayId = GL30C.glGenVertexArrays();
             GL30C.glBindVertexArray(this.vertexArrayId);
             GL15C.glBindBuffer(GL15C.GL_ELEMENT_ARRAY_BUFFER, this.indexBufferId);
-            GL30C.glBindFramebuffer(GL30C.GL_FRAMEBUFFER, this.offscreenFramebufferId);
-            GL20C.glDrawBuffers(GL30C.GL_COLOR_ATTACHMENT0);
-            GL11C.glReadBuffer(GL30C.GL_COLOR_ATTACHMENT0);
-            GL11C.glViewport(0, 0, PREVIEW_WIDTH, PREVIEW_HEIGHT);
             GL11C.glDisable(GL11C.GL_DEPTH_TEST);
-            GL11C.glDisable(GL11C.GL_BLEND);
             GL11C.glDisable(GL11C.GL_CULL_FACE);
-            GL11C.glClearColor(0.0F, 0.0F, 0.0F, 0.0F);
-            GL11C.glClear(GL11C.GL_COLOR_BUFFER_BIT);
+            GL11C.glDisable(GL11C.GL_BLEND);
+            GL11C.glDepthMask(false);
 
-            GL20C.glUseProgram(this.terrainShaderProgramId);
-            int recordCountLocation = GL20C.glGetUniformLocation(this.terrainShaderProgramId, "recordCount");
-            if (recordCountLocation >= 0) {
-                GL30C.glUniform1ui(recordCountLocation, Math.max(1, k8.formalGeometrySnapshotRecordCount()));
+            PoseStack poseStack = event.getPoseStack();
+            Vec3 cameraPos = event.getCamera().getPosition();
+            Vec3 look = minecraft.player == null ? new Vec3(0.0D, 0.0D, 1.0D) : minecraft.player.getLookAngle();
+            if (look.lengthSqr() < 1.0E-6D) {
+                look = new Vec3(0.0D, 0.0D, 1.0D);
             }
-            int baseVertexLocation = GL20C.glGetUniformLocation(this.terrainShaderProgramId, "baseVertexBias");
-            if (baseVertexLocation >= 0) {
-                GL30C.glUniform1ui(baseVertexLocation, Math.max(0, this.k6FirstCommandBaseVertex));
+            look = look.normalize();
+            Vec3 worldUp = new Vec3(0.0D, 1.0D, 0.0D);
+            Vec3 right = look.cross(worldUp);
+            if (right.lengthSqr() < 1.0E-6D) {
+                right = new Vec3(1.0D, 0.0D, 0.0D);
             }
-            GL30C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, ForgeFormalShaderInputBindingLayout.QUAD_BUFFER_BINDING_INDEX, k8.formalGeometryValidationBufferId());
-            GL30C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, ForgeFormalShaderInputBindingLayout.MODEL_DATA_BINDING_INDEX, store.modelDataBufferId());
-            GL30C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, ForgeFormalShaderInputBindingLayout.MODEL_COLOUR_BINDING_INDEX, store.modelColourBufferId());
-            GL30C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, ForgeFormalShaderInputBindingLayout.POSITION_SCRATCH_BINDING_INDEX, this.positionScratchBufferId);
-            GL11C.glBindTexture(GL11C.GL_TEXTURE_2D, store.atlasTextureId());
-            GL33C.glBindSampler(ForgeFormalShaderInputBindingLayout.BLOCK_MODEL_ATLAS_TEXTURE_UNIT, store.samplerId());
-            GL15C.glBindBuffer(GL40C.GL_DRAW_INDIRECT_BUFFER, this.commandBufferId);
-            GL15C.glBindBuffer(GL_PARAMETER_BUFFER_ARB, this.drawCountBufferId);
+            right = right.normalize();
+            Vec3 up = right.cross(look).normalize();
+            Vec3 center = cameraPos.add(look.scale(8.0D)).add(0.0D, 0.25D, 0.0D);
 
-            this.geometryBufferBindingOk = GL30C.glGetIntegeri(GL43C.GL_SHADER_STORAGE_BUFFER_BINDING, ForgeFormalShaderInputBindingLayout.QUAD_BUFFER_BINDING_INDEX) == k8.formalGeometryValidationBufferId();
-            this.modelDataBindingOk = GL30C.glGetIntegeri(GL43C.GL_SHADER_STORAGE_BUFFER_BINDING, ForgeFormalShaderInputBindingLayout.MODEL_DATA_BINDING_INDEX) == store.modelDataBufferId();
-            this.modelColourBindingOk = GL30C.glGetIntegeri(GL43C.GL_SHADER_STORAGE_BUFFER_BINDING, ForgeFormalShaderInputBindingLayout.MODEL_COLOUR_BINDING_INDEX) == store.modelColourBufferId();
-            this.positionScratchBindingOk = GL30C.glGetIntegeri(GL43C.GL_SHADER_STORAGE_BUFFER_BINDING, ForgeFormalShaderInputBindingLayout.POSITION_SCRATCH_BINDING_INDEX) == this.positionScratchBufferId;
-            this.atlasTextureBindingOk = GL11C.glGetInteger(GL11C.GL_TEXTURE_BINDING_2D) == store.atlasTextureId();
-            this.samplerBindingOk = GL30C.glGetIntegeri(GL33C.GL_SAMPLER_BINDING, ForgeFormalShaderInputBindingLayout.BLOCK_MODEL_ATLAS_TEXTURE_UNIT) == store.samplerId();
-            this.commandBufferBindingOk = GL11C.glGetInteger(GL40C.GL_DRAW_INDIRECT_BUFFER_BINDING) == this.commandBufferId;
-            this.drawCountBufferBindingOk = GL11C.glGetInteger(GL_PARAMETER_BUFFER_BINDING_ARB) == this.drawCountBufferId;
-            if (!this.geometryBufferBindingOk
-                    || !this.modelDataBindingOk
-                    || !this.modelColourBindingOk
-                    || !this.positionScratchBindingOk
-                    || !this.atlasTextureBindingOk
-                    || !this.samplerBindingOk
-                    || !this.commandBufferBindingOk
-                    || !this.drawCountBufferBindingOk) {
-                throw new IllegalStateException("k9-formal-resource-binding-failed");
-            }
+            poseStack.pushPose();
+            try {
+                poseStack.translate(-cameraPos.x, -cameraPos.y, -cameraPos.z);
+                Matrix4f modelView = poseStack.last().pose();
+                Matrix4f projection = event.getProjectionMatrix();
+                GL20C.glUseProgram(this.visiblePreviewShaderProgramId);
+                uniformMatrix4f(this.visiblePreviewShaderProgramId, "modelViewMatrix", modelView);
+                uniformMatrix4f(this.visiblePreviewShaderProgramId, "projectionMatrix", projection);
+                uniform3f(this.visiblePreviewShaderProgramId, "previewCenter", center);
+                uniform3f(this.visiblePreviewShaderProgramId, "previewRight", right);
+                uniform3f(this.visiblePreviewShaderProgramId, "previewUp", up);
+                uniform1f(this.visiblePreviewShaderProgramId, "previewScale", 1.45F);
+                uniform1ui(this.visiblePreviewShaderProgramId, "recordCount", Math.max(1, k8.formalGeometrySnapshotRecordCount()));
+                uniform1ui(this.visiblePreviewShaderProgramId, "baseVertexBias", Math.max(0, this.k6FirstCommandBaseVertex));
 
-            GL43C.glMemoryBarrier(GL43C.GL_SHADER_STORAGE_BARRIER_BIT | GL43C.GL_TEXTURE_FETCH_BARRIER_BIT | GL43C.GL_COMMAND_BARRIER_BIT);
-            glMultiDrawElementsIndirectCountARB(GL11C.GL_TRIANGLES, GL11C.GL_UNSIGNED_SHORT, 0L, OPAQUE_DRAW_COUNT_OFFSET_BYTES, 1, 0);
-            GL11C.glFinish();
-            this.offscreenTerrainShaderDrawExecuted = true;
-            int error = GL11C.glGetError();
-            this.lastGlError = error == GL11C.GL_NO_ERROR ? "none" : glErrorName(error);
-            if (error != GL11C.GL_NO_ERROR) {
-                throw new IllegalStateException("k9-terrain-shader-draw-gl-error-" + this.lastGlError);
+                GL30C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, ForgeFormalShaderInputBindingLayout.QUAD_BUFFER_BINDING_INDEX, k8.formalGeometryValidationBufferId());
+                GL30C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, ForgeFormalShaderInputBindingLayout.MODEL_DATA_BINDING_INDEX, store.modelDataBufferId());
+                GL30C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, ForgeFormalShaderInputBindingLayout.MODEL_COLOUR_BINDING_INDEX, store.modelColourBufferId());
+                GL30C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, ForgeFormalShaderInputBindingLayout.POSITION_SCRATCH_BINDING_INDEX, this.positionScratchBufferId);
+                GL11C.glBindTexture(GL11C.GL_TEXTURE_2D, store.atlasTextureId());
+                GL33C.glBindSampler(ForgeFormalShaderInputBindingLayout.BLOCK_MODEL_ATLAS_TEXTURE_UNIT, store.samplerId());
+                GL15C.glBindBuffer(GL40C.GL_DRAW_INDIRECT_BUFFER, this.commandBufferId);
+                GL15C.glBindBuffer(GL_PARAMETER_BUFFER_ARB, this.drawCountBufferId);
+
+                boolean bindingsOk = GL30C.glGetIntegeri(GL43C.GL_SHADER_STORAGE_BUFFER_BINDING, ForgeFormalShaderInputBindingLayout.QUAD_BUFFER_BINDING_INDEX) == k8.formalGeometryValidationBufferId()
+                        && GL30C.glGetIntegeri(GL43C.GL_SHADER_STORAGE_BUFFER_BINDING, ForgeFormalShaderInputBindingLayout.MODEL_DATA_BINDING_INDEX) == store.modelDataBufferId()
+                        && GL30C.glGetIntegeri(GL43C.GL_SHADER_STORAGE_BUFFER_BINDING, ForgeFormalShaderInputBindingLayout.MODEL_COLOUR_BINDING_INDEX) == store.modelColourBufferId()
+                        && GL30C.glGetIntegeri(GL43C.GL_SHADER_STORAGE_BUFFER_BINDING, ForgeFormalShaderInputBindingLayout.POSITION_SCRATCH_BINDING_INDEX) == this.positionScratchBufferId
+                        && GL11C.glGetInteger(GL11C.GL_TEXTURE_BINDING_2D) == store.atlasTextureId()
+                        && GL30C.glGetIntegeri(GL33C.GL_SAMPLER_BINDING, ForgeFormalShaderInputBindingLayout.BLOCK_MODEL_ATLAS_TEXTURE_UNIT) == store.samplerId()
+                        && GL11C.glGetInteger(GL40C.GL_DRAW_INDIRECT_BUFFER_BINDING) == this.commandBufferId
+                        && GL11C.glGetInteger(GL_PARAMETER_BUFFER_BINDING_ARB) == this.drawCountBufferId;
+                if (!bindingsOk) {
+                    throw new IllegalStateException("k10-formal-resource-binding-failed");
+                }
+
+                GL43C.glMemoryBarrier(GL43C.GL_SHADER_STORAGE_BARRIER_BIT | GL43C.GL_TEXTURE_FETCH_BARRIER_BIT | GL43C.GL_COMMAND_BARRIER_BIT);
+                glMultiDrawElementsIndirectCountARB(GL11C.GL_TRIANGLES, GL11C.GL_UNSIGNED_SHORT, 0L, OPAQUE_DRAW_COUNT_OFFSET_BYTES, 1, 0);
+                this.worldSpacePreview = true;
+                this.previewCameraRelativeTransformOk = true;
+                this.projectionMatrixUsed = true;
+                this.modelViewMatrixUsed = true;
+                this.visiblePreviewDrawExecuted = true;
+                this.minecraftMainFramebufferDrawn = true;
+                this.visiblePreviewDrawCallOk = true;
+                int error = GL11C.glGetError();
+                this.lastGlError = error == GL11C.GL_NO_ERROR ? "none" : glErrorName(error);
+                if (error != GL11C.GL_NO_ERROR) {
+                    throw new IllegalStateException("k10-visible-preview-draw-gl-error-" + this.lastGlError);
+                }
+                if (!this.visiblePreviewReadbackOk) {
+                    this.readbackMainFramebufferSample();
+                }
+            } finally {
+                poseStack.popPose();
             }
         } finally {
             GL20C.glUseProgram(oldProgram);
@@ -897,32 +1069,34 @@ final class ForgeFormalTerrainShaderIntegration {
             GL11C.glBindTexture(GL11C.GL_TEXTURE_2D, oldTexture);
             GL33C.glBindSampler(ForgeFormalShaderInputBindingLayout.BLOCK_MODEL_ATLAS_TEXTURE_UNIT, oldSampler);
             GL13C.glActiveTexture(oldActiveTexture);
-            GL30C.glBindFramebuffer(GL30C.GL_DRAW_FRAMEBUFFER, oldDrawFramebuffer);
-            GL30C.glBindFramebuffer(GL30C.GL_READ_FRAMEBUFFER, oldReadFramebuffer);
-            GL20C.glDrawBuffers(oldDrawBuffer);
-            GL11C.glReadBuffer(oldReadBuffer);
-            GL11C.glViewport(oldViewport[0], oldViewport[1], oldViewport[2], oldViewport[3]);
-            GL11C.glClearColor(oldClearColor[0], oldClearColor[1], oldClearColor[2], oldClearColor[3]);
+            GL11C.glDepthMask(depthMask);
             setEnabled(GL11C.GL_DEPTH_TEST, depthEnabled);
             setEnabled(GL11C.GL_BLEND, blendEnabled);
             setEnabled(GL11C.GL_CULL_FACE, cullEnabled);
         }
     }
 
-    private void readbackOffscreenFramebuffer() {
-        ByteBuffer buffer = MemoryUtil.memAlloc(PREVIEW_WIDTH * PREVIEW_HEIGHT * BYTES_PER_PIXEL);
+    private void readbackMainFramebufferSample() {
+        int[] viewport = new int[4];
+        GL11C.glGetIntegerv(GL11C.GL_VIEWPORT, viewport);
+        int width = Math.max(1, Math.min(READBACK_SIZE, viewport[2]));
+        int height = Math.max(1, Math.min(READBACK_SIZE, viewport[3]));
+        int x = Math.max(0, viewport[0] + (viewport[2] - width) / 2);
+        int y = Math.max(0, viewport[1] + (viewport[3] - height) / 2);
+        ByteBuffer buffer = MemoryUtil.memAlloc(width * height * BYTES_PER_PIXEL);
         PixelStoreState pixelStore = PixelStoreState.capturePack();
         int packBufferBinding = GL11C.glGetInteger(GL21C.GL_PIXEL_PACK_BUFFER_BINDING);
         int oldReadFramebuffer = GL11C.glGetInteger(GL30C.GL_READ_FRAMEBUFFER_BINDING);
+        int oldDrawFramebuffer = GL11C.glGetInteger(GL30C.GL_DRAW_FRAMEBUFFER_BINDING);
         int oldReadBuffer = GL11C.glGetInteger(GL11C.GL_READ_BUFFER);
         try {
             GL15C.glBindBuffer(GL21C.GL_PIXEL_PACK_BUFFER, 0);
-            GL30C.glBindFramebuffer(GL30C.GL_READ_FRAMEBUFFER, this.offscreenFramebufferId);
-            GL11C.glReadBuffer(GL30C.GL_COLOR_ATTACHMENT0);
-            GL11C.glReadPixels(0, 0, PREVIEW_WIDTH, PREVIEW_HEIGHT, GL11C.GL_RGBA, GL11C.GL_UNSIGNED_BYTE, buffer);
+            GL30C.glBindFramebuffer(GL30C.GL_READ_FRAMEBUFFER, oldDrawFramebuffer);
+            GL11C.glReadBuffer(oldDrawFramebuffer == 0 ? GL11C.GL_BACK : GL30C.GL_COLOR_ATTACHMENT0);
+            GL11C.glReadPixels(x, y, width, height, GL11C.GL_RGBA, GL11C.GL_UNSIGNED_BYTE, buffer);
             CRC32 crc = new CRC32();
             int nonZero = 0;
-            for (int i = 0; i < PREVIEW_WIDTH * PREVIEW_HEIGHT; i++) {
+            for (int i = 0; i < width * height; i++) {
                 int base = i * BYTES_PER_PIXEL;
                 int r = buffer.get(base) & 0xFF;
                 int g = buffer.get(base + 1) & 0xFF;
@@ -936,15 +1110,11 @@ final class ForgeFormalTerrainShaderIntegration {
                 crc.update(b);
                 crc.update(a);
             }
-            this.offscreenNonZeroPixelCount = nonZero;
-            this.offscreenChecksum = "0x" + Long.toHexString(crc.getValue());
             int error = GL11C.glGetError();
             this.lastGlError = error == GL11C.GL_NO_ERROR ? "none" : glErrorName(error);
-            this.offscreenReadbackOk = error == GL11C.GL_NO_ERROR && nonZero > 0;
-            this.basicFragmentOutputOk = this.offscreenReadbackOk;
-            if (!this.offscreenReadbackOk) {
-                throw new IllegalStateException("k9-offscreen-readback-failed:" + this.lastGlError + ":nonZero=" + nonZero);
-            }
+            this.visiblePreviewNonZeroPixelCount = nonZero;
+            this.visiblePreviewChecksum = "0x" + Long.toHexString(crc.getValue());
+            this.visiblePreviewReadbackOk = error == GL11C.GL_NO_ERROR && nonZero > 0;
         } finally {
             GL15C.glBindBuffer(GL21C.GL_PIXEL_PACK_BUFFER, packBufferBinding);
             GL30C.glBindFramebuffer(GL30C.GL_READ_FRAMEBUFFER, oldReadFramebuffer);
@@ -955,14 +1125,15 @@ final class ForgeFormalTerrainShaderIntegration {
     }
 
     private void markStale(String reason) {
-        this.integrationReady = false;
+        this.visiblePreviewEnabled = false;
+        this.ownerReady = false;
         this.resetBuildFlags();
         this.stale = true;
         this.requiresRebuild = true;
         this.lifecycleState = "STALE";
         this.lastLifecycleEvent = safeReason(reason);
         this.lastFailureReason = this.lastLifecycleEvent;
-        this.lastAudit = ForgeFormalTerrainShaderIntegrationAuditResult.failure(this.lastFailureReason, 0.0D);
+        this.lastAudit = ForgeFormalVisibleLodPreviewAuditResult.failure(this.lastFailureReason, 0.0D);
         this.scheduleCleanup(this.lastLifecycleEvent);
     }
 
@@ -976,14 +1147,8 @@ final class ForgeFormalTerrainShaderIntegration {
     }
 
     private void closeOwnedResourcesOnRenderThread() {
-        if (this.terrainShaderProgramId != 0) {
-            GL20C.glDeleteProgram(this.terrainShaderProgramId);
-        }
-        if (this.offscreenFramebufferId != 0) {
-            GL30C.glDeleteFramebuffers(this.offscreenFramebufferId);
-        }
-        if (this.offscreenTextureId != 0) {
-            GL11C.glDeleteTextures(this.offscreenTextureId);
+        if (this.visiblePreviewShaderProgramId != 0) {
+            GL20C.glDeleteProgram(this.visiblePreviewShaderProgramId);
         }
         if (this.vertexArrayId != 0) {
             GL30C.glDeleteVertexArrays(this.vertexArrayId);
@@ -1000,9 +1165,7 @@ final class ForgeFormalTerrainShaderIntegration {
         if (this.positionScratchBufferId != 0) {
             GL15C.glDeleteBuffers(this.positionScratchBufferId);
         }
-        this.terrainShaderProgramId = 0;
-        this.offscreenFramebufferId = 0;
-        this.offscreenTextureId = 0;
+        this.visiblePreviewShaderProgramId = 0;
         this.vertexArrayId = 0;
         this.indexBufferId = 0;
         this.commandBufferId = 0;
@@ -1011,38 +1174,36 @@ final class ForgeFormalTerrainShaderIntegration {
     }
 
     private void resetBuildFlags() {
-        this.integrationReady = false;
-        this.originalShaderFilesInspected = false;
-        this.originalQuadsVertInspected = false;
-        this.originalQuadsFragInspected = false;
-        this.originalQuadUtilInspected = false;
-        this.originalBlockModelInspected = false;
-        this.terrainShaderProgramCompileAttempted = false;
-        this.terrainShaderProgramCompileOk = false;
-        this.terrainShaderProgramLinkOk = false;
+        this.ownerReady = false;
+        this.visiblePreviewDrawExecuted = false;
+        this.visiblePreviewFrameCount = 0;
+        this.minecraftMainFramebufferDrawn = false;
+        this.visiblePreviewWasEnabledDuringQa = false;
+        this.visiblePreviewDisabledAfterQa = false;
+        this.qaAutoDisablePending = false;
+        this.qaFramesRemaining = 0;
+        this.firstDrawLogged = false;
         this.k8FormalGeometryUsed = false;
+        this.k9TerrainShaderIntegrationUsed = false;
         this.k6RealSectionCommandUsed = false;
         this.syntheticDrawFixtureUsed = false;
-        this.modelDataBindingOk = false;
-        this.modelColourBindingOk = false;
-        this.atlasTextureBindingOk = false;
-        this.samplerBindingOk = false;
-        this.geometryBufferBindingOk = false;
-        this.commandBufferBindingOk = false;
-        this.drawCountBufferBindingOk = false;
-        this.positionScratchBindingOk = false;
+        this.worldSpacePreview = false;
+        this.previewSectionWorldPosition = "none";
+        this.previewCameraRelativeTransformOk = false;
+        this.projectionMatrixUsed = false;
+        this.modelViewMatrixUsed = false;
+        this.visiblePreviewShaderProgramCompileAttempted = false;
+        this.visiblePreviewShaderProgramCompileOk = false;
+        this.visiblePreviewShaderProgramLinkOk = false;
+        this.visiblePreviewDrawCallOk = false;
         this.formalModelIdDecodeOk = false;
         this.faceDataLookupOk = false;
         this.atlasSampleOk = false;
         this.modelDataReadOk = false;
         this.modelColourReadOk = false;
-        this.basicFragmentOutputOk = false;
-        this.offscreenFramebufferCreated = false;
-        this.offscreenFramebufferComplete = false;
-        this.offscreenTerrainShaderDrawExecuted = false;
-        this.offscreenReadbackOk = false;
-        this.offscreenNonZeroPixelCount = 0;
-        this.offscreenChecksum = "none";
+        this.visiblePreviewReadbackOk = false;
+        this.visiblePreviewNonZeroPixelCount = 0;
+        this.visiblePreviewChecksum = "none";
         this.validationFormalModelId = 0;
         this.validationFace = 0;
         this.validationFormalModelIds = "none";
@@ -1058,7 +1219,7 @@ final class ForgeFormalTerrainShaderIntegration {
     }
 
     private void fail(String reason) {
-        this.integrationReady = false;
+        this.ownerReady = false;
         this.lifecycleState = "FAILED";
         this.lastFailureReason = safeReason(reason);
     }
@@ -1094,6 +1255,39 @@ final class ForgeFormalTerrainShaderIntegration {
             GL45C.nglNamedBufferData(bufferId, (long) values.length * Short.BYTES, ptr, usage);
         } finally {
             MemoryUtil.nmemFree(ptr);
+        }
+    }
+
+    private static void uniformMatrix4f(int program, String name, Matrix4f matrix) {
+        int location = GL20C.glGetUniformLocation(program, name);
+        if (location < 0) {
+            return;
+        }
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            FloatBuffer buffer = stack.mallocFloat(16);
+            matrix.get(buffer);
+            GL20C.glUniformMatrix4fv(location, false, buffer);
+        }
+    }
+
+    private static void uniform3f(int program, String name, Vec3 value) {
+        int location = GL20C.glGetUniformLocation(program, name);
+        if (location >= 0) {
+            GL20C.glUniform3f(location, (float) value.x, (float) value.y, (float) value.z);
+        }
+    }
+
+    private static void uniform1f(int program, String name, float value) {
+        int location = GL20C.glGetUniformLocation(program, name);
+        if (location >= 0) {
+            GL20C.glUniform1f(location, value);
+        }
+    }
+
+    private static void uniform1ui(int program, String name, int value) {
+        int location = GL20C.glGetUniformLocation(program, name);
+        if (location >= 0) {
+            GL30C.glUniform1ui(location, value);
         }
     }
 
@@ -1157,7 +1351,7 @@ final class ForgeFormalTerrainShaderIntegration {
 
     private static void clearGlErrors() {
         while (GL11C.glGetError() != GL11C.GL_NO_ERROR) {
-            // Drain stale GL errors before the K9 offscreen terrain shader validation draw.
+            // Drain stale GL errors before the K10 visible preview validation draw.
         }
     }
 

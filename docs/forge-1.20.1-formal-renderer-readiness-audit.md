@@ -1247,3 +1247,41 @@ The boundary remains strict: K9 draws only into a K9-owned offscreen framebuffer
 does not use sample-set data as a formal source, does not mutate the original
 geometry heap, does not call `MDICSectionRenderer` or `VoxyRenderSystem`, and
 does not make the formal renderer ready.
+
+## K10 readiness note
+
+K10 adds a visible formal LoD preview toggle. This is the first formal-path
+main-framebuffer draw, but it is deliberately reported as preview-only and
+debug opt-in:
+
+```text
+visiblePreviewDefaultEnabled=false
+debugOptInOnly=true
+visibleTerrainPreviewOnly=true
+productionLiveRendererDrawExecuted=false
+```
+
+K10 consumes the already-audited formal inputs instead of debug/sample sources:
+
+```text
+drawInputSource=K8FormalGeometryAndK9Shader
+k8FormalGeometryUsed=true
+k9TerrainShaderIntegrationUsed=true
+k6RealSectionCommandUsed=true
+syntheticDrawFixtureUsed=false
+sampleSetUsedAsFormalSource=false
+```
+
+The formal renderer readiness boundary remains unchanged:
+
+```text
+formalDrawPipelineReady=false
+formalRendererReady=false
+actualRendererDrawEnabled=false
+productionTerrainShaderReady=false
+```
+
+The K10 readiness fields are evidence that the preview hook and formal inputs
+can produce a visible debug preview. They must not be treated as production
+LoD renderer readiness until production cmdgen, traversal, shader semantics,
+and live MDIC renderer ownership are complete.

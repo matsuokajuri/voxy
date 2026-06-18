@@ -665,3 +665,45 @@ visibleTerrainDrawExecuted=false
 K9 does not draw into the Minecraft main framebuffer, does not call
 `MDICSectionRenderer` or `VoxyRenderSystem`, does not mutate the original
 geometry heap, and does not enable live LoD terrain rendering.
+
+## K10 status note
+
+K10 adds the first visible formal LoD preview path. Unlike K9, it may draw into
+the Minecraft main framebuffer, but only through an explicit debug opt-in
+command or preset. The preview is disabled by default and auto-disables after
+the compact QA window.
+
+The K10 chain is:
+
+```text
+K8 formal model-id geometry snapshot
+ + K9 terrain shader adapter resources
+ + K6/K7 real-section command/count evidence
+ -> K10 render-stage hook
+ -> Minecraft main framebuffer visible preview
+ -> status/audit confirmation
+```
+
+K10 success means:
+
+```text
+visibleLodPreviewOwnerReady=true
+visiblePreviewDefaultEnabled=false
+debugOptInOnly=true
+visiblePreviewDrawExecuted=true
+minecraftMainFramebufferDrawn=true
+visibleTerrainPreviewOnly=true
+productionLiveRendererDrawExecuted=false
+```
+
+K10 is still not the production renderer. It does not call
+`MDICSectionRenderer` or `VoxyRenderSystem`, does not use debug MDIC command
+buffers as formal command buffers, does not mutate the original geometry heap,
+and still reports:
+
+```text
+formalDrawPipelineReady=false
+formalRendererReady=false
+actualRendererDrawEnabled=false
+productionTerrainShaderReady=false
+```

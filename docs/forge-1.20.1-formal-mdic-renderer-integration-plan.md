@@ -602,3 +602,37 @@ evidence. Remaining blockers are production cmdgen, formal hierarchical
 visibility traversal, full terrain shader semantics, live MDIC renderer
 ownership, lightmap, biome tint, material/alpha semantics, translucency, and
 resource rebuild automation.
+
+## K10 formal visible LoD preview note
+
+K10 introduces an explicit visible preview hook for the formal path. It uses the
+same formal input chain proven by K8 and K9, then draws a small world-space
+preview into the Minecraft main framebuffer only when enabled by command or
+preset.
+
+Original alignment:
+
+- The preview continues to use the original Voxy-style indexed indirect command
+  shape copied from K6/K7 validation evidence.
+- Formal model inputs keep the original binding intent: packed geometry at
+  binding 1, model data at binding 3, model colour at binding 4, position
+  scratch at binding 5, and the block model atlas on texture unit 0.
+- The visible shader path is still the K9 production-aligned adapter subset,
+  not a claim that the original terrain shader is fully ported.
+
+Intentional Forge deviation:
+
+- K10 registers a narrow Forge render-stage hook for preview-only drawing.
+- The preview is disabled by default and requires explicit debug opt-in.
+- The preview auto-disables in QA after a short visible window.
+- K10 does not call `MDICSectionRenderer` or `VoxyRenderSystem`.
+- K10 does not use debug MDIC command buffers as formal command buffers.
+- K10 does not mutate or replace the original GL geometry heap.
+- K10 does not mark the formal draw pipeline, formal renderer, or actual
+  renderer draw as ready.
+
+After K10, the project has visible proof that the formal path can put pixels in
+the game framebuffer, but the remaining blockers are still production cmdgen,
+formal hierarchical traversal, live MDIC renderer integration, full terrain
+shader semantics, lightmap, biome tint, material/alpha behavior, translucency,
+and resource rebuild automation.

@@ -575,6 +575,20 @@ public final class ForgeVoxyCommands {
                         .executes(ctx -> formalTerrainShaderIntegrationClear(ctx.getSource())))
                 .then(Commands.literal("qa_k9_formal_terrain_shader_integration")
                         .executes(ctx -> qaK9FormalTerrainShaderIntegration(ctx.getSource())))
+                .then(Commands.literal("formal_visible_lod_preview_enable")
+                        .executes(ctx -> formalVisibleLodPreviewEnable(ctx.getSource())))
+                .then(Commands.literal("formal_visible_lod_preview_disable")
+                        .executes(ctx -> formalVisibleLodPreviewDisable(ctx.getSource())))
+                .then(Commands.literal("formal_visible_lod_preview_status")
+                        .executes(ctx -> formalVisibleLodPreviewStatus(ctx.getSource())))
+                .then(Commands.literal("formal_visible_lod_preview_audit")
+                        .executes(ctx -> formalVisibleLodPreviewAudit(ctx.getSource())))
+                .then(Commands.literal("formal_visible_lod_preview_dump")
+                        .executes(ctx -> formalVisibleLodPreviewDump(ctx.getSource())))
+                .then(Commands.literal("formal_visible_lod_preview_clear")
+                        .executes(ctx -> formalVisibleLodPreviewClear(ctx.getSource())))
+                .then(Commands.literal("qa_k10_formal_visible_lod_preview")
+                        .executes(ctx -> qaK10FormalVisibleLodPreview(ctx.getSource())))
                 .then(Commands.literal("formal_renderer_check")
                         .executes(ctx -> formalRendererCheck(ctx.getSource())))
                 .then(Commands.literal("formal_renderer_status")
@@ -702,6 +716,8 @@ public final class ForgeVoxyCommands {
                                 .executes(ctx -> applyPresetFormalModelIdGeometryPathNoLiveDraw(ctx.getSource())))
                         .then(Commands.literal("formal_terrain_shader_integration_offscreen")
                                 .executes(ctx -> applyPresetFormalTerrainShaderIntegrationOffscreen(ctx.getSource())))
+                        .then(Commands.literal("formal_visible_lod_preview_debug")
+                                .executes(ctx -> applyPresetFormalVisibleLodPreviewDebug(ctx.getSource())))
                         .then(Commands.literal("clear")
                                 .executes(ctx -> clearPreset(ctx.getSource())))
                         .then(Commands.literal("status")
@@ -6014,6 +6030,113 @@ public final class ForgeVoxyCommands {
                 && !rendererStatus.actualDrawEnabled() ? 1 : 0;
     }
 
+    private static int formalVisibleLodPreviewEnable(CommandSourceStack source) {
+        ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview().enable("command-enable");
+        ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("k10-visible-lod-preview-enable");
+        source.sendSuccess(() -> Component.literal("Voxy K10 formal visible LoD preview enable: "
+                + formatFormalVisibleLodPreviewStatus(status)
+                + " "
+                + formatFormalRendererStatus(rendererStatus)
+                + " Preview draw is explicit opt-in only and remains preview-only; formalRendererReady=false actualRendererDrawEnabled=false."), false);
+        return status.visibleLodPreviewOwnerReady()
+                && status.visiblePreviewEnabled()
+                && status.debugOptInOnly()
+                && !status.productionLiveRendererDrawExecuted()
+                && !status.formalRendererReady()
+                && !status.actualRendererDrawEnabled() ? 1 : 0;
+    }
+
+    private static int formalVisibleLodPreviewDisable(CommandSourceStack source) {
+        ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview().disable("command-disable");
+        ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("k10-visible-lod-preview-disable");
+        source.sendSuccess(() -> Component.literal("Voxy K10 formal visible LoD preview disable: "
+                + formatFormalVisibleLodPreviewStatus(status)
+                + " "
+                + formatFormalRendererStatus(rendererStatus)
+                + " The visible preview hook remains registered but drawing is disabled."), false);
+        return !status.visiblePreviewEnabled() && !status.actualRendererDrawEnabled() ? 1 : 0;
+    }
+
+    private static int formalVisibleLodPreviewStatus(CommandSourceStack source) {
+        ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview().createStatusSnapshot();
+        source.sendSuccess(() -> Component.literal("Voxy K10 formal visible LoD preview status: " + formatFormalVisibleLodPreviewStatus(status)), false);
+        return status.visibleLodPreviewOwnerReady() || status.stale() ? 1 : 0;
+    }
+
+    private static int formalVisibleLodPreviewAudit(CommandSourceStack source) {
+        ForgeFormalVisibleLodPreviewAuditResult audit = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview().audit();
+        ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview().createStatusSnapshot();
+        ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("k10-visible-lod-preview-audit");
+        source.sendSuccess(() -> Component.literal("Voxy K10 formal visible LoD preview audit: "
+                + formatFormalVisibleLodPreviewAudit(audit)
+                + " "
+                + formatFormalVisibleLodPreviewStatus(status)
+                + " "
+                + formatFormalRendererStatus(rendererStatus)), false);
+        return audit.success() ? 1 : 0;
+    }
+
+    private static int formalVisibleLodPreviewDump(CommandSourceStack source) {
+        ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview().createStatusSnapshot();
+        String dump = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview().dump();
+        source.sendSuccess(() -> Component.literal("Voxy K10 formal visible LoD preview dump: " + dump + " " + formatFormalVisibleLodPreviewStatus(status)), false);
+        return status.blockerCount() > 0 || status.visibleLodPreviewOwnerReady() ? 1 : 0;
+    }
+
+    private static int formalVisibleLodPreviewClear(CommandSourceStack source) {
+        ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview().clear();
+        ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview().createStatusSnapshot();
+        source.sendSuccess(() -> Component.literal("Voxy K10 formal visible LoD preview clear: "
+                + formatFormalVisibleLodPreviewStatus(status)
+                + " Only K10 visible-preview shader and validation buffers were cleared; K8 geometry, formal ModelStore, debug renderers, live GL geometry heap, and MDIC command buffers were left unchanged."), false);
+        return 1;
+    }
+
+    private static int qaK10FormalVisibleLodPreview(CommandSourceStack source) {
+        ForgeVoxyRuntimeOverrides.applyFormalVisibleLodPreviewDebugPreset();
+        boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
+        ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview().runQa();
+        ForgeFormalVisibleLodPreviewAuditResult audit = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview().createAuditStatusSnapshot();
+        ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("qa-k10-formal-visible-lod-preview");
+        String message = "Voxy QA K10 formal visible LoD preview: "
+                + (engineReady ? "WorldEngine is active. " : "No active client world was found; K10 success requires real section input and should be treated as partial if ready=false. ")
+                + "The preview is disabled by default, is now explicitly enabled for a short QA window, and will auto-disable after visible frames. "
+                + formatFormalVisibleLodPreviewStatus(status)
+                + " "
+                + formatFormalVisibleLodPreviewAudit(audit)
+                + " "
+                + formatFormalRendererStatus(rendererStatus)
+                + " The QA path uses K8 formal model-id geometry, K9 terrain shader integration, and K6 real-section command evidence; it does not call MDICSectionRenderer or VoxyRenderSystem and does not enable the production renderer.";
+        VoxyForge.LOGGER.info(message);
+        source.sendSuccess(() -> Component.literal(message), false);
+        return status.formalTerrainRendererOwnerReady()
+                && status.formalModelIdGeometryPathReady()
+                && status.formalTerrainShaderIntegrationReady()
+                && status.visibleLodPreviewOwnerReady()
+                && status.visiblePreviewDefaultDisabledVerified()
+                && status.debugOptInOnly()
+                && status.visiblePreviewEnabled()
+                && status.visiblePreviewWasEnabledDuringQa()
+                && status.k8FormalGeometryUsed()
+                && status.k9TerrainShaderIntegrationUsed()
+                && status.k6RealSectionCommandUsed()
+                && !status.syntheticDrawFixtureUsed()
+                && status.formalModelIdDecodeOk()
+                && status.faceDataLookupOk()
+                && status.atlasSampleOk()
+                && !status.originalGeometryHeapMutated()
+                && !status.debugMdicCommandBuffersUsedAsFormal()
+                && !status.sampleSetUsedAsFormalSource()
+                && !status.mdicSectionRendererCalled()
+                && !status.voxyRenderSystemCalled()
+                && !status.formalDrawPipelineReady()
+                && !status.formalRendererReady()
+                && !status.actualRendererDrawEnabled()
+                && status.p0BlockerCount() >= 1
+                && !rendererStatus.formalRendererReady()
+                && !rendererStatus.actualDrawEnabled() ? 1 : 0;
+    }
+
     private static int formalRendererCheck(CommandSourceStack source) {
         ForgeFormalRendererStats status = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("command-check");
         source.sendSuccess(() -> Component.literal("Voxy formal renderer check: " + formatFormalRendererStatus(status)), false);
@@ -8196,9 +8319,138 @@ public final class ForgeVoxyCommands {
         );
     }
 
+    private static String formatFormalVisibleLodPreviewStatus(ForgeFormalVisibleLodPreviewStats status) {
+        return String.format(
+                "stage=%s formalTerrainRendererOwnerReady=%s formalViewportOwnerReady=%s formalCommandGenerationOwnerReady=%s formalVisibilityOwnerReady=%s realSectionDryRunReady=%s isolatedMdicDrawSmokeTestReady=%s formalModelIdGeometryPathReady=%s formalTerrainShaderIntegrationReady=%s visibleLodPreviewOwnerReady=%s visiblePreviewEnabled=%s visiblePreviewDefaultEnabled=%s visiblePreviewDefaultDisabledVerified=%s debugOptInOnly=%s visiblePreviewWasEnabledDuringQa=%s visiblePreviewDisabledAfterQa=%s visiblePreviewDrawExecuted=%s visiblePreviewFrameCount=%d visibleTerrainPreviewOnly=%s minecraftMainFramebufferDrawn=%s productionLiveRendererDrawExecuted=%s renderHookRegistered=%s renderHookName=%s renderHookScope=%s drawInputSource=%s k8FormalGeometryUsed=%s k9TerrainShaderIntegrationUsed=%s k6RealSectionCommandUsed=%s syntheticDrawFixtureUsed=%s worldSpacePreview=%s previewSectionWorldPosition=%s previewCameraRelativeTransformOk=%s projectionMatrixUsed=%s modelViewMatrixUsed=%s k9TerrainShaderAdapterReused=%s visiblePreviewShaderProgramCompileAttempted=%s visiblePreviewShaderProgramCompileOk=%s visiblePreviewShaderProgramLinkOk=%s visiblePreviewShaderProgramId=%d visiblePreviewDrawCallOk=%s visiblePreviewLastGlError=%s formalModelIdDecodeOk=%s faceDataLookupOk=%s atlasSampleOk=%s modelDataReadOk=%s modelColourReadOk=%s visiblePreviewReadbackOk=%s visiblePreviewNonZeroPixelCount=%d visiblePreviewChecksum=%s validationFormalModelId=%d validationFace=%d validationFormalModelIds=%s geometryBufferId=%d commandBufferId=%d drawCountBufferId=%d positionScratchBufferId=%d indexBufferId=%d vertexArrayId=%d k6FirstCommandCount=%d k6FirstCommandInstanceCount=%d k6FirstCommandFirstIndex=%d k6FirstCommandBaseVertex=%d k6FirstCommandBaseInstance=%d acceptedDrawCommandCount=%d drawCommandMatchesK6=%s originalGeometryHeapMutated=%s liveGeometryHeapUsedAsMutableTarget=%s debugGeometryHeapUsedAsFormal=%s debugMdicCommandBuffersUsedAsFormal=%s sampleSetUsedAsFormalSource=%s MDICSectionRendererCalled=%s VoxyRenderSystemCalled=%s formalDrawPipelineReady=%s formalRendererReady=%s actualRendererDrawEnabled=%s productionTerrainShaderReady=%s formalTerrainShaderSemanticCompleteness=%s lightmapReady=%s biomeTintFullReady=%s materialAlphaFullReady=%s translucencyReady=%s shaderpackReady=%s lifecycleState=%s lastLifecycleEvent=%s stale=%s requiresRebuild=%s blockerCount=%d p0BlockerCount=%d p1BlockerCount=%d p2BlockerCount=%d blockers=%s lastFailureReason=%s lastAuditOk=%s lastAuditError=%s lastAuditDurationMs=%.2f renderer=formal-visible-lod-preview productionRenderer=false previewOnly=true",
+                status.stage(),
+                status.formalTerrainRendererOwnerReady(),
+                status.formalViewportOwnerReady(),
+                status.formalCommandGenerationOwnerReady(),
+                status.formalVisibilityOwnerReady(),
+                status.realSectionDryRunReady(),
+                status.isolatedMdicDrawSmokeTestReady(),
+                status.formalModelIdGeometryPathReady(),
+                status.formalTerrainShaderIntegrationReady(),
+                status.visibleLodPreviewOwnerReady(),
+                status.visiblePreviewEnabled(),
+                status.visiblePreviewDefaultEnabled(),
+                status.visiblePreviewDefaultDisabledVerified(),
+                status.debugOptInOnly(),
+                status.visiblePreviewWasEnabledDuringQa(),
+                status.visiblePreviewDisabledAfterQa(),
+                status.visiblePreviewDrawExecuted(),
+                status.visiblePreviewFrameCount(),
+                status.visibleTerrainPreviewOnly(),
+                status.minecraftMainFramebufferDrawn(),
+                status.productionLiveRendererDrawExecuted(),
+                status.renderHookRegistered(),
+                status.renderHookName(),
+                status.renderHookScope(),
+                status.drawInputSource(),
+                status.k8FormalGeometryUsed(),
+                status.k9TerrainShaderIntegrationUsed(),
+                status.k6RealSectionCommandUsed(),
+                status.syntheticDrawFixtureUsed(),
+                status.worldSpacePreview(),
+                status.previewSectionWorldPosition(),
+                status.previewCameraRelativeTransformOk(),
+                status.projectionMatrixUsed(),
+                status.modelViewMatrixUsed(),
+                status.k9TerrainShaderAdapterReused(),
+                status.visiblePreviewShaderProgramCompileAttempted(),
+                status.visiblePreviewShaderProgramCompileOk(),
+                status.visiblePreviewShaderProgramLinkOk(),
+                status.visiblePreviewShaderProgramId(),
+                status.visiblePreviewDrawCallOk(),
+                status.visiblePreviewLastGlError(),
+                status.formalModelIdDecodeOk(),
+                status.faceDataLookupOk(),
+                status.atlasSampleOk(),
+                status.modelDataReadOk(),
+                status.modelColourReadOk(),
+                status.visiblePreviewReadbackOk(),
+                status.visiblePreviewNonZeroPixelCount(),
+                status.visiblePreviewChecksum(),
+                status.validationFormalModelId(),
+                status.validationFace(),
+                status.validationFormalModelIds(),
+                status.geometryBufferId(),
+                status.commandBufferId(),
+                status.drawCountBufferId(),
+                status.positionScratchBufferId(),
+                status.indexBufferId(),
+                status.vertexArrayId(),
+                status.k6FirstCommandCount(),
+                status.k6FirstCommandInstanceCount(),
+                status.k6FirstCommandFirstIndex(),
+                status.k6FirstCommandBaseVertex(),
+                status.k6FirstCommandBaseInstance(),
+                status.acceptedDrawCommandCount(),
+                status.drawCommandMatchesK6(),
+                status.originalGeometryHeapMutated(),
+                status.liveGeometryHeapUsedAsMutableTarget(),
+                status.debugGeometryHeapUsedAsFormal(),
+                status.debugMdicCommandBuffersUsedAsFormal(),
+                status.sampleSetUsedAsFormalSource(),
+                status.mdicSectionRendererCalled(),
+                status.voxyRenderSystemCalled(),
+                status.formalDrawPipelineReady(),
+                status.formalRendererReady(),
+                status.actualRendererDrawEnabled(),
+                status.productionTerrainShaderReady(),
+                status.formalTerrainShaderSemanticCompleteness(),
+                status.lightmapReady(),
+                status.biomeTintFullReady(),
+                status.materialAlphaFullReady(),
+                status.translucencyReady(),
+                status.shaderpackReady(),
+                status.lifecycleState(),
+                status.lastLifecycleEvent(),
+                status.stale(),
+                status.requiresRebuild(),
+                status.blockerCount(),
+                status.p0BlockerCount(),
+                status.p1BlockerCount(),
+                status.p2BlockerCount(),
+                status.blockers(),
+                status.lastFailureReason(),
+                status.lastAuditOk(),
+                status.lastAuditError(),
+                status.lastAuditDurationMs()
+        );
+    }
+
+    private static String formatFormalVisibleLodPreviewAudit(ForgeFormalVisibleLodPreviewAuditResult audit) {
+        return String.format(
+                "k10AuditOk=%s k10AuditError=%s durationMs=%.2f prerequisitesChecked=%s previewDisabledByDefault=%s explicitOptInRequired=%s drawInputUsesK8AndK9=%s placeholderIdsUsedAsFormalIds=%s sampleSetUsedAsFormalSource=%s originalGeometryHeapMutated=%s debugCommandBuffersUsedAsFormal=%s visiblePreviewDrawExecuted=%s minecraftMainFramebufferDrawn=%s previewDisabledAfterQa=%s MDICSectionRendererCalled=%s VoxyRenderSystemCalled=%s formalRendererReady=%s actualRendererDrawEnabled=%s",
+                audit.success(),
+                audit.error(),
+                audit.durationMs(),
+                audit.prerequisitesChecked(),
+                audit.previewDisabledByDefault(),
+                audit.explicitOptInRequired(),
+                audit.drawInputUsesK8AndK9(),
+                audit.placeholderIdsUsedAsFormalIds(),
+                audit.sampleSetUsedAsFormalSource(),
+                audit.originalGeometryHeapMutated(),
+                audit.debugCommandBuffersUsedAsFormal(),
+                audit.visiblePreviewDrawExecuted(),
+                audit.minecraftMainFramebufferDrawn(),
+                audit.previewDisabledAfterQa(),
+                audit.mdicSectionRendererCalled(),
+                audit.voxyRenderSystemCalled(),
+                audit.formalRendererReady(),
+                audit.actualRendererDrawEnabled()
+        );
+    }
+
+    static String formatFormalRendererStatusForLog(ForgeFormalRendererStats status) {
+        return formatFormalRendererStatus(status);
+    }
+
     private static String formatFormalRendererStatus(ForgeFormalRendererStats status) {
         return String.format(
-                "stage=%s formalRendererSkeletonReady=%s formalRendererReady=%s actualDrawEnabled=%s noDraw=%s enabled=%s lifecycleState=%s formalRendererOwnershipReady=%s lastEnableReason=%s lastDisableReason=%s lastClearReason=%s lastLifecycleEvent=%s lastCheckAt=%s lastCheckReason=%s lastStaleReason=%s requiresRecheck=%s readinessGeneration=%d lifecycleGeneration=%d geometryHeapReady=%s metadataReady=%s sectionGeometryManagerReady=%s mdicCommandReady=%s mdicDrawCountReady=%s modelBridgeReady=%s formalShaderInputBridgeReady=%s atlasReady=%s resourceReloadReady=%s worldEngineReady=%s dimensionReady=%s infrastructureReady=%s debugProofReady=%s sampleBridgeReady=%s oneBlockBakePrototypeReady=%s oneBlockFormalUploadReady=%s oneBlockFormalUploadAuditReady=%s multiBlockBakePrototypeReady=%s multiBlockFormalUploadReady=%s multiBlockFormalUploadAuditReady=%s formalModelBakeryLifecycleSkeletonReady=%s reloadRebuildPrototypeReady=%s aliasSafeDedupeReady=%s formalModelFactorySkeletonReady=%s formalModelFactoryLifecycleReady=%s formalModelStoreSkeletonReady=%s formalModelStoreOwnerReady=%s formalShaderInputConsumerReady=%s formalShaderInputBindingLayoutKnown=%s formalShaderInputBindingLayoutCompatible=%s formalShaderProgramValidatorReady=%s formalShaderProgramValidationReady=%s validationShaderCompileOk=%s validationProgramLinkOk=%s gpuValidationOk=%s formalTexturedShaderPrototypeReady=%s formalTexturedShaderPreviewReady=%s formalPackedQuadPreviewReady=%s packedQuadShaderPreviewReady=%s packedQuadModelIdBridgeReady=%s formalTerrainPackedRecordBridgeReady=%s realTerrainPackedRecordBridgeReady=%s temporaryFormalQuadBufferCreated=%s originalGeometryUntouched=%s originalGeometryHeapUntouched=%s realTerrainRecordsUsed=%s syntheticFallbackUsed=%s formalTerrainRendererOwnerReady=%s formalTerrainRendererLifecycleReady=%s k0AlignmentAuditReady=%s k0VerdictReadyForK1=%s originalVoxyAlignmentPreserved=%s formalViewportOwnerReady=%s formalCommandBufferOwnerReady=%s formalCommandGenerationOwnerReady=%s formalCommandGenerationContractReady=%s formalDrawCommandLayoutReady=%s formalDrawCountLayoutReady=%s formalVisibilityOwnerReady=%s formalRenderListOwnerReady=%s formalIndirectLookupOwnerReady=%s formalVisibilityContractReady=%s formalRenderListContractReady=%s formalVisibilityTraversalImplemented=%s formalHierarchicalOcclusionReady=%s formalRenderDistanceTrackerReady=%s cpuCandidateSnapshotReady=%s debugPlannerUsedAsFormal=%s cmdgenValidationProgramReady=%s cmdgenValidationProgramCompileOk=%s cmdgenValidationProgramLinkOk=%s cmdgenValidationDispatchRun=%s cmdgenValidationReadbackOk=%s cmdgenValidationAuditOk=%s productionCmdgenReady=%s formalCmdgenRealSectionDryRunReady=%s realSectionInputSnapshotReady=%s realSectionMetadataUsed=%s realSectionCandidateSnapshotUsed=%s cmdgenRealSectionDryRunAuditOk=%s formalIsolatedMdicDrawSmokeTestReady=%s offscreenValidationDrawReady=%s offscreenValidationDrawExecuted=%s offscreenValidationReadbackOk=%s offscreenValidationOnly=%s offscreenOnly=%s realSectionCommandUsedForOffscreenDraw=%s syntheticDrawFixtureUsed=%s formalDrawPipelineReady=%s globalFormalModelIdGeometryReady=%s formalModelIdGeometryPathReady=%s globalFormalModelIdGeometryPathReady=%s globalFormalModelIdGeometryEnabledForLiveRenderer=%s formalGeometrySnapshotCreated=%s formalGeometrySnapshotRecordCount=%d formalPackedRecordsAuditOk=%s formalGeometryReadbackOk=%s originalGeometryHeapMutated=%s formalTerrainShaderIntegrationReady=%s productionTerrainShaderReady=%s terrainShaderAdapterUsed=%s terrainShaderProgramCompileOk=%s terrainShaderProgramLinkOk=%s k8FormalGeometryUsedByTerrainShader=%s k6RealSectionCommandUsedByTerrainShader=%s terrainShaderOffscreenDrawExecuted=%s terrainShaderOffscreenReadbackOk=%s terrainShaderValidationOnly=%s terrainShaderOffscreenOnly=%s formalTerrainShaderReady=%s previewSystemsSeparated=%s sampleSetUsedAsFormalSource=%s terrainDrawStarted=%s formalRendererDrawStarted=%s actualRendererDrawEnabled=%s formalShaderInputContractReady=%s formalPrerequisitesReady=%s realModelFactoryReady=%s realModelBakeryReady=%s realModelStoreReady=%s formalShaderReady=%s formalTextureAtlasReady=%s formalTexturedShaderReady=%s formalTraversalReady=%s formalVisibilityTraversalReady=%s formalVoxyRenderSystemReady=%s shaderpackIntegrationReady=%s blockerCount=%d p0BlockerCount=%d p1BlockerCount=%d p2BlockerCount=%d formalDrawBlockingBlockerCount=%d blockers=%s worldUnloadSeen=%s dimensionSwitchSeen=%s resourceReloadSeen=%s debugPipelineClearSeen=%s presetOffSeen=%s presetClearSeen=%s formalRendererStale=%s debugRenderersIsolated=%s existingMdicDebugTouched=%s texturedMdicDebugTouched=%s actualDrawStartedByFormalRenderer=%s renderer=formal-renderer-skeleton formalRenderer=false draw=false",
+                "stage=%s formalRendererSkeletonReady=%s formalRendererReady=%s actualDrawEnabled=%s noDraw=%s enabled=%s lifecycleState=%s formalRendererOwnershipReady=%s lastEnableReason=%s lastDisableReason=%s lastClearReason=%s lastLifecycleEvent=%s lastCheckAt=%s lastCheckReason=%s lastStaleReason=%s requiresRecheck=%s readinessGeneration=%d lifecycleGeneration=%d geometryHeapReady=%s metadataReady=%s sectionGeometryManagerReady=%s mdicCommandReady=%s mdicDrawCountReady=%s modelBridgeReady=%s formalShaderInputBridgeReady=%s atlasReady=%s resourceReloadReady=%s worldEngineReady=%s dimensionReady=%s infrastructureReady=%s debugProofReady=%s sampleBridgeReady=%s oneBlockBakePrototypeReady=%s oneBlockFormalUploadReady=%s oneBlockFormalUploadAuditReady=%s multiBlockBakePrototypeReady=%s multiBlockFormalUploadReady=%s multiBlockFormalUploadAuditReady=%s formalModelBakeryLifecycleSkeletonReady=%s reloadRebuildPrototypeReady=%s aliasSafeDedupeReady=%s formalModelFactorySkeletonReady=%s formalModelFactoryLifecycleReady=%s formalModelStoreSkeletonReady=%s formalModelStoreOwnerReady=%s formalShaderInputConsumerReady=%s formalShaderInputBindingLayoutKnown=%s formalShaderInputBindingLayoutCompatible=%s formalShaderProgramValidatorReady=%s formalShaderProgramValidationReady=%s validationShaderCompileOk=%s validationProgramLinkOk=%s gpuValidationOk=%s formalTexturedShaderPrototypeReady=%s formalTexturedShaderPreviewReady=%s formalPackedQuadPreviewReady=%s packedQuadShaderPreviewReady=%s packedQuadModelIdBridgeReady=%s formalTerrainPackedRecordBridgeReady=%s realTerrainPackedRecordBridgeReady=%s temporaryFormalQuadBufferCreated=%s originalGeometryUntouched=%s originalGeometryHeapUntouched=%s realTerrainRecordsUsed=%s syntheticFallbackUsed=%s formalTerrainRendererOwnerReady=%s formalTerrainRendererLifecycleReady=%s k0AlignmentAuditReady=%s k0VerdictReadyForK1=%s originalVoxyAlignmentPreserved=%s formalViewportOwnerReady=%s formalCommandBufferOwnerReady=%s formalCommandGenerationOwnerReady=%s formalCommandGenerationContractReady=%s formalDrawCommandLayoutReady=%s formalDrawCountLayoutReady=%s formalVisibilityOwnerReady=%s formalRenderListOwnerReady=%s formalIndirectLookupOwnerReady=%s formalVisibilityContractReady=%s formalRenderListContractReady=%s formalVisibilityTraversalImplemented=%s formalHierarchicalOcclusionReady=%s formalRenderDistanceTrackerReady=%s cpuCandidateSnapshotReady=%s debugPlannerUsedAsFormal=%s cmdgenValidationProgramReady=%s cmdgenValidationProgramCompileOk=%s cmdgenValidationProgramLinkOk=%s cmdgenValidationDispatchRun=%s cmdgenValidationReadbackOk=%s cmdgenValidationAuditOk=%s productionCmdgenReady=%s formalCmdgenRealSectionDryRunReady=%s realSectionInputSnapshotReady=%s realSectionMetadataUsed=%s realSectionCandidateSnapshotUsed=%s cmdgenRealSectionDryRunAuditOk=%s formalIsolatedMdicDrawSmokeTestReady=%s offscreenValidationDrawReady=%s offscreenValidationDrawExecuted=%s offscreenValidationReadbackOk=%s offscreenValidationOnly=%s offscreenOnly=%s realSectionCommandUsedForOffscreenDraw=%s syntheticDrawFixtureUsed=%s formalDrawPipelineReady=%s globalFormalModelIdGeometryReady=%s formalModelIdGeometryPathReady=%s globalFormalModelIdGeometryPathReady=%s globalFormalModelIdGeometryEnabledForLiveRenderer=%s formalGeometrySnapshotCreated=%s formalGeometrySnapshotRecordCount=%d formalPackedRecordsAuditOk=%s formalGeometryReadbackOk=%s originalGeometryHeapMutated=%s formalTerrainShaderIntegrationReady=%s productionTerrainShaderReady=%s terrainShaderAdapterUsed=%s terrainShaderProgramCompileOk=%s terrainShaderProgramLinkOk=%s k8FormalGeometryUsedByTerrainShader=%s k6RealSectionCommandUsedByTerrainShader=%s terrainShaderOffscreenDrawExecuted=%s terrainShaderOffscreenReadbackOk=%s terrainShaderValidationOnly=%s terrainShaderOffscreenOnly=%s formalVisibleLodPreviewReady=%s visiblePreviewDefaultDisabled=%s visiblePreviewEnabled=%s visiblePreviewDrawExecuted=%s minecraftMainFramebufferDrawn=%s visibleTerrainPreviewOnly=%s productionLiveRendererDrawExecuted=%s visiblePreviewUsesFormalInputs=%s formalTerrainShaderReady=%s previewSystemsSeparated=%s sampleSetUsedAsFormalSource=%s terrainDrawStarted=%s formalRendererDrawStarted=%s actualRendererDrawEnabled=%s formalShaderInputContractReady=%s formalPrerequisitesReady=%s realModelFactoryReady=%s realModelBakeryReady=%s realModelStoreReady=%s formalShaderReady=%s formalTextureAtlasReady=%s formalTexturedShaderReady=%s formalTraversalReady=%s formalVisibilityTraversalReady=%s formalVoxyRenderSystemReady=%s shaderpackIntegrationReady=%s blockerCount=%d p0BlockerCount=%d p1BlockerCount=%d p2BlockerCount=%d formalDrawBlockingBlockerCount=%d blockers=%s worldUnloadSeen=%s dimensionSwitchSeen=%s resourceReloadSeen=%s debugPipelineClearSeen=%s presetOffSeen=%s presetClearSeen=%s formalRendererStale=%s debugRenderersIsolated=%s existingMdicDebugTouched=%s texturedMdicDebugTouched=%s actualDrawStartedByFormalRenderer=%s renderer=formal-renderer-skeleton formalRenderer=false draw=false",
                 status.stage(),
                 status.formalRendererSkeletonReady(),
                 status.formalRendererReady(),
@@ -8326,6 +8578,14 @@ public final class ForgeVoxyCommands {
                 status.terrainShaderOffscreenReadbackOk(),
                 status.terrainShaderValidationOnly(),
                 status.terrainShaderOffscreenOnly(),
+                status.formalVisibleLodPreviewReady(),
+                status.visiblePreviewDefaultDisabled(),
+                status.visiblePreviewEnabled(),
+                status.visiblePreviewDrawExecuted(),
+                status.minecraftMainFramebufferDrawn(),
+                status.visibleTerrainPreviewOnly(),
+                status.productionLiveRendererDrawExecuted(),
+                status.visiblePreviewUsesFormalInputs(),
                 status.formalTerrainShaderReady(),
                 status.previewSystemsSeparated(),
                 status.sampleSetUsedAsFormalSource(),
@@ -9300,6 +9560,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getFormalIsolatedMdicDrawSmokeTest().markPresetOff();
         ForgeVoxyInstance.INSTANCE.getFormalModelIdSectionGeometryPath().markPresetOff();
         ForgeVoxyInstance.INSTANCE.getFormalTerrainShaderIntegration().markPresetOff();
+        ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview().markPresetOff();
         ForgeVoxyInstance.INSTANCE.closeActiveWorld();
         source.sendSuccess(() -> Component.literal("Voxy preset off: runtime overrides disabled engine, auto ingest, auto CPU mesh build, auto BuiltSection build, auto geometry-manager consume, upload-only GL geometry heap, direct GL renderer skeleton, MDIC command skeleton/debug draw, simple GPU renderer, and debug renderer. Overrides are not written to toml."), false);
         return 1;
@@ -10013,6 +10274,37 @@ public final class ForgeVoxyCommands {
                 && !rendererStatus.formalRendererReady() ? 1 : 0;
     }
 
+    private static int applyPresetFormalVisibleLodPreviewDebug(CommandSourceStack source) {
+        ForgeVoxyRuntimeOverrides.applyFormalVisibleLodPreviewDebugPreset();
+        boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
+        ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview().runQa();
+        ForgeFormalVisibleLodPreviewAuditResult audit = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview().createAuditStatusSnapshot();
+        ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("preset-formal-visible-lod-preview-debug");
+        String message = "Voxy preset formal_visible_lod_preview_debug: runtime-only K10 visible formal LoD preview applied, not written to toml. "
+                + "The preset explicitly enables the K10 preview for a short QA window, then the render hook auto-disables it; production live renderer readiness remains false. "
+                + (engineReady ? "WorldEngine is active. " : "No active client world was found; K10 success requires real section input and should be treated as partial if ready=false. ")
+                + formatFormalVisibleLodPreviewStatus(status)
+                + " "
+                + formatFormalVisibleLodPreviewAudit(audit)
+                + " "
+                + formatFormalRendererStatus(rendererStatus);
+        source.sendSuccess(() -> Component.literal(message), false);
+        return status.visibleLodPreviewOwnerReady()
+                && status.visiblePreviewEnabled()
+                && status.visiblePreviewDefaultDisabledVerified()
+                && status.debugOptInOnly()
+                && status.k8FormalGeometryUsed()
+                && status.k9TerrainShaderIntegrationUsed()
+                && status.k6RealSectionCommandUsed()
+                && !status.syntheticDrawFixtureUsed()
+                && !status.productionLiveRendererDrawExecuted()
+                && !status.actualRendererDrawEnabled()
+                && !status.formalDrawPipelineReady()
+                && !status.formalRendererReady()
+                && !rendererStatus.actualDrawEnabled()
+                && !rendererStatus.formalRendererReady() ? 1 : 0;
+    }
+
     private static int clearPreset(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.clear();
         ForgeVoxyInstance.INSTANCE.getGpuGeometryReadbackMeshCache().clear();
@@ -10051,6 +10343,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getFormalIsolatedMdicDrawSmokeTest().clear();
         ForgeVoxyInstance.INSTANCE.getFormalModelIdSectionGeometryPath().clear();
         ForgeVoxyInstance.INSTANCE.getFormalTerrainShaderIntegration().clear();
+        ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedDebugQuadRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedReadbackRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedMdicDebugRenderer().clear();
@@ -10078,6 +10371,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getFormalIsolatedMdicDrawSmokeTest().markPresetClear();
         ForgeVoxyInstance.INSTANCE.getFormalModelIdSectionGeometryPath().markPresetClear();
         ForgeVoxyInstance.INSTANCE.getFormalTerrainShaderIntegration().markPresetClear();
+        ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview().markPresetClear();
         source.sendSuccess(() -> Component.literal("Voxy preset clear: runtime overrides cleared; effective values now come from the toml config."), false);
         return 1;
     }
@@ -10426,6 +10720,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getFormalIsolatedMdicDrawSmokeTest().markDebugPipelineClear();
         ForgeVoxyInstance.INSTANCE.getFormalModelIdSectionGeometryPath().markDebugPipelineClear();
         ForgeVoxyInstance.INSTANCE.getFormalTerrainShaderIntegration().markDebugPipelineClear();
+        ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview().markDebugPipelineClear();
         ForgeVoxyInstance.INSTANCE.getTexturedDebugQuadRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedReadbackRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedMdicDebugRenderer().clear();
@@ -10521,6 +10816,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getFormalIsolatedMdicDrawSmokeTest().markDebugPipelineClear();
         ForgeVoxyInstance.INSTANCE.getFormalModelIdSectionGeometryPath().markDebugPipelineClear();
         ForgeVoxyInstance.INSTANCE.getFormalTerrainShaderIntegration().markDebugPipelineClear();
+        ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview().markDebugPipelineClear();
         ForgeVoxyInstance.INSTANCE.getTexturedDebugQuadRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedReadbackRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedMdicDebugRenderer().clear();

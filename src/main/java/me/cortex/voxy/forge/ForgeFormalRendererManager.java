@@ -282,6 +282,14 @@ final class ForgeFormalRendererManager {
                 readiness.terrainShaderOffscreenReadbackOk(),
                 readiness.terrainShaderValidationOnly(),
                 readiness.terrainShaderOffscreenOnly(),
+                readiness.formalVisibleLodPreviewReady(),
+                readiness.visiblePreviewDefaultDisabled(),
+                readiness.visiblePreviewEnabled(),
+                readiness.visiblePreviewDrawExecuted(),
+                readiness.minecraftMainFramebufferDrawn(),
+                readiness.visibleTerrainPreviewOnly(),
+                readiness.productionLiveRendererDrawExecuted(),
+                readiness.visiblePreviewUsesFormalInputs(),
                 readiness.formalTerrainShaderReady(),
                 readiness.previewSystemsSeparated(),
                 readiness.sampleSetUsedAsFormalSource(),
@@ -355,6 +363,7 @@ final class ForgeFormalRendererManager {
         ForgeFormalIsolatedMdicDrawSmokeTestStats isolatedMdicDraw = this.instance.getFormalIsolatedMdicDrawSmokeTest().createStatusSnapshot();
         ForgeFormalModelIdSectionGeometryStats modelIdGeometry = this.instance.getFormalModelIdSectionGeometryPath().createStatusSnapshot();
         ForgeFormalTerrainShaderIntegrationStats terrainShaderIntegration = this.instance.getFormalTerrainShaderIntegration().createStatusSnapshot();
+        ForgeFormalVisibleLodPreviewStats visibleLodPreview = this.instance.getFormalVisibleLodPreview().createStatusSnapshot();
         ForgeModelAtlasSampleSetUploadStats atlas = this.instance.getModelAtlasSampleSetUploader().createStatusSnapshot();
         ForgeModelBridgeResourceReloadStats reload = this.instance.getModelBridgeResourceReloadTracker().createStatusSnapshot();
         String dimension = currentDimensionId();
@@ -491,6 +500,17 @@ final class ForgeFormalRendererManager {
                 terrainShaderIntegration.offscreenReadbackOk(),
                 terrainShaderIntegration.validationOnly(),
                 terrainShaderIntegration.offscreenOnly(),
+                visibleLodPreview.visibleLodPreviewOwnerReady(),
+                !visibleLodPreview.visiblePreviewDefaultEnabled(),
+                visibleLodPreview.visiblePreviewEnabled(),
+                visibleLodPreview.visiblePreviewDrawExecuted(),
+                visibleLodPreview.minecraftMainFramebufferDrawn(),
+                visibleLodPreview.visibleTerrainPreviewOnly(),
+                visibleLodPreview.productionLiveRendererDrawExecuted(),
+                visibleLodPreview.k8FormalGeometryUsed()
+                        && visibleLodPreview.k9TerrainShaderIntegrationUsed()
+                        && visibleLodPreview.k6RealSectionCommandUsed()
+                        && !visibleLodPreview.syntheticDrawFixtureUsed(),
                 terrainRendererOwner.formalTerrainShaderReady(),
                 terrainRendererOwner.previewSystemsSeparated(),
                 terrainRendererOwner.sampleSetUsedAsFormalSource() || terrainShaderIntegration.sampleSetUsedAsFormalSource(),
