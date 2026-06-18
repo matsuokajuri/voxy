@@ -559,6 +559,31 @@ final class ForgeFormalModelIdSectionGeometryPath {
         return toLongArray(records);
     }
 
+    PreviewRecord[] copyPreviewRecordsInterleavedDetailed(int maxRecords) {
+        if (maxRecords <= 0 || this.snapshots.isEmpty()) {
+            return new PreviewRecord[0];
+        }
+        List<PreviewRecord> records = new ArrayList<>();
+        for (int offset = 0; records.size() < maxRecords; offset++) {
+            boolean any = false;
+            for (FormalSectionSnapshot snapshot : this.snapshots) {
+                long[] snapshotRecords = snapshot.records();
+                if (offset >= snapshotRecords.length) {
+                    continue;
+                }
+                records.add(new PreviewRecord(snapshotRecords[offset], snapshot.position(), snapshot.chunkX(), snapshot.chunkZ()));
+                any = true;
+                if (records.size() >= maxRecords) {
+                    break;
+                }
+            }
+            if (!any) {
+                break;
+            }
+        }
+        return records.toArray(PreviewRecord[]::new);
+    }
+
     String previewSectionPositionsSummary() {
         if (this.snapshots.isEmpty()) {
             return "none";
@@ -876,6 +901,9 @@ final class ForgeFormalModelIdSectionGeometryPath {
 
     private static double elapsedMs(long startNanos) {
         return startNanos == 0L ? 0.0D : (System.nanoTime() - startNanos) / 1_000_000.0D;
+    }
+
+    record PreviewRecord(long record, long sectionPosition, int chunkX, int chunkZ) {
     }
 
     private record FormalSectionSnapshot(String dimension, long position, int chunkX, int chunkZ, long[] records) {

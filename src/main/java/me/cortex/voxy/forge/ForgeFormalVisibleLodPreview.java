@@ -2,6 +2,7 @@ package me.cortex.voxy.forge;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
+import me.cortex.voxy.common.world.WorldEngine;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.client.event.RenderLevelStageEvent;
@@ -34,6 +35,7 @@ final class ForgeFormalVisibleLodPreview {
     static final String STAGE = "K10_FORMAL_VISIBLE_LOD_PREVIEW_DEBUG_TOGGLE";
     static final String K12_K13_STAGE = "K12_K13_FORMAL_VISIBLE_PREVIEW_PREPARE_BUDGET_AND_REUSE";
     static final String K14_K16_STAGE = "K14_K16_FORMAL_MULTI_SECTION_PREVIEW_PIPELINE";
+    static final String K17_K18_STAGE = "K17_K18_FORMAL_WORLD_PLACED_PREVIEW_GEOMETRY";
     private static final boolean DEFAULT_ENABLED = false;
     private static final boolean DEBUG_OPT_IN_ONLY = true;
     private static final int QA_VISIBLE_FRAMES = 1;
@@ -49,6 +51,7 @@ final class ForgeFormalVisibleLodPreview {
     private static final float OBSERVE_PREVIEW_SCALE = 1.75F;
     private static final int MULTI_SECTION_PREVIEW_MAX_RECORDS = 16;
     private static final int OBSERVE_MAX_DRAW_INDICES = MULTI_SECTION_PREVIEW_MAX_RECORDS * 6;
+    private static final int PREVIEW_SECTION_DATA_BINDING_INDEX = 6;
     private static final String DRAW_INPUT_SOURCE = "K8FormalGeometryAndK9Shader";
     private static final String RENDER_HOOK_NAME = "RenderLevelStageEvent.AFTER_TRANSLUCENT_BLOCKS";
     private static final String RENDER_HOOK_SCOPE = "K10_visible_preview_only";
@@ -72,6 +75,10 @@ final class ForgeFormalVisibleLodPreview {
 
             layout(std430, binding = 5) readonly buffer PositionScratch {
                 uvec2 positionScratch[];
+            };
+
+            layout(std430, binding = 6) readonly buffer PreviewSectionData {
+                vec4 sectionData[];
             };
 
             uniform mat4 modelViewMatrix;
@@ -110,6 +117,33 @@ final class ForgeFormalVisibleLodPreview {
 
             uint extractFace(uvec2 quad) {
                 return quad.x & 7u;
+            }
+
+            uint extractLength(uvec2 quad) {
+                return ((quad.x >> 3u) & 15u) + 1u;
+            }
+
+            uint extractWidth(uvec2 quad) {
+                return ((quad.x >> 7u) & 15u) + 1u;
+            }
+
+            vec3 extractLocalPos(uvec2 quad) {
+                return vec3(
+                    float((quad.x >> 21u) & 31u),
+                    float((quad.x >> 16u) & 31u),
+                    float((quad.x >> 11u) & 31u)
+                );
+            }
+
+            vec3 quadCornerOffset(uint face, vec2 corner, vec2 size) {
+                uint axis = face >> 1u;
+                if (axis == 0u) {
+                    return vec3(corner.x * size.x, 0.0, corner.y * size.y);
+                }
+                if (axis == 1u) {
+                    return vec3(corner.x * size.x, corner.y * size.y, 0.0);
+                }
+                return vec3(0.0, corner.x * size.x, corner.y * size.y);
             }
 
             void main() {
@@ -155,15 +189,14 @@ final class ForgeFormalVisibleLodPreview {
                 vFace = face;
                 vFaceData = faceData;
 
-                float slot = float(recordIndex % 4u);
-                float row = float((recordIndex / 4u) % 3u);
-                float jitter = float((positionScratch[0].x ^ positionScratch[0].y) & 3u) * 0.04;
-                vec2 local = (corner - vec2(0.5)) * previewScale
-                    + vec2((slot - 1.5) * previewScale * 1.16 + jitter, row * previewScale * 1.16);
+                vec4 section = sectionData[recordIndex];
+                float lodScale = max(section.w, 1.0);
+                vec3 localPos = extractLocalPos(rawQuad);
+                vec2 quadSize = vec2(float(extractLength(rawQuad)), float(extractWidth(rawQuad)));
+                vec3 worldPos = section.xyz + (localPos + quadCornerOffset(face, corner, quadSize)) * lodScale;
                 if (observeMode != 0u) {
-                    local.y += previewScale * 0.35;
+                    worldPos += vec3(0.0, 0.035 * previewScale, 0.0);
                 }
-                vec3 worldPos = previewCenter + previewRight * local.x + previewUp * local.y;
                 gl_Position = projectionMatrix * modelViewMatrix * vec4(worldPos, 1.0);
             }
             """;
@@ -360,6 +393,16 @@ final class ForgeFormalVisibleLodPreview {
     private String multiSectionPreviewModelIds = "none";
     private boolean singleSectionFallbackUsed;
     private boolean multiSectionSyntheticFallbackUsed;
+    private boolean worldPlacedPreviewReady;
+    private boolean worldPlacedPreviewUsed;
+    private boolean packedQuadLocalPositionUsed;
+    private boolean sectionWorldBaseUsed;
+    private boolean sectionLodScaleUsed;
+    private boolean previewSectionSidecarBufferCreated;
+    private int previewSectionDataBufferId;
+    private int worldPlacedPreviewRecordCount;
+    private String worldPlacedPreviewSectionBases = "none";
+    private boolean cameraBillboardFallbackUsed;
     private int commandBufferId;
     private int drawCountBufferId;
     private int positionScratchBufferId;
@@ -463,6 +506,11 @@ final class ForgeFormalVisibleLodPreview {
                     && this.multiSectionPreviewDrawRecordCount > 1
                     && !this.singleSectionFallbackUsed
                     && !this.multiSectionSyntheticFallbackUsed;
+            this.worldPlacedPreviewReady = this.ownerReady
+                    && this.worldPlacedPreviewUsed
+                    && this.previewSectionSidecarBufferCreated
+                    && this.worldPlacedPreviewRecordCount > 0
+                    && !this.cameraBillboardFallbackUsed;
             if (this.ownerReady) {
                 this.stale = false;
                 this.requiresRebuild = false;
@@ -928,6 +976,17 @@ final class ForgeFormalVisibleLodPreview {
                 this.multiSectionPreviewModelIds,
                 this.singleSectionFallbackUsed,
                 this.multiSectionSyntheticFallbackUsed,
+                K17_K18_STAGE,
+                this.worldPlacedPreviewReady,
+                this.worldPlacedPreviewUsed,
+                this.packedQuadLocalPositionUsed,
+                this.sectionWorldBaseUsed,
+                this.sectionLodScaleUsed,
+                this.previewSectionSidecarBufferCreated,
+                this.previewSectionDataBufferId,
+                this.worldPlacedPreviewRecordCount,
+                this.worldPlacedPreviewSectionBases,
+                this.cameraBillboardFallbackUsed,
                 this.previewWorldBounds,
                 this.previewCameraDistance,
                 this.visiblePreviewWasEnabledDuringQa,
@@ -1902,19 +1961,22 @@ final class ForgeFormalVisibleLodPreview {
 
     private void createValidationDrawBuffers(ForgeFormalCmdgenRealSectionDryRunStats k6, ForgeFormalModelIdSectionGeometryStats k8) {
         this.glAllocationRuns++;
-        long[] previewRecords = this.instance.getFormalModelIdSectionGeometryPath()
-                .copyPreviewRecordsInterleaved(MULTI_SECTION_PREVIEW_MAX_RECORDS);
+        ForgeFormalModelIdSectionGeometryPath.PreviewRecord[] previewRecords = this.instance.getFormalModelIdSectionGeometryPath()
+                .copyPreviewRecordsInterleavedDetailed(MULTI_SECTION_PREVIEW_MAX_RECORDS);
         if (previewRecords.length == 0) {
             throw new IllegalStateException("empty-multi-section-preview-records");
         }
+        long[] previewRecordValues = copyPreviewRecordValues(previewRecords);
         this.geometryBufferId = GL45C.glCreateBuffers();
+        this.previewSectionDataBufferId = GL45C.glCreateBuffers();
         this.geometryBufferOwnedByK10 = true;
         this.commandBufferId = GL45C.glCreateBuffers();
         this.drawCountBufferId = GL45C.glCreateBuffers();
         this.indexBufferId = GL45C.glCreateBuffers();
         this.positionScratchBufferId = GL45C.glCreateBuffers();
         this.vertexArrayId = GL30C.glGenVertexArrays();
-        uploadLongs(this.geometryBufferId, previewRecords, GL15C.GL_STATIC_DRAW);
+        uploadLongs(this.geometryBufferId, previewRecordValues, GL15C.GL_STATIC_DRAW);
+        uploadFloats(this.previewSectionDataBufferId, createPreviewSectionData(previewRecords), GL15C.GL_STATIC_DRAW);
         uploadInts(this.commandBufferId, new int[] {
                 this.k6FirstCommandCount,
                 this.k6FirstCommandInstanceCount,
@@ -1942,7 +2004,7 @@ final class ForgeFormalVisibleLodPreview {
         this.multiSectionPreviewDrawRecordCount = Math.min(previewRecords.length, MULTI_SECTION_PREVIEW_MAX_RECORDS);
         this.multiSectionPreviewDrawCapped = k8.formalGeometrySnapshotRecordCount() > this.multiSectionPreviewDrawRecordCount;
         this.multiSectionPreviewSectionPositions = this.instance.getFormalModelIdSectionGeometryPath().previewSectionPositionsSummary();
-        this.multiSectionPreviewModelIds = collectPreviewModelIds(previewRecords);
+        this.multiSectionPreviewModelIds = collectPreviewModelIds(previewRecordValues);
         this.multiSectionPreviewInputReady = k8.formalGeometrySnapshotSectionCount() > 1
                 && k8.formalGeometrySnapshotRecordCount() > 1
                 && k8.realSectionInputUsed();
@@ -1955,6 +2017,21 @@ final class ForgeFormalVisibleLodPreview {
                 && this.multiSectionPreviewDrawRecordLimit == MULTI_SECTION_PREVIEW_MAX_RECORDS;
         this.singleSectionFallbackUsed = k8.formalGeometrySnapshotSectionCount() <= 1;
         this.multiSectionSyntheticFallbackUsed = this.syntheticDrawFixtureUsed;
+        this.previewSectionSidecarBufferCreated = this.previewSectionDataBufferId != 0;
+        this.worldPlacedPreviewRecordCount = previewRecords.length;
+        this.worldPlacedPreviewSectionBases = formatPreviewSectionBases(previewRecords);
+        this.packedQuadLocalPositionUsed = true;
+        this.sectionWorldBaseUsed = true;
+        this.sectionLodScaleUsed = true;
+        this.cameraBillboardFallbackUsed = false;
+        this.worldPlacedPreviewUsed = this.previewSectionSidecarBufferCreated
+                && this.packedQuadLocalPositionUsed
+                && this.sectionWorldBaseUsed
+                && this.sectionLodScaleUsed
+                && !this.cameraBillboardFallbackUsed;
+        this.worldPlacedPreviewReady = this.worldPlacedPreviewUsed
+                && this.multiSectionFormalGeometryUsed
+                && this.worldPlacedPreviewRecordCount > 0;
     }
 
     private void executeVisiblePreviewDraw(
@@ -1968,6 +2045,7 @@ final class ForgeFormalVisibleLodPreview {
         int oldModelBuffer = GL30C.glGetIntegeri(GL43C.GL_SHADER_STORAGE_BUFFER_BINDING, ForgeFormalShaderInputBindingLayout.MODEL_DATA_BINDING_INDEX);
         int oldColourBuffer = GL30C.glGetIntegeri(GL43C.GL_SHADER_STORAGE_BUFFER_BINDING, ForgeFormalShaderInputBindingLayout.MODEL_COLOUR_BINDING_INDEX);
         int oldPositionScratch = GL30C.glGetIntegeri(GL43C.GL_SHADER_STORAGE_BUFFER_BINDING, ForgeFormalShaderInputBindingLayout.POSITION_SCRATCH_BINDING_INDEX);
+        int oldPreviewSectionData = GL30C.glGetIntegeri(GL43C.GL_SHADER_STORAGE_BUFFER_BINDING, PREVIEW_SECTION_DATA_BINDING_INDEX);
         int oldActiveTexture = GL11C.glGetInteger(GL13C.GL_ACTIVE_TEXTURE);
         GL13C.glActiveTexture(GL13C.GL_TEXTURE0 + ForgeFormalShaderInputBindingLayout.BLOCK_MODEL_ATLAS_TEXTURE_UNIT);
         int oldTexture = GL11C.glGetInteger(GL11C.GL_TEXTURE_BINDING_2D);
@@ -2030,6 +2108,7 @@ final class ForgeFormalVisibleLodPreview {
                 GL30C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, ForgeFormalShaderInputBindingLayout.MODEL_DATA_BINDING_INDEX, this.modelDataBufferId);
                 GL30C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, ForgeFormalShaderInputBindingLayout.MODEL_COLOUR_BINDING_INDEX, this.modelColourBufferId);
                 GL30C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, ForgeFormalShaderInputBindingLayout.POSITION_SCRATCH_BINDING_INDEX, this.positionScratchBufferId);
+                GL30C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, PREVIEW_SECTION_DATA_BINDING_INDEX, this.previewSectionDataBufferId);
                 GL11C.glBindTexture(GL11C.GL_TEXTURE_2D, this.atlasTextureId);
                 GL33C.glBindSampler(ForgeFormalShaderInputBindingLayout.BLOCK_MODEL_ATLAS_TEXTURE_UNIT, this.samplerId);
 
@@ -2038,6 +2117,7 @@ final class ForgeFormalVisibleLodPreview {
                             && GL30C.glGetIntegeri(GL43C.GL_SHADER_STORAGE_BUFFER_BINDING, ForgeFormalShaderInputBindingLayout.MODEL_DATA_BINDING_INDEX) == this.modelDataBufferId
                             && GL30C.glGetIntegeri(GL43C.GL_SHADER_STORAGE_BUFFER_BINDING, ForgeFormalShaderInputBindingLayout.MODEL_COLOUR_BINDING_INDEX) == this.modelColourBufferId
                             && GL30C.glGetIntegeri(GL43C.GL_SHADER_STORAGE_BUFFER_BINDING, ForgeFormalShaderInputBindingLayout.POSITION_SCRATCH_BINDING_INDEX) == this.positionScratchBufferId
+                            && GL30C.glGetIntegeri(GL43C.GL_SHADER_STORAGE_BUFFER_BINDING, PREVIEW_SECTION_DATA_BINDING_INDEX) == this.previewSectionDataBufferId
                             && GL11C.glGetInteger(GL11C.GL_TEXTURE_BINDING_2D) == this.atlasTextureId
                             && GL30C.glGetIntegeri(GL33C.GL_SAMPLER_BINDING, ForgeFormalShaderInputBindingLayout.BLOCK_MODEL_ATLAS_TEXTURE_UNIT) == this.samplerId;
                     if (!bindingsOk) {
@@ -2096,6 +2176,7 @@ final class ForgeFormalVisibleLodPreview {
             GL30C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, ForgeFormalShaderInputBindingLayout.MODEL_DATA_BINDING_INDEX, oldModelBuffer);
             GL30C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, ForgeFormalShaderInputBindingLayout.MODEL_COLOUR_BINDING_INDEX, oldColourBuffer);
             GL30C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, ForgeFormalShaderInputBindingLayout.POSITION_SCRATCH_BINDING_INDEX, oldPositionScratch);
+            GL30C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, PREVIEW_SECTION_DATA_BINDING_INDEX, oldPreviewSectionData);
             GL11C.glBindTexture(GL11C.GL_TEXTURE_2D, oldTexture);
             GL33C.glBindSampler(ForgeFormalShaderInputBindingLayout.BLOCK_MODEL_ATLAS_TEXTURE_UNIT, oldSampler);
             GL13C.glActiveTexture(oldActiveTexture);
@@ -2191,6 +2272,9 @@ final class ForgeFormalVisibleLodPreview {
         if (this.geometryBufferOwnedByK10 && this.geometryBufferId != 0) {
             GL15C.glDeleteBuffers(this.geometryBufferId);
         }
+        if (this.previewSectionDataBufferId != 0) {
+            GL15C.glDeleteBuffers(this.previewSectionDataBufferId);
+        }
         if (this.indexBufferId != 0) {
             GL15C.glDeleteBuffers(this.indexBufferId);
         }
@@ -2206,6 +2290,7 @@ final class ForgeFormalVisibleLodPreview {
         this.visiblePreviewShaderProgramId = 0;
         this.vertexArrayId = 0;
         this.geometryBufferOwnedByK10 = false;
+        this.previewSectionDataBufferId = 0;
         this.indexBufferId = 0;
         this.commandBufferId = 0;
         this.drawCountBufferId = 0;
@@ -2299,6 +2384,16 @@ final class ForgeFormalVisibleLodPreview {
         this.multiSectionPreviewModelIds = "none";
         this.singleSectionFallbackUsed = false;
         this.multiSectionSyntheticFallbackUsed = false;
+        this.worldPlacedPreviewReady = false;
+        this.worldPlacedPreviewUsed = false;
+        this.packedQuadLocalPositionUsed = false;
+        this.sectionWorldBaseUsed = false;
+        this.sectionLodScaleUsed = false;
+        this.previewSectionSidecarBufferCreated = false;
+        this.previewSectionDataBufferId = 0;
+        this.worldPlacedPreviewRecordCount = 0;
+        this.worldPlacedPreviewSectionBases = "none";
+        this.cameraBillboardFallbackUsed = false;
         this.k6FirstCommandCount = 0;
         this.k6FirstCommandInstanceCount = 0;
         this.k6FirstCommandFirstIndex = 0;
@@ -2364,6 +2459,18 @@ final class ForgeFormalVisibleLodPreview {
         }
     }
 
+    private static void uploadFloats(int bufferId, float[] values, int usage) {
+        long ptr = MemoryUtil.nmemAlloc((long) values.length * Float.BYTES);
+        try {
+            for (int i = 0; i < values.length; i++) {
+                MemoryUtil.memPutFloat(ptr + ((long) i * Float.BYTES), values[i]);
+            }
+            GL45C.nglNamedBufferData(bufferId, (long) values.length * Float.BYTES, ptr, usage);
+        } finally {
+            MemoryUtil.nmemFree(ptr);
+        }
+    }
+
     private static void uploadShorts(int bufferId, short[] values, int usage) {
         long ptr = MemoryUtil.nmemAlloc((long) values.length * Short.BYTES);
         try {
@@ -2374,6 +2481,45 @@ final class ForgeFormalVisibleLodPreview {
         } finally {
             MemoryUtil.nmemFree(ptr);
         }
+    }
+
+    private static long[] copyPreviewRecordValues(ForgeFormalModelIdSectionGeometryPath.PreviewRecord[] records) {
+        long[] values = new long[records.length];
+        for (int i = 0; i < records.length; i++) {
+            values[i] = records[i].record();
+        }
+        return values;
+    }
+
+    private static float[] createPreviewSectionData(ForgeFormalModelIdSectionGeometryPath.PreviewRecord[] records) {
+        float[] values = new float[records.length * 4];
+        for (int i = 0; i < records.length; i++) {
+            long position = records[i].sectionPosition();
+            int level = Math.max(0, WorldEngine.getLevel(position));
+            float scale = (float) (1 << Math.min(level, 12));
+            int base = i * 4;
+            values[base] = WorldEngine.getX(position) * 32.0F * scale;
+            values[base + 1] = WorldEngine.getY(position) * 32.0F * scale;
+            values[base + 2] = WorldEngine.getZ(position) * 32.0F * scale;
+            values[base + 3] = scale;
+        }
+        return values;
+    }
+
+    private static String formatPreviewSectionBases(ForgeFormalModelIdSectionGeometryPath.PreviewRecord[] records) {
+        return java.util.Arrays.stream(records)
+                .map(record -> {
+                    long position = record.sectionPosition();
+                    int level = Math.max(0, WorldEngine.getLevel(position));
+                    int scale = 1 << Math.min(level, 12);
+                    int x = Math.round(WorldEngine.getX(position) * 32.0F * scale);
+                    int y = Math.round(WorldEngine.getY(position) * 32.0F * scale);
+                    int z = Math.round(WorldEngine.getZ(position) * 32.0F * scale);
+                    return x + "," + y + "," + z + "@" + scale;
+                })
+                .distinct()
+                .limit(8)
+                .collect(Collectors.joining("|"));
     }
 
     private static String collectPreviewModelIds(long[] records) {

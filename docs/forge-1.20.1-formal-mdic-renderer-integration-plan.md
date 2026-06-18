@@ -818,3 +818,24 @@ The production path still needs formal traversal, production command
 generation, formal MDIC command buffer ownership, full terrain shader semantics,
 and a default-disabled live renderer integration step before the project can
 leave preview-only rendering.
+
+## K17/K18 world-placed preview note
+
+K17/K18 changes the K10 visible preview from a camera-relative proof panel into
+a preview-only world-placed packed-quad sample. The sidecar buffer supplies the
+section base and LoD scale that the original Voxy shader obtains through section
+metadata and position scratch concepts:
+
+```text
+K8 formal packed record
+ + K8 section position
+ -> K10-owned section sidecar buffer
+ -> shader decodes packed local position / size / face
+ -> world-space visible preview quad
+```
+
+The sidecar is intentionally scoped to preview validation. It is not a
+production section metadata buffer, not a formal MDIC command resource, and not
+owned by the live renderer. Production integration still requires a formal
+section metadata owner, operational production cmdgen, and live MDIC draw
+ownership.

@@ -617,6 +617,10 @@ public final class ForgeVoxyCommands {
                         .executes(ctx -> formalVisibleLodPreviewMultiSectionStatus(ctx.getSource())))
                 .then(Commands.literal("qa_k14_k16_multi_section_visible_preview")
                         .executes(ctx -> qaK14K16MultiSectionVisiblePreview(ctx.getSource())))
+                .then(Commands.literal("formal_visible_lod_preview_world_placed_status")
+                        .executes(ctx -> formalVisibleLodPreviewWorldPlacedStatus(ctx.getSource())))
+                .then(Commands.literal("qa_k17_k18_world_placed_visible_preview")
+                        .executes(ctx -> qaK17K18WorldPlacedVisiblePreview(ctx.getSource())))
                 .then(Commands.literal("formal_renderer_check")
                         .executes(ctx -> formalRendererCheck(ctx.getSource())))
                 .then(Commands.literal("formal_renderer_status")
@@ -6433,6 +6437,35 @@ public final class ForgeVoxyCommands {
                 && !status.actualRendererDrawEnabled() ? 1 : 0;
     }
 
+    private static int formalVisibleLodPreviewWorldPlacedStatus(CommandSourceStack source) {
+        ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview().createStatusSnapshot();
+        source.sendSuccess(() -> Component.literal("Voxy K17/K18 world-placed visible preview status: "
+                + formatFormalVisibleLodPreviewWorldPlacedStatus(status)), false);
+        return status.worldPlacedPreviewReady()
+                && !status.formalRendererReady()
+                && !status.actualRendererDrawEnabled() ? 1 : 0;
+    }
+
+    private static int qaK17K18WorldPlacedVisiblePreview(CommandSourceStack source) {
+        ForgeVoxyRuntimeOverrides.applyFormalVisibleLodPreviewDebugPreset();
+        boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
+        ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview()
+                .requestPreviewPrepare("qa-k17-k18-world-placed-visible-preview");
+        boolean previewPrepared = status.visibleLodPreviewOwnerReady() && !status.stale();
+        source.sendSuccess(() -> Component.literal("Voxy QA K17/K18 world-placed visible preview: "
+                + (engineReady ? "WorldEngine active. " : "No active client world; prepare may wait/fail safely. ")
+                + formatFormalVisibleLodPreviewWorldPlacedStatus(status)
+                + " next=/voxy formal_visible_lod_preview_world_placed_status; after prepared, use /voxy formal_visible_lod_preview_observe_enable"), false);
+        return (previewPrepared || status.observePrepareRequested() || status.observePrepareInProgress())
+                && status.observeEnableCommandReturnedQuickly()
+                && !status.observeEnableDidGlWorkOnCommandThread()
+                && !status.observeEnableDidReadbackOnCommandThread()
+                && !status.observeEnableDidSynchronousRebuild()
+                && !status.cameraBillboardFallbackUsed()
+                && !status.formalRendererReady()
+                && !status.actualRendererDrawEnabled() ? 1 : 0;
+    }
+
     private static int formalRendererCheck(CommandSourceStack source) {
         ForgeFormalRendererStats status = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("command-check");
         source.sendSuccess(() -> Component.literal("Voxy formal renderer check: " + formatFormalRendererStatus(status)), false);
@@ -8657,6 +8690,48 @@ public final class ForgeVoxyCommands {
                 status.syntheticDrawFixtureUsed(),
                 status.formalModelIdDecodeOk(),
                 status.sampleSetUsedAsFormalSource(),
+                status.originalGeometryHeapMutated(),
+                status.debugMdicCommandBuffersUsedAsFormal(),
+                status.lastFailureReason()
+        );
+    }
+
+    private static String formatFormalVisibleLodPreviewWorldPlacedStatus(ForgeFormalVisibleLodPreviewStats status) {
+        return String.format(
+                "stage=%s k17_k18_stage=%s previewPrepared=%s prepareRequested=%s prepareInProgress=%s prepareCompleted=%s "
+                        + "worldPlacedPreviewReady=%s worldPlacedPreviewUsed=%s packedQuadLocalPositionUsed=%s sectionWorldBaseUsed=%s sectionLodScaleUsed=%s "
+                        + "previewSectionSidecarBufferCreated=%s previewSectionDataBufferId=%d worldPlacedPreviewRecordCount=%d worldPlacedPreviewSectionBases=%s cameraBillboardFallbackUsed=%s "
+                        + "multiSectionPreviewPipelineReady=%s multiSectionPreviewSectionCount=%d multiSectionPreviewDrawRecordCount=%d multiSectionPreviewDrawCapped=%s "
+                        + "visiblePreviewEnabled=%s visiblePreviewDrawExecuted=%s visiblePreviewFrameCount=%d k8FormalGeometryUsed=%s k9TerrainShaderIntegrationUsed=%s k6RealSectionCommandUsed=%s "
+                        + "syntheticDrawFixtureUsed=%s originalGeometryHeapMutated=%s debugMdicCommandBuffersUsedAsFormal=%s visibleTerrainPreviewOnly=true "
+                        + "productionLiveRendererDrawExecuted=false formalDrawPipelineReady=false formalRendererReady=false actualRendererDrawEnabled=false lastFailureReason=%s",
+                status.stage(),
+                status.k17K18Stage(),
+                status.visibleLodPreviewOwnerReady() && !status.stale(),
+                status.observePrepareRequested(),
+                status.observePrepareInProgress(),
+                status.observePrepareCompleted(),
+                status.worldPlacedPreviewReady(),
+                status.worldPlacedPreviewUsed(),
+                status.packedQuadLocalPositionUsed(),
+                status.sectionWorldBaseUsed(),
+                status.sectionLodScaleUsed(),
+                status.previewSectionSidecarBufferCreated(),
+                status.previewSectionDataBufferId(),
+                status.worldPlacedPreviewRecordCount(),
+                status.worldPlacedPreviewSectionBases(),
+                status.cameraBillboardFallbackUsed(),
+                status.multiSectionPreviewPipelineReady(),
+                status.multiSectionPreviewSectionCount(),
+                status.multiSectionPreviewDrawRecordCount(),
+                status.multiSectionPreviewDrawCapped(),
+                status.visiblePreviewEnabled(),
+                status.visiblePreviewDrawExecuted(),
+                status.visiblePreviewFrameCount(),
+                status.k8FormalGeometryUsed(),
+                status.k9TerrainShaderIntegrationUsed(),
+                status.k6RealSectionCommandUsed(),
+                status.syntheticDrawFixtureUsed(),
                 status.originalGeometryHeapMutated(),
                 status.debugMdicCommandBuffersUsedAsFormal(),
                 status.lastFailureReason()

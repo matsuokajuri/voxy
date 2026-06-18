@@ -774,6 +774,29 @@ live MDIC renderer integration remain incomplete. The renderer status must
 continue to report `formalDrawPipelineReady=false`, `formalRendererReady=false`,
 and `actualRendererDrawEnabled=false`.
 
+## K17/K18 world-placed preview geometry note
+
+K17/K18 adds preview-only evidence that the visible shader can consume the
+formal packed quad local-position fields together with section base data. K10
+now owns a tiny section sidecar buffer for the selected preview records and
+reports:
+
+```text
+worldPlacedPreviewReady
+worldPlacedPreviewUsed
+packedQuadLocalPositionUsed
+sectionWorldBaseUsed
+sectionLodScaleUsed
+previewSectionSidecarBufferCreated
+cameraBillboardFallbackUsed
+```
+
+The old camera-facing billboard/grid is no longer the intended success path for
+the formal visible preview. However, this is still not renderer readiness:
+formal traversal, production command generation, formal MDIC live integration,
+lightmap, material alpha, translucency, and shaderpack semantics remain
+blockers.
+
 Those flags mean the current formal shader resources can produce audited
 textured preview pixels offscreen. They do not mean the formal textured shader
 or renderer is ready. The readiness boundary remains:

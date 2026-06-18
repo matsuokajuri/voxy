@@ -942,3 +942,25 @@ K10. It still does not call `MDICSectionRenderer`, does not call
 `VoxyRenderSystem`, does not mutate the original geometry heap, and still
 reports `formalDrawPipelineReady=false`, `formalRendererReady=false`, and
 `actualRendererDrawEnabled=false`.
+
+## K17/K18 status note
+
+K17/K18 moves the visible preview geometry one step closer to the original Voxy
+shader placement model. Instead of drawing the bounded K10 preview records as a
+camera-facing grid, K10 now builds a preview-only sidecar buffer containing the
+section world base and LoD scale for each selected formal packed record. The
+visible shader uses the packed quad local position, packed size, face axis, and
+section base to place the preview quads in world space.
+
+New compact commands:
+
+```text
+/voxy qa_k17_k18_world_placed_visible_preview
+/voxy formal_visible_lod_preview_world_placed_status
+```
+
+This remains a K10-owned visible preview buffer, not a live geometry heap and
+not a production MDIC renderer input. The stage does not call
+`MDICSectionRenderer`, does not call `VoxyRenderSystem`, does not run production
+`cmdgen.comp`, and does not change `formalDrawPipelineReady=false`,
+`formalRendererReady=false`, or `actualRendererDrawEnabled=false`.
