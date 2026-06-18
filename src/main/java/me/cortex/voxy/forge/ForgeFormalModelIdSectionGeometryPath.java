@@ -534,6 +534,40 @@ final class ForgeFormalModelIdSectionGeometryPath {
         this.formalGeometryModelIds = collectFormalModelIds(this.flattenedSnapshotRecords);
     }
 
+    long[] copyPreviewRecordsInterleaved(int maxRecords) {
+        if (maxRecords <= 0 || this.snapshots.isEmpty()) {
+            return new long[0];
+        }
+        List<Long> records = new ArrayList<>();
+        for (int offset = 0; records.size() < maxRecords; offset++) {
+            boolean any = false;
+            for (FormalSectionSnapshot snapshot : this.snapshots) {
+                long[] snapshotRecords = snapshot.records();
+                if (offset >= snapshotRecords.length) {
+                    continue;
+                }
+                records.add(snapshotRecords[offset]);
+                any = true;
+                if (records.size() >= maxRecords) {
+                    break;
+                }
+            }
+            if (!any) {
+                break;
+            }
+        }
+        return toLongArray(records);
+    }
+
+    String previewSectionPositionsSummary() {
+        if (this.snapshots.isEmpty()) {
+            return "none";
+        }
+        return this.snapshots.stream()
+                .map(snapshot -> snapshot.chunkX() + "," + snapshot.chunkZ() + ":" + Long.toUnsignedString(snapshot.position()))
+                .collect(Collectors.joining("|"));
+    }
+
     private boolean decodeSnapshotFormalModelIds() {
         if (this.flattenedSnapshotRecords.length == 0) {
             return false;

@@ -613,6 +613,10 @@ public final class ForgeVoxyCommands {
                         .executes(ctx -> qaK11FormalVisibleLodPreviewPrewarm(ctx.getSource())))
                 .then(Commands.literal("qa_k12_k13_visible_preview_prepare_reuse")
                         .executes(ctx -> qaK12K13VisiblePreviewPrepareReuse(ctx.getSource())))
+                .then(Commands.literal("formal_visible_lod_preview_multi_section_status")
+                        .executes(ctx -> formalVisibleLodPreviewMultiSectionStatus(ctx.getSource())))
+                .then(Commands.literal("qa_k14_k16_multi_section_visible_preview")
+                        .executes(ctx -> qaK14K16MultiSectionVisiblePreview(ctx.getSource())))
                 .then(Commands.literal("formal_renderer_check")
                         .executes(ctx -> formalRendererCheck(ctx.getSource())))
                 .then(Commands.literal("formal_renderer_status")
@@ -6400,6 +6404,35 @@ public final class ForgeVoxyCommands {
                 && !status.actualRendererDrawEnabled() ? 1 : 0;
     }
 
+    private static int formalVisibleLodPreviewMultiSectionStatus(CommandSourceStack source) {
+        ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview().createStatusSnapshot();
+        source.sendSuccess(() -> Component.literal("Voxy K14/K16 multi-section visible preview status: "
+                + formatFormalVisibleLodPreviewMultiSectionStatus(status)), false);
+        return status.multiSectionPreviewInputReady()
+                && !status.formalRendererReady()
+                && !status.actualRendererDrawEnabled() ? 1 : 0;
+    }
+
+    private static int qaK14K16MultiSectionVisiblePreview(CommandSourceStack source) {
+        ForgeVoxyRuntimeOverrides.applyFormalVisibleLodPreviewDebugPreset();
+        boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
+        ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview()
+                .requestPreviewPrepare("qa-k14-k16-multi-section-visible-preview");
+        boolean previewPrepared = status.visibleLodPreviewOwnerReady() && !status.stale();
+        source.sendSuccess(() -> Component.literal("Voxy QA K14/K16 multi-section visible preview: "
+                + (engineReady ? "WorldEngine active. " : "No active client world; prepare may wait/fail safely. ")
+                + formatFormalVisibleLodPreviewMultiSectionStatus(status)
+                + " next=/voxy formal_visible_lod_preview_multi_section_status; after prepared, use /voxy formal_visible_lod_preview_observe_enable"), false);
+        return (previewPrepared || status.observePrepareRequested() || status.observePrepareInProgress())
+                && status.observeEnableCommandReturnedQuickly()
+                && !status.observeEnableDidGlWorkOnCommandThread()
+                && !status.observeEnableDidReadbackOnCommandThread()
+                && !status.observeEnableDidSynchronousRebuild()
+                && !status.multiSectionSyntheticFallbackUsed()
+                && !status.formalRendererReady()
+                && !status.actualRendererDrawEnabled() ? 1 : 0;
+    }
+
     private static int formalRendererCheck(CommandSourceStack source) {
         ForgeFormalRendererStats status = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("command-check");
         source.sendSuccess(() -> Component.literal("Voxy formal renderer check: " + formatFormalRendererStatus(status)), false);
@@ -8579,6 +8612,54 @@ public final class ForgeVoxyCommands {
                 audit.voxyRenderSystemCalled(),
                 audit.formalRendererReady(),
                 audit.actualRendererDrawEnabled()
+        );
+    }
+
+    private static String formatFormalVisibleLodPreviewMultiSectionStatus(ForgeFormalVisibleLodPreviewStats status) {
+        return String.format(
+                "stage=%s k14_k16_stage=%s previewPrepared=%s prepareRequested=%s prepareInProgress=%s prepareCompleted=%s "
+                        + "multiSectionPreviewPipelineReady=%s multiSectionPreviewInputReady=%s multiSectionFormalGeometryUsed=%s multiSectionPreviewBudgetReady=%s "
+                        + "multiSectionPreviewSectionCount=%d multiSectionPreviewInputRecordCount=%d multiSectionPreviewDrawRecordLimit=%d multiSectionPreviewDrawRecordCount=%d multiSectionPreviewDrawCapped=%s "
+                        + "multiSectionPreviewSectionPositions=%s multiSectionPreviewModelIds=%s singleSectionFallbackUsed=%s multiSectionSyntheticFallbackUsed=%s "
+                        + "visiblePreviewEnabled=%s visiblePreviewDrawExecuted=%s visiblePreviewFrameCount=%d visiblePreviewDrawIndexCount=%d visiblePreviewDrawIndexCap=%d visiblePreviewDrawCountCapped=%s "
+                        + "k8FormalGeometryUsed=%s k9TerrainShaderIntegrationUsed=%s k6RealSectionCommandUsed=%s syntheticDrawFixtureUsed=%s "
+                        + "usesFormalModelIds=%s usesPlaceholderModelIds=false sampleSetUsedAsFormalSource=%s originalGeometryHeapMutated=%s debugMdicCommandBuffersUsedAsFormal=%s "
+                        + "visibleTerrainPreviewOnly=true productionLiveRendererDrawExecuted=false formalDrawPipelineReady=false formalRendererReady=false actualRendererDrawEnabled=false "
+                        + "lastFailureReason=%s",
+                status.stage(),
+                status.k14K16Stage(),
+                status.visibleLodPreviewOwnerReady() && !status.stale(),
+                status.observePrepareRequested(),
+                status.observePrepareInProgress(),
+                status.observePrepareCompleted(),
+                status.multiSectionPreviewPipelineReady(),
+                status.multiSectionPreviewInputReady(),
+                status.multiSectionFormalGeometryUsed(),
+                status.multiSectionPreviewBudgetReady(),
+                status.multiSectionPreviewSectionCount(),
+                status.multiSectionPreviewInputRecordCount(),
+                status.multiSectionPreviewDrawRecordLimit(),
+                status.multiSectionPreviewDrawRecordCount(),
+                status.multiSectionPreviewDrawCapped(),
+                status.multiSectionPreviewSectionPositions(),
+                status.multiSectionPreviewModelIds(),
+                status.singleSectionFallbackUsed(),
+                status.multiSectionSyntheticFallbackUsed(),
+                status.visiblePreviewEnabled(),
+                status.visiblePreviewDrawExecuted(),
+                status.visiblePreviewFrameCount(),
+                status.visiblePreviewDrawIndexCount(),
+                status.visiblePreviewDrawIndexCap(),
+                status.visiblePreviewDrawCountCapped(),
+                status.k8FormalGeometryUsed(),
+                status.k9TerrainShaderIntegrationUsed(),
+                status.k6RealSectionCommandUsed(),
+                status.syntheticDrawFixtureUsed(),
+                status.formalModelIdDecodeOk(),
+                status.sampleSetUsedAsFormalSource(),
+                status.originalGeometryHeapMutated(),
+                status.debugMdicCommandBuffersUsedAsFormal(),
+                status.lastFailureReason()
         );
     }
 

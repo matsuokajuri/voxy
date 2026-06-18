@@ -745,6 +745,35 @@ formalRendererDrawStarted=false
 actualRendererDrawEnabled=false
 ```
 
+## K14/K16 multi-section visible preview note
+
+K14/K16 adds readiness evidence that the visible preview can consume more than
+one real-section formal model-id geometry sample. K8 exposes a read-only,
+interleaved copy of its formal section snapshot, and K10 uploads a small
+K10-owned preview geometry buffer from that copy. The buffer is capped for
+manual observation and is not a live renderer geometry heap.
+
+The compact evidence fields are:
+
+```text
+multiSectionPreviewPipelineReady
+multiSectionPreviewInputReady
+multiSectionFormalGeometryUsed
+multiSectionPreviewSectionCount
+multiSectionPreviewInputRecordCount
+multiSectionPreviewDrawRecordLimit
+multiSectionPreviewDrawRecordCount
+multiSectionPreviewDrawCapped
+singleSectionFallbackUsed
+multiSectionSyntheticFallbackUsed
+```
+
+This does not remove the production renderer blockers. Formal visibility
+traversal, production command generation, full terrain shader semantics, and
+live MDIC renderer integration remain incomplete. The renderer status must
+continue to report `formalDrawPipelineReady=false`, `formalRendererReady=false`,
+and `actualRendererDrawEnabled=false`.
+
 Those flags mean the current formal shader resources can produce audited
 textured preview pixels offscreen. They do not mean the formal textured shader
 or renderer is ready. The readiness boundary remains:

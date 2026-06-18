@@ -918,3 +918,27 @@ resources and report `lastPrepareReusedExistingResources=true` without enabling
 visible preview drawing. Renderer readiness remains unchanged:
 `formalDrawPipelineReady=false`, `formalRendererReady=false`, and
 `actualRendererDrawEnabled=false`.
+
+## K14/K16 status note
+
+K14/K16 batches the next visible-preview hardening step without entering the
+production renderer boundary. K8 already builds a bounded formal model-id
+section geometry snapshot from real section records; K14/K16 makes K10 consume
+an interleaved, K10-owned preview copy of that snapshot so the visible preview
+can prove multi-section formal geometry input instead of a single rewritten
+quad sample.
+
+New compact commands:
+
+```text
+/voxy qa_k14_k16_multi_section_visible_preview
+/voxy formal_visible_lod_preview_multi_section_status
+```
+
+The draw remains capped and preview-only. `multiSectionPreviewPipelineReady`
+means the preview input contains more than one real section, uses formal model
+ids, avoids sample/debug ids, and uploads only a bounded preview buffer owned by
+K10. It still does not call `MDICSectionRenderer`, does not call
+`VoxyRenderSystem`, does not mutate the original geometry heap, and still
+reports `formalDrawPipelineReady=false`, `formalRendererReady=false`, and
+`actualRendererDrawEnabled=false`.

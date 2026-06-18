@@ -795,3 +795,26 @@ returns quickly with `lastPrepareReusedExistingResources=true` and
 `unnecessaryRebuildDetected=false`. Visible preview drawing still requires the
 explicit observe enable command, and the production MDIC renderer remains
 disabled.
+
+## K14/K16 multi-section preview integration note
+
+K14/K16 keeps the visible path below formal MDIC renderer integration but
+removes a preview-only single-record weakness. The K8 formal model-id geometry
+snapshot can contain multiple accepted real sections; K10 now builds a bounded,
+interleaved preview buffer from that snapshot and draws only that capped copy.
+
+This is intentionally not the production geometry ownership path:
+
+```text
+K8 formal section snapshot
+ -> interleaved K10-owned preview buffer
+ -> capped visible preview draw
+ -> no MDICSectionRenderer
+ -> no VoxyRenderSystem
+ -> no live geometry heap mutation
+```
+
+The production path still needs formal traversal, production command
+generation, formal MDIC command buffer ownership, full terrain shader semantics,
+and a default-disabled live renderer integration step before the project can
+leave preview-only rendering.

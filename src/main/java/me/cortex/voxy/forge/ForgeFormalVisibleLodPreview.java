@@ -33,6 +33,7 @@ import java.util.zip.CRC32;
 final class ForgeFormalVisibleLodPreview {
     static final String STAGE = "K10_FORMAL_VISIBLE_LOD_PREVIEW_DEBUG_TOGGLE";
     static final String K12_K13_STAGE = "K12_K13_FORMAL_VISIBLE_PREVIEW_PREPARE_BUDGET_AND_REUSE";
+    static final String K14_K16_STAGE = "K14_K16_FORMAL_MULTI_SECTION_PREVIEW_PIPELINE";
     private static final boolean DEFAULT_ENABLED = false;
     private static final boolean DEBUG_OPT_IN_ONLY = true;
     private static final int QA_VISIBLE_FRAMES = 1;
@@ -46,7 +47,8 @@ final class ForgeFormalVisibleLodPreview {
     private static final float NORMAL_PREVIEW_SCALE = 1.45F;
     private static final float OBSERVE_PREVIEW_DISTANCE = 5.0F;
     private static final float OBSERVE_PREVIEW_SCALE = 1.75F;
-    private static final int OBSERVE_MAX_DRAW_INDICES = 6;
+    private static final int MULTI_SECTION_PREVIEW_MAX_RECORDS = 16;
+    private static final int OBSERVE_MAX_DRAW_INDICES = MULTI_SECTION_PREVIEW_MAX_RECORDS * 6;
     private static final String DRAW_INPUT_SOURCE = "K8FormalGeometryAndK9Shader";
     private static final String RENDER_HOOK_NAME = "RenderLevelStageEvent.AFTER_TRANSLUCENT_BLOCKS";
     private static final String RENDER_HOOK_SCOPE = "K10_visible_preview_only";
@@ -344,6 +346,20 @@ final class ForgeFormalVisibleLodPreview {
     private int atlasTextureId;
     private int samplerId;
     private int formalGeometryRecordCount;
+    private boolean geometryBufferOwnedByK10;
+    private boolean multiSectionPreviewPipelineReady;
+    private boolean multiSectionPreviewInputReady;
+    private boolean multiSectionFormalGeometryUsed;
+    private boolean multiSectionPreviewBudgetReady;
+    private int multiSectionPreviewSectionCount;
+    private int multiSectionPreviewInputRecordCount;
+    private int multiSectionPreviewDrawRecordLimit = MULTI_SECTION_PREVIEW_MAX_RECORDS;
+    private int multiSectionPreviewDrawRecordCount;
+    private boolean multiSectionPreviewDrawCapped;
+    private String multiSectionPreviewSectionPositions = "none";
+    private String multiSectionPreviewModelIds = "none";
+    private boolean singleSectionFallbackUsed;
+    private boolean multiSectionSyntheticFallbackUsed;
     private int commandBufferId;
     private int drawCountBufferId;
     private int positionScratchBufferId;
@@ -424,7 +440,7 @@ final class ForgeFormalVisibleLodPreview {
             this.closeOwnedResourcesOnRenderThread();
             this.captureFormalModelReadbacks(k8);
             this.visiblePreviewShaderProgramId = this.compileVisiblePreviewShaderProgram();
-            this.createValidationDrawBuffers(k6);
+            this.createValidationDrawBuffers(k6, k8);
             this.ownerReady = this.renderHookRegistered
                     && this.visiblePreviewDefaultDisabledVerified
                     && this.visiblePreviewShaderProgramCompileOk
@@ -440,6 +456,13 @@ final class ForgeFormalVisibleLodPreview {
                     && this.modelColourReadOk
                     && this.drawCommandMatchesK6
                     && this.acceptedDrawCommandCount >= 1;
+            this.multiSectionPreviewPipelineReady = this.ownerReady
+                    && this.multiSectionPreviewInputReady
+                    && this.multiSectionFormalGeometryUsed
+                    && this.multiSectionPreviewBudgetReady
+                    && this.multiSectionPreviewDrawRecordCount > 1
+                    && !this.singleSectionFallbackUsed
+                    && !this.multiSectionSyntheticFallbackUsed;
             if (this.ownerReady) {
                 this.stale = false;
                 this.requiresRebuild = false;
@@ -891,6 +914,20 @@ final class ForgeFormalVisibleLodPreview {
                 this.prepareK9DurationMs,
                 this.prepareK10DurationMs,
                 this.prepareTimingSummary,
+                K14_K16_STAGE,
+                this.multiSectionPreviewPipelineReady,
+                this.multiSectionPreviewInputReady,
+                this.multiSectionFormalGeometryUsed,
+                this.multiSectionPreviewBudgetReady,
+                this.multiSectionPreviewSectionCount,
+                this.multiSectionPreviewInputRecordCount,
+                this.multiSectionPreviewDrawRecordLimit,
+                this.multiSectionPreviewDrawRecordCount,
+                this.multiSectionPreviewDrawCapped,
+                this.multiSectionPreviewSectionPositions,
+                this.multiSectionPreviewModelIds,
+                this.singleSectionFallbackUsed,
+                this.multiSectionSyntheticFallbackUsed,
                 this.previewWorldBounds,
                 this.previewCameraDistance,
                 this.visiblePreviewWasEnabledDuringQa,
@@ -1863,13 +1900,21 @@ final class ForgeFormalVisibleLodPreview {
         return shader;
     }
 
-    private void createValidationDrawBuffers(ForgeFormalCmdgenRealSectionDryRunStats k6) {
+    private void createValidationDrawBuffers(ForgeFormalCmdgenRealSectionDryRunStats k6, ForgeFormalModelIdSectionGeometryStats k8) {
         this.glAllocationRuns++;
+        long[] previewRecords = this.instance.getFormalModelIdSectionGeometryPath()
+                .copyPreviewRecordsInterleaved(MULTI_SECTION_PREVIEW_MAX_RECORDS);
+        if (previewRecords.length == 0) {
+            throw new IllegalStateException("empty-multi-section-preview-records");
+        }
+        this.geometryBufferId = GL45C.glCreateBuffers();
+        this.geometryBufferOwnedByK10 = true;
         this.commandBufferId = GL45C.glCreateBuffers();
         this.drawCountBufferId = GL45C.glCreateBuffers();
         this.indexBufferId = GL45C.glCreateBuffers();
         this.positionScratchBufferId = GL45C.glCreateBuffers();
         this.vertexArrayId = GL30C.glGenVertexArrays();
+        uploadLongs(this.geometryBufferId, previewRecords, GL15C.GL_STATIC_DRAW);
         uploadInts(this.commandBufferId, new int[] {
                 this.k6FirstCommandCount,
                 this.k6FirstCommandInstanceCount,
@@ -1890,6 +1935,26 @@ final class ForgeFormalVisibleLodPreview {
         if (!this.drawCommandMatchesK6) {
             throw new IllegalStateException("k6-command-copy-mismatch");
         }
+        this.formalGeometryRecordCount = previewRecords.length;
+        this.multiSectionPreviewSectionCount = k8.formalGeometrySnapshotSectionCount();
+        this.multiSectionPreviewInputRecordCount = k8.formalGeometrySnapshotRecordCount();
+        this.multiSectionPreviewDrawRecordLimit = MULTI_SECTION_PREVIEW_MAX_RECORDS;
+        this.multiSectionPreviewDrawRecordCount = Math.min(previewRecords.length, MULTI_SECTION_PREVIEW_MAX_RECORDS);
+        this.multiSectionPreviewDrawCapped = k8.formalGeometrySnapshotRecordCount() > this.multiSectionPreviewDrawRecordCount;
+        this.multiSectionPreviewSectionPositions = this.instance.getFormalModelIdSectionGeometryPath().previewSectionPositionsSummary();
+        this.multiSectionPreviewModelIds = collectPreviewModelIds(previewRecords);
+        this.multiSectionPreviewInputReady = k8.formalGeometrySnapshotSectionCount() > 1
+                && k8.formalGeometrySnapshotRecordCount() > 1
+                && k8.realSectionInputUsed();
+        this.multiSectionFormalGeometryUsed = this.geometryBufferId != 0
+                && this.geometryBufferOwnedByK10
+                && previewRecords.length > 1
+                && this.k8FormalGeometryUsed
+                && !this.syntheticDrawFixtureUsed;
+        this.multiSectionPreviewBudgetReady = previewRecords.length <= MULTI_SECTION_PREVIEW_MAX_RECORDS
+                && this.multiSectionPreviewDrawRecordLimit == MULTI_SECTION_PREVIEW_MAX_RECORDS;
+        this.singleSectionFallbackUsed = k8.formalGeometrySnapshotSectionCount() <= 1;
+        this.multiSectionSyntheticFallbackUsed = this.syntheticDrawFixtureUsed;
     }
 
     private void executeVisiblePreviewDraw(
@@ -1985,12 +2050,12 @@ final class ForgeFormalVisibleLodPreview {
                     GL43C.glMemoryBarrier(GL43C.GL_SHADER_STORAGE_BARRIER_BIT | GL43C.GL_TEXTURE_FETCH_BARRIER_BIT);
                 }
                 int commandIndexCount = Math.max(0, this.k6FirstCommandCount);
-                int drawIndexCount = this.observeModeEnabled
-                        ? Math.min(commandIndexCount, OBSERVE_MAX_DRAW_INDICES)
-                        : commandIndexCount;
+                int recordIndexCap = Math.max(1, this.multiSectionPreviewDrawRecordCount) * 6;
+                int drawIndexCap = Math.min(OBSERVE_MAX_DRAW_INDICES, recordIndexCap);
+                int drawIndexCount = Math.min(commandIndexCount, drawIndexCap);
                 this.visiblePreviewCommandIndexCount = commandIndexCount;
                 this.visiblePreviewDrawIndexCount = drawIndexCount;
-                this.visiblePreviewDrawIndexCap = OBSERVE_MAX_DRAW_INDICES;
+                this.visiblePreviewDrawIndexCap = drawIndexCap;
                 this.visiblePreviewDrawCountCapped = drawIndexCount < commandIndexCount;
                 GL11C.glDrawElements(
                         GL11C.GL_TRIANGLES,
@@ -2123,6 +2188,9 @@ final class ForgeFormalVisibleLodPreview {
         if (this.vertexArrayId != 0) {
             GL30C.glDeleteVertexArrays(this.vertexArrayId);
         }
+        if (this.geometryBufferOwnedByK10 && this.geometryBufferId != 0) {
+            GL15C.glDeleteBuffers(this.geometryBufferId);
+        }
         if (this.indexBufferId != 0) {
             GL15C.glDeleteBuffers(this.indexBufferId);
         }
@@ -2137,6 +2205,7 @@ final class ForgeFormalVisibleLodPreview {
         }
         this.visiblePreviewShaderProgramId = 0;
         this.vertexArrayId = 0;
+        this.geometryBufferOwnedByK10 = false;
         this.indexBufferId = 0;
         this.commandBufferId = 0;
         this.drawCountBufferId = 0;
@@ -2216,6 +2285,20 @@ final class ForgeFormalVisibleLodPreview {
         this.atlasTextureId = 0;
         this.samplerId = 0;
         this.formalGeometryRecordCount = 0;
+        this.geometryBufferOwnedByK10 = false;
+        this.multiSectionPreviewPipelineReady = false;
+        this.multiSectionPreviewInputReady = false;
+        this.multiSectionFormalGeometryUsed = false;
+        this.multiSectionPreviewBudgetReady = false;
+        this.multiSectionPreviewSectionCount = 0;
+        this.multiSectionPreviewInputRecordCount = 0;
+        this.multiSectionPreviewDrawRecordLimit = MULTI_SECTION_PREVIEW_MAX_RECORDS;
+        this.multiSectionPreviewDrawRecordCount = 0;
+        this.multiSectionPreviewDrawCapped = false;
+        this.multiSectionPreviewSectionPositions = "none";
+        this.multiSectionPreviewModelIds = "none";
+        this.singleSectionFallbackUsed = false;
+        this.multiSectionSyntheticFallbackUsed = false;
         this.k6FirstCommandCount = 0;
         this.k6FirstCommandInstanceCount = 0;
         this.k6FirstCommandFirstIndex = 0;
@@ -2269,6 +2352,18 @@ final class ForgeFormalVisibleLodPreview {
         }
     }
 
+    private static void uploadLongs(int bufferId, long[] values, int usage) {
+        long ptr = MemoryUtil.nmemAlloc((long) values.length * Long.BYTES);
+        try {
+            for (int i = 0; i < values.length; i++) {
+                MemoryUtil.memPutLong(ptr + ((long) i * Long.BYTES), values[i]);
+            }
+            GL45C.nglNamedBufferData(bufferId, (long) values.length * Long.BYTES, ptr, usage);
+        } finally {
+            MemoryUtil.nmemFree(ptr);
+        }
+    }
+
     private static void uploadShorts(int bufferId, short[] values, int usage) {
         long ptr = MemoryUtil.nmemAlloc((long) values.length * Short.BYTES);
         try {
@@ -2279,6 +2374,15 @@ final class ForgeFormalVisibleLodPreview {
         } finally {
             MemoryUtil.nmemFree(ptr);
         }
+    }
+
+    private static String collectPreviewModelIds(long[] records) {
+        return java.util.Arrays.stream(records)
+                .mapToInt(ForgeVoxyQuadEncoder::extractModelId)
+                .distinct()
+                .limit(16)
+                .mapToObj(String::valueOf)
+                .collect(Collectors.joining(","));
     }
 
     private void captureVisiblePreviewUniformLocations(int program) {
