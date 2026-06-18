@@ -245,6 +245,7 @@ final class ForgeFormalVisibleLodPreview {
     private boolean observePrepareInProgress;
     private boolean observePrepareCompleted;
     private boolean observePrepareFailedSafely;
+    private boolean observePrepareAutoEnable;
     private boolean observeAutoEnabledAfterPrepare;
     private boolean observePrepareFrameBudgetExceeded;
     private int observePrepareStep;
@@ -496,6 +497,27 @@ final class ForgeFormalVisibleLodPreview {
         long glAllocationRunsBeforeCommand = this.glAllocationRuns;
         long readbackRunsBeforeCommand = this.readbackRuns;
         this.enableRuns++;
+        if (!this.ownerReady || this.stale) {
+            this.observeEnableRequested = false;
+            this.observeEnableHandledOnRenderThread = false;
+            this.observeEnableCommandDurationMillis = Math.max(0L, (System.nanoTime() - startNanos) / 1_000_000L);
+            this.observeEnableCommandReturnedQuickly = this.observeEnableCommandDurationMillis < 250L;
+            this.observeEnableDidGlWorkOnCommandThread = false;
+            this.observeEnableDidReadbackOnCommandThread = false;
+            this.observeEnableDidSynchronousRebuild = false;
+            this.observeEnableFailedSafely = true;
+            this.observeEnableTimeoutReproduced = false;
+            this.lastObserveEnableFailureReason = "preview-not-prepared-run-formal_visible_lod_preview_prepare";
+            this.lastObserveEnableExceptionClass = "none";
+            this.lastObserveEnableExceptionMessage = "none";
+            this.visiblePreviewEnabled = false;
+            this.observeModeEnabled = false;
+            this.observeDrawPaused = false;
+            this.lifecycleState = "OBSERVE_ENABLE_REJECTED_PREVIEW_NOT_PREPARED";
+            this.lastLifecycleEvent = safeReason(reason);
+            this.lastFailureReason = this.lastObserveEnableFailureReason;
+            return this.createStatusSnapshot();
+        }
         this.observeEnableRequested = true;
         this.observeEnableHandledOnRenderThread = false;
         this.observeEnableCommandReturnedQuickly = false;
@@ -508,17 +530,6 @@ final class ForgeFormalVisibleLodPreview {
         this.lastObserveEnableFailureReason = "pending-render-thread";
         this.lastObserveEnableExceptionClass = "none";
         this.lastObserveEnableExceptionMessage = "none";
-        this.observePrepareRequested = true;
-        this.observePrepareInProgress = false;
-        this.observePrepareCompleted = false;
-        this.observePrepareFailedSafely = false;
-        this.observeAutoEnabledAfterPrepare = false;
-        this.observePrepareFrameBudgetExceeded = false;
-        this.observePrepareStep = 0;
-        this.observePrepareFrameCount = 0;
-        this.observePrepareNextAttemptFrame = 0;
-        this.lastObservePrepareStepName = "pending-render-thread";
-        this.lastObservePrepareFailureReason = "none";
         this.visiblePreviewEnabled = false;
         this.observeModeEnabled = false;
         this.observeDrawPaused = false;
@@ -530,6 +541,76 @@ final class ForgeFormalVisibleLodPreview {
         this.qaAutoDisablePending = false;
         this.qaFramesRemaining = 0;
         this.lifecycleState = "VISIBLE_PREVIEW_OBSERVE_PREPARE_REQUESTED";
+        this.lastLifecycleEvent = safeReason(reason);
+        this.lastFailureReason = "none";
+        this.observeEnableCommandDurationMillis = Math.max(0L, (System.nanoTime() - startNanos) / 1_000_000L);
+        this.observeEnableDidSynchronousRebuild = this.buildRuns != buildRunsBeforeCommand;
+        this.observeEnableDidReadbackOnCommandThread = this.readbackRuns != readbackRunsBeforeCommand;
+        this.observeEnableDidGlWorkOnCommandThread = this.glAllocationRuns != glAllocationRunsBeforeCommand
+                || this.shaderCompileRuns != shaderCompileRunsBeforeCommand;
+        this.observeEnableCommandReturnedQuickly = this.observeEnableCommandDurationMillis < 250L
+                && !this.observeEnableDidSynchronousRebuild
+                && !this.observeEnableDidReadbackOnCommandThread
+                && !this.observeEnableDidGlWorkOnCommandThread;
+        return this.createStatusSnapshot();
+    }
+
+    ForgeFormalVisibleLodPreviewStats requestPreviewPrepare(String reason) {
+        long startNanos = System.nanoTime();
+        long buildRunsBeforeCommand = this.buildRuns;
+        long shaderCompileRunsBeforeCommand = this.shaderCompileRuns;
+        long glAllocationRunsBeforeCommand = this.glAllocationRuns;
+        long readbackRunsBeforeCommand = this.readbackRuns;
+        this.observeEnableRequested = false;
+        this.observeEnableHandledOnRenderThread = false;
+        this.observeEnableCommandDurationMillis = 0L;
+        this.observeEnableDidGlWorkOnCommandThread = false;
+        this.observeEnableDidReadbackOnCommandThread = false;
+        this.observeEnableDidSynchronousRebuild = false;
+        this.observeEnableFailedSafely = false;
+        this.observeEnableTimeoutReproduced = false;
+        this.lastObserveEnableFailureReason = "none";
+        this.lastObserveEnableExceptionClass = "none";
+        this.lastObserveEnableExceptionMessage = "none";
+        if (this.ownerReady && !this.stale) {
+            this.observePrepareRequested = false;
+            this.observePrepareInProgress = false;
+            this.observePrepareCompleted = true;
+            this.observePrepareFailedSafely = false;
+            this.observePrepareAutoEnable = false;
+            this.observeAutoEnabledAfterPrepare = false;
+            this.observePrepareFrameBudgetExceeded = false;
+            this.lastObservePrepareStepName = "already-prepared";
+            this.lastObservePrepareFailureReason = "none";
+            this.visiblePreviewEnabled = false;
+            this.observeModeEnabled = false;
+            this.lifecycleState = "VISIBLE_PREVIEW_ALREADY_PREPARED_DISABLED";
+            this.lastLifecycleEvent = safeReason(reason);
+            this.lastFailureReason = "none";
+            this.observeEnableCommandDurationMillis = Math.max(0L, (System.nanoTime() - startNanos) / 1_000_000L);
+            this.observeEnableCommandReturnedQuickly = this.observeEnableCommandDurationMillis < 250L;
+            return this.createStatusSnapshot();
+        }
+        this.observePrepareRequested = true;
+        this.observePrepareInProgress = false;
+        this.observePrepareCompleted = false;
+        this.observePrepareFailedSafely = false;
+        this.observePrepareAutoEnable = false;
+        this.observeAutoEnabledAfterPrepare = false;
+        this.observePrepareFrameBudgetExceeded = false;
+        this.observePrepareStep = 0;
+        this.observePrepareFrameCount = 0;
+        this.observePrepareNextAttemptFrame = 0;
+        this.lastObservePrepareStepName = "prepare-requested";
+        this.lastObservePrepareFailureReason = "none";
+        this.visiblePreviewEnabled = false;
+        this.observeModeEnabled = false;
+        this.observeDrawPaused = false;
+        this.readbackPending = false;
+        this.qaReadbackAllowed = false;
+        this.qaAutoDisablePending = false;
+        this.qaFramesRemaining = 0;
+        this.lifecycleState = "VISIBLE_PREVIEW_PREPARE_REQUESTED";
         this.lastLifecycleEvent = safeReason(reason);
         this.lastFailureReason = "none";
         this.observeEnableCommandDurationMillis = Math.max(0L, (System.nanoTime() - startNanos) / 1_000_000L);
@@ -928,6 +1009,9 @@ final class ForgeFormalVisibleLodPreview {
         if (this.observeEnableRequested) {
             this.handleObserveEnableRequestOnRenderThread();
         }
+        if (this.observePrepareRequested && !this.observePrepareInProgress) {
+            this.startObservePrepareOnRenderThread("prepare-request");
+        }
         if (this.observePrepareInProgress) {
             this.runObservePrepareStep();
         }
@@ -1011,7 +1095,7 @@ final class ForgeFormalVisibleLodPreview {
                 return;
             }
             if (!this.ownerReady || this.stale) {
-                this.startObservePrepareOnRenderThread("ownerReady=" + this.ownerReady + ":stale=" + this.stale);
+                this.failObserveEnableSafely("preview-not-prepared-run-formal_visible_lod_preview_prepare", null);
                 return;
             }
             this.enableObserveFromPreparedResources("observe-enable-render-thread", false);
@@ -1111,17 +1195,28 @@ final class ForgeFormalVisibleLodPreview {
                     this.observePrepareStep++;
                 }
                 case 6 -> {
-                    this.lastObservePrepareStepName = "enable-observe";
-                    if (!this.enableObserveFromPreparedResources("observe-prepare-complete", true)) {
-                        this.failObservePrepareSafely("observe-prepare-enable-failed:ownerReady=" + this.ownerReady + ":stale=" + this.stale, null);
-                        return;
-                    }
+                    this.lastObservePrepareStepName = this.observePrepareAutoEnable ? "enable-observe" : "prepared-disabled";
                     this.observePrepareInProgress = false;
                     this.observePrepareCompleted = true;
                     this.observePrepareFailedSafely = false;
-                    this.observeAutoEnabledAfterPrepare = true;
                     this.lastObservePrepareFailureReason = "none";
-                    this.instance.getFormalRendererManager().checkReadiness("k10-observe-prepare-complete");
+                    if (this.observePrepareAutoEnable) {
+                        if (!this.enableObserveFromPreparedResources("observe-prepare-complete", true)) {
+                            this.failObservePrepareSafely("observe-prepare-enable-failed:ownerReady=" + this.ownerReady + ":stale=" + this.stale, null);
+                            return;
+                        }
+                        this.observeAutoEnabledAfterPrepare = true;
+                        this.instance.getFormalRendererManager().checkReadiness("k10-observe-prepare-complete");
+                    } else {
+                        this.visiblePreviewEnabled = false;
+                        this.observeModeEnabled = false;
+                        this.observeAutoEnabledAfterPrepare = false;
+                        this.lifecycleState = "VISIBLE_PREVIEW_PREPARED_DISABLED";
+                        this.lastLifecycleEvent = "k11-visible-preview-prepare-complete";
+                        this.lastFailureReason = "none";
+                        this.renderHookEarlyReturnWhenDisabled = true;
+                        this.instance.getFormalRendererManager().checkReadiness("k11-visible-preview-prepare-complete");
+                    }
                 }
                 default -> this.observePrepareInProgress = false;
             }
@@ -1190,6 +1285,7 @@ final class ForgeFormalVisibleLodPreview {
         this.observePrepareInProgress = false;
         this.observePrepareCompleted = false;
         this.observePrepareFailedSafely = true;
+        this.observePrepareAutoEnable = false;
         this.observeAutoEnabledAfterPrepare = false;
         this.observePrepareFrameBudgetExceeded = safeReason.contains("frame-budget-exceeded");
         this.observePrepareNextAttemptFrame = 0;
@@ -1237,6 +1333,7 @@ final class ForgeFormalVisibleLodPreview {
         this.observePrepareInProgress = false;
         this.observePrepareCompleted = false;
         this.observePrepareFailedSafely = false;
+        this.observePrepareAutoEnable = false;
         this.observeAutoEnabledAfterPrepare = false;
         this.observePrepareFrameBudgetExceeded = false;
         this.observePrepareStep = 0;

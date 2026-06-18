@@ -1027,6 +1027,38 @@ requests render-thread preparation, and disable only stops preview drawing; full
 status and audit remain explicit commands. This keeps the manual preview switch
 from becoming a hidden readiness audit or log/chat stress path.
 
+## K11 visible preview lifecycle prewarm note
+
+K11 keeps K10's visible preview as debug opt-in, but separates resource
+preparation from observe enable. The explicit prewarm command owns the heavy
+preview preparation:
+
+```text
+formal_visible_lod_preview_prepare
+ -> K6 real-section dry-run
+ -> K7 isolated draw evidence
+ -> K8 formal model-id geometry
+ -> K9 terrain shader integration
+ -> K10 visible preview owner build
+ -> prepared but disabled
+```
+
+Readiness evidence is reported through the existing K10.3 prepare fields plus
+K11 status text:
+
+```text
+k11_stage=K11_FORMAL_VISIBLE_LOD_PREVIEW_LIFECYCLE_PREWARM
+previewPrepared=true/false
+observeEnableRequiresPreparedResources=true
+observeEnableRejectedMissingPrepare=true/false
+```
+
+K11 success means observe enable no longer hides a K6-K10 rebuild. If preview
+resources are missing or stale, observe enable fails safely and tells the user
+to run the prepare command first. This is still not renderer readiness:
+`formalRendererReady=false`, `actualRendererDrawEnabled=false`, and
+`formalDrawPipelineReady=false` remain required.
+
 ## K3 readiness note
 
 K3 adds the formal command-generation ownership skeleton above the K2 resource

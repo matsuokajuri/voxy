@@ -751,3 +751,27 @@ toggle-oriented feedback instead of formatting the full K10 and renderer status
 on the command path. Expensive or verbose readiness evidence stays behind the
 explicit status/audit commands, and disable no longer runs a synchronous K10
 audit before stopping preview drawing.
+
+## K11 visible preview lifecycle prewarm note
+
+K11 adds an explicit prewarm lifecycle for the K10 visible preview. It keeps the
+preview path below production MDIC integration but stops `observe_enable` from
+being the command that implicitly discovers and prepares missing resources.
+
+The K11 command path is:
+
+```text
+/voxy formal_visible_lod_preview_prepare
+ -> render-thread K6/K7/K8/K9/K10 preparation
+ -> visible preview resources prepared
+ -> visible preview remains disabled
+
+/voxy formal_visible_lod_preview_observe_enable
+ -> lightweight enable only when prepared
+```
+
+If the resources are stale or missing, observe enable reports
+`preview-not-prepared-run-formal_visible_lod_preview_prepare` and returns
+without starting a hidden rebuild. K11 still does not call `MDICSectionRenderer`
+or `VoxyRenderSystem`, does not run production `cmdgen.comp`, and does not mark
+the formal draw pipeline or formal renderer ready.

@@ -861,3 +861,29 @@ one-line command feedback and do not implicitly dump the full K10/formal
 renderer status. Full status/audit output remains available through the
 explicit status and audit commands, keeping the manual visibility toggle closer
 to a lightweight switch.
+
+## K11 status note
+
+K11 introduces a formal visible LoD preview lifecycle prewarm path. It is not a
+production renderer stage. Its purpose is to move the first heavy K6-K10
+resource preparation out of manual observe enable and into an explicit prepare
+step:
+
+```text
+/voxy formal_visible_lod_preview_prepare
+/voxy formal_visible_lod_preview_prepare_status
+/voxy qa_k11_formal_visible_lod_preview_prewarm
+```
+
+After K11, manual observe enable requires prepared preview resources. If the
+K10 visible preview owner is missing or stale, observe enable returns quickly
+with `preview-not-prepared-run-formal_visible_lod_preview_prepare` instead of
+starting the K6-K10 prepare chain itself. A successful prepare leaves the
+preview disabled but ready, so the next observe enable can be a lightweight
+toggle.
+
+K11 keeps the same renderer boundary as K10: it does not call
+`MDICSectionRenderer`, does not call `VoxyRenderSystem`, does not enable
+production cmdgen or formal visibility traversal, and still reports
+`formalDrawPipelineReady=false`, `formalRendererReady=false`, and
+`actualRendererDrawEnabled=false`.
