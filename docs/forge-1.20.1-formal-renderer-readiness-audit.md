@@ -1329,3 +1329,48 @@ formalRendererReady=false
 actualRendererDrawEnabled=false
 productionLiveRendererDrawExecuted=false
 ```
+
+## K10.2 observe timeout hotfix note
+
+K10.2 fixes the manual observe enable path after a timeout was observed while
+running:
+
+```text
+/voxy formal_visible_lod_preview_observe_enable
+```
+
+The log evidence showed the old command path could return only after the K10
+preview owner had performed build work, including shader compile and GL
+allocation. K10.2 moves manual observe enable to a lightweight request model:
+the command records intent and returns, while the render hook handles the
+request later. If resources are missing or stale, the hook disables observe mode
+and reports a safe failure instead of rebuilding in a loop or blocking the
+command.
+
+New readiness/audit evidence includes:
+
+```text
+observeEnableRequested
+observeEnableHandledOnRenderThread
+observeEnableCommandReturnedQuickly
+observeEnableCommandDurationMillis
+observeEnableDidGlWorkOnCommandThread
+observeEnableDidReadbackOnCommandThread
+observeEnableDidSynchronousRebuild
+observeEnableFailedSafely
+observeEnableTimeoutReproduced
+lastObserveEnableFailureReason
+lastObserveEnableExceptionClass
+lastObserveEnableExceptionMessage
+```
+
+The expected safe command-path values are:
+
+```text
+observeEnableCommandReturnedQuickly=true
+observeEnableDidGlWorkOnCommandThread=false
+observeEnableDidReadbackOnCommandThread=false
+observeEnableDidSynchronousRebuild=false
+formalRendererReady=false
+actualRendererDrawEnabled=false
+```

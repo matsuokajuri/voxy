@@ -742,3 +742,37 @@ formalDrawPipelineReady=false
 formalRendererReady=false
 actualRendererDrawEnabled=false
 ```
+
+## K10.2 hotfix note
+
+K10.2 is a timeout hotfix on the K10/K10.1 visible preview observe command,
+not K11. The previous manual observe command could synchronously build the
+K8/K9/K10 preview chain before returning, including shader compile and GL
+allocation. That was unsafe for the command path and could stall the
+client/integrated server long enough to look like a connection timeout.
+
+The observe enable path is now two-stage:
+
+```text
+command thread:
+  set observeEnableRequested=true
+  return quickly
+  no GL work
+  no readback
+  no synchronous rebuild
+
+render hook:
+  consume the request
+  enable observe drawing only if K10 resources are already ready and not stale
+  otherwise fail safely, disable the preview, and report the reason
+```
+
+K10.2 adds timeout-oriented status fields such as
+`observeEnableCommandReturnedQuickly`,
+`observeEnableDidGlWorkOnCommandThread`,
+`observeEnableDidReadbackOnCommandThread`,
+`observeEnableDidSynchronousRebuild`, and
+`observeEnableHandledOnRenderThread`.
+
+The preview remains explicit opt-in only and still does not change production
+renderer readiness.

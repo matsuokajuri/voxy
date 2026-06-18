@@ -666,3 +666,32 @@ formalDrawPipelineReady=false
 formalRendererReady=false
 actualRendererDrawEnabled=false
 ```
+
+## K10.2 visible preview observe timeout hotfix note
+
+K10.2 keeps the K10 visible preview as a debug opt-in preview and only changes
+the manual observe enable lifecycle. The command handler no longer performs
+heavy preview construction, shader compilation, GL allocation, readback, or a
+full prerequisite rebuild before returning.
+
+Manual observe enable now follows a render-thread request contract:
+
+- command handling sets `observeEnableRequested=true` and records command-path
+  timing/GL/readback/rebuild flags;
+- the render hook consumes the request on the render thread;
+- observe drawing is enabled only when existing K10 resources are already ready
+  and not stale;
+- stale or missing resources disable observe mode safely and report
+  `lastObserveEnableFailureReason`;
+- no command path calls `MDICSectionRenderer`, `VoxyRenderSystem`, or the
+  production live renderer.
+
+The K10.2 timeout QA command is:
+
+```text
+/voxy qa_k10_visible_preview_observe_timeout
+```
+
+It verifies that observe enable returns quickly and does not do command-thread
+GL work, readback, or synchronous rebuild. It remains separate from production
+MDIC renderer integration.

@@ -234,6 +234,18 @@ final class ForgeFormalVisibleLodPreview {
     private boolean observeModeDebugTintUsed;
     private float observeModeScale = OBSERVE_PREVIEW_SCALE;
     private boolean observeModeCameraRelative;
+    private boolean observeEnableRequested;
+    private boolean observeEnableHandledOnRenderThread;
+    private boolean observeEnableCommandReturnedQuickly;
+    private long observeEnableCommandDurationMillis;
+    private boolean observeEnableDidGlWorkOnCommandThread;
+    private boolean observeEnableDidReadbackOnCommandThread;
+    private boolean observeEnableDidSynchronousRebuild;
+    private boolean observeEnableFailedSafely;
+    private boolean observeEnableTimeoutReproduced;
+    private String lastObserveEnableFailureReason = "none";
+    private String lastObserveEnableExceptionClass = "none";
+    private String lastObserveEnableExceptionMessage = "none";
     private String previewWorldBounds = "none";
     private double previewCameraDistance;
     private boolean visiblePreviewDefaultDisabledVerified = true;
@@ -429,6 +441,18 @@ final class ForgeFormalVisibleLodPreview {
 
     ForgeFormalVisibleLodPreviewStats observeEnable(String reason) {
         this.enableRuns++;
+        this.observeEnableRequested = false;
+        this.observeEnableHandledOnRenderThread = RenderSystem.isOnRenderThread();
+        this.observeEnableCommandReturnedQuickly = true;
+        this.observeEnableCommandDurationMillis = 0L;
+        this.observeEnableDidGlWorkOnCommandThread = false;
+        this.observeEnableDidReadbackOnCommandThread = false;
+        this.observeEnableDidSynchronousRebuild = false;
+        this.observeEnableFailedSafely = false;
+        this.observeEnableTimeoutReproduced = false;
+        this.lastObserveEnableFailureReason = "none";
+        this.lastObserveEnableExceptionClass = "none";
+        this.lastObserveEnableExceptionMessage = "none";
         ForgeFormalVisibleLodPreviewStats status = this.ownerReady && !this.stale
                 ? this.createStatusSnapshot()
                 : this.build();
@@ -445,6 +469,49 @@ final class ForgeFormalVisibleLodPreview {
         this.lifecycleState = "VISIBLE_PREVIEW_OBSERVE_ENABLED";
         this.lastLifecycleEvent = safeReason(reason);
         this.lastFailureReason = "none";
+        return this.createStatusSnapshot();
+    }
+
+    ForgeFormalVisibleLodPreviewStats requestObserveEnable(String reason) {
+        long startNanos = System.nanoTime();
+        long buildRunsBeforeCommand = this.buildRuns;
+        long shaderCompileRunsBeforeCommand = this.shaderCompileRuns;
+        long glAllocationRunsBeforeCommand = this.glAllocationRuns;
+        long readbackRunsBeforeCommand = this.readbackRuns;
+        this.enableRuns++;
+        this.observeEnableRequested = true;
+        this.observeEnableHandledOnRenderThread = false;
+        this.observeEnableCommandReturnedQuickly = false;
+        this.observeEnableCommandDurationMillis = 0L;
+        this.observeEnableDidGlWorkOnCommandThread = false;
+        this.observeEnableDidReadbackOnCommandThread = false;
+        this.observeEnableDidSynchronousRebuild = false;
+        this.observeEnableFailedSafely = false;
+        this.observeEnableTimeoutReproduced = false;
+        this.lastObserveEnableFailureReason = "pending-render-thread";
+        this.lastObserveEnableExceptionClass = "none";
+        this.lastObserveEnableExceptionMessage = "none";
+        this.visiblePreviewEnabled = true;
+        this.observeModeEnabled = true;
+        this.observeModeDebugTintUsed = true;
+        this.observeModeCameraRelative = true;
+        this.observeModeScale = OBSERVE_PREVIEW_SCALE;
+        this.readbackPending = false;
+        this.qaReadbackAllowed = false;
+        this.qaAutoDisablePending = false;
+        this.qaFramesRemaining = 0;
+        this.lifecycleState = "VISIBLE_PREVIEW_OBSERVE_REQUESTED";
+        this.lastLifecycleEvent = safeReason(reason);
+        this.lastFailureReason = "none";
+        this.observeEnableCommandDurationMillis = Math.max(0L, (System.nanoTime() - startNanos) / 1_000_000L);
+        this.observeEnableDidSynchronousRebuild = this.buildRuns != buildRunsBeforeCommand;
+        this.observeEnableDidReadbackOnCommandThread = this.readbackRuns != readbackRunsBeforeCommand;
+        this.observeEnableDidGlWorkOnCommandThread = this.glAllocationRuns != glAllocationRunsBeforeCommand
+                || this.shaderCompileRuns != shaderCompileRunsBeforeCommand;
+        this.observeEnableCommandReturnedQuickly = this.observeEnableCommandDurationMillis < 250L
+                && !this.observeEnableDidSynchronousRebuild
+                && !this.observeEnableDidReadbackOnCommandThread
+                && !this.observeEnableDidGlWorkOnCommandThread;
         return this.createStatusSnapshot();
     }
 
@@ -512,6 +579,8 @@ final class ForgeFormalVisibleLodPreview {
         this.observeModeEnabled = false;
         this.observeModeDebugTintUsed = false;
         this.observeModeCameraRelative = false;
+        this.observeEnableRequested = false;
+        this.observeEnableFailedSafely = false;
         this.readbackPending = false;
         this.qaReadbackAllowed = false;
         this.qaAutoDisablePending = false;
@@ -587,6 +656,18 @@ final class ForgeFormalVisibleLodPreview {
                 this.observeModeDebugTintUsed,
                 this.observeModeScale,
                 this.observeModeCameraRelative,
+                this.observeEnableRequested,
+                this.observeEnableHandledOnRenderThread,
+                this.observeEnableCommandReturnedQuickly,
+                this.observeEnableCommandDurationMillis,
+                this.observeEnableDidGlWorkOnCommandThread,
+                this.observeEnableDidReadbackOnCommandThread,
+                this.observeEnableDidSynchronousRebuild,
+                this.observeEnableFailedSafely,
+                this.observeEnableTimeoutReproduced,
+                this.lastObserveEnableFailureReason,
+                this.lastObserveEnableExceptionClass,
+                this.lastObserveEnableExceptionMessage,
                 this.previewWorldBounds,
                 this.previewCameraDistance,
                 this.visiblePreviewWasEnabledDuringQa,
@@ -704,6 +785,8 @@ final class ForgeFormalVisibleLodPreview {
         this.clearRuns++;
         this.visiblePreviewEnabled = false;
         this.ownerReady = false;
+        this.observeEnableRequested = false;
+        this.observeEnableFailedSafely = false;
         this.stale = false;
         this.requiresRebuild = false;
         this.lifecycleState = "CLEARED";
@@ -755,6 +838,9 @@ final class ForgeFormalVisibleLodPreview {
         }
         if (this.deferredQaPending) {
             this.runDeferredQaStep();
+        }
+        if (this.observeEnableRequested) {
+            this.handleObserveEnableRequestOnRenderThread();
         }
         if (!this.visiblePreviewEnabled) {
             this.renderHookDisabledEarlyReturnCount++;
@@ -820,6 +906,59 @@ final class ForgeFormalVisibleLodPreview {
             this.visiblePreviewEnabled = false;
             VoxyForge.LOGGER.error("K10 formal visible LoD preview draw failed.", e);
         }
+    }
+
+    private void handleObserveEnableRequestOnRenderThread() {
+        this.observeEnableHandledOnRenderThread = true;
+        this.observeEnableRequested = false;
+        this.lastObserveEnableExceptionClass = "none";
+        this.lastObserveEnableExceptionMessage = "none";
+        try {
+            if (!RenderSystem.isOnRenderThread()) {
+                this.failObserveEnableSafely("observe-enable-not-render-thread", null);
+                return;
+            }
+            if (!this.ownerReady || this.stale) {
+                this.failObserveEnableSafely("observe-enable-resources-not-ready:ownerReady=" + this.ownerReady + ":stale=" + this.stale, null);
+                return;
+            }
+            this.visiblePreviewEnabled = true;
+            this.observeModeEnabled = true;
+            this.observeModeDebugTintUsed = true;
+            this.observeModeCameraRelative = true;
+            this.observeModeScale = OBSERVE_PREVIEW_SCALE;
+            this.readbackPending = false;
+            this.qaReadbackAllowed = false;
+            this.lifecycleState = "VISIBLE_PREVIEW_OBSERVE_ENABLED_RENDER_THREAD";
+            this.lastLifecycleEvent = "observe-enable-render-thread";
+            this.lastFailureReason = "none";
+            this.lastObserveEnableFailureReason = "none";
+            this.observeEnableFailedSafely = false;
+            this.observeEnableTimeoutReproduced = false;
+        } catch (RuntimeException e) {
+            this.failObserveEnableSafely(e.getClass().getSimpleName() + ":" + e.getMessage(), e);
+        }
+    }
+
+    private void failObserveEnableSafely(String reason, RuntimeException exception) {
+        String safeReason = safeReason(reason);
+        this.observeEnableRequested = false;
+        this.observeEnableFailedSafely = true;
+        this.observeEnableTimeoutReproduced = false;
+        this.lastObserveEnableFailureReason = safeReason;
+        this.lastObserveEnableExceptionClass = exception == null ? "none" : exception.getClass().getName();
+        this.lastObserveEnableExceptionMessage = exception == null ? "none" : safeReason(exception.getMessage());
+        this.visiblePreviewEnabled = false;
+        this.observeModeEnabled = false;
+        this.observeModeDebugTintUsed = false;
+        this.observeModeCameraRelative = false;
+        this.readbackPending = false;
+        this.qaReadbackAllowed = false;
+        this.lifecycleState = "OBSERVE_ENABLE_FAILED_SAFE";
+        this.lastLifecycleEvent = "observe-enable-failed-safe";
+        this.lastFailureReason = safeReason;
+        this.renderHookEarlyReturnWhenDisabled = true;
+        this.renderHookEarlyReturnWhenStale = true;
     }
 
     private void runDeferredQaStep() {
@@ -1331,6 +1470,8 @@ final class ForgeFormalVisibleLodPreview {
     private void markStale(String reason) {
         this.visiblePreviewEnabled = false;
         this.ownerReady = false;
+        this.observeEnableRequested = false;
+        this.observeEnableFailedSafely = false;
         this.resetBuildFlags();
         this.renderHookEarlyReturnWhenStale = true;
         this.stale = true;
@@ -1397,6 +1538,18 @@ final class ForgeFormalVisibleLodPreview {
         this.observeModeDebugTintUsed = false;
         this.observeModeScale = OBSERVE_PREVIEW_SCALE;
         this.observeModeCameraRelative = false;
+        this.observeEnableRequested = false;
+        this.observeEnableHandledOnRenderThread = false;
+        this.observeEnableCommandReturnedQuickly = false;
+        this.observeEnableCommandDurationMillis = 0L;
+        this.observeEnableDidGlWorkOnCommandThread = false;
+        this.observeEnableDidReadbackOnCommandThread = false;
+        this.observeEnableDidSynchronousRebuild = false;
+        this.observeEnableFailedSafely = false;
+        this.observeEnableTimeoutReproduced = false;
+        this.lastObserveEnableFailureReason = "none";
+        this.lastObserveEnableExceptionClass = "none";
+        this.lastObserveEnableExceptionMessage = "none";
         this.previewWorldBounds = "none";
         this.previewCameraDistance = 0.0D;
         this.k8FormalGeometryUsed = false;

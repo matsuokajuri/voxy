@@ -597,6 +597,8 @@ public final class ForgeVoxyCommands {
                         .executes(ctx -> qaK10FormalVisibleLodPreview(ctx.getSource())))
                 .then(Commands.literal("qa_k10_visible_preview_observe_performance")
                         .executes(ctx -> qaK10VisiblePreviewObservePerformance(ctx.getSource())))
+                .then(Commands.literal("qa_k10_visible_preview_observe_timeout")
+                        .executes(ctx -> qaK10VisiblePreviewObserveTimeout(ctx.getSource())))
                 .then(Commands.literal("formal_renderer_check")
                         .executes(ctx -> formalRendererCheck(ctx.getSource())))
                 .then(Commands.literal("formal_renderer_status")
@@ -6066,18 +6068,18 @@ public final class ForgeVoxyCommands {
     }
 
     private static int formalVisibleLodPreviewObserveEnable(CommandSourceStack source) {
-        ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview().observeEnable("observe-enable");
+        ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview().requestObserveEnable("observe-enable");
         ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("k10-visible-lod-preview-observe-enable");
         source.sendSuccess(() -> Component.literal("Voxy K10.1 formal visible LoD preview observe enable: "
                 + formatFormalVisibleLodPreviewStatus(status)
                 + " "
                 + formatFormalRendererStatus(rendererStatus)
-                + " Observe mode uses a brighter debug tint and larger world-space scale; disable with /voxy formal_visible_lod_preview_observe_disable."), false);
-        return status.visibleLodPreviewOwnerReady()
-                && status.visiblePreviewEnabled()
-                && status.observeModeEnabled()
-                && status.observeModeDebugTintUsed()
-                && !status.perFrameReadbackDetected()
+                + " Observe enable is now a K10.2 render-thread request; it returns before GL work/readback/rebuild and the render hook will enable drawing only if resources are already ready. Rerun /voxy formal_visible_lod_preview_observe_status after a few frames."), false);
+        return status.observeEnableRequested()
+                && status.observeEnableCommandReturnedQuickly()
+                && !status.observeEnableDidGlWorkOnCommandThread()
+                && !status.observeEnableDidReadbackOnCommandThread()
+                && !status.observeEnableDidSynchronousRebuild()
                 && !status.formalRendererReady()
                 && !status.actualRendererDrawEnabled() ? 1 : 0;
     }
@@ -6097,7 +6099,7 @@ public final class ForgeVoxyCommands {
 
     private static int formalVisibleLodPreviewObserveStatus(CommandSourceStack source) {
         ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview().createStatusSnapshot();
-        source.sendSuccess(() -> Component.literal("Voxy K10.1 formal visible LoD preview observe status: " + formatFormalVisibleLodPreviewStatus(status)), false);
+        source.sendSuccess(() -> Component.literal("Voxy K10.2 formal visible LoD preview observe status: " + formatFormalVisibleLodPreviewStatus(status)), false);
         return status.visibleLodPreviewOwnerReady() || status.visiblePreviewEnabled() || status.stale() ? 1 : 0;
     }
 
@@ -6206,6 +6208,32 @@ public final class ForgeVoxyCommands {
                 && !status.perFrameGlAllocationDetected()
                 && !status.perFrameLogSpamDetected()
                 && !status.duplicateHookRegistrationDetected()
+                && !status.formalRendererReady()
+                && !status.actualRendererDrawEnabled()
+                && !rendererStatus.formalRendererReady()
+                && !rendererStatus.actualDrawEnabled() ? 1 : 0;
+    }
+
+    private static int qaK10VisiblePreviewObserveTimeout(CommandSourceStack source) {
+        ForgeVoxyRuntimeOverrides.applyFormalVisibleLodPreviewDebugPreset();
+        boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
+        ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview().requestObserveEnable("qa-k10-visible-preview-observe-timeout");
+        ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("qa-k10-visible-preview-observe-timeout");
+        String message = "Voxy QA K10.2 visible preview observe timeout: "
+                + (engineReady ? "WorldEngine is active. " : "No active client world was found; observe request should still return safely but drawing cannot be proven. ")
+                + "The command path only records an observe request, does no GL/readback/synchronous rebuild, and returns before the render hook handles it. "
+                + formatFormalVisibleLodPreviewStatus(status)
+                + " "
+                + formatFormalRendererStatus(rendererStatus)
+                + " Rerun /voxy formal_visible_lod_preview_observe_status after a few frames to confirm render-thread handling; disable with /voxy formal_visible_lod_preview_observe_disable.";
+        VoxyForge.LOGGER.info(message);
+        source.sendSuccess(() -> Component.literal(message), false);
+        return status.observeEnableRequested()
+                && status.observeEnableCommandReturnedQuickly()
+                && !status.observeEnableDidGlWorkOnCommandThread()
+                && !status.observeEnableDidReadbackOnCommandThread()
+                && !status.observeEnableDidSynchronousRebuild()
+                && !status.observeEnableTimeoutReproduced()
                 && !status.formalRendererReady()
                 && !status.actualRendererDrawEnabled()
                 && !rendererStatus.formalRendererReady()
@@ -8396,7 +8424,7 @@ public final class ForgeVoxyCommands {
 
     private static String formatFormalVisibleLodPreviewStatus(ForgeFormalVisibleLodPreviewStats status) {
         return String.format(
-                "stage=%s formalTerrainRendererOwnerReady=%s formalViewportOwnerReady=%s formalCommandGenerationOwnerReady=%s formalVisibilityOwnerReady=%s realSectionDryRunReady=%s isolatedMdicDrawSmokeTestReady=%s formalModelIdGeometryPathReady=%s formalTerrainShaderIntegrationReady=%s visibleLodPreviewOwnerReady=%s visiblePreviewEnabled=%s visiblePreviewDefaultEnabled=%s visiblePreviewDefaultDisabledVerified=%s debugOptInOnly=%s visiblePreviewWasEnabledDuringQa=%s visiblePreviewDisabledAfterQa=%s visiblePreviewDrawExecuted=%s visiblePreviewFrameCount=%d visibleTerrainPreviewOnly=%s minecraftMainFramebufferDrawn=%s productionLiveRendererDrawExecuted=%s renderHookRegistered=%s renderHookName=%s renderHookScope=%s drawInputSource=%s k8FormalGeometryUsed=%s k9TerrainShaderIntegrationUsed=%s k6RealSectionCommandUsed=%s syntheticDrawFixtureUsed=%s worldSpacePreview=%s previewSectionWorldPosition=%s previewCameraRelativeTransformOk=%s projectionMatrixUsed=%s modelViewMatrixUsed=%s k9TerrainShaderAdapterReused=%s visiblePreviewShaderProgramCompileAttempted=%s visiblePreviewShaderProgramCompileOk=%s visiblePreviewShaderProgramLinkOk=%s visiblePreviewShaderProgramId=%d visiblePreviewDrawCallOk=%s visiblePreviewLastGlError=%s formalModelIdDecodeOk=%s faceDataLookupOk=%s atlasSampleOk=%s modelDataReadOk=%s modelColourReadOk=%s visiblePreviewReadbackOk=%s visiblePreviewNonZeroPixelCount=%d visiblePreviewChecksum=%s validationFormalModelId=%d validationFace=%d validationFormalModelIds=%s geometryBufferId=%d commandBufferId=%d drawCountBufferId=%d positionScratchBufferId=%d indexBufferId=%d vertexArrayId=%d k6FirstCommandCount=%d k6FirstCommandInstanceCount=%d k6FirstCommandFirstIndex=%d k6FirstCommandBaseVertex=%d k6FirstCommandBaseInstance=%d acceptedDrawCommandCount=%d drawCommandMatchesK6=%s originalGeometryHeapMutated=%s liveGeometryHeapUsedAsMutableTarget=%s debugGeometryHeapUsedAsFormal=%s debugMdicCommandBuffersUsedAsFormal=%s sampleSetUsedAsFormalSource=%s MDICSectionRendererCalled=%s VoxyRenderSystemCalled=%s formalDrawPipelineReady=%s formalRendererReady=%s actualRendererDrawEnabled=%s productionTerrainShaderReady=%s formalTerrainShaderSemanticCompleteness=%s lightmapReady=%s biomeTintFullReady=%s materialAlphaFullReady=%s translucencyReady=%s shaderpackReady=%s lifecycleState=%s lastLifecycleEvent=%s stale=%s requiresRebuild=%s blockerCount=%d p0BlockerCount=%d p1BlockerCount=%d p2BlockerCount=%d blockers=%s lastFailureReason=%s lastAuditOk=%s lastAuditError=%s lastAuditDurationMs=%.2f k10_1_stage=K10_1_VISIBLE_PREVIEW_OBSERVE_PERFORMANCE_HOTFIX previewBuildCount=%d previewRebuildCount=%d renderFrameCount=%d renderHookInvocationCount=%d shaderCompileCount=%d glAllocationCount=%d readbackCount=%d renderLogCount=%d observeModeEnabled=%s observeModeDebugTintUsed=%s observeModeScale=%.2f observeModeCameraRelative=%s previewWorldBounds=%s previewCameraDistance=%.2f perFrameRebuildDetected=%s perFrameReadbackDetected=%s perFrameShaderCompileDetected=%s perFrameGlAllocationDetected=%s perFrameLogSpamDetected=%s duplicateHookRegistrationDetected=%s lastFrameDrawTimeNanos=%d averageFrameDrawTimeNanos=%d maxFrameDrawTimeNanos=%d renderHookEarlyReturnWhenDisabled=%s renderHookEarlyReturnWhenStale=%s performanceHotfix=true readbackOnlyDuringQa=true observeModeOptInOnly=true renderer=formal-visible-lod-preview productionRenderer=false previewOnly=true",
+                "stage=%s formalTerrainRendererOwnerReady=%s formalViewportOwnerReady=%s formalCommandGenerationOwnerReady=%s formalVisibilityOwnerReady=%s realSectionDryRunReady=%s isolatedMdicDrawSmokeTestReady=%s formalModelIdGeometryPathReady=%s formalTerrainShaderIntegrationReady=%s visibleLodPreviewOwnerReady=%s visiblePreviewEnabled=%s visiblePreviewDefaultEnabled=%s visiblePreviewDefaultDisabledVerified=%s debugOptInOnly=%s visiblePreviewWasEnabledDuringQa=%s visiblePreviewDisabledAfterQa=%s visiblePreviewDrawExecuted=%s visiblePreviewFrameCount=%d visibleTerrainPreviewOnly=%s minecraftMainFramebufferDrawn=%s productionLiveRendererDrawExecuted=%s renderHookRegistered=%s renderHookName=%s renderHookScope=%s drawInputSource=%s k8FormalGeometryUsed=%s k9TerrainShaderIntegrationUsed=%s k6RealSectionCommandUsed=%s syntheticDrawFixtureUsed=%s worldSpacePreview=%s previewSectionWorldPosition=%s previewCameraRelativeTransformOk=%s projectionMatrixUsed=%s modelViewMatrixUsed=%s k9TerrainShaderAdapterReused=%s visiblePreviewShaderProgramCompileAttempted=%s visiblePreviewShaderProgramCompileOk=%s visiblePreviewShaderProgramLinkOk=%s visiblePreviewShaderProgramId=%d visiblePreviewDrawCallOk=%s visiblePreviewLastGlError=%s formalModelIdDecodeOk=%s faceDataLookupOk=%s atlasSampleOk=%s modelDataReadOk=%s modelColourReadOk=%s visiblePreviewReadbackOk=%s visiblePreviewNonZeroPixelCount=%d visiblePreviewChecksum=%s validationFormalModelId=%d validationFace=%d validationFormalModelIds=%s geometryBufferId=%d commandBufferId=%d drawCountBufferId=%d positionScratchBufferId=%d indexBufferId=%d vertexArrayId=%d k6FirstCommandCount=%d k6FirstCommandInstanceCount=%d k6FirstCommandFirstIndex=%d k6FirstCommandBaseVertex=%d k6FirstCommandBaseInstance=%d acceptedDrawCommandCount=%d drawCommandMatchesK6=%s originalGeometryHeapMutated=%s liveGeometryHeapUsedAsMutableTarget=%s debugGeometryHeapUsedAsFormal=%s debugMdicCommandBuffersUsedAsFormal=%s sampleSetUsedAsFormalSource=%s MDICSectionRendererCalled=%s VoxyRenderSystemCalled=%s formalDrawPipelineReady=%s formalRendererReady=%s actualRendererDrawEnabled=%s productionTerrainShaderReady=%s formalTerrainShaderSemanticCompleteness=%s lightmapReady=%s biomeTintFullReady=%s materialAlphaFullReady=%s translucencyReady=%s shaderpackReady=%s lifecycleState=%s lastLifecycleEvent=%s stale=%s requiresRebuild=%s blockerCount=%d p0BlockerCount=%d p1BlockerCount=%d p2BlockerCount=%d blockers=%s lastFailureReason=%s lastAuditOk=%s lastAuditError=%s lastAuditDurationMs=%.2f k10_1_stage=K10_1_VISIBLE_PREVIEW_OBSERVE_PERFORMANCE_HOTFIX previewBuildCount=%d previewRebuildCount=%d renderFrameCount=%d renderHookInvocationCount=%d shaderCompileCount=%d glAllocationCount=%d readbackCount=%d renderLogCount=%d observeModeEnabled=%s observeModeDebugTintUsed=%s observeModeScale=%.2f observeModeCameraRelative=%s k10_2_stage=K10_2_VISIBLE_PREVIEW_OBSERVE_TIMEOUT_HOTFIX observeEnableRequested=%s observeEnableHandledOnRenderThread=%s observeEnableCommandReturnedQuickly=%s observeEnableCommandDurationMillis=%d observeEnableDidGlWorkOnCommandThread=%s observeEnableDidReadbackOnCommandThread=%s observeEnableDidSynchronousRebuild=%s observeEnableFailedSafely=%s observeEnableTimeoutReproduced=%s lastObserveEnableFailureReason=%s lastObserveEnableExceptionClass=%s lastObserveEnableExceptionMessage=%s previewWorldBounds=%s previewCameraDistance=%.2f perFrameRebuildDetected=%s perFrameReadbackDetected=%s perFrameShaderCompileDetected=%s perFrameGlAllocationDetected=%s perFrameLogSpamDetected=%s duplicateHookRegistrationDetected=%s lastFrameDrawTimeNanos=%d averageFrameDrawTimeNanos=%d maxFrameDrawTimeNanos=%d renderHookEarlyReturnWhenDisabled=%s renderHookEarlyReturnWhenStale=%s performanceHotfix=true readbackOnlyDuringQa=true observeModeOptInOnly=true renderer=formal-visible-lod-preview productionRenderer=false previewOnly=true",
                 status.stage(),
                 status.formalTerrainRendererOwnerReady(),
                 status.formalViewportOwnerReady(),
@@ -8504,6 +8532,18 @@ public final class ForgeVoxyCommands {
                 status.observeModeDebugTintUsed(),
                 status.observeModeScale(),
                 status.observeModeCameraRelative(),
+                status.observeEnableRequested(),
+                status.observeEnableHandledOnRenderThread(),
+                status.observeEnableCommandReturnedQuickly(),
+                status.observeEnableCommandDurationMillis(),
+                status.observeEnableDidGlWorkOnCommandThread(),
+                status.observeEnableDidReadbackOnCommandThread(),
+                status.observeEnableDidSynchronousRebuild(),
+                status.observeEnableFailedSafely(),
+                status.observeEnableTimeoutReproduced(),
+                status.lastObserveEnableFailureReason(),
+                status.lastObserveEnableExceptionClass(),
+                status.lastObserveEnableExceptionMessage(),
                 status.previewWorldBounds(),
                 status.previewCameraDistance(),
                 status.perFrameRebuildDetected(),
