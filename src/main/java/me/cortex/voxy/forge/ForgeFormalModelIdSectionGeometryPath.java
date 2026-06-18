@@ -584,6 +584,25 @@ final class ForgeFormalModelIdSectionGeometryPath {
         return records.toArray(PreviewRecord[]::new);
     }
 
+    PreviewRecord[] copyPreviewRecordsCommandContiguousDetailed(int maxRecords) {
+        if (maxRecords <= 0 || this.snapshots.isEmpty()) {
+            return new PreviewRecord[0];
+        }
+        for (FormalSectionSnapshot snapshot : this.snapshots) {
+            long[] snapshotRecords = snapshot.records();
+            if (snapshotRecords.length == 0) {
+                continue;
+            }
+            int count = Math.min(maxRecords, snapshotRecords.length);
+            PreviewRecord[] records = new PreviewRecord[count];
+            for (int i = 0; i < count; i++) {
+                records[i] = new PreviewRecord(snapshotRecords[i], snapshot.position(), snapshot.chunkX(), snapshot.chunkZ());
+            }
+            return records;
+        }
+        return new PreviewRecord[0];
+    }
+
     String previewSectionPositionsSummary() {
         if (this.snapshots.isEmpty()) {
             return "none";

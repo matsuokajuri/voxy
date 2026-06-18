@@ -37,6 +37,7 @@ final class ForgeFormalVisibleLodPreview {
     static final String K14_K16_STAGE = "K14_K16_FORMAL_MULTI_SECTION_PREVIEW_PIPELINE";
     static final String K17_K18_STAGE = "K17_K18_FORMAL_WORLD_PLACED_PREVIEW_GEOMETRY";
     static final String K19_K20_STAGE = "K19_K20_FORMAL_SECTION_METADATA_POSITION_SCRATCH_PREVIEW_ALIGNMENT";
+    static final String K21_K22_STAGE = "K21_K22_FORMAL_PREVIEW_DRAW_COMMAND_BUCKET_ALIGNMENT";
     private static final boolean DEFAULT_ENABLED = false;
     private static final boolean DEBUG_OPT_IN_ONLY = true;
     private static final int QA_VISIBLE_FRAMES = 1;
@@ -96,6 +97,7 @@ final class ForgeFormalVisibleLodPreview {
             uniform uint observeMode;
             uniform uint recordCount;
             uniform uint baseVertexBias;
+            uniform uint previewCommandBaseInstance;
 
             out vec2 vAtlasUv;
             out vec4 vTint;
@@ -211,7 +213,8 @@ final class ForgeFormalVisibleLodPreview {
 
                 SectionMeta section = sectionData[recordIndex];
                 uvec2 rawSectionPos = section.a.xy;
-                uvec2 scratchSectionPos = positionScratch[recordIndex];
+                uint scratchIndex = min(previewCommandBaseInstance, safeRecordCount - 1u);
+                uvec2 scratchSectionPos = positionScratch[scratchIndex];
                 if (any(notEqual(scratchSectionPos, rawSectionPos))) {
                     rawSectionPos = scratchSectionPos;
                 }
@@ -375,6 +378,7 @@ final class ForgeFormalVisibleLodPreview {
     private int uniformObserveTint = -1;
     private int uniformRecordCount = -1;
     private int uniformBaseVertexBias = -1;
+    private int uniformPreviewCommandBaseInstance = -1;
     private int uniformBlockModelAtlas = -1;
     private boolean visiblePreviewDrawExecuted;
     private int visiblePreviewFrameCount;
@@ -441,6 +445,29 @@ final class ForgeFormalVisibleLodPreview {
     private boolean originalSectionMetadataLayoutUsed;
     private boolean cmdgenPositionScratchSemanticsUsed;
     private boolean previewSectionSidecarFallbackUsed;
+    private boolean previewDrawCommandBucketAlignmentReady;
+    private boolean previewDrawCommandBufferCreated;
+    private boolean previewDrawCommandLayoutUsed;
+    private int previewDrawCommandStrideBytes;
+    private int previewDrawCommandFieldCount;
+    private int previewDrawCommandCount;
+    private int previewDrawCommandIndexCount;
+    private int previewDrawCommandFirstIndex;
+    private int previewDrawCommandBaseVertex;
+    private int previewDrawCommandBaseInstance;
+    private boolean previewDrawCommandMatchesK6;
+    private boolean previewDrawCommandDrivesDrawCount;
+    private boolean bucketCommandPathUsed;
+    private boolean bucketCommandContiguousGeometryUsed;
+    private boolean interleavedPreviewUsedForCommandPath;
+    private int bucketCommandSectionCount;
+    private int bucketCommandRecordCount;
+    private int bucketCommandIndexCount;
+    private int bucketCommandQuadCount;
+    private String bucketCommandSectionPosition = "none";
+    private boolean positionScratchBaseInstanceCompatible;
+    private boolean commandBaseInstancePositionScratchUsed;
+    private boolean productionMdicIndirectDrawUsed;
     private int commandBufferId;
     private int drawCountBufferId;
     private int positionScratchBufferId;
@@ -539,6 +566,7 @@ final class ForgeFormalVisibleLodPreview {
                     && this.sectionMetadataPreviewReady
                     && this.sectionMetadataPathUsed
                     && this.positionScratchPathUsed
+                    && this.previewDrawCommandBucketAlignmentReady
                     && this.acceptedDrawCommandCount >= 1;
             this.multiSectionPreviewPipelineReady = this.ownerReady
                     && this.multiSectionPreviewInputReady
@@ -1040,6 +1068,11 @@ final class ForgeFormalVisibleLodPreview {
                 this.originalSectionMetadataLayoutUsed,
                 this.cmdgenPositionScratchSemanticsUsed,
                 this.previewSectionSidecarFallbackUsed,
+                K21_K22_STAGE,
+                this.previewDrawCommandBucketAlignmentReady,
+                this.previewDrawCommandDrivesDrawCount,
+                this.productionMdicIndirectDrawUsed,
+                this.formatPreviewDrawCommandBucketSummary(),
                 this.previewWorldBounds,
                 this.previewCameraDistance,
                 this.visiblePreviewWasEnabledDuringQa,
@@ -1143,6 +1176,34 @@ final class ForgeFormalVisibleLodPreview {
                 this.lastAudit.success(),
                 this.lastAudit.error(),
                 this.lastAudit.durationMs()
+        );
+    }
+
+    private String formatPreviewDrawCommandBucketSummary() {
+        return String.format(Locale.ROOT,
+                "bufferCreated=%s,layoutUsed=%s,strideBytes=%d,fieldCount=%d,commandCount=%d,indexCount=%d,firstIndex=%d,baseVertex=%d,baseInstance=%d,matchesK6=%s,drivesDrawCount=%s,bucketPathUsed=%s,contiguous=%s,interleavedUsed=%s,bucketSectionCount=%d,bucketRecordCount=%d,bucketIndexCount=%d,bucketQuadCount=%d,bucketSectionPosition=%s,positionScratchBaseInstanceCompatible=%s,commandBaseInstancePositionScratchUsed=%s,productionMdicIndirectDrawUsed=%s",
+                this.previewDrawCommandBufferCreated,
+                this.previewDrawCommandLayoutUsed,
+                this.previewDrawCommandStrideBytes,
+                this.previewDrawCommandFieldCount,
+                this.previewDrawCommandCount,
+                this.previewDrawCommandIndexCount,
+                this.previewDrawCommandFirstIndex,
+                this.previewDrawCommandBaseVertex,
+                this.previewDrawCommandBaseInstance,
+                this.previewDrawCommandMatchesK6,
+                this.previewDrawCommandDrivesDrawCount,
+                this.bucketCommandPathUsed,
+                this.bucketCommandContiguousGeometryUsed,
+                this.interleavedPreviewUsedForCommandPath,
+                this.bucketCommandSectionCount,
+                this.bucketCommandRecordCount,
+                this.bucketCommandIndexCount,
+                this.bucketCommandQuadCount,
+                this.bucketCommandSectionPosition,
+                this.positionScratchBaseInstanceCompatible,
+                this.commandBaseInstancePositionScratchUsed,
+                this.productionMdicIndirectDrawUsed
         );
     }
 
@@ -1928,6 +1989,9 @@ final class ForgeFormalVisibleLodPreview {
                 && this.atlasSampleOk
                 && this.modelDataReadOk
                 && this.modelColourReadOk
+                && this.previewDrawCommandBucketAlignmentReady
+                && this.previewDrawCommandDrivesDrawCount
+                && !this.productionMdicIndirectDrawUsed
                 && qaDisableRequirementMet
                 && !this.perFrameRebuildDetected
                 && !this.perFrameReadbackDetected
@@ -2015,9 +2079,9 @@ final class ForgeFormalVisibleLodPreview {
     private void createValidationDrawBuffers(ForgeFormalCmdgenRealSectionDryRunStats k6, ForgeFormalModelIdSectionGeometryStats k8) {
         this.glAllocationRuns++;
         ForgeFormalModelIdSectionGeometryPath.PreviewRecord[] previewRecords = this.instance.getFormalModelIdSectionGeometryPath()
-                .copyPreviewRecordsInterleavedDetailed(MULTI_SECTION_PREVIEW_MAX_RECORDS);
+                .copyPreviewRecordsCommandContiguousDetailed(MULTI_SECTION_PREVIEW_MAX_RECORDS);
         if (previewRecords.length == 0) {
-            throw new IllegalStateException("empty-multi-section-preview-records");
+            throw new IllegalStateException("empty-command-contiguous-preview-records");
         }
         long[] previewRecordValues = copyPreviewRecordValues(previewRecords);
         int[] previewSectionMetadata = createPreviewSectionMetadata(previewRecords);
@@ -2064,14 +2128,10 @@ final class ForgeFormalVisibleLodPreview {
         this.multiSectionPreviewInputReady = k8.formalGeometrySnapshotSectionCount() > 1
                 && k8.formalGeometrySnapshotRecordCount() > 1
                 && k8.realSectionInputUsed();
-        this.multiSectionFormalGeometryUsed = this.geometryBufferId != 0
-                && this.geometryBufferOwnedByK10
-                && previewRecords.length > 1
-                && this.k8FormalGeometryUsed
-                && !this.syntheticDrawFixtureUsed;
+        this.multiSectionFormalGeometryUsed = false;
         this.multiSectionPreviewBudgetReady = previewRecords.length <= MULTI_SECTION_PREVIEW_MAX_RECORDS
                 && this.multiSectionPreviewDrawRecordLimit == MULTI_SECTION_PREVIEW_MAX_RECORDS;
-        this.singleSectionFallbackUsed = k8.formalGeometrySnapshotSectionCount() <= 1;
+        this.singleSectionFallbackUsed = false;
         this.multiSectionSyntheticFallbackUsed = this.syntheticDrawFixtureUsed;
         this.previewSectionSidecarBufferCreated = false;
         this.worldPlacedPreviewRecordCount = previewRecords.length;
@@ -2096,6 +2156,44 @@ final class ForgeFormalVisibleLodPreview {
         this.sectionMetadataPreviewReady = this.sectionMetadataPathUsed
                 && this.positionScratchPathUsed
                 && !this.previewSectionSidecarFallbackUsed;
+        this.previewDrawCommandBufferCreated = this.commandBufferId != 0;
+        this.previewDrawCommandLayoutUsed = true;
+        this.previewDrawCommandStrideBytes = DRAW_COMMAND_FIELD_COUNT * Integer.BYTES;
+        this.previewDrawCommandFieldCount = DRAW_COMMAND_FIELD_COUNT;
+        this.previewDrawCommandCount = this.acceptedDrawCommandCount;
+        this.previewDrawCommandIndexCount = this.k6FirstCommandCount;
+        this.previewDrawCommandFirstIndex = this.k6FirstCommandFirstIndex;
+        this.previewDrawCommandBaseVertex = this.k6FirstCommandBaseVertex;
+        this.previewDrawCommandBaseInstance = this.k6FirstCommandBaseInstance;
+        this.previewDrawCommandMatchesK6 = this.drawCommandMatchesK6;
+        this.previewDrawCommandDrivesDrawCount = this.previewDrawCommandBufferCreated
+                && this.previewDrawCommandIndexCount > 0
+                && this.previewDrawCommandCount == 1;
+        this.bucketCommandPathUsed = true;
+        this.bucketCommandContiguousGeometryUsed = previewRecords.length > 0 && allPreviewRecordsShareSectionPosition(previewRecords);
+        this.interleavedPreviewUsedForCommandPath = false;
+        this.bucketCommandSectionCount = this.bucketCommandContiguousGeometryUsed ? 1 : 0;
+        this.bucketCommandRecordCount = previewRecords.length;
+        this.bucketCommandIndexCount = this.previewDrawCommandIndexCount;
+        this.bucketCommandQuadCount = Math.max(0, this.bucketCommandIndexCount / 6);
+        this.bucketCommandSectionPosition = Long.toUnsignedString(previewRecords[0].sectionPosition());
+        this.positionScratchBaseInstanceCompatible = this.previewDrawCommandBaseInstance >= 0
+                && this.previewDrawCommandBaseInstance < previewRecords.length
+                && this.bucketCommandContiguousGeometryUsed;
+        this.commandBaseInstancePositionScratchUsed = this.positionScratchPathUsed
+                && this.positionScratchBaseInstanceCompatible;
+        this.productionMdicIndirectDrawUsed = false;
+        this.previewDrawCommandBucketAlignmentReady = this.previewDrawCommandBufferCreated
+                && this.previewDrawCommandLayoutUsed
+                && this.previewDrawCommandStrideBytes == 20
+                && this.previewDrawCommandFieldCount == DRAW_COMMAND_FIELD_COUNT
+                && this.previewDrawCommandMatchesK6
+                && this.previewDrawCommandDrivesDrawCount
+                && this.bucketCommandPathUsed
+                && this.bucketCommandContiguousGeometryUsed
+                && this.commandBaseInstancePositionScratchUsed
+                && !this.interleavedPreviewUsedForCommandPath
+                && !this.productionMdicIndirectDrawUsed;
         this.worldPlacedPreviewUsed = this.previewSectionSidecarBufferCreated
                 || this.sectionMetadataPreviewReady;
         this.worldPlacedPreviewUsed = this.worldPlacedPreviewUsed
@@ -2176,7 +2274,8 @@ final class ForgeFormalVisibleLodPreview {
                 uniform1ui(this.uniformObserveMode, this.observeModeEnabled ? 1 : 0);
                 uniform3f(this.uniformObserveTint, 0.18F, 1.0F, 0.25F);
                 uniform1ui(this.uniformRecordCount, Math.max(1, this.formalGeometryRecordCount));
-                uniform1ui(this.uniformBaseVertexBias, Math.max(0, this.k6FirstCommandBaseVertex));
+                uniform1ui(this.uniformBaseVertexBias, Math.max(0, this.previewDrawCommandBaseVertex));
+                uniform1ui(this.uniformPreviewCommandBaseInstance, Math.max(0, this.previewDrawCommandBaseInstance));
 
                 GL30C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, ForgeFormalShaderInputBindingLayout.QUAD_BUFFER_BINDING_INDEX, this.geometryBufferId);
                 GL30C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, ForgeFormalShaderInputBindingLayout.MODEL_DATA_BINDING_INDEX, this.modelDataBufferId);
@@ -2203,7 +2302,7 @@ final class ForgeFormalVisibleLodPreview {
                 if (validationChecksThisFrame) {
                     GL43C.glMemoryBarrier(GL43C.GL_SHADER_STORAGE_BARRIER_BIT | GL43C.GL_TEXTURE_FETCH_BARRIER_BIT);
                 }
-                int commandIndexCount = Math.max(0, this.k6FirstCommandCount);
+                int commandIndexCount = Math.max(0, this.previewDrawCommandIndexCount);
                 int recordIndexCap = Math.max(1, this.multiSectionPreviewDrawRecordCount) * 6;
                 int drawIndexCap = Math.min(OBSERVE_MAX_DRAW_INDICES, recordIndexCap);
                 int drawIndexCount = Math.min(commandIndexCount, drawIndexCap);
@@ -2215,7 +2314,7 @@ final class ForgeFormalVisibleLodPreview {
                         GL11C.GL_TRIANGLES,
                         drawIndexCount,
                         GL11C.GL_UNSIGNED_SHORT,
-                        (long) Math.max(0, this.k6FirstCommandFirstIndex) * Short.BYTES
+                        (long) Math.max(0, this.previewDrawCommandFirstIndex) * Short.BYTES
                 );
                 this.visiblePreviewLightweightDrawPath = true;
                 this.visiblePreviewDirectDrawUsed = true;
@@ -2480,6 +2579,29 @@ final class ForgeFormalVisibleLodPreview {
         this.originalSectionMetadataLayoutUsed = false;
         this.cmdgenPositionScratchSemanticsUsed = false;
         this.previewSectionSidecarFallbackUsed = false;
+        this.previewDrawCommandBucketAlignmentReady = false;
+        this.previewDrawCommandBufferCreated = false;
+        this.previewDrawCommandLayoutUsed = false;
+        this.previewDrawCommandStrideBytes = 0;
+        this.previewDrawCommandFieldCount = 0;
+        this.previewDrawCommandCount = 0;
+        this.previewDrawCommandIndexCount = 0;
+        this.previewDrawCommandFirstIndex = 0;
+        this.previewDrawCommandBaseVertex = 0;
+        this.previewDrawCommandBaseInstance = 0;
+        this.previewDrawCommandMatchesK6 = false;
+        this.previewDrawCommandDrivesDrawCount = false;
+        this.bucketCommandPathUsed = false;
+        this.bucketCommandContiguousGeometryUsed = false;
+        this.interleavedPreviewUsedForCommandPath = false;
+        this.bucketCommandSectionCount = 0;
+        this.bucketCommandRecordCount = 0;
+        this.bucketCommandIndexCount = 0;
+        this.bucketCommandQuadCount = 0;
+        this.bucketCommandSectionPosition = "none";
+        this.positionScratchBaseInstanceCompatible = false;
+        this.commandBaseInstancePositionScratchUsed = false;
+        this.productionMdicIndirectDrawUsed = false;
         this.k6FirstCommandCount = 0;
         this.k6FirstCommandInstanceCount = 0;
         this.k6FirstCommandFirstIndex = 0;
@@ -2592,6 +2714,19 @@ final class ForgeFormalVisibleLodPreview {
         return values;
     }
 
+    private static boolean allPreviewRecordsShareSectionPosition(ForgeFormalModelIdSectionGeometryPath.PreviewRecord[] records) {
+        if (records.length == 0) {
+            return false;
+        }
+        long position = records[0].sectionPosition();
+        for (ForgeFormalModelIdSectionGeometryPath.PreviewRecord record : records) {
+            if (record.sectionPosition() != position) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     private static int[] rawSectionPositionWords(long position) {
         return new int[] {(int) (position >>> 32), (int) position};
     }
@@ -2643,6 +2778,7 @@ final class ForgeFormalVisibleLodPreview {
         this.uniformObserveTint = GL20C.glGetUniformLocation(program, "observeTint");
         this.uniformRecordCount = GL20C.glGetUniformLocation(program, "recordCount");
         this.uniformBaseVertexBias = GL20C.glGetUniformLocation(program, "baseVertexBias");
+        this.uniformPreviewCommandBaseInstance = GL20C.glGetUniformLocation(program, "previewCommandBaseInstance");
         this.uniformBlockModelAtlas = GL20C.glGetUniformLocation(program, "blockModelAtlas");
     }
 
@@ -2657,6 +2793,7 @@ final class ForgeFormalVisibleLodPreview {
         this.uniformObserveTint = -1;
         this.uniformRecordCount = -1;
         this.uniformBaseVertexBias = -1;
+        this.uniformPreviewCommandBaseInstance = -1;
         this.uniformBlockModelAtlas = -1;
     }
 

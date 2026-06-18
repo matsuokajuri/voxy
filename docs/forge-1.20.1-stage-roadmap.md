@@ -809,6 +809,29 @@ K10.3 remains below K11: it does not call `MDICSectionRenderer`, does not call
 `formalDrawPipelineReady=false`, `formalRendererReady=false`, and
 `actualRendererDrawEnabled=false`.
 
+## K21/K22 status note
+
+K21/K22 keeps the visible preview path below production MDIC renderer
+integration while aligning its draw input with the original Voxy
+`DrawCommand`/bucket contract. K10 now builds a K10-owned preview command buffer
+using the five-field, 20-byte `DrawCommand` layout and drives the visible
+preview draw count, first index, base vertex, and base instance from that
+command state.
+
+New compact commands:
+
+```text
+/voxy qa_k21_k22_command_bucket_visible_preview
+/voxy formal_visible_lod_preview_command_bucket_status
+```
+
+This stage intentionally selects a contiguous preview slice from one accepted
+formal section so `baseInstance -> positionScratch` semantics are meaningful.
+It does not call `MDICSectionRenderer`, does not call `VoxyRenderSystem`, does
+not use production `glMultiDrawElementsIndirectCountARB`, and does not change
+`formalDrawPipelineReady=false`, `formalRendererReady=false`, or
+`actualRendererDrawEnabled=false`.
+
 Follow-up hotfix detail: if a real resource reload lands while manual observe
 prepare is pending or in progress, K10.3 now keeps the observe request alive,
 closes any stale K10-owned resources, and lets the bounded render-thread

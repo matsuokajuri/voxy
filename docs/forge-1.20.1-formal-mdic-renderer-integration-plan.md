@@ -861,3 +861,28 @@ This matches the original concept where `cmdgen.comp` writes
 buffers remain validation resources: they are not `BasicSectionGeometryData`,
 not production MDIC command resources, not a live renderer input, and not a
 replacement for formal visibility traversal or production command generation.
+
+## K21/K22 preview DrawCommand / bucket alignment note
+
+K21/K22 adds a preview-only bridge between the K19/K20 section metadata path and
+future production MDIC draw ownership. The visible preview now constructs a
+K10-owned command buffer using the original five-field `DrawCommand` layout:
+
+```text
+count
+instanceCount
+firstIndex
+baseVertex
+baseInstance
+```
+
+The K10 draw remains a direct, preview-scoped draw, but its draw count and
+index/base parameters are derived from that command state. The shader also uses
+the preview command `baseInstance` to address the preview position scratch
+buffer, matching the shape of the original `cmdgen.comp -> positionScratch ->
+quads3.vert` handoff.
+
+This is not production indirect rendering. K21/K22 does not run production
+`cmdgen.comp`, does not bind the K2 formal command buffers as live renderer
+inputs, does not call `MDICSectionRenderer`, and does not call
+`glMultiDrawElementsIndirectCountARB` for terrain rendering.

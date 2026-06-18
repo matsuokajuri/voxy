@@ -625,6 +625,10 @@ public final class ForgeVoxyCommands {
                         .executes(ctx -> formalVisibleLodPreviewSectionMetadataStatus(ctx.getSource())))
                 .then(Commands.literal("qa_k19_k20_section_metadata_visible_preview")
                         .executes(ctx -> qaK19K20SectionMetadataVisiblePreview(ctx.getSource())))
+                .then(Commands.literal("formal_visible_lod_preview_command_bucket_status")
+                        .executes(ctx -> formalVisibleLodPreviewCommandBucketStatus(ctx.getSource())))
+                .then(Commands.literal("qa_k21_k22_command_bucket_visible_preview")
+                        .executes(ctx -> qaK21K22CommandBucketVisiblePreview(ctx.getSource())))
                 .then(Commands.literal("formal_renderer_check")
                         .executes(ctx -> formalRendererCheck(ctx.getSource())))
                 .then(Commands.literal("formal_renderer_status")
@@ -6500,6 +6504,37 @@ public final class ForgeVoxyCommands {
                 && !status.actualRendererDrawEnabled() ? 1 : 0;
     }
 
+    private static int formalVisibleLodPreviewCommandBucketStatus(CommandSourceStack source) {
+        ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview().createStatusSnapshot();
+        source.sendSuccess(() -> Component.literal("Voxy K21/K22 command/bucket visible preview status: "
+                + formatFormalVisibleLodPreviewCommandBucketStatus(status)), false);
+        return status.previewDrawCommandBucketAlignmentReady()
+                && status.previewDrawCommandDrivesDrawCount()
+                && !status.productionMdicIndirectDrawUsed()
+                && !status.formalRendererReady()
+                && !status.actualRendererDrawEnabled() ? 1 : 0;
+    }
+
+    private static int qaK21K22CommandBucketVisiblePreview(CommandSourceStack source) {
+        ForgeVoxyRuntimeOverrides.applyFormalVisibleLodPreviewDebugPreset();
+        boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
+        ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview()
+                .requestPreviewPrepare("qa-k21-k22-command-bucket-visible-preview");
+        boolean previewPrepared = status.visibleLodPreviewOwnerReady() && !status.stale();
+        source.sendSuccess(() -> Component.literal("Voxy QA K21/K22 command/bucket visible preview: "
+                + (engineReady ? "WorldEngine active. " : "No active client world; prepare may wait/fail safely. ")
+                + formatFormalVisibleLodPreviewCommandBucketStatus(status)
+                + " next=/voxy formal_visible_lod_preview_command_bucket_status; after prepared, use /voxy formal_visible_lod_preview_observe_enable"), false);
+        return (previewPrepared || status.observePrepareRequested() || status.observePrepareInProgress())
+                && status.observeEnableCommandReturnedQuickly()
+                && !status.observeEnableDidGlWorkOnCommandThread()
+                && !status.observeEnableDidReadbackOnCommandThread()
+                && !status.observeEnableDidSynchronousRebuild()
+                && !status.productionMdicIndirectDrawUsed()
+                && !status.formalRendererReady()
+                && !status.actualRendererDrawEnabled() ? 1 : 0;
+    }
+
     private static int formalRendererCheck(CommandSourceStack source) {
         ForgeFormalRendererStats status = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("command-check");
         source.sendSuccess(() -> Component.literal("Voxy formal renderer check: " + formatFormalRendererStatus(status)), false);
@@ -8816,6 +8851,47 @@ public final class ForgeVoxyCommands {
                 status.visiblePreviewEnabled(),
                 status.visiblePreviewDrawExecuted(),
                 status.visiblePreviewFrameCount(),
+                status.k8FormalGeometryUsed(),
+                status.k9TerrainShaderIntegrationUsed(),
+                status.k6RealSectionCommandUsed(),
+                status.syntheticDrawFixtureUsed(),
+                status.originalGeometryHeapMutated(),
+                status.debugMdicCommandBuffersUsedAsFormal(),
+                status.lastFailureReason()
+        );
+    }
+
+    private static String formatFormalVisibleLodPreviewCommandBucketStatus(ForgeFormalVisibleLodPreviewStats status) {
+        return String.format(
+                "stage=%s k21_k22_stage=%s previewPrepared=%s prepareRequested=%s prepareInProgress=%s prepareCompleted=%s "
+                        + "previewDrawCommandBucketAlignmentReady=%s previewDrawCommandDrivesDrawCount=%s productionMdicIndirectDrawUsed=%s "
+                        + "previewDrawCommandBucketSummary=%s "
+                        + "sectionMetadataPreviewReady=%s positionScratchPathUsed=%s worldPlacedPreviewReady=%s visiblePreviewEnabled=%s visiblePreviewDrawExecuted=%s "
+                        + "visiblePreviewFrameCount=%d visiblePreviewDirectDrawUsed=%s visiblePreviewIndirectCountDrawUsed=%s visiblePreviewCommandIndexCount=%d "
+                        + "visiblePreviewDrawIndexCount=%d visiblePreviewDrawCountCapped=%s k8FormalGeometryUsed=%s k9TerrainShaderIntegrationUsed=%s k6RealSectionCommandUsed=%s "
+                        + "syntheticDrawFixtureUsed=%s originalGeometryHeapMutated=%s debugMdicCommandBuffersUsedAsFormal=%s visibleTerrainPreviewOnly=true "
+                        + "productionLiveRendererDrawExecuted=false formalDrawPipelineReady=false formalRendererReady=false actualRendererDrawEnabled=false lastFailureReason=%s",
+                status.stage(),
+                status.k21K22Stage(),
+                status.visibleLodPreviewOwnerReady() && !status.stale(),
+                status.observePrepareRequested(),
+                status.observePrepareInProgress(),
+                status.observePrepareCompleted(),
+                status.previewDrawCommandBucketAlignmentReady(),
+                status.previewDrawCommandDrivesDrawCount(),
+                status.productionMdicIndirectDrawUsed(),
+                status.previewDrawCommandBucketSummary(),
+                status.sectionMetadataPreviewReady(),
+                status.positionScratchPathUsed(),
+                status.worldPlacedPreviewReady(),
+                status.visiblePreviewEnabled(),
+                status.visiblePreviewDrawExecuted(),
+                status.visiblePreviewFrameCount(),
+                status.visiblePreviewDirectDrawUsed(),
+                status.visiblePreviewIndirectCountDrawUsed(),
+                status.visiblePreviewCommandIndexCount(),
+                status.visiblePreviewDrawIndexCount(),
+                status.visiblePreviewDrawCountCapped(),
                 status.k8FormalGeometryUsed(),
                 status.k9TerrainShaderIntegrationUsed(),
                 status.k6RealSectionCommandUsed(),

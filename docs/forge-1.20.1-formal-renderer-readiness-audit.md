@@ -1594,3 +1594,28 @@ observeEnableDidSynchronousRebuild=false
 formalRendererReady=false
 actualRendererDrawEnabled=false
 ```
+
+## K21/K22 preview command / bucket alignment note
+
+K21/K22 adds visible-preview evidence for the original Voxy command contract
+without enabling the production MDIC renderer. The K10 visible preview now
+reports:
+
+```text
+previewDrawCommandBucketAlignmentReady
+previewDrawCommandBufferCreated
+previewDrawCommandStrideBytes=20
+previewDrawCommandFieldCount=5
+previewDrawCommandDrivesDrawCount
+bucketCommandContiguousGeometryUsed
+positionScratchBaseInstanceCompatible
+commandBaseInstancePositionScratchUsed
+productionMdicIndirectDrawUsed=false
+```
+
+The preview command is K10-owned and validation scoped. It exists to prove that
+the visible preview is no longer just a raw vertex-count draw; it is not the
+formal command buffer owner from K2, not production `cmdgen.comp` output, and
+not submitted through `MDICSectionRenderer`. Readiness remains blocked by
+production command generation, formal visibility traversal, full terrain shader
+semantics, and live MDIC renderer integration.
