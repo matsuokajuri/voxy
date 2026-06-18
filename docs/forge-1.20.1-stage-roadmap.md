@@ -887,3 +887,34 @@ K11 keeps the same renderer boundary as K10: it does not call
 production cmdgen or formal visibility traversal, and still reports
 `formalDrawPipelineReady=false`, `formalRendererReady=false`, and
 `actualRendererDrawEnabled=false`.
+
+## K12/K13 status note
+
+K12/K13 batches the visible-preview prepare observability and reuse work without
+entering a new production renderer boundary. The K11 prepare lifecycle now
+reports per-step timing for the render-thread preparation chain:
+
+```text
+ensure-world
+ -> K6 real-section dry-run
+ -> K7 isolated MDIC draw evidence
+ -> K8 formal model-id geometry
+ -> K9 terrain shader integration
+ -> K10 visible preview build
+```
+
+New status fields include `prepareTimingReady`, `prepareReuseReady`,
+`lastPrepareReusedExistingResources`, `unnecessaryRebuildDetected`,
+`slowestPrepareStepName`, `prepareBlockingStep`, and
+`prepareTimingSummary`. The compact QA command is:
+
+```text
+/voxy qa_k12_k13_visible_preview_prepare_reuse
+```
+
+The expected workflow is: first prepare may still take real time while K6-K10
+resources are built; a second prepare after success should reuse existing
+resources and report `lastPrepareReusedExistingResources=true` without enabling
+visible preview drawing. Renderer readiness remains unchanged:
+`formalDrawPipelineReady=false`, `formalRendererReady=false`, and
+`actualRendererDrawEnabled=false`.

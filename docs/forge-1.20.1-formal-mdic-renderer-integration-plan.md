@@ -775,3 +775,23 @@ If the resources are stale or missing, observe enable reports
 without starting a hidden rebuild. K11 still does not call `MDICSectionRenderer`
 or `VoxyRenderSystem`, does not run production `cmdgen.comp`, and does not mark
 the formal draw pipeline or formal renderer ready.
+
+## K12/K13 visible preview prepare timing and reuse note
+
+K12/K13 does not add live MDIC rendering. It tightens the K11 prepare workflow so
+the formal visible preview path can be tested in larger batches with fewer game
+restarts. The prepare owner now records per-step timing for the K6/K7/K8/K9/K10
+preparation chain, reports the slowest step, and marks whether a second prepare
+request reused already-prepared resources instead of rebuilding them.
+
+The compact QA entry is:
+
+```text
+/voxy qa_k12_k13_visible_preview_prepare_reuse
+```
+
+Expected behavior after a successful prepare is that a repeated prepare command
+returns quickly with `lastPrepareReusedExistingResources=true` and
+`unnecessaryRebuildDetected=false`. Visible preview drawing still requires the
+explicit observe enable command, and the production MDIC renderer remains
+disabled.

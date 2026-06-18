@@ -26,11 +26,13 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Locale;
 import java.util.stream.Collectors;
 import java.util.zip.CRC32;
 
 final class ForgeFormalVisibleLodPreview {
     static final String STAGE = "K10_FORMAL_VISIBLE_LOD_PREVIEW_DEBUG_TOGGLE";
+    static final String K12_K13_STAGE = "K12_K13_FORMAL_VISIBLE_PREVIEW_PREPARE_BUDGET_AND_REUSE";
     private static final boolean DEFAULT_ENABLED = false;
     private static final boolean DEBUG_OPT_IN_ONLY = true;
     private static final int QA_VISIBLE_FRAMES = 1;
@@ -39,6 +41,7 @@ final class ForgeFormalVisibleLodPreview {
     private static final int DRAW_COMMAND_FIELD_COUNT = 5;
     private static final int OBSERVE_PREPARE_FRAME_BUDGET = 2400;
     private static final int OBSERVE_PREPARE_RETRY_INTERVAL_FRAMES = 20;
+    private static final double OBSERVE_PREPARE_STEP_WARN_MS = 250.0D;
     private static final float NORMAL_PREVIEW_DISTANCE = 8.0F;
     private static final float NORMAL_PREVIEW_SCALE = 1.45F;
     private static final float OBSERVE_PREVIEW_DISTANCE = 5.0F;
@@ -253,6 +256,27 @@ final class ForgeFormalVisibleLodPreview {
     private int observePrepareNextAttemptFrame;
     private String lastObservePrepareStepName = "none";
     private String lastObservePrepareFailureReason = "none";
+    private long prepareRunCount;
+    private long prepareReuseCount;
+    private long prepareStartedNanos;
+    private boolean prepareTimingReady;
+    private boolean prepareReuseReady;
+    private boolean lastPrepareReusedExistingResources;
+    private boolean unnecessaryRebuildDetected;
+    private boolean prepareStepBudgetExceeded;
+    private double lastPrepareTotalDurationMs;
+    private double lastPrepareStepDurationMs;
+    private double maxPrepareStepDurationMs;
+    private String slowestPrepareStepName = "none";
+    private String prepareBlockingStep = "none";
+    private String prepareBlockingReason = "none";
+    private double prepareEnsureWorldDurationMs;
+    private double prepareK6DurationMs;
+    private double prepareK7DurationMs;
+    private double prepareK8DurationMs;
+    private double prepareK9DurationMs;
+    private double prepareK10DurationMs;
+    private String prepareTimingSummary = "none";
     private String previewWorldBounds = "none";
     private double previewCameraDistance;
     private boolean visiblePreviewDefaultDisabledVerified = true;
@@ -561,6 +585,7 @@ final class ForgeFormalVisibleLodPreview {
         long shaderCompileRunsBeforeCommand = this.shaderCompileRuns;
         long glAllocationRunsBeforeCommand = this.glAllocationRuns;
         long readbackRunsBeforeCommand = this.readbackRuns;
+        this.prepareRunCount++;
         this.observeEnableRequested = false;
         this.observeEnableHandledOnRenderThread = false;
         this.observeEnableCommandDurationMillis = 0L;
@@ -572,7 +597,18 @@ final class ForgeFormalVisibleLodPreview {
         this.lastObserveEnableFailureReason = "none";
         this.lastObserveEnableExceptionClass = "none";
         this.lastObserveEnableExceptionMessage = "none";
+        if (this.observePrepareRequested || this.observePrepareInProgress) {
+            this.observeEnableCommandDurationMillis = Math.max(0L, (System.nanoTime() - startNanos) / 1_000_000L);
+            this.observeEnableCommandReturnedQuickly = this.observeEnableCommandDurationMillis < 250L;
+            this.lastPrepareReusedExistingResources = false;
+            this.prepareReuseReady = false;
+            this.unnecessaryRebuildDetected = false;
+            this.lastLifecycleEvent = safeReason(reason);
+            this.lastObservePrepareStepName = "prepare-already-in-progress";
+            return this.createStatusSnapshot();
+        }
         if (this.ownerReady && !this.stale) {
+            this.prepareReuseCount++;
             this.observePrepareRequested = false;
             this.observePrepareInProgress = false;
             this.observePrepareCompleted = true;
@@ -589,8 +625,31 @@ final class ForgeFormalVisibleLodPreview {
             this.lastFailureReason = "none";
             this.observeEnableCommandDurationMillis = Math.max(0L, (System.nanoTime() - startNanos) / 1_000_000L);
             this.observeEnableCommandReturnedQuickly = this.observeEnableCommandDurationMillis < 250L;
+            this.prepareTimingReady = true;
+            this.prepareReuseReady = true;
+            this.lastPrepareReusedExistingResources = true;
+            this.unnecessaryRebuildDetected = this.buildRuns != buildRunsBeforeCommand
+                    || this.readbackRuns != readbackRunsBeforeCommand
+                    || this.glAllocationRuns != glAllocationRunsBeforeCommand
+                    || this.shaderCompileRuns != shaderCompileRunsBeforeCommand;
+            this.prepareStepBudgetExceeded = false;
+            this.prepareStartedNanos = 0L;
+            this.lastPrepareTotalDurationMs = this.observeEnableCommandDurationMillis;
+            this.lastPrepareStepDurationMs = 0.0D;
+            this.maxPrepareStepDurationMs = 0.0D;
+            this.slowestPrepareStepName = "already-prepared";
+            this.prepareBlockingStep = "none";
+            this.prepareBlockingReason = "none";
+            this.prepareEnsureWorldDurationMs = 0.0D;
+            this.prepareK6DurationMs = 0.0D;
+            this.prepareK7DurationMs = 0.0D;
+            this.prepareK8DurationMs = 0.0D;
+            this.prepareK9DurationMs = 0.0D;
+            this.prepareK10DurationMs = 0.0D;
+            this.prepareTimingSummary = "reused-existing-resources";
             return this.createStatusSnapshot();
         }
+        this.resetPrepareTimingForNewRun();
         this.observePrepareRequested = true;
         this.observePrepareInProgress = false;
         this.observePrepareCompleted = false;
@@ -810,6 +869,28 @@ final class ForgeFormalVisibleLodPreview {
                 this.observePrepareNextAttemptFrame,
                 this.lastObservePrepareStepName,
                 this.lastObservePrepareFailureReason,
+                K12_K13_STAGE,
+                this.prepareRunCount,
+                this.prepareReuseCount,
+                this.prepareTimingReady,
+                this.prepareReuseReady,
+                this.lastPrepareReusedExistingResources,
+                this.unnecessaryRebuildDetected,
+                this.prepareStepBudgetExceeded,
+                OBSERVE_PREPARE_STEP_WARN_MS,
+                this.lastPrepareTotalDurationMs,
+                this.lastPrepareStepDurationMs,
+                this.maxPrepareStepDurationMs,
+                this.slowestPrepareStepName,
+                this.prepareBlockingStep,
+                this.prepareBlockingReason,
+                this.prepareEnsureWorldDurationMs,
+                this.prepareK6DurationMs,
+                this.prepareK7DurationMs,
+                this.prepareK8DurationMs,
+                this.prepareK9DurationMs,
+                this.prepareK10DurationMs,
+                this.prepareTimingSummary,
                 this.previewWorldBounds,
                 this.previewCameraDistance,
                 this.visiblePreviewWasEnabledDuringQa,
@@ -1116,6 +1197,14 @@ final class ForgeFormalVisibleLodPreview {
         this.observePrepareNextAttemptFrame = 0;
         this.lastObservePrepareStepName = "start:" + safeReason(reason);
         this.lastObservePrepareFailureReason = "none";
+        this.prepareStartedNanos = System.nanoTime();
+        this.prepareTimingReady = false;
+        this.prepareReuseReady = false;
+        this.lastPrepareReusedExistingResources = false;
+        this.unnecessaryRebuildDetected = false;
+        this.prepareBlockingStep = "none";
+        this.prepareBlockingReason = "none";
+        this.prepareTimingSummary = "running";
         this.visiblePreviewEnabled = false;
         this.observeModeEnabled = false;
         this.readbackPending = false;
@@ -1129,7 +1218,9 @@ final class ForgeFormalVisibleLodPreview {
     private void runObservePrepareStep() {
         this.observePrepareFrameCount++;
         if (this.observePrepareFrameCount > OBSERVE_PREPARE_FRAME_BUDGET) {
-            this.failObservePrepareSafely("observe-prepare-frame-budget-exceeded:" + OBSERVE_PREPARE_FRAME_BUDGET, null);
+            String reason = "observe-prepare-frame-budget-exceeded:" + OBSERVE_PREPARE_FRAME_BUDGET;
+            this.setPrepareBlocking("frame-budget", reason);
+            this.failObservePrepareSafely(reason, null);
             return;
         }
         if (this.observePrepareFrameCount < this.observePrepareNextAttemptFrame) {
@@ -1138,63 +1229,98 @@ final class ForgeFormalVisibleLodPreview {
         try {
             switch (this.observePrepareStep) {
                 case 0 -> {
-                    this.lastObservePrepareStepName = "ensure-world";
+                    long stepStart = System.nanoTime();
+                    String stepName = "ensure-world";
+                    this.lastObservePrepareStepName = stepName;
                     if (!this.instance.ensureActiveWorldSkeletonForCurrentWorldIfAllowed()) {
-                        this.failObservePrepareSafely("observe-prepare-world-engine-skeleton-not-ready", null);
+                        String reason = "observe-prepare-world-engine-skeleton-not-ready";
+                        this.recordPrepareStepTiming(stepName, stepStart);
+                        this.setPrepareBlocking(stepName, reason);
+                        this.failObservePrepareSafely(reason, null);
                         return;
                     }
+                    this.recordPrepareStepTiming(stepName, stepStart);
                     this.observePrepareStep++;
                 }
                 case 1 -> {
-                    this.lastObservePrepareStepName = "k6-real-section-dry-run";
+                    long stepStart = System.nanoTime();
+                    String stepName = "k6-real-section-dry-run";
+                    this.lastObservePrepareStepName = stepName;
                     ForgeFormalCmdgenRealSectionDryRunStats k6 = this.instance.getFormalCmdgenRealSectionDryRun().build();
                     if (!k6.realSectionDryRunReady()) {
-                        this.waitForObservePreparePrerequisite("observe-prepare-k6-not-ready:" + k6.lastFailureReason(), false);
+                        String reason = "observe-prepare-k6-not-ready:" + k6.lastFailureReason();
+                        this.recordPrepareStepTiming(stepName, stepStart);
+                        this.setPrepareBlocking(stepName, reason);
+                        this.waitForObservePreparePrerequisite(reason, false);
                         return;
                     }
+                    this.recordPrepareStepTiming(stepName, stepStart);
                     this.observePrepareStep++;
                 }
                 case 2 -> {
-                    this.lastObservePrepareStepName = "k7-isolated-mdic-draw";
+                    long stepStart = System.nanoTime();
+                    String stepName = "k7-isolated-mdic-draw";
+                    this.lastObservePrepareStepName = stepName;
                     ForgeFormalIsolatedMdicDrawSmokeTestStats k7 = this.instance.getFormalIsolatedMdicDrawSmokeTest().build();
                     if (!k7.isolatedMdicDrawSmokeTestReady()) {
                         ForgeFormalCmdgenRealSectionDryRunStats k6 = this.instance.getFormalCmdgenRealSectionDryRun().createStatusSnapshot();
-                        this.waitForObservePreparePrerequisite(
-                                "observe-prepare-k7-not-ready:" + k7.lastFailureReason() + ":k6=" + k6.lastFailureReason(),
-                                true);
+                        String reason = "observe-prepare-k7-not-ready:" + k7.lastFailureReason() + ":k6=" + k6.lastFailureReason();
+                        this.recordPrepareStepTiming(stepName, stepStart);
+                        this.setPrepareBlocking(stepName, reason);
+                        this.waitForObservePreparePrerequisite(reason, true);
                         return;
                     }
+                    this.recordPrepareStepTiming(stepName, stepStart);
                     this.observePrepareStep++;
                 }
                 case 3 -> {
-                    this.lastObservePrepareStepName = "k8-formal-model-id-geometry";
+                    long stepStart = System.nanoTime();
+                    String stepName = "k8-formal-model-id-geometry";
+                    this.lastObservePrepareStepName = stepName;
                     ForgeFormalModelIdSectionGeometryStats k8 = this.instance.getFormalModelIdSectionGeometryPath().build();
                     if (!k8.formalModelIdGeometryPathReady()) {
-                        this.waitForObservePreparePrerequisite("observe-prepare-k8-not-ready:" + k8.lastFailureReason(), true);
+                        String reason = "observe-prepare-k8-not-ready:" + k8.lastFailureReason();
+                        this.recordPrepareStepTiming(stepName, stepStart);
+                        this.setPrepareBlocking(stepName, reason);
+                        this.waitForObservePreparePrerequisite(reason, true);
                         return;
                     }
+                    this.recordPrepareStepTiming(stepName, stepStart);
                     this.observePrepareStep++;
                 }
                 case 4 -> {
-                    this.lastObservePrepareStepName = "k9-terrain-shader-integration";
+                    long stepStart = System.nanoTime();
+                    String stepName = "k9-terrain-shader-integration";
+                    this.lastObservePrepareStepName = stepName;
                     ForgeFormalTerrainShaderIntegrationStats k9 = this.instance.getFormalTerrainShaderIntegration().build();
                     if (!k9.formalTerrainShaderIntegrationReady()) {
-                        this.waitForObservePreparePrerequisite("observe-prepare-k9-not-ready:" + k9.lastFailureReason(), true);
+                        String reason = "observe-prepare-k9-not-ready:" + k9.lastFailureReason();
+                        this.recordPrepareStepTiming(stepName, stepStart);
+                        this.setPrepareBlocking(stepName, reason);
+                        this.waitForObservePreparePrerequisite(reason, true);
                         return;
                     }
+                    this.recordPrepareStepTiming(stepName, stepStart);
                     this.observePrepareStep++;
                 }
                 case 5 -> {
-                    this.lastObservePrepareStepName = "k10-visible-preview-build";
+                    long stepStart = System.nanoTime();
+                    String stepName = "k10-visible-preview-build";
+                    this.lastObservePrepareStepName = stepName;
                     ForgeFormalVisibleLodPreviewStats status = this.build();
                     this.restoreObserveEnableCommandSafetyAfterRenderPrepare();
                     if (!status.visibleLodPreviewOwnerReady()) {
-                        this.waitForObservePreparePrerequisite("observe-prepare-k10-not-ready:" + status.lastFailureReason(), true);
+                        String reason = "observe-prepare-k10-not-ready:" + status.lastFailureReason();
+                        this.recordPrepareStepTiming(stepName, stepStart);
+                        this.setPrepareBlocking(stepName, reason);
+                        this.waitForObservePreparePrerequisite(reason, true);
                         return;
                     }
+                    this.recordPrepareStepTiming(stepName, stepStart);
                     this.observePrepareStep++;
                 }
                 case 6 -> {
+                    long stepStart = System.nanoTime();
                     this.lastObservePrepareStepName = this.observePrepareAutoEnable ? "enable-observe" : "prepared-disabled";
                     this.observePrepareInProgress = false;
                     this.observePrepareCompleted = true;
@@ -1202,7 +1328,10 @@ final class ForgeFormalVisibleLodPreview {
                     this.lastObservePrepareFailureReason = "none";
                     if (this.observePrepareAutoEnable) {
                         if (!this.enableObserveFromPreparedResources("observe-prepare-complete", true)) {
-                            this.failObservePrepareSafely("observe-prepare-enable-failed:ownerReady=" + this.ownerReady + ":stale=" + this.stale, null);
+                            String reason = "observe-prepare-enable-failed:ownerReady=" + this.ownerReady + ":stale=" + this.stale;
+                            this.recordPrepareStepTiming(this.lastObservePrepareStepName, stepStart);
+                            this.setPrepareBlocking(this.lastObservePrepareStepName, reason);
+                            this.failObservePrepareSafely(reason, null);
                             return;
                         }
                         this.observeAutoEnabledAfterPrepare = true;
@@ -1217,12 +1346,90 @@ final class ForgeFormalVisibleLodPreview {
                         this.renderHookEarlyReturnWhenDisabled = true;
                         this.instance.getFormalRendererManager().checkReadiness("k11-visible-preview-prepare-complete");
                     }
+                    this.recordPrepareStepTiming(this.lastObservePrepareStepName, stepStart);
+                    this.finishPrepareTiming();
                 }
                 default -> this.observePrepareInProgress = false;
             }
         } catch (RuntimeException e) {
+            this.setPrepareBlocking(this.lastObservePrepareStepName, e.getClass().getSimpleName() + ":" + e.getMessage());
             this.failObservePrepareSafely(e.getClass().getSimpleName() + ":" + e.getMessage(), e);
         }
+    }
+
+    private void resetPrepareTimingForNewRun() {
+        this.prepareStartedNanos = 0L;
+        this.prepareTimingReady = false;
+        this.prepareReuseReady = false;
+        this.lastPrepareReusedExistingResources = false;
+        this.unnecessaryRebuildDetected = false;
+        this.prepareStepBudgetExceeded = false;
+        this.lastPrepareTotalDurationMs = 0.0D;
+        this.lastPrepareStepDurationMs = 0.0D;
+        this.maxPrepareStepDurationMs = 0.0D;
+        this.slowestPrepareStepName = "none";
+        this.prepareBlockingStep = "none";
+        this.prepareBlockingReason = "none";
+        this.prepareEnsureWorldDurationMs = 0.0D;
+        this.prepareK6DurationMs = 0.0D;
+        this.prepareK7DurationMs = 0.0D;
+        this.prepareK8DurationMs = 0.0D;
+        this.prepareK9DurationMs = 0.0D;
+        this.prepareK10DurationMs = 0.0D;
+        this.prepareTimingSummary = "pending";
+    }
+
+    private void recordPrepareStepTiming(String stepName, long stepStartNanos) {
+        double durationMs = elapsedMs(stepStartNanos);
+        this.lastPrepareStepDurationMs = durationMs;
+        switch (stepName) {
+            case "ensure-world" -> this.prepareEnsureWorldDurationMs = durationMs;
+            case "k6-real-section-dry-run" -> this.prepareK6DurationMs = durationMs;
+            case "k7-isolated-mdic-draw" -> this.prepareK7DurationMs = durationMs;
+            case "k8-formal-model-id-geometry" -> this.prepareK8DurationMs = durationMs;
+            case "k9-terrain-shader-integration" -> this.prepareK9DurationMs = durationMs;
+            case "k10-visible-preview-build" -> this.prepareK10DurationMs = durationMs;
+            default -> {
+                // Final enable/disabled steps are tracked as last/slowest only.
+            }
+        }
+        if (durationMs >= this.maxPrepareStepDurationMs) {
+            this.maxPrepareStepDurationMs = durationMs;
+            this.slowestPrepareStepName = stepName;
+        }
+        this.prepareStepBudgetExceeded |= durationMs > OBSERVE_PREPARE_STEP_WARN_MS;
+        this.prepareTimingSummary = this.formatPrepareTimingSummary("running");
+    }
+
+    private void finishPrepareTiming() {
+        this.lastPrepareTotalDurationMs = elapsedMs(this.prepareStartedNanos);
+        this.prepareTimingReady = true;
+        this.prepareReuseReady = true;
+        this.lastPrepareReusedExistingResources = false;
+        this.prepareBlockingStep = "none";
+        this.prepareBlockingReason = "none";
+        this.prepareTimingSummary = this.formatPrepareTimingSummary("complete");
+    }
+
+    private void setPrepareBlocking(String stepName, String reason) {
+        this.prepareBlockingStep = safeReason(stepName);
+        this.prepareBlockingReason = safeReason(reason);
+        this.prepareTimingSummary = this.formatPrepareTimingSummary("blocked");
+    }
+
+    private String formatPrepareTimingSummary(String state) {
+        return String.format(Locale.ROOT,
+                "state=%s,totalMs=%.2f,slowest=%s,slowestMs=%.2f,ensureMs=%.2f,k6Ms=%.2f,k7Ms=%.2f,k8Ms=%.2f,k9Ms=%.2f,k10Ms=%.2f",
+                state,
+                this.lastPrepareTotalDurationMs,
+                this.slowestPrepareStepName,
+                this.maxPrepareStepDurationMs,
+                this.prepareEnsureWorldDurationMs,
+                this.prepareK6DurationMs,
+                this.prepareK7DurationMs,
+                this.prepareK8DurationMs,
+                this.prepareK9DurationMs,
+                this.prepareK10DurationMs);
     }
 
     private boolean enableObserveFromPreparedResources(String reason, boolean autoEnabledAfterPrepare) {
@@ -1303,6 +1510,11 @@ final class ForgeFormalVisibleLodPreview {
         this.lifecycleState = "OBSERVE_PREPARE_FAILED_SAFE";
         this.lastLifecycleEvent = "observe-prepare-failed-safe";
         this.lastFailureReason = safeReason;
+        this.lastPrepareTotalDurationMs = elapsedMs(this.prepareStartedNanos);
+        this.prepareTimingReady = true;
+        this.prepareReuseReady = false;
+        this.lastPrepareReusedExistingResources = false;
+        this.prepareTimingSummary = this.formatPrepareTimingSummary("failed");
         this.renderHookEarlyReturnWhenDisabled = true;
         this.renderHookEarlyReturnWhenStale = true;
     }
@@ -1341,6 +1553,11 @@ final class ForgeFormalVisibleLodPreview {
         this.observePrepareNextAttemptFrame = 0;
         this.lastObservePrepareStepName = "cancelled:" + safeReason(reason);
         this.lastObservePrepareFailureReason = "none";
+        this.prepareReuseReady = false;
+        this.lastPrepareReusedExistingResources = false;
+        this.prepareBlockingStep = "cancelled";
+        this.prepareBlockingReason = safeReason(reason);
+        this.prepareTimingSummary = this.formatPrepareTimingSummary("cancelled");
     }
 
     private void runDeferredQaStep() {

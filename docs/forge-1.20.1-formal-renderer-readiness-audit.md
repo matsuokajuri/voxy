@@ -1456,6 +1456,31 @@ request later. If resources are missing or stale, the hook disables observe mode
 and reports a safe failure instead of rebuilding in a loop or blocking the
 command.
 
+## K12/K13 visible preview prepare timing/reuse note
+
+K12/K13 keeps the K11 explicit prepare model and adds readiness evidence around
+why the first prepare may take time. The visible-preview status now reports
+per-step timings for `ensure-world`, K6, K7, K8, K9, and the K10 visible-preview
+build, plus the slowest step and any current blocking prerequisite.
+
+The key new fields are:
+
+```text
+prepareTimingReady
+prepareReuseReady
+lastPrepareReusedExistingResources
+unnecessaryRebuildDetected
+prepareStepBudgetExceeded
+slowestPrepareStepName
+prepareBlockingStep
+prepareBlockingReason
+prepareTimingSummary
+```
+
+This is deliberately observational. It does not promote the K10 visible preview
+to production renderer readiness, does not call `MDICSectionRenderer`, does not
+call `VoxyRenderSystem`, and does not change the formal renderer blockers.
+
 New readiness/audit evidence includes:
 
 ```text
