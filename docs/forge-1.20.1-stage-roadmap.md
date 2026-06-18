@@ -776,3 +776,88 @@ K10.2 adds timeout-oriented status fields such as
 
 The preview remains explicit opt-in only and still does not change production
 renderer readiness.
+
+## K10.3 hotfix note
+
+K10.3 keeps the K10 visible preview as a debug-only preview and fixes the
+manual observe path that could safely return without producing any visible
+change when K10 resources were missing or stale.
+
+`/voxy formal_visible_lod_preview_observe_enable` still performs no command
+thread GL work, readback, shader compile, or synchronous rebuild. Instead, the
+render hook now consumes the request and prepares the K6-K10 dependency chain
+over bounded render frames. When preparation succeeds, observe mode is enabled
+automatically with the larger debug-tinted preview.
+
+New status evidence includes:
+
+```text
+observePrepareRequested
+observePrepareInProgress
+observePrepareCompleted
+observePrepareFailedSafely
+observeAutoEnabledAfterPrepare
+observePrepareFrameBudgetExceeded
+observePrepareStep
+observePrepareFrameCount
+lastObservePrepareStepName
+lastObservePrepareFailureReason
+```
+
+K10.3 remains below K11: it does not call `MDICSectionRenderer`, does not call
+`VoxyRenderSystem`, does not enable the production renderer, and still reports
+`formalDrawPipelineReady=false`, `formalRendererReady=false`, and
+`actualRendererDrawEnabled=false`.
+
+Follow-up hotfix detail: if a real resource reload lands while manual observe
+prepare is pending or in progress, K10.3 now keeps the observe request alive,
+closes any stale K10-owned resources, and lets the bounded render-thread
+prepare continue rebuilding from the refreshed lifecycle state.
+
+K10.3 also treats missing real-section/K6/K7 readiness as a retryable
+prerequisite while the section geometry manager catches up after teleport or
+chunk ingest. The manual observe request remains bounded, but it waits and
+retries instead of failing after only a few render frames.
+
+K10 observe follow-up: manual testing then proved the preview was visible, but
+the continuous observe path could still drop to very low FPS. The main-framebuffer
+observe draw now uses a lightweight direct indexed draw driven by the K6 command
+fields and K8/K9 formal inputs, rather than calling the indirect-count validation
+path every frame. The command/draw-count buffers remain recorded as formal
+evidence, but continuous observe rendering reports
+`visiblePreviewLightweightDrawPath=true`, `visiblePreviewDirectDrawUsed=true`,
+and `visiblePreviewIndirectCountDrawUsed=false`.
+
+The observe draw is also capped to a small number of indices and a smaller
+debug-tint scale so it remains a clear visible proof without rendering the
+entire real-section command payload every frame. Status reports both the K6
+command count and the actual observe draw count through
+`visiblePreviewCommandIndexCount`, `visiblePreviewDrawIndexCount`,
+`visiblePreviewDrawIndexCap`, and `visiblePreviewDrawCountCapped`.
+
+Original Voxy alignment follow-up: the visible preview shader now follows the
+original `quads3.vert` / `SharedIndexBuffer` convention more closely. It treats
+each packed quad as four logical vertices (`gl_VertexID >> 2`) and uses the
+Voxy shared-index pattern `1,2,0,1,3,2`, instead of the earlier K10-only
+six-vertex quad helper.
+
+K10 observe A/B diagnostics add:
+
+```text
+/voxy formal_visible_lod_preview_observe_draw_pause
+/voxy formal_visible_lod_preview_observe_draw_resume
+```
+
+These commands keep the prepared K10 resources but suppress or restore the
+actual main-framebuffer draw call, allowing manual FPS comparison without
+promoting the preview to production renderer readiness.
+
+Hot-path follow-up: K10 visible preview now caches the formal ModelStore and
+K8 geometry GL handles captured at build time. The render hook no longer builds
+formal status snapshots every frame just to recover buffer and texture ids.
+
+Observe command follow-up: manual observe enable/disable now return concise
+one-line command feedback and do not implicitly dump the full K10/formal
+renderer status. Full status/audit output remains available through the
+explicit status and audit commands, keeping the manual visibility toggle closer
+to a lightweight switch.

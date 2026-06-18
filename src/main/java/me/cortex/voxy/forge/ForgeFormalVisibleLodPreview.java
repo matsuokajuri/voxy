@@ -7,7 +7,6 @@ import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.client.event.RenderLevelStageEvent;
 import net.minecraftforge.common.MinecraftForge;
 import org.joml.Matrix4f;
-import org.lwjgl.opengl.GL;
 import org.lwjgl.opengl.GL11C;
 import org.lwjgl.opengl.GL12C;
 import org.lwjgl.opengl.GL13C;
@@ -16,7 +15,6 @@ import org.lwjgl.opengl.GL20C;
 import org.lwjgl.opengl.GL21C;
 import org.lwjgl.opengl.GL30C;
 import org.lwjgl.opengl.GL33C;
-import org.lwjgl.opengl.GL40C;
 import org.lwjgl.opengl.GL43C;
 import org.lwjgl.opengl.GL45C;
 import org.lwjgl.system.MemoryStack;
@@ -31,10 +29,6 @@ import java.util.List;
 import java.util.stream.Collectors;
 import java.util.zip.CRC32;
 
-import static org.lwjgl.opengl.ARBIndirectParameters.GL_PARAMETER_BUFFER_ARB;
-import static org.lwjgl.opengl.ARBIndirectParameters.GL_PARAMETER_BUFFER_BINDING_ARB;
-import static org.lwjgl.opengl.ARBIndirectParameters.glMultiDrawElementsIndirectCountARB;
-
 final class ForgeFormalVisibleLodPreview {
     static final String STAGE = "K10_FORMAL_VISIBLE_LOD_PREVIEW_DEBUG_TOGGLE";
     private static final boolean DEFAULT_ENABLED = false;
@@ -43,11 +37,13 @@ final class ForgeFormalVisibleLodPreview {
     private static final int READBACK_SIZE = 64;
     private static final int BYTES_PER_PIXEL = 4;
     private static final int DRAW_COMMAND_FIELD_COUNT = 5;
-    private static final int OPAQUE_DRAW_COUNT_OFFSET_BYTES = 3 * Integer.BYTES;
+    private static final int OBSERVE_PREPARE_FRAME_BUDGET = 2400;
+    private static final int OBSERVE_PREPARE_RETRY_INTERVAL_FRAMES = 20;
     private static final float NORMAL_PREVIEW_DISTANCE = 8.0F;
     private static final float NORMAL_PREVIEW_SCALE = 1.45F;
     private static final float OBSERVE_PREVIEW_DISTANCE = 5.0F;
-    private static final float OBSERVE_PREVIEW_SCALE = 3.25F;
+    private static final float OBSERVE_PREVIEW_SCALE = 1.75F;
+    private static final int OBSERVE_MAX_DRAW_INDICES = 6;
     private static final String DRAW_INPUT_SOURCE = "K8FormalGeometryAndK9Shader";
     private static final String RENDER_HOOK_NAME = "RenderLevelStageEvent.AFTER_TRANSLUCENT_BLOCKS";
     private static final String RENDER_HOOK_SCOPE = "K10_visible_preview_only";
@@ -96,13 +92,11 @@ final class ForgeFormalVisibleLodPreview {
             const float ATLAS_WIDTH = 12288.0;
             const float ATLAS_HEIGHT = 8192.0;
 
-            const vec2 CORNERS[6] = vec2[](
+            const vec2 CORNERS[4] = vec2[](
                 vec2(0.0, 0.0),
+                vec2(0.0, 1.0),
                 vec2(1.0, 0.0),
-                vec2(1.0, 1.0),
-                vec2(0.0, 0.0),
-                vec2(1.0, 1.0),
-                vec2(0.0, 1.0)
+                vec2(1.0, 1.0)
             );
 
             uint extractModelId(uvec2 quad) {
@@ -119,8 +113,8 @@ final class ForgeFormalVisibleLodPreview {
                     localVertex -= baseVertexBias;
                 }
                 uint safeRecordCount = max(recordCount, 1u);
-                uint recordIndex = (localVertex / 6u) % safeRecordCount;
-                uint cornerIndex = localVertex % 6u;
+                uint recordIndex = (localVertex >> 2u) % safeRecordCount;
+                uint cornerIndex = localVertex & 3u;
                 vec2 corner = CORNERS[cornerIndex];
                 uvec2 rawQuad = quadData[recordIndex];
                 uint modelId = extractModelId(rawQuad);
@@ -231,6 +225,7 @@ final class ForgeFormalVisibleLodPreview {
     private boolean ownerReady;
     private boolean visiblePreviewEnabled;
     private boolean observeModeEnabled;
+    private boolean observeDrawPaused;
     private boolean observeModeDebugTintUsed;
     private float observeModeScale = OBSERVE_PREVIEW_SCALE;
     private boolean observeModeCameraRelative;
@@ -246,6 +241,17 @@ final class ForgeFormalVisibleLodPreview {
     private String lastObserveEnableFailureReason = "none";
     private String lastObserveEnableExceptionClass = "none";
     private String lastObserveEnableExceptionMessage = "none";
+    private boolean observePrepareRequested;
+    private boolean observePrepareInProgress;
+    private boolean observePrepareCompleted;
+    private boolean observePrepareFailedSafely;
+    private boolean observeAutoEnabledAfterPrepare;
+    private boolean observePrepareFrameBudgetExceeded;
+    private int observePrepareStep;
+    private int observePrepareFrameCount;
+    private int observePrepareNextAttemptFrame;
+    private String lastObservePrepareStepName = "none";
+    private String lastObservePrepareFailureReason = "none";
     private String previewWorldBounds = "none";
     private double previewCameraDistance;
     private boolean visiblePreviewDefaultDisabledVerified = true;
@@ -287,6 +293,15 @@ final class ForgeFormalVisibleLodPreview {
     private int visiblePreviewFrameCount;
     private boolean minecraftMainFramebufferDrawn;
     private boolean visiblePreviewDrawCallOk;
+    private boolean visiblePreviewLightweightDrawPath = true;
+    private boolean visiblePreviewDirectDrawUsed;
+    private boolean visiblePreviewDrawArraysUsed;
+    private boolean visiblePreviewIndirectCountDrawUsed;
+    private boolean visiblePreviewValidationChecksOnly;
+    private int visiblePreviewCommandIndexCount;
+    private int visiblePreviewDrawIndexCount;
+    private int visiblePreviewDrawIndexCap = OBSERVE_MAX_DRAW_INDICES;
+    private boolean visiblePreviewDrawCountCapped;
     private boolean formalModelIdDecodeOk;
     private boolean faceDataLookupOk;
     private boolean atlasSampleOk;
@@ -299,6 +314,11 @@ final class ForgeFormalVisibleLodPreview {
     private int validationFace;
     private String validationFormalModelIds = "none";
     private int geometryBufferId;
+    private int modelDataBufferId;
+    private int modelColourBufferId;
+    private int atlasTextureId;
+    private int samplerId;
+    private int formalGeometryRecordCount;
     private int commandBufferId;
     private int drawCountBufferId;
     private int positionScratchBufferId;
@@ -356,11 +376,6 @@ final class ForgeFormalVisibleLodPreview {
 
         if (!RenderSystem.isOnRenderThread()) {
             this.fail("not-render-thread");
-            this.audit();
-            return this.createStatusSnapshot();
-        }
-        if (GL.getCapabilities().glMultiDrawElementsIndirectCountARB == 0L) {
-            this.fail("glMultiDrawElementsIndirectCountARB-unavailable");
             this.audit();
             return this.createStatusSnapshot();
         }
@@ -428,6 +443,7 @@ final class ForgeFormalVisibleLodPreview {
         }
         this.visiblePreviewEnabled = true;
         this.observeModeEnabled = false;
+        this.observeDrawPaused = false;
         this.observeModeDebugTintUsed = false;
         this.observeModeCameraRelative = false;
         this.observeModeScale = NORMAL_PREVIEW_SCALE;
@@ -461,6 +477,7 @@ final class ForgeFormalVisibleLodPreview {
         }
         this.visiblePreviewEnabled = true;
         this.observeModeEnabled = true;
+        this.observeDrawPaused = false;
         this.observeModeDebugTintUsed = true;
         this.observeModeCameraRelative = true;
         this.observeModeScale = OBSERVE_PREVIEW_SCALE;
@@ -491,8 +508,20 @@ final class ForgeFormalVisibleLodPreview {
         this.lastObserveEnableFailureReason = "pending-render-thread";
         this.lastObserveEnableExceptionClass = "none";
         this.lastObserveEnableExceptionMessage = "none";
-        this.visiblePreviewEnabled = true;
-        this.observeModeEnabled = true;
+        this.observePrepareRequested = true;
+        this.observePrepareInProgress = false;
+        this.observePrepareCompleted = false;
+        this.observePrepareFailedSafely = false;
+        this.observeAutoEnabledAfterPrepare = false;
+        this.observePrepareFrameBudgetExceeded = false;
+        this.observePrepareStep = 0;
+        this.observePrepareFrameCount = 0;
+        this.observePrepareNextAttemptFrame = 0;
+        this.lastObservePrepareStepName = "pending-render-thread";
+        this.lastObservePrepareFailureReason = "none";
+        this.visiblePreviewEnabled = false;
+        this.observeModeEnabled = false;
+        this.observeDrawPaused = false;
         this.observeModeDebugTintUsed = true;
         this.observeModeCameraRelative = true;
         this.observeModeScale = OBSERVE_PREVIEW_SCALE;
@@ -500,7 +529,7 @@ final class ForgeFormalVisibleLodPreview {
         this.qaReadbackAllowed = false;
         this.qaAutoDisablePending = false;
         this.qaFramesRemaining = 0;
-        this.lifecycleState = "VISIBLE_PREVIEW_OBSERVE_REQUESTED";
+        this.lifecycleState = "VISIBLE_PREVIEW_OBSERVE_PREPARE_REQUESTED";
         this.lastLifecycleEvent = safeReason(reason);
         this.lastFailureReason = "none";
         this.observeEnableCommandDurationMillis = Math.max(0L, (System.nanoTime() - startNanos) / 1_000_000L);
@@ -577,10 +606,12 @@ final class ForgeFormalVisibleLodPreview {
         this.disableRuns++;
         this.visiblePreviewEnabled = false;
         this.observeModeEnabled = false;
+        this.observeDrawPaused = false;
         this.observeModeDebugTintUsed = false;
         this.observeModeCameraRelative = false;
         this.observeEnableRequested = false;
         this.observeEnableFailedSafely = false;
+        this.cancelObservePrepare("disable");
         this.readbackPending = false;
         this.qaReadbackAllowed = false;
         this.qaAutoDisablePending = false;
@@ -589,9 +620,28 @@ final class ForgeFormalVisibleLodPreview {
         this.lifecycleState = "DISABLED";
         this.lastLifecycleEvent = safeReason(reason);
         this.lastFailureReason = "none";
-        this.audit();
-        this.instance.getFormalRendererManager().checkReadiness("k10-visible-lod-preview-disable");
         return this.createStatusSnapshot();
+    }
+
+    ForgeFormalVisibleLodPreviewStats pauseObserveDraw(String reason) {
+        this.observeDrawPaused = true;
+        this.lifecycleState = "VISIBLE_PREVIEW_OBSERVE_DRAW_PAUSED";
+        this.lastLifecycleEvent = safeReason(reason);
+        this.lastFailureReason = "none";
+        this.renderHookEarlyReturnWhenDisabled = true;
+        return this.createStatusSnapshot();
+    }
+
+    ForgeFormalVisibleLodPreviewStats resumeObserveDraw(String reason) {
+        this.observeDrawPaused = false;
+        this.lifecycleState = this.observeModeEnabled ? "VISIBLE_PREVIEW_OBSERVE_DRAW_RESUMED" : "VISIBLE_PREVIEW_DRAW_RESUMED";
+        this.lastLifecycleEvent = safeReason(reason);
+        this.lastFailureReason = "none";
+        return this.createStatusSnapshot();
+    }
+
+    boolean isObserveDrawPaused() {
+        return this.observeDrawPaused;
     }
 
     ForgeFormalVisibleLodPreviewAuditResult audit() {
@@ -668,6 +718,17 @@ final class ForgeFormalVisibleLodPreview {
                 this.lastObserveEnableFailureReason,
                 this.lastObserveEnableExceptionClass,
                 this.lastObserveEnableExceptionMessage,
+                this.observePrepareRequested,
+                this.observePrepareInProgress,
+                this.observePrepareCompleted,
+                this.observePrepareFailedSafely,
+                this.observeAutoEnabledAfterPrepare,
+                this.observePrepareFrameBudgetExceeded,
+                this.observePrepareStep,
+                this.observePrepareFrameCount,
+                this.observePrepareNextAttemptFrame,
+                this.lastObservePrepareStepName,
+                this.lastObservePrepareFailureReason,
                 this.previewWorldBounds,
                 this.previewCameraDistance,
                 this.visiblePreviewWasEnabledDuringQa,
@@ -696,6 +757,15 @@ final class ForgeFormalVisibleLodPreview {
                 this.visiblePreviewShaderProgramLinkOk,
                 this.visiblePreviewShaderProgramId,
                 this.visiblePreviewDrawCallOk,
+                this.visiblePreviewLightweightDrawPath,
+                this.visiblePreviewDirectDrawUsed,
+                this.visiblePreviewDrawArraysUsed,
+                this.visiblePreviewIndirectCountDrawUsed,
+                this.visiblePreviewValidationChecksOnly,
+                this.visiblePreviewCommandIndexCount,
+                this.visiblePreviewDrawIndexCount,
+                this.visiblePreviewDrawIndexCap,
+                this.visiblePreviewDrawCountCapped,
                 this.lastGlError,
                 this.formalModelIdDecodeOk,
                 this.faceDataLookupOk,
@@ -787,6 +857,7 @@ final class ForgeFormalVisibleLodPreview {
         this.ownerReady = false;
         this.observeEnableRequested = false;
         this.observeEnableFailedSafely = false;
+        this.cancelObservePrepare("clear");
         this.stale = false;
         this.requiresRebuild = false;
         this.lifecycleState = "CLEARED";
@@ -799,6 +870,21 @@ final class ForgeFormalVisibleLodPreview {
     }
 
     void markResourceReload() {
+        if (this.observePrepareRequested || this.observePrepareInProgress) {
+            this.visiblePreviewEnabled = false;
+            this.observeModeEnabled = false;
+            this.ownerReady = false;
+            this.stale = true;
+            this.requiresRebuild = true;
+            this.lifecycleState = "VISIBLE_PREVIEW_OBSERVE_PREPARE_RESOURCE_RELOAD_SEEN";
+            this.lastLifecycleEvent = "resource-reload-during-observe-prepare";
+            this.lastFailureReason = "observe-prepare-resource-reload-rebuild-continues";
+            this.lastObservePrepareStepName = "resource-reload-rebuild-continues";
+            this.renderHookEarlyReturnWhenStale = true;
+            this.lastAudit = ForgeFormalVisibleLodPreviewAuditResult.failure(this.lastFailureReason, 0.0D);
+            this.scheduleCleanup(this.lastLifecycleEvent);
+            return;
+        }
         this.markStale("resource-reload");
     }
 
@@ -842,7 +928,15 @@ final class ForgeFormalVisibleLodPreview {
         if (this.observeEnableRequested) {
             this.handleObserveEnableRequestOnRenderThread();
         }
+        if (this.observePrepareInProgress) {
+            this.runObservePrepareStep();
+        }
         if (!this.visiblePreviewEnabled) {
+            this.renderHookDisabledEarlyReturnCount++;
+            this.renderHookEarlyReturnWhenDisabled = true;
+            return;
+        }
+        if (this.observeDrawPaused) {
             this.renderHookDisabledEarlyReturnCount++;
             this.renderHookEarlyReturnWhenDisabled = true;
             return;
@@ -854,8 +948,6 @@ final class ForgeFormalVisibleLodPreview {
             this.renderHookEarlyReturnWhenStale = true;
             return;
         }
-        ForgeFormalModelStoreStats store = this.instance.getFormalModelStore().createStatusSnapshot();
-        ForgeFormalModelIdSectionGeometryStats k8 = this.instance.getFormalModelIdSectionGeometryPath().createStatusSnapshot();
         try {
             long buildRunsBeforeFrame = this.buildRuns;
             long readbackRunsBeforeFrame = this.readbackRuns;
@@ -863,7 +955,7 @@ final class ForgeFormalVisibleLodPreview {
             long glAllocationRunsBeforeFrame = this.glAllocationRuns;
             long renderLogRunsBeforeFrame = this.renderLogRuns;
             long startNanos = System.nanoTime();
-            this.executeVisiblePreviewDraw(event, minecraft, store, k8);
+            this.executeVisiblePreviewDraw(event, minecraft);
             long elapsed = System.nanoTime() - startNanos;
             this.lastFrameDrawTimeNanos = elapsed;
             this.totalFrameDrawTimeNanos += elapsed;
@@ -919,25 +1011,204 @@ final class ForgeFormalVisibleLodPreview {
                 return;
             }
             if (!this.ownerReady || this.stale) {
-                this.failObserveEnableSafely("observe-enable-resources-not-ready:ownerReady=" + this.ownerReady + ":stale=" + this.stale, null);
+                this.startObservePrepareOnRenderThread("ownerReady=" + this.ownerReady + ":stale=" + this.stale);
                 return;
             }
-            this.visiblePreviewEnabled = true;
-            this.observeModeEnabled = true;
-            this.observeModeDebugTintUsed = true;
-            this.observeModeCameraRelative = true;
-            this.observeModeScale = OBSERVE_PREVIEW_SCALE;
-            this.readbackPending = false;
-            this.qaReadbackAllowed = false;
-            this.lifecycleState = "VISIBLE_PREVIEW_OBSERVE_ENABLED_RENDER_THREAD";
-            this.lastLifecycleEvent = "observe-enable-render-thread";
-            this.lastFailureReason = "none";
-            this.lastObserveEnableFailureReason = "none";
-            this.observeEnableFailedSafely = false;
-            this.observeEnableTimeoutReproduced = false;
+            this.enableObserveFromPreparedResources("observe-enable-render-thread", false);
         } catch (RuntimeException e) {
             this.failObserveEnableSafely(e.getClass().getSimpleName() + ":" + e.getMessage(), e);
         }
+    }
+
+    private void startObservePrepareOnRenderThread(String reason) {
+        this.observePrepareRequested = false;
+        this.observePrepareInProgress = true;
+        this.observePrepareCompleted = false;
+        this.observePrepareFailedSafely = false;
+        this.observeAutoEnabledAfterPrepare = false;
+        this.observePrepareFrameBudgetExceeded = false;
+        this.observePrepareStep = 0;
+        this.observePrepareFrameCount = 0;
+        this.observePrepareNextAttemptFrame = 0;
+        this.lastObservePrepareStepName = "start:" + safeReason(reason);
+        this.lastObservePrepareFailureReason = "none";
+        this.visiblePreviewEnabled = false;
+        this.observeModeEnabled = false;
+        this.readbackPending = false;
+        this.qaReadbackAllowed = false;
+        this.lifecycleState = "VISIBLE_PREVIEW_OBSERVE_PREPARE_IN_PROGRESS";
+        this.lastLifecycleEvent = "observe-prepare-start";
+        this.lastFailureReason = "observe-prepare-in-progress";
+        this.lastObserveEnableFailureReason = "observe-prepare-in-progress";
+    }
+
+    private void runObservePrepareStep() {
+        this.observePrepareFrameCount++;
+        if (this.observePrepareFrameCount > OBSERVE_PREPARE_FRAME_BUDGET) {
+            this.failObservePrepareSafely("observe-prepare-frame-budget-exceeded:" + OBSERVE_PREPARE_FRAME_BUDGET, null);
+            return;
+        }
+        if (this.observePrepareFrameCount < this.observePrepareNextAttemptFrame) {
+            return;
+        }
+        try {
+            switch (this.observePrepareStep) {
+                case 0 -> {
+                    this.lastObservePrepareStepName = "ensure-world";
+                    if (!this.instance.ensureActiveWorldSkeletonForCurrentWorldIfAllowed()) {
+                        this.failObservePrepareSafely("observe-prepare-world-engine-skeleton-not-ready", null);
+                        return;
+                    }
+                    this.observePrepareStep++;
+                }
+                case 1 -> {
+                    this.lastObservePrepareStepName = "k6-real-section-dry-run";
+                    ForgeFormalCmdgenRealSectionDryRunStats k6 = this.instance.getFormalCmdgenRealSectionDryRun().build();
+                    if (!k6.realSectionDryRunReady()) {
+                        this.waitForObservePreparePrerequisite("observe-prepare-k6-not-ready:" + k6.lastFailureReason(), false);
+                        return;
+                    }
+                    this.observePrepareStep++;
+                }
+                case 2 -> {
+                    this.lastObservePrepareStepName = "k7-isolated-mdic-draw";
+                    ForgeFormalIsolatedMdicDrawSmokeTestStats k7 = this.instance.getFormalIsolatedMdicDrawSmokeTest().build();
+                    if (!k7.isolatedMdicDrawSmokeTestReady()) {
+                        ForgeFormalCmdgenRealSectionDryRunStats k6 = this.instance.getFormalCmdgenRealSectionDryRun().createStatusSnapshot();
+                        this.waitForObservePreparePrerequisite(
+                                "observe-prepare-k7-not-ready:" + k7.lastFailureReason() + ":k6=" + k6.lastFailureReason(),
+                                true);
+                        return;
+                    }
+                    this.observePrepareStep++;
+                }
+                case 3 -> {
+                    this.lastObservePrepareStepName = "k8-formal-model-id-geometry";
+                    ForgeFormalModelIdSectionGeometryStats k8 = this.instance.getFormalModelIdSectionGeometryPath().build();
+                    if (!k8.formalModelIdGeometryPathReady()) {
+                        this.waitForObservePreparePrerequisite("observe-prepare-k8-not-ready:" + k8.lastFailureReason(), true);
+                        return;
+                    }
+                    this.observePrepareStep++;
+                }
+                case 4 -> {
+                    this.lastObservePrepareStepName = "k9-terrain-shader-integration";
+                    ForgeFormalTerrainShaderIntegrationStats k9 = this.instance.getFormalTerrainShaderIntegration().build();
+                    if (!k9.formalTerrainShaderIntegrationReady()) {
+                        this.waitForObservePreparePrerequisite("observe-prepare-k9-not-ready:" + k9.lastFailureReason(), true);
+                        return;
+                    }
+                    this.observePrepareStep++;
+                }
+                case 5 -> {
+                    this.lastObservePrepareStepName = "k10-visible-preview-build";
+                    ForgeFormalVisibleLodPreviewStats status = this.build();
+                    this.restoreObserveEnableCommandSafetyAfterRenderPrepare();
+                    if (!status.visibleLodPreviewOwnerReady()) {
+                        this.waitForObservePreparePrerequisite("observe-prepare-k10-not-ready:" + status.lastFailureReason(), true);
+                        return;
+                    }
+                    this.observePrepareStep++;
+                }
+                case 6 -> {
+                    this.lastObservePrepareStepName = "enable-observe";
+                    if (!this.enableObserveFromPreparedResources("observe-prepare-complete", true)) {
+                        this.failObservePrepareSafely("observe-prepare-enable-failed:ownerReady=" + this.ownerReady + ":stale=" + this.stale, null);
+                        return;
+                    }
+                    this.observePrepareInProgress = false;
+                    this.observePrepareCompleted = true;
+                    this.observePrepareFailedSafely = false;
+                    this.observeAutoEnabledAfterPrepare = true;
+                    this.lastObservePrepareFailureReason = "none";
+                    this.instance.getFormalRendererManager().checkReadiness("k10-observe-prepare-complete");
+                }
+                default -> this.observePrepareInProgress = false;
+            }
+        } catch (RuntimeException e) {
+            this.failObservePrepareSafely(e.getClass().getSimpleName() + ":" + e.getMessage(), e);
+        }
+    }
+
+    private boolean enableObserveFromPreparedResources(String reason, boolean autoEnabledAfterPrepare) {
+        if (!this.ownerReady || this.stale) {
+            return false;
+        }
+        this.visiblePreviewEnabled = true;
+        this.observeModeEnabled = true;
+        this.observeModeDebugTintUsed = true;
+        this.observeModeCameraRelative = true;
+        this.observeModeScale = OBSERVE_PREVIEW_SCALE;
+        this.readbackPending = false;
+        this.qaReadbackAllowed = false;
+        this.firstDrawLogged = false;
+        this.lifecycleState = autoEnabledAfterPrepare
+                ? "VISIBLE_PREVIEW_OBSERVE_ENABLED_AFTER_PREPARE"
+                : "VISIBLE_PREVIEW_OBSERVE_ENABLED_RENDER_THREAD";
+        this.lastLifecycleEvent = safeReason(reason);
+        this.lastFailureReason = "none";
+        this.lastObserveEnableFailureReason = "none";
+        this.observeEnableFailedSafely = false;
+        this.observeEnableTimeoutReproduced = false;
+        this.observePrepareFailedSafely = false;
+        return true;
+    }
+
+    private void restoreObserveEnableCommandSafetyAfterRenderPrepare() {
+        this.observeEnableHandledOnRenderThread = true;
+        this.observeEnableCommandReturnedQuickly = true;
+        this.observeEnableDidGlWorkOnCommandThread = false;
+        this.observeEnableDidReadbackOnCommandThread = false;
+        this.observeEnableDidSynchronousRebuild = false;
+        this.observeEnableTimeoutReproduced = false;
+        this.lastObserveEnableExceptionClass = "none";
+        this.lastObserveEnableExceptionMessage = "none";
+    }
+
+    private void waitForObservePreparePrerequisite(String reason, boolean rewindToK6) {
+        String safeReason = safeReason(reason);
+        if (rewindToK6) {
+            this.observePrepareStep = 1;
+        }
+        this.observePrepareNextAttemptFrame = this.observePrepareFrameCount + OBSERVE_PREPARE_RETRY_INTERVAL_FRAMES;
+        this.lastObservePrepareFailureReason = safeReason;
+        this.lastObservePrepareStepName = "waiting:" + safeReason;
+        this.lastObserveEnableFailureReason = safeReason;
+        this.lifecycleState = "VISIBLE_PREVIEW_OBSERVE_PREPARE_WAITING";
+        this.lastLifecycleEvent = "observe-prepare-waiting";
+        this.lastFailureReason = safeReason;
+        this.visiblePreviewEnabled = false;
+        this.observeModeEnabled = false;
+        this.readbackPending = false;
+        this.qaReadbackAllowed = false;
+        this.renderHookEarlyReturnWhenDisabled = true;
+    }
+
+    private void failObservePrepareSafely(String reason, RuntimeException exception) {
+        String safeReason = safeReason(reason);
+        this.observePrepareRequested = false;
+        this.observePrepareInProgress = false;
+        this.observePrepareCompleted = false;
+        this.observePrepareFailedSafely = true;
+        this.observeAutoEnabledAfterPrepare = false;
+        this.observePrepareFrameBudgetExceeded = safeReason.contains("frame-budget-exceeded");
+        this.observePrepareNextAttemptFrame = 0;
+        this.lastObservePrepareFailureReason = safeReason;
+        this.observeEnableFailedSafely = true;
+        this.lastObserveEnableFailureReason = safeReason;
+        this.lastObserveEnableExceptionClass = exception == null ? "none" : exception.getClass().getName();
+        this.lastObserveEnableExceptionMessage = exception == null ? "none" : safeReason(exception.getMessage());
+        this.visiblePreviewEnabled = false;
+        this.observeModeEnabled = false;
+        this.observeModeDebugTintUsed = false;
+        this.observeModeCameraRelative = false;
+        this.readbackPending = false;
+        this.qaReadbackAllowed = false;
+        this.lifecycleState = "OBSERVE_PREPARE_FAILED_SAFE";
+        this.lastLifecycleEvent = "observe-prepare-failed-safe";
+        this.lastFailureReason = safeReason;
+        this.renderHookEarlyReturnWhenDisabled = true;
+        this.renderHookEarlyReturnWhenStale = true;
     }
 
     private void failObserveEnableSafely(String reason, RuntimeException exception) {
@@ -959,6 +1230,20 @@ final class ForgeFormalVisibleLodPreview {
         this.lastFailureReason = safeReason;
         this.renderHookEarlyReturnWhenDisabled = true;
         this.renderHookEarlyReturnWhenStale = true;
+    }
+
+    private void cancelObservePrepare(String reason) {
+        this.observePrepareRequested = false;
+        this.observePrepareInProgress = false;
+        this.observePrepareCompleted = false;
+        this.observePrepareFailedSafely = false;
+        this.observeAutoEnabledAfterPrepare = false;
+        this.observePrepareFrameBudgetExceeded = false;
+        this.observePrepareStep = 0;
+        this.observePrepareFrameCount = 0;
+        this.observePrepareNextAttemptFrame = 0;
+        this.lastObservePrepareStepName = "cancelled:" + safeReason(reason);
+        this.lastObservePrepareFailureReason = "none";
     }
 
     private void runDeferredQaStep() {
@@ -1125,6 +1410,11 @@ final class ForgeFormalVisibleLodPreview {
             this.fail("formal-modelstore-resources-not-ready:" + store.lastBuildError());
             return false;
         }
+        this.modelDataBufferId = store.modelDataBufferId();
+        this.modelColourBufferId = store.modelColourBufferId();
+        this.atlasTextureId = store.atlasTextureId();
+        this.samplerId = store.samplerId();
+        this.formalGeometryRecordCount = k8.formalGeometrySnapshotRecordCount();
         return true;
     }
 
@@ -1167,6 +1457,9 @@ final class ForgeFormalVisibleLodPreview {
                 && this.visiblePreviewDrawExecuted
                 && this.minecraftMainFramebufferDrawn
                 && this.visiblePreviewDrawCallOk
+                && this.visiblePreviewLightweightDrawPath
+                && this.visiblePreviewDirectDrawUsed
+                && !this.visiblePreviewIndirectCountDrawUsed
                 && this.formalModelIdDecodeOk
                 && this.faceDataLookupOk
                 && this.atlasSampleOk
@@ -1271,7 +1564,8 @@ final class ForgeFormalVisibleLodPreview {
                 this.k6FirstCommandBaseInstance
         }, GL15C.GL_STATIC_DRAW);
         uploadInts(this.drawCountBufferId, new int[] {0, 0, 0, 1}, GL15C.GL_STATIC_DRAW);
-        uploadShorts(this.indexBufferId, createIndexSequenceForBaseVertex(this.k6FirstCommandCount, this.k6FirstCommandBaseVertex), GL15C.GL_STATIC_DRAW);
+        int indexBufferCount = Math.max(0, this.k6FirstCommandFirstIndex) + Math.max(0, this.k6FirstCommandCount);
+        uploadShorts(this.indexBufferId, createVoxyQuadIndexSequence(indexBufferCount), GL15C.GL_STATIC_DRAW);
         uploadInts(this.positionScratchBufferId, new int[] {k6.positionScratchWord0(), k6.positionScratchWord1()}, GL15C.GL_STATIC_DRAW);
         this.acceptedDrawCommandCount = 1;
         this.drawCommandMatchesK6 = this.k6FirstCommandCount == k6.firstCommandCount()
@@ -1286,15 +1580,11 @@ final class ForgeFormalVisibleLodPreview {
 
     private void executeVisiblePreviewDraw(
             RenderLevelStageEvent event,
-            Minecraft minecraft,
-            ForgeFormalModelStoreStats store,
-            ForgeFormalModelIdSectionGeometryStats k8
+            Minecraft minecraft
     ) {
         int oldProgram = GL11C.glGetInteger(GL20C.GL_CURRENT_PROGRAM);
         int oldVertexArray = GL11C.glGetInteger(GL30C.GL_VERTEX_ARRAY_BINDING);
         int oldElementArray = GL11C.glGetInteger(GL15C.GL_ELEMENT_ARRAY_BUFFER_BINDING);
-        int oldDrawIndirect = GL11C.glGetInteger(GL40C.GL_DRAW_INDIRECT_BUFFER_BINDING);
-        int oldParameter = GL11C.glGetInteger(GL_PARAMETER_BUFFER_BINDING_ARB);
         int oldGeometryBuffer = GL30C.glGetIntegeri(GL43C.GL_SHADER_STORAGE_BUFFER_BINDING, ForgeFormalShaderInputBindingLayout.QUAD_BUFFER_BINDING_INDEX);
         int oldModelBuffer = GL30C.glGetIntegeri(GL43C.GL_SHADER_STORAGE_BUFFER_BINDING, ForgeFormalShaderInputBindingLayout.MODEL_DATA_BINDING_INDEX);
         int oldColourBuffer = GL30C.glGetIntegeri(GL43C.GL_SHADER_STORAGE_BUFFER_BINDING, ForgeFormalShaderInputBindingLayout.MODEL_COLOUR_BINDING_INDEX);
@@ -1308,7 +1598,10 @@ final class ForgeFormalVisibleLodPreview {
         boolean cullEnabled = GL11C.glIsEnabled(GL11C.GL_CULL_FACE);
         boolean depthMask = GL11C.glGetBoolean(GL11C.GL_DEPTH_WRITEMASK);
         try {
-            clearGlErrors();
+            boolean validationChecksThisFrame = this.qaReadbackAllowed || !this.visiblePreviewDrawCallOk;
+            if (validationChecksThisFrame) {
+                clearGlErrors();
+            }
             GL30C.glBindVertexArray(this.vertexArrayId);
             GL15C.glBindBuffer(GL15C.GL_ELEMENT_ARRAY_BUFFER, this.indexBufferId);
             GL11C.glDisable(GL11C.GL_DEPTH_TEST);
@@ -1351,34 +1644,50 @@ final class ForgeFormalVisibleLodPreview {
                 uniform1f(this.uniformPreviewScale, previewScale);
                 uniform1ui(this.uniformObserveMode, this.observeModeEnabled ? 1 : 0);
                 uniform3f(this.uniformObserveTint, 0.18F, 1.0F, 0.25F);
-                uniform1ui(this.uniformRecordCount, Math.max(1, k8.formalGeometrySnapshotRecordCount()));
+                uniform1ui(this.uniformRecordCount, Math.max(1, this.formalGeometryRecordCount));
                 uniform1ui(this.uniformBaseVertexBias, Math.max(0, this.k6FirstCommandBaseVertex));
 
-                GL30C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, ForgeFormalShaderInputBindingLayout.QUAD_BUFFER_BINDING_INDEX, k8.formalGeometryValidationBufferId());
-                GL30C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, ForgeFormalShaderInputBindingLayout.MODEL_DATA_BINDING_INDEX, store.modelDataBufferId());
-                GL30C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, ForgeFormalShaderInputBindingLayout.MODEL_COLOUR_BINDING_INDEX, store.modelColourBufferId());
+                GL30C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, ForgeFormalShaderInputBindingLayout.QUAD_BUFFER_BINDING_INDEX, this.geometryBufferId);
+                GL30C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, ForgeFormalShaderInputBindingLayout.MODEL_DATA_BINDING_INDEX, this.modelDataBufferId);
+                GL30C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, ForgeFormalShaderInputBindingLayout.MODEL_COLOUR_BINDING_INDEX, this.modelColourBufferId);
                 GL30C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, ForgeFormalShaderInputBindingLayout.POSITION_SCRATCH_BINDING_INDEX, this.positionScratchBufferId);
-                GL11C.glBindTexture(GL11C.GL_TEXTURE_2D, store.atlasTextureId());
-                GL33C.glBindSampler(ForgeFormalShaderInputBindingLayout.BLOCK_MODEL_ATLAS_TEXTURE_UNIT, store.samplerId());
-                GL15C.glBindBuffer(GL40C.GL_DRAW_INDIRECT_BUFFER, this.commandBufferId);
-                GL15C.glBindBuffer(GL_PARAMETER_BUFFER_ARB, this.drawCountBufferId);
+                GL11C.glBindTexture(GL11C.GL_TEXTURE_2D, this.atlasTextureId);
+                GL33C.glBindSampler(ForgeFormalShaderInputBindingLayout.BLOCK_MODEL_ATLAS_TEXTURE_UNIT, this.samplerId);
 
-                if (this.qaReadbackAllowed || !this.visiblePreviewDrawCallOk) {
-                    boolean bindingsOk = GL30C.glGetIntegeri(GL43C.GL_SHADER_STORAGE_BUFFER_BINDING, ForgeFormalShaderInputBindingLayout.QUAD_BUFFER_BINDING_INDEX) == k8.formalGeometryValidationBufferId()
-                            && GL30C.glGetIntegeri(GL43C.GL_SHADER_STORAGE_BUFFER_BINDING, ForgeFormalShaderInputBindingLayout.MODEL_DATA_BINDING_INDEX) == store.modelDataBufferId()
-                            && GL30C.glGetIntegeri(GL43C.GL_SHADER_STORAGE_BUFFER_BINDING, ForgeFormalShaderInputBindingLayout.MODEL_COLOUR_BINDING_INDEX) == store.modelColourBufferId()
+                if (validationChecksThisFrame) {
+                    boolean bindingsOk = GL30C.glGetIntegeri(GL43C.GL_SHADER_STORAGE_BUFFER_BINDING, ForgeFormalShaderInputBindingLayout.QUAD_BUFFER_BINDING_INDEX) == this.geometryBufferId
+                            && GL30C.glGetIntegeri(GL43C.GL_SHADER_STORAGE_BUFFER_BINDING, ForgeFormalShaderInputBindingLayout.MODEL_DATA_BINDING_INDEX) == this.modelDataBufferId
+                            && GL30C.glGetIntegeri(GL43C.GL_SHADER_STORAGE_BUFFER_BINDING, ForgeFormalShaderInputBindingLayout.MODEL_COLOUR_BINDING_INDEX) == this.modelColourBufferId
                             && GL30C.glGetIntegeri(GL43C.GL_SHADER_STORAGE_BUFFER_BINDING, ForgeFormalShaderInputBindingLayout.POSITION_SCRATCH_BINDING_INDEX) == this.positionScratchBufferId
-                            && GL11C.glGetInteger(GL11C.GL_TEXTURE_BINDING_2D) == store.atlasTextureId()
-                            && GL30C.glGetIntegeri(GL33C.GL_SAMPLER_BINDING, ForgeFormalShaderInputBindingLayout.BLOCK_MODEL_ATLAS_TEXTURE_UNIT) == store.samplerId()
-                            && GL11C.glGetInteger(GL40C.GL_DRAW_INDIRECT_BUFFER_BINDING) == this.commandBufferId
-                            && GL11C.glGetInteger(GL_PARAMETER_BUFFER_BINDING_ARB) == this.drawCountBufferId;
+                            && GL11C.glGetInteger(GL11C.GL_TEXTURE_BINDING_2D) == this.atlasTextureId
+                            && GL30C.glGetIntegeri(GL33C.GL_SAMPLER_BINDING, ForgeFormalShaderInputBindingLayout.BLOCK_MODEL_ATLAS_TEXTURE_UNIT) == this.samplerId;
                     if (!bindingsOk) {
                         throw new IllegalStateException("k10-formal-resource-binding-failed");
                     }
+                    this.visiblePreviewValidationChecksOnly = true;
                 }
 
-                GL43C.glMemoryBarrier(GL43C.GL_SHADER_STORAGE_BARRIER_BIT | GL43C.GL_TEXTURE_FETCH_BARRIER_BIT | GL43C.GL_COMMAND_BARRIER_BIT);
-                glMultiDrawElementsIndirectCountARB(GL11C.GL_TRIANGLES, GL11C.GL_UNSIGNED_SHORT, 0L, OPAQUE_DRAW_COUNT_OFFSET_BYTES, 1, 0);
+                if (validationChecksThisFrame) {
+                    GL43C.glMemoryBarrier(GL43C.GL_SHADER_STORAGE_BARRIER_BIT | GL43C.GL_TEXTURE_FETCH_BARRIER_BIT);
+                }
+                int commandIndexCount = Math.max(0, this.k6FirstCommandCount);
+                int drawIndexCount = this.observeModeEnabled
+                        ? Math.min(commandIndexCount, OBSERVE_MAX_DRAW_INDICES)
+                        : commandIndexCount;
+                this.visiblePreviewCommandIndexCount = commandIndexCount;
+                this.visiblePreviewDrawIndexCount = drawIndexCount;
+                this.visiblePreviewDrawIndexCap = OBSERVE_MAX_DRAW_INDICES;
+                this.visiblePreviewDrawCountCapped = drawIndexCount < commandIndexCount;
+                GL11C.glDrawElements(
+                        GL11C.GL_TRIANGLES,
+                        drawIndexCount,
+                        GL11C.GL_UNSIGNED_SHORT,
+                        (long) Math.max(0, this.k6FirstCommandFirstIndex) * Short.BYTES
+                );
+                this.visiblePreviewLightweightDrawPath = true;
+                this.visiblePreviewDirectDrawUsed = true;
+                this.visiblePreviewDrawArraysUsed = false;
+                this.visiblePreviewIndirectCountDrawUsed = false;
                 this.worldSpacePreview = true;
                 this.previewCameraRelativeTransformOk = true;
                 this.projectionMatrixUsed = true;
@@ -1386,10 +1695,12 @@ final class ForgeFormalVisibleLodPreview {
                 this.visiblePreviewDrawExecuted = true;
                 this.minecraftMainFramebufferDrawn = true;
                 this.visiblePreviewDrawCallOk = true;
-                int error = GL11C.glGetError();
-                this.lastGlError = error == GL11C.GL_NO_ERROR ? "none" : glErrorName(error);
-                if (error != GL11C.GL_NO_ERROR) {
-                    throw new IllegalStateException("k10-visible-preview-draw-gl-error-" + this.lastGlError);
+                if (validationChecksThisFrame) {
+                    int error = GL11C.glGetError();
+                    this.lastGlError = error == GL11C.GL_NO_ERROR ? "none" : glErrorName(error);
+                    if (error != GL11C.GL_NO_ERROR) {
+                        throw new IllegalStateException("k10-visible-preview-draw-gl-error-" + this.lastGlError);
+                    }
                 }
                 if (this.readbackPending && this.qaReadbackAllowed) {
                     this.readbackPending = false;
@@ -1402,8 +1713,6 @@ final class ForgeFormalVisibleLodPreview {
             GL20C.glUseProgram(oldProgram);
             GL30C.glBindVertexArray(oldVertexArray);
             GL15C.glBindBuffer(GL15C.GL_ELEMENT_ARRAY_BUFFER, oldElementArray);
-            GL15C.glBindBuffer(GL40C.GL_DRAW_INDIRECT_BUFFER, oldDrawIndirect);
-            GL15C.glBindBuffer(GL_PARAMETER_BUFFER_ARB, oldParameter);
             GL30C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, ForgeFormalShaderInputBindingLayout.QUAD_BUFFER_BINDING_INDEX, oldGeometryBuffer);
             GL30C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, ForgeFormalShaderInputBindingLayout.MODEL_DATA_BINDING_INDEX, oldModelBuffer);
             GL30C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, ForgeFormalShaderInputBindingLayout.MODEL_COLOUR_BINDING_INDEX, oldColourBuffer);
@@ -1472,6 +1781,7 @@ final class ForgeFormalVisibleLodPreview {
         this.ownerReady = false;
         this.observeEnableRequested = false;
         this.observeEnableFailedSafely = false;
+        this.cancelObservePrepare(reason);
         this.resetBuildFlags();
         this.renderHookEarlyReturnWhenStale = true;
         this.stale = true;
@@ -1535,6 +1845,7 @@ final class ForgeFormalVisibleLodPreview {
         this.qaReadbackAllowed = false;
         this.firstDrawLogged = false;
         this.observeModeEnabled = false;
+        this.observeDrawPaused = false;
         this.observeModeDebugTintUsed = false;
         this.observeModeScale = OBSERVE_PREVIEW_SCALE;
         this.observeModeCameraRelative = false;
@@ -1565,6 +1876,15 @@ final class ForgeFormalVisibleLodPreview {
         this.visiblePreviewShaderProgramCompileOk = false;
         this.visiblePreviewShaderProgramLinkOk = false;
         this.visiblePreviewDrawCallOk = false;
+        this.visiblePreviewLightweightDrawPath = true;
+        this.visiblePreviewDirectDrawUsed = false;
+        this.visiblePreviewDrawArraysUsed = false;
+        this.visiblePreviewIndirectCountDrawUsed = false;
+        this.visiblePreviewValidationChecksOnly = false;
+        this.visiblePreviewCommandIndexCount = 0;
+        this.visiblePreviewDrawIndexCount = 0;
+        this.visiblePreviewDrawIndexCap = OBSERVE_MAX_DRAW_INDICES;
+        this.visiblePreviewDrawCountCapped = false;
         this.formalModelIdDecodeOk = false;
         this.faceDataLookupOk = false;
         this.atlasSampleOk = false;
@@ -1577,6 +1897,11 @@ final class ForgeFormalVisibleLodPreview {
         this.validationFace = 0;
         this.validationFormalModelIds = "none";
         this.geometryBufferId = 0;
+        this.modelDataBufferId = 0;
+        this.modelColourBufferId = 0;
+        this.atlasTextureId = 0;
+        this.samplerId = 0;
+        this.formalGeometryRecordCount = 0;
         this.k6FirstCommandCount = 0;
         this.k6FirstCommandInstanceCount = 0;
         this.k6FirstCommandFirstIndex = 0;
@@ -1603,12 +1928,17 @@ final class ForgeFormalVisibleLodPreview {
         this.lastFailureReason = safeReason(reason);
     }
 
-    private static short[] createIndexSequenceForBaseVertex(int count, int baseVertex) {
-        short[] indices = new short[count];
-        for (int i = 0; i < count; i++) {
-            int desiredCorner = i % 6;
-            int index = Math.floorMod(desiredCorner - baseVertex, 6);
-            indices[i] = (short) index;
+    private static short[] createVoxyQuadIndexSequence(int indexCount) {
+        int quadCount = Math.max(1, (indexCount + 5) / 6);
+        short[] indices = new short[quadCount * 6];
+        int ptr = 0;
+        for (int base = 0; base < quadCount * 4; base += 4) {
+            indices[ptr++] = (short) (base + 1);
+            indices[ptr++] = (short) (base + 2);
+            indices[ptr++] = (short) base;
+            indices[ptr++] = (short) (base + 1);
+            indices[ptr++] = (short) (base + 3);
+            indices[ptr++] = (short) (base + 2);
         }
         return indices;
     }

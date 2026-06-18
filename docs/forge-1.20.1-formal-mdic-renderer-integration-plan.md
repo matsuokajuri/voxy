@@ -695,3 +695,59 @@ The K10.2 timeout QA command is:
 It verifies that observe enable returns quickly and does not do command-thread
 GL work, readback, or synchronous rebuild. It remains separate from production
 MDIC renderer integration.
+
+## K10.3 visible preview observe prepare hotfix note
+
+K10.3 keeps the same non-production boundary as K10.2 but changes the missing
+resource behavior. If manual observe enable finds the K10 visible preview owner
+missing or stale, the render hook now starts a bounded prepare sequence instead
+of failing immediately.
+
+The prepare sequence is explicitly staged:
+
+```text
+K6 real-section cmdgen dry-run
+ -> K7 isolated offscreen draw evidence
+ -> K8 formal model-id geometry snapshot
+ -> K9 terrain shader integration
+ -> K10 visible preview owner build
+ -> observe mode enable
+```
+
+This work is render-thread owned and does not happen in the Brigadier command
+handler. The command still returns quickly and reports no command-thread GL
+work, readback, or synchronous rebuild. Disable, clear, reload, world unload,
+dimension switch, and preset clear/off cancel any pending observe prepare.
+
+K10.3 still does not call `MDICSectionRenderer`, does not call
+`VoxyRenderSystem`, does not run the production live renderer, and does not
+change formal renderer readiness.
+
+If a resource reload is observed during the manual observe prepare sequence,
+K10.3 treats it as an instruction to rebuild the preview dependencies rather
+than as a reason to drop the explicit user request. Disable, clear, world
+unload, dimension switch, preset off, and preset clear still cancel the request.
+
+K10 observe performance follow-up: once manual observe could visibly draw, the
+continuous main-framebuffer path was changed to a lightweight direct indexed
+draw using the K6 command fields and K8/K9 formal inputs. This avoids calling
+the indirect-count validation path every frame while preserving the same
+preview-only boundary. The formal command and draw-count buffers remain owned
+evidence, not debug buffers and not live renderer inputs.
+
+The manual observe path now caps the visible draw to a small sample count so the
+debug proof does not render the whole real-section command payload every frame.
+The uncapped K6 command data remains recorded for audit, and the capped observe
+sample does not imply formal MDIC live draw readiness.
+
+Original Voxy comparison found one concrete K10 preview drift: original
+`quads3.vert` and `SharedIndexBuffer` use four logical vertices per packed quad
+with a shared index sequence `1,2,0,1,3,2`. K10's visible preview has been
+adjusted to that convention instead of the earlier six-vertex helper so future
+MDIC integration does not inherit a preview-only vertex-id assumption.
+
+Manual observe command follow-up: observe enable/disable now return short
+toggle-oriented feedback instead of formatting the full K10 and renderer status
+on the command path. Expensive or verbose readiness evidence stays behind the
+explicit status/audit commands, and disable no longer runs a synchronous K10
+audit before stopping preview drawing.

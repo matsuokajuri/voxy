@@ -945,10 +945,87 @@ formalRendererReady=false
 actualRendererDrawEnabled=false
 ```
 
+## K10.3 observe prepare hotfix note
+
+K10.3 fixes the gap left by K10.2: a manual observe command could return
+safely but still produce no visible change if the K10 visible preview owner was
+not already built. The command path remains lightweight and command-thread
+safe, but missing/stale preview resources now trigger a bounded render-thread
+prepare sequence instead of immediate safe failure.
+
+The prepare sequence is still preview-only evidence. It may build or refresh
+K6 real-section dry-run, K7 isolated offscreen draw evidence, K8 formal
+model-id geometry, K9 terrain shader integration, and finally the K10 visible
+preview owner over multiple render frames. It does not run per-frame rebuilds,
+does not read back during manual observe frames, and does not promote the
+preview to production renderer readiness.
+
+New readiness/audit evidence includes:
+
+```text
+observePrepareRequested
+observePrepareInProgress
+observePrepareCompleted
+observePrepareFailedSafely
+observeAutoEnabledAfterPrepare
+observePrepareFrameBudgetExceeded
+observePrepareStep
+observePrepareFrameCount
+lastObservePrepareStepName
+lastObservePrepareFailureReason
+```
+
+Expected successful manual observe evidence is:
+
+```text
+observeEnableCommandReturnedQuickly=true
+observeEnableDidGlWorkOnCommandThread=false
+observeEnableDidReadbackOnCommandThread=false
+observeEnableDidSynchronousRebuild=false
+observePrepareCompleted=true
+observeAutoEnabledAfterPrepare=true
+visiblePreviewDrawExecuted=true
+visiblePreviewLightweightDrawPath=true
+visiblePreviewDirectDrawUsed=true
+visiblePreviewIndirectCountDrawUsed=false
+formalRendererReady=false
+actualRendererDrawEnabled=false
+```
+
+Resource reload during observe prepare is treated as a rebuild signal rather
+than a command cancellation. The K10-owned preview resources are cleaned up, the
+component remains stale until rebuilt, and the pending prepare sequence
+continues on the render thread.
+
+Follow-up performance note: manual observe eventually produced a visible large
+debug-tinted preview, but sustained FPS was still too low. Continuous observe
+draw now avoids the indirect-count validation call and uses a direct indexed draw
+from the K6 command fields against K8/K9 formal inputs. The command and draw
+count buffers remain recorded as formal evidence; they are not used as debug
+buffers and are not submitted to the production renderer.
+
+The visible observe draw is deliberately capped to a small index count for
+human observation. This does not change the K6 command evidence; status keeps
+both values separate via `visiblePreviewCommandIndexCount` and
+`visiblePreviewDrawIndexCount`, with `visiblePreviewDrawCountCapped=true` when
+the observe path is showing only the reduced sample.
+
+After comparing against original Voxy, the K10 visible preview no longer uses a
+custom six-vertex quad convention. The shader/index path now mirrors the Voxy
+four-vertex quad convention (`gl_VertexID >> 2`) with the shared-index pattern
+`1,2,0,1,3,2`. This keeps the preview closer to the original MDIC shader
+contract while remaining preview-only.
+
 The blocker boundary shifts from missing owner shells to missing producers and
 draw integration: formal command generation, formal visibility traversal, global
 formal model-id geometry, formal terrain shader integration, and formal MDIC
 draw remain absent.
+
+K10 observe command hotfix: manual observe enable/disable no longer run or print
+the full readiness/status dump as part of the toggle path. Enable still only
+requests render-thread preparation, and disable only stops preview drawing; full
+status and audit remain explicit commands. This keeps the manual preview switch
+from becoming a hidden readiness audit or log/chat stress path.
 
 ## K3 readiness note
 
