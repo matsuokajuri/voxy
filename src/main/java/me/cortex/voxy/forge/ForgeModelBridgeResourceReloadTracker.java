@@ -121,6 +121,7 @@ final class ForgeModelBridgeResourceReloadTracker {
             this.instance.getFormalCmdgenRealSectionDryRun().markResourceReload();
             this.instance.getFormalIsolatedMdicDrawSmokeTest().markResourceReload();
             this.instance.getFormalModelIdSectionGeometryPath().markResourceReload();
+            this.instance.getFormalTerrainShaderIntegration().markResourceReload();
             this.instance.getFormalRendererManager().markResourceReload();
             this.instance.getTexturedDebugQuadRenderer().markStale(staleReason);
             this.instance.getTexturedReadbackRenderer().markStale(staleReason);

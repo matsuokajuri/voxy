@@ -271,6 +271,17 @@ final class ForgeFormalRendererManager {
                 readiness.formalPackedRecordsAuditOk(),
                 readiness.formalGeometryReadbackOk(),
                 readiness.originalGeometryHeapMutated(),
+                readiness.formalTerrainShaderIntegrationReady(),
+                readiness.productionTerrainShaderReady(),
+                readiness.terrainShaderAdapterUsed(),
+                readiness.terrainShaderProgramCompileOk(),
+                readiness.terrainShaderProgramLinkOk(),
+                readiness.k8FormalGeometryUsedByTerrainShader(),
+                readiness.k6RealSectionCommandUsedByTerrainShader(),
+                readiness.terrainShaderOffscreenDrawExecuted(),
+                readiness.terrainShaderOffscreenReadbackOk(),
+                readiness.terrainShaderValidationOnly(),
+                readiness.terrainShaderOffscreenOnly(),
                 readiness.formalTerrainShaderReady(),
                 readiness.previewSystemsSeparated(),
                 readiness.sampleSetUsedAsFormalSource(),
@@ -343,6 +354,7 @@ final class ForgeFormalRendererManager {
         ForgeFormalCmdgenRealSectionDryRunStats cmdgenRealSectionDryRun = this.instance.getFormalCmdgenRealSectionDryRun().createStatusSnapshot();
         ForgeFormalIsolatedMdicDrawSmokeTestStats isolatedMdicDraw = this.instance.getFormalIsolatedMdicDrawSmokeTest().createStatusSnapshot();
         ForgeFormalModelIdSectionGeometryStats modelIdGeometry = this.instance.getFormalModelIdSectionGeometryPath().createStatusSnapshot();
+        ForgeFormalTerrainShaderIntegrationStats terrainShaderIntegration = this.instance.getFormalTerrainShaderIntegration().createStatusSnapshot();
         ForgeModelAtlasSampleSetUploadStats atlas = this.instance.getModelAtlasSampleSetUploader().createStatusSnapshot();
         ForgeModelBridgeResourceReloadStats reload = this.instance.getModelBridgeResourceReloadTracker().createStatusSnapshot();
         String dimension = currentDimensionId();
@@ -468,12 +480,23 @@ final class ForgeFormalRendererManager {
                 modelIdGeometry.formalPackedRecordsAuditOk(),
                 modelIdGeometry.formalGeometryReadbackOk(),
                 modelIdGeometry.originalGeometryHeapMutated(),
+                terrainShaderIntegration.formalTerrainShaderIntegrationReady(),
+                terrainShaderIntegration.productionTerrainShaderReady(),
+                terrainShaderIntegration.terrainShaderAdapterUsed(),
+                terrainShaderIntegration.terrainShaderProgramCompileOk(),
+                terrainShaderIntegration.terrainShaderProgramLinkOk(),
+                terrainShaderIntegration.k8FormalGeometryUsed(),
+                terrainShaderIntegration.k6RealSectionCommandUsed(),
+                terrainShaderIntegration.offscreenTerrainShaderDrawExecuted(),
+                terrainShaderIntegration.offscreenReadbackOk(),
+                terrainShaderIntegration.validationOnly(),
+                terrainShaderIntegration.offscreenOnly(),
                 terrainRendererOwner.formalTerrainShaderReady(),
                 terrainRendererOwner.previewSystemsSeparated(),
-                terrainRendererOwner.sampleSetUsedAsFormalSource(),
-                texturedShaderPreview.terrainDrawStarted() || packedQuadPreview.terrainDrawStarted() || terrainRecordBridge.terrainDrawStarted() || isolatedMdicDraw.visibleTerrainDrawExecuted(),
-                texturedShaderPreview.formalRendererDrawStarted() || packedQuadPreview.formalRendererDrawStarted() || terrainRecordBridge.formalRendererDrawStarted() || isolatedMdicDraw.liveRendererDrawExecuted(),
-                texturedShaderPreview.actualRendererDrawEnabled() || packedQuadPreview.actualRendererDrawEnabled() || terrainRecordBridge.actualRendererDrawEnabled() || isolatedMdicDraw.actualRendererDrawEnabled(),
+                terrainRendererOwner.sampleSetUsedAsFormalSource() || terrainShaderIntegration.sampleSetUsedAsFormalSource(),
+                texturedShaderPreview.terrainDrawStarted() || packedQuadPreview.terrainDrawStarted() || terrainRecordBridge.terrainDrawStarted() || isolatedMdicDraw.visibleTerrainDrawExecuted() || terrainShaderIntegration.visibleTerrainDrawExecuted(),
+                texturedShaderPreview.formalRendererDrawStarted() || packedQuadPreview.formalRendererDrawStarted() || terrainRecordBridge.formalRendererDrawStarted() || isolatedMdicDraw.liveRendererDrawExecuted() || terrainShaderIntegration.liveRendererDrawExecuted(),
+                texturedShaderPreview.actualRendererDrawEnabled() || packedQuadPreview.actualRendererDrawEnabled() || terrainRecordBridge.actualRendererDrawEnabled() || isolatedMdicDraw.actualRendererDrawEnabled() || terrainShaderIntegration.actualRendererDrawEnabled(),
                 shaderInputConsumer.formalShaderInputContractReady(),
                 formalPrerequisitesReady
         );

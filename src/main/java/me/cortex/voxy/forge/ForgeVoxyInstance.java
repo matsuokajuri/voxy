@@ -64,6 +64,7 @@ public final class ForgeVoxyInstance {
     private final ForgeFormalCmdgenRealSectionDryRun formalCmdgenRealSectionDryRun = new ForgeFormalCmdgenRealSectionDryRun(this);
     private final ForgeFormalIsolatedMdicDrawSmokeTest formalIsolatedMdicDrawSmokeTest = new ForgeFormalIsolatedMdicDrawSmokeTest(this);
     private final ForgeFormalModelIdSectionGeometryPath formalModelIdSectionGeometryPath = new ForgeFormalModelIdSectionGeometryPath(this);
+    private final ForgeFormalTerrainShaderIntegration formalTerrainShaderIntegration = new ForgeFormalTerrainShaderIntegration(this);
     private final ForgeFormalRendererManager formalRendererManager = new ForgeFormalRendererManager(this);
     private final ForgeTexturedDebugQuadRenderer texturedDebugQuadRenderer = new ForgeTexturedDebugQuadRenderer(this);
     private final ForgeTexturedReadbackRenderer texturedReadbackRenderer = new ForgeTexturedReadbackRenderer(this);
@@ -302,6 +303,10 @@ public final class ForgeVoxyInstance {
         return this.formalModelIdSectionGeometryPath;
     }
 
+    public ForgeFormalTerrainShaderIntegration getFormalTerrainShaderIntegration() {
+        return this.formalTerrainShaderIntegration;
+    }
+
     public ForgeFormalRendererManager getFormalRendererManager() {
         return this.formalRendererManager;
     }
@@ -386,6 +391,7 @@ public final class ForgeVoxyInstance {
         this.formalCmdgenRealSectionDryRun.markDimensionSwitch();
         this.formalIsolatedMdicDrawSmokeTest.markDimensionSwitch();
         this.formalModelIdSectionGeometryPath.markDimensionSwitch();
+        this.formalTerrainShaderIntegration.markDimensionSwitch();
         this.formalRendererManager.markDimensionSwitch();
         this.texturedDebugQuadRenderer.clear();
         this.texturedReadbackRenderer.clear();
@@ -495,6 +501,7 @@ public final class ForgeVoxyInstance {
         this.formalCmdgenRealSectionDryRun.markWorldUnload();
         this.formalIsolatedMdicDrawSmokeTest.markWorldUnload();
         this.formalModelIdSectionGeometryPath.markWorldUnload();
+        this.formalTerrainShaderIntegration.markWorldUnload();
         this.formalRendererManager.markWorldUnload();
         this.texturedDebugQuadRenderer.clear();
         this.texturedReadbackRenderer.clear();

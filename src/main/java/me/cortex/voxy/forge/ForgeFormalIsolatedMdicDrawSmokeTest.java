@@ -219,7 +219,10 @@ final class ForgeFormalIsolatedMdicDrawSmokeTest {
             return this.createStatusSnapshot();
         }
 
-        ForgeFormalTerrainPackedRecordBridgeStats bridge = this.instance.getFormalTerrainPackedRecordBridge().build();
+        ForgeFormalTerrainPackedRecordBridgeStats bridge = this.instance.getFormalTerrainPackedRecordBridge().createStatusSnapshot();
+        if (!bridge.realTerrainPackedRecordBridgeReady() || bridge.stale() || bridge.requiresRebuild()) {
+            bridge = this.instance.getFormalTerrainPackedRecordBridge().build();
+        }
         ForgeFormalCmdgenRealSectionDryRunStats k6 = this.instance.getFormalCmdgenRealSectionDryRun().build();
         ForgeFormalModelStoreStats store = this.instance.getFormalModelStore().createStatusSnapshot();
         List<ForgeFormalUploadedModelSummary> summaries = this.instance.getMultiBlockFormalBakeUpload().uploadedModelSummaries();

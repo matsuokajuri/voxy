@@ -634,3 +634,34 @@ originalGeometryHeapMutated=false
 K8 is still not live terrain rendering. The formal geometry snapshot is isolated
 and validation-only; the live renderer does not consume it, `MDICSectionRenderer`
 and `VoxyRenderSystem` are not called, and renderer readiness remains false.
+
+## K9 status note
+
+K9 adds formal terrain shader offscreen integration. It replaces the K7
+validation shader subset with a production-aligned terrain shader adapter that
+consumes:
+
+```text
+K8 formal model-id geometry snapshot
+ + K6/K7 real-section command/count evidence
+ + I2/I6 formal ModelStore modelData/modelColour/atlas/sampler
+ -> K9-owned offscreen framebuffer
+ -> pixel/readback audit
+```
+
+K9 success means the shader side can decode a formal model id from packed
+quad-style geometry, read `BlockModel.faceData`, sample the formal atlas, and
+emit non-empty offscreen pixels. It still reports:
+
+```text
+productionTerrainShaderReady=false
+formalTerrainShaderSemanticCompleteness=partial
+formalDrawPipelineReady=false
+formalRendererReady=false
+actualRendererDrawEnabled=false
+visibleTerrainDrawExecuted=false
+```
+
+K9 does not draw into the Minecraft main framebuffer, does not call
+`MDICSectionRenderer` or `VoxyRenderSystem`, does not mutate the original
+geometry heap, and does not enable live LoD terrain rendering.

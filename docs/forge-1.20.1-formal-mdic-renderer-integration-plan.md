@@ -572,3 +572,33 @@ globalFormalModelIdGeometryEnabledForLiveRenderer=false
 The next renderer blockers remain production cmdgen, formal traversal,
 production terrain shader integration, live MDIC draw ownership, and full
 resource rebuild automation.
+
+## K9 formal terrain shader offscreen integration note
+
+K9 integrates a production-aligned terrain shader adapter into the formal path,
+but only for offscreen validation. It consumes the K8 formal model-id geometry
+snapshot and K6/K7 real-section command/count evidence, then binds formal
+`ModelStore` resources using the original binding intent:
+
+- packed quad-style geometry at binding 1,
+- model data at binding 3,
+- model colour at binding 4,
+- block model atlas on texture unit 0,
+- position scratch at binding 5.
+
+Intentional Forge deviation:
+
+- K9 uses a shader adapter/subset instead of claiming the original terrain
+  shader files are fully ported.
+- K9 owns its framebuffer, shader program, index buffer, command buffer,
+  draw-count buffer, and position-scratch validation buffer.
+- K9 does not draw into the Minecraft main framebuffer.
+- K9 does not call `MDICSectionRenderer` or `VoxyRenderSystem`.
+- K9 does not enable live terrain draw or mark the formal draw pipeline ready.
+
+After K9, the formal path can prove `modelId -> BlockModel.faceData -> atlas
+sample -> offscreen pixel` with real-section-derived geometry and command
+evidence. Remaining blockers are production cmdgen, formal hierarchical
+visibility traversal, full terrain shader semantics, live MDIC renderer
+ownership, lightmap, biome tint, material/alpha semantics, translucency, and
+resource rebuild automation.

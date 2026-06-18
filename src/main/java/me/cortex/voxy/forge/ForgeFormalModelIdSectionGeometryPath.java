@@ -120,7 +120,10 @@ final class ForgeFormalModelIdSectionGeometryPath {
             return this.createStatusSnapshot();
         }
 
-        ForgeFormalTerrainPackedRecordBridgeStats j5 = this.instance.getFormalTerrainPackedRecordBridge().build();
+        ForgeFormalTerrainPackedRecordBridgeStats j5 = this.instance.getFormalTerrainPackedRecordBridge().createStatusSnapshot();
+        if (!j5.realTerrainPackedRecordBridgeReady() || j5.stale() || j5.requiresRebuild()) {
+            j5 = this.instance.getFormalTerrainPackedRecordBridge().build();
+        }
         ForgeFormalCmdgenRealSectionDryRunStats k6 = this.instance.getFormalCmdgenRealSectionDryRun().createStatusSnapshot();
         ForgeFormalIsolatedMdicDrawSmokeTestStats k7 = this.instance.getFormalIsolatedMdicDrawSmokeTest().createStatusSnapshot();
         ForgeFormalModelBakeryLifecycleStats lifecycle = this.instance.getFormalModelBakeryLifecycle().createStatusSnapshot();

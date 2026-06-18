@@ -1206,3 +1206,44 @@ as a formal source, does not call `MDICSectionRenderer` or `VoxyRenderSystem`,
 and does not enable visible terrain rendering. The old blocker "global formal
 model-id geometry missing" is now more precise: the opt-in path exists, but it is
 not enabled for the live renderer.
+
+## K9 readiness note
+
+K9 adds a formal terrain shader offscreen integration path. It uses the K8
+formal model-id geometry snapshot, K6/K7 real-section command/count evidence,
+and the I2 formal `ModelStore` owner populated by the I/J lifecycle path.
+
+K9 can now report:
+
+```text
+formalTerrainShaderIntegrationReady=true
+terrainShaderProgramCompileOk=true
+terrainShaderProgramLinkOk=true
+k8FormalGeometryUsed=true
+k6RealSectionCommandUsed=true
+modelDataBindingOk=true
+modelColourBindingOk=true
+atlasTextureBindingOk=true
+formalModelIdDecodeOk=true
+faceDataLookupOk=true
+atlasSampleOk=true
+offscreenTerrainShaderDrawExecuted=true
+offscreenReadbackOk=true
+```
+
+The integration is deliberately partial:
+
+```text
+productionTerrainShaderReady=false
+formalTerrainShaderSemanticCompleteness=partial
+lightmapReady=false
+biomeTintFullReady=false
+materialAlphaFullReady=false
+translucencyReady=false
+shaderpackReady=false
+```
+
+The boundary remains strict: K9 draws only into a K9-owned offscreen framebuffer,
+does not use sample-set data as a formal source, does not mutate the original
+geometry heap, does not call `MDICSectionRenderer` or `VoxyRenderSystem`, and
+does not make the formal renderer ready.
