@@ -29,9 +29,9 @@ import java.util.stream.Collectors;
 
 final class ForgeFormalModelIdSectionGeometryPath {
     static final String STAGE = "K8_FORMAL_MODEL_ID_SECTION_GEOMETRY_PATH_NO_LIVE_DRAW";
-    private static final int SEARCH_RADIUS_CHUNKS = 2;
-    private static final int MAX_SNAPSHOT_SECTIONS = 4;
-    private static final int MAX_SNAPSHOT_RECORDS = 256;
+    private static final int SEARCH_RADIUS_CHUNKS = 3;
+    private static final int MAX_SNAPSHOT_SECTIONS = 12;
+    private static final int MAX_SNAPSHOT_RECORDS = 768;
     private static final List<ForgeFormalRendererBlocker> BLOCKERS = List.of(
             new ForgeFormalRendererBlocker("P0", "P0_PRODUCTION_CMDGEN_NOT_OPERATIONAL", "Production cmdgen not operational", "K8 creates formal-model-id geometry snapshots but production cmdgen.comp still is not the live renderer path.", "Promote production command generation after traversal and shader integration are ready.", true),
             new ForgeFormalRendererBlocker("P0", "P0_FORMAL_VISIBILITY_TRAVERSAL_IMPLEMENTATION_MISSING", "Formal visibility traversal implementation missing", "K8 consumes real section evidence but does not implement original hierarchical traversal.", "Port formal visibility traversal before live draw.", true),

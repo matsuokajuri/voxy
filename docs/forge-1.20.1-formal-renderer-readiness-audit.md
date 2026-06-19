@@ -1524,6 +1524,45 @@ can produce a visible debug preview. They must not be treated as production
 LoD renderer readiness until production cmdgen, traversal, shader semantics,
 and live MDIC renderer ownership are complete.
 
+## K37-K42 expanded formal LoD patch preview note
+
+K37-K42 broadens the visible proof without changing readiness semantics. The
+formal model-id section geometry path now allows a larger bounded snapshot, and
+the K10 preview owner can prepare an expanded interleaved patch:
+
+```text
+K8 expanded real-section snapshot
+ -> K10 expanded preview buffer
+ -> preview SectionMeta / positionScratch / DrawCommand
+ -> explicit opt-in visible preview
+```
+
+Positive evidence is reported in `expandedSummary`:
+
+```text
+expandedOwnerReady=true
+expandedPatchReady=true
+candidateSnapshotUsed=true
+interleavedSectionsUsed=true
+recordCount>=192
+sectionCount>=3
+yBandCount>=2
+liveRendererEnabled=false
+```
+
+This is still a K10-owned preview region. It is allowed to make the visible
+result larger and more representative, but it does not promote the production
+renderer. Required safety values remain:
+
+```text
+formalDrawPipelineReady=false
+formalRendererReady=false
+actualRendererDrawEnabled=false
+MDICSectionRendererCalled=false
+VoxyRenderSystemCalled=false
+productionLiveRendererDrawExecuted=false
+```
+
 ## K10.1 observe/performance hotfix note
 
 K10.1 is a hotfix on the K10 visible preview, not a new renderer stage. It

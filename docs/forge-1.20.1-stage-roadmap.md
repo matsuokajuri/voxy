@@ -848,6 +848,44 @@ is still opt-in, preview-only, K10-owned validation geometry. It does not call
 MDIC rendering, and still requires `formalDrawPipelineReady=false`,
 `formalRendererReady=false`, and `actualRendererDrawEnabled=false`.
 
+## K37/K42 status note
+
+K37/K42 expands the K31-K36 moving preview into a larger formal LoD patch while
+keeping the same preview-only boundary. K8 now collects a wider real-section
+snapshot, and K10 can build an interleaved expanded patch capped at 768 formal
+packed records.
+
+New compact commands:
+
+```text
+/voxy qa_k37_k42_expanded_formal_lod_patch
+/voxy formal_lod_preview_expanded_prepare
+/voxy formal_lod_preview_expanded_status
+/voxy formal_lod_preview_expanded_enable
+/voxy formal_lod_preview_expanded_disable
+```
+
+The key status evidence is embedded in `expandedSummary`:
+
+```text
+expandedOwnerReady
+expandedPatchReady
+recordCount
+sectionCount
+chunkCount
+yBandCount
+sectionBases
+selectionStrategy=interleaved-near-player-section-snapshot
+liveRendererEnabled=false
+```
+
+This stage is intended to make the visible proof read more like a small LoD
+region instead of one narrow section slice. It still uses K10-owned preview
+resources, remains explicit opt-in, does not mutate the original geometry heap,
+does not call `MDICSectionRenderer` or `VoxyRenderSystem`, and still reports
+`formalDrawPipelineReady=false`, `formalRendererReady=false`, and
+`actualRendererDrawEnabled=false`.
+
 ## K23-K30 status note
 
 K23-K30 creates the first minimal formal LoD renderer prototype, still bounded

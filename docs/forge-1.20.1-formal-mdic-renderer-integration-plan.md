@@ -946,3 +946,26 @@ The next MDIC-facing work should convert this preview-owned moving patch into
 formal renderer-owned update scheduling and command resource handoff, still
 with explicit opt-in and bounded draw scope until production traversal and
 shader semantics are ready.
+
+## K37-K42 expanded formal LoD patch preview note
+
+K37-K42 keeps the same MDIC boundary as K31-K36 but expands the preview input
+so the visible proof can cover a small region instead of one narrow patch slice:
+
+```text
+K8 expanded formal model-id snapshot
+ -> interleaved K10 preview copy
+ -> preview SectionMeta / positionScratch
+ -> K10-owned DrawCommand
+ -> direct visible preview draw
+```
+
+The expanded path is capped at 768 formal packed records and reports
+`recordCount`, `sectionCount`, `chunkCount`, `yBandCount`, `sectionBases`, and
+`selectionStrategy`. This gives the next production-facing stage better input
+evidence without treating the preview copy as formal MDIC command ownership.
+
+K37-K42 still does not run production `cmdgen.comp`, does not populate the K2
+formal command buffers as live renderer inputs, does not submit production
+indirect draws, does not call `MDICSectionRenderer`, and does not call
+`VoxyRenderSystem`.

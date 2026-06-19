@@ -649,6 +649,16 @@ public final class ForgeVoxyCommands {
                         .executes(ctx -> formalLodPreviewMovingStatus(ctx.getSource())))
                 .then(Commands.literal("qa_k31_k36_formal_lod_preview_moving_patch")
                         .executes(ctx -> qaK31K36FormalLodPreviewMovingPatch(ctx.getSource())))
+                .then(Commands.literal("formal_lod_preview_expanded_prepare")
+                        .executes(ctx -> formalLodPreviewExpandedPrepare(ctx.getSource())))
+                .then(Commands.literal("formal_lod_preview_expanded_enable")
+                        .executes(ctx -> formalLodPreviewExpandedEnable(ctx.getSource())))
+                .then(Commands.literal("formal_lod_preview_expanded_disable")
+                        .executes(ctx -> formalVisibleLodPreviewObserveDisable(ctx.getSource())))
+                .then(Commands.literal("formal_lod_preview_expanded_status")
+                        .executes(ctx -> formalLodPreviewExpandedStatus(ctx.getSource())))
+                .then(Commands.literal("qa_k37_k42_expanded_formal_lod_patch")
+                        .executes(ctx -> qaK37K42ExpandedFormalLodPatch(ctx.getSource())))
                 .then(Commands.literal("formal_renderer_check")
                         .executes(ctx -> formalRendererCheck(ctx.getSource())))
                 .then(Commands.literal("formal_renderer_status")
@@ -6670,6 +6680,78 @@ public final class ForgeVoxyCommands {
                 && !rendererStatus.actualDrawEnabled() ? 1 : 0;
     }
 
+    private static int formalLodPreviewExpandedPrepare(CommandSourceStack source) {
+        ForgeVoxyRuntimeOverrides.applyFormalVisibleLodPreviewDebugPreset();
+        boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
+        ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview()
+                .requestExpandedFormalLodPatchPrepare("k37-k42-expanded-formal-lod-preview-prepare");
+        source.sendSuccess(() -> Component.literal("Voxy K37-K42 expanded formal LoD patch prepare: "
+                + (engineReady ? "WorldEngine active. " : "No active client world; prepare may wait/fail safely. ")
+                + formatFormalLodPreviewExpandedStatus(status)
+                + " next=/voxy formal_lod_preview_expanded_status; enable=/voxy formal_lod_preview_expanded_enable"), false);
+        return (expandedFormalLodPatchReady(status)
+                || status.observePrepareRequested()
+                || status.observePrepareInProgress())
+                && !status.formalRendererReady()
+                && !status.actualRendererDrawEnabled() ? 1 : 0;
+    }
+
+    private static int formalLodPreviewExpandedEnable(CommandSourceStack source) {
+        ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview()
+                .requestObserveEnable("k37-k42-expanded-formal-lod-preview-enable");
+        boolean previewPrepared = status.visibleLodPreviewOwnerReady() && !status.stale();
+        source.sendSuccess(() -> Component.literal("Voxy K37-K42 expanded formal LoD patch enable: "
+                + "previewPrepared=" + previewPrepared
+                + " commandReturnedQuickly=" + status.observeEnableCommandReturnedQuickly()
+                + " visiblePreviewEnabled=" + status.visiblePreviewEnabled()
+                + " " + formatFormalLodPreviewExpandedStatus(status)
+                + (previewPrepared ? " hint=wait-a-few-frames-then-status" : " hint=run-formal_lod_preview_expanded_prepare-first")), false);
+        return (status.observeEnableRequested() || status.visiblePreviewEnabled())
+                && status.observeEnableCommandReturnedQuickly()
+                && !status.observeEnableDidGlWorkOnCommandThread()
+                && !status.observeEnableDidReadbackOnCommandThread()
+                && !status.observeEnableDidSynchronousRebuild()
+                && !status.formalRendererReady()
+                && !status.actualRendererDrawEnabled() ? 1 : 0;
+    }
+
+    private static int formalLodPreviewExpandedStatus(CommandSourceStack source) {
+        ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview().createStatusSnapshot();
+        source.sendSuccess(() -> Component.literal("Voxy K37-K42 expanded formal LoD patch status: "
+                + formatFormalLodPreviewExpandedStatus(status)), false);
+        return expandedFormalLodPatchReady(status)
+                && !status.formalRendererReady()
+                && !status.actualRendererDrawEnabled() ? 1 : 0;
+    }
+
+    private static int qaK37K42ExpandedFormalLodPatch(CommandSourceStack source) {
+        ForgeVoxyRuntimeOverrides.applyFormalVisibleLodPreviewDebugPreset();
+        boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
+        ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview()
+                .requestExpandedFormalLodPatchPrepare("qa-k37-k42-expanded-formal-lod-patch");
+        boolean previewPrepared = status.visibleLodPreviewOwnerReady() && !status.stale();
+        ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager()
+                .checkReadiness("qa-k37-k42-expanded-formal-lod-patch");
+        String message = "Voxy QA K37-K42 expanded formal LoD patch: "
+                + (engineReady ? "WorldEngine active. " : "No active client world; prepare may wait/fail safely. ")
+                + formatFormalLodPreviewExpandedStatus(status)
+                + " "
+                + formatFormalRendererStatus(rendererStatus)
+                + " next=/voxy formal_lod_preview_expanded_status; enable=/voxy formal_lod_preview_expanded_enable; disable=/voxy formal_lod_preview_expanded_disable";
+        VoxyForge.LOGGER.info(message);
+        source.sendSuccess(() -> Component.literal(message), false);
+        return (previewPrepared || status.observePrepareRequested() || status.observePrepareInProgress())
+                && status.observeEnableCommandReturnedQuickly()
+                && !status.observeEnableDidGlWorkOnCommandThread()
+                && !status.observeEnableDidReadbackOnCommandThread()
+                && !status.observeEnableDidSynchronousRebuild()
+                && !status.formalDrawPipelineReady()
+                && !status.formalRendererReady()
+                && !status.actualRendererDrawEnabled()
+                && !rendererStatus.formalRendererReady()
+                && !rendererStatus.actualDrawEnabled() ? 1 : 0;
+    }
+
     private static int formalRendererCheck(CommandSourceStack source) {
         ForgeFormalRendererStats status = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("command-check");
         source.sendSuccess(() -> Component.literal("Voxy formal renderer check: " + formatFormalRendererStatus(status)), false);
@@ -9125,6 +9207,45 @@ public final class ForgeVoxyCommands {
     private static boolean movingFormalLodPreviewReady(ForgeFormalVisibleLodPreviewStats status) {
         return status.previewDrawCommandBucketSummary().contains("movingOwnerReady=true")
                 && status.previewDrawCommandBucketSummary().contains("movingPatchReady=true")
+                && status.previewDrawCommandBucketSummary().contains("liveRendererEnabled=false");
+    }
+
+    private static String formatFormalLodPreviewExpandedStatus(ForgeFormalVisibleLodPreviewStats status) {
+        return String.format(
+                "stage=%s k37_k42_stage=K37_K42_EXPANDED_FORMAL_LOD_PATCH_PREVIEW previewPrepared=%s prepareRequested=%s prepareInProgress=%s prepareCompleted=%s "
+                        + "expandedFormalLodPatchReady=%s expandedSummary=%s "
+                        + "visiblePreviewEnabled=%s visiblePreviewDrawExecuted=%s visiblePreviewFrameCount=%d minecraftMainFramebufferDrawn=%s "
+                        + "visibleTerrainPreviewOnly=true debugOptInOnly=true visiblePreviewDefaultEnabled=false "
+                        + "k8FormalGeometryUsed=%s syntheticDrawFixtureUsed=%s formalModelIdDecodeOk=%s faceDataLookupOk=%s atlasSampleOk=%s "
+                        + "originalGeometryHeapMutated=%s debugMdicCommandBuffersUsedAsFormal=%s sampleSetUsedAsFormalSource=%s "
+                        + "MDICSectionRendererCalled=false VoxyRenderSystemCalled=false productionLiveRendererDrawExecuted=false "
+                        + "formalDrawPipelineReady=false formalRendererReady=false actualRendererDrawEnabled=false lastFailureReason=%s",
+                status.stage(),
+                status.visibleLodPreviewOwnerReady() && !status.stale(),
+                status.observePrepareRequested(),
+                status.observePrepareInProgress(),
+                status.observePrepareCompleted(),
+                expandedFormalLodPatchReady(status),
+                status.previewDrawCommandBucketSummary(),
+                status.visiblePreviewEnabled(),
+                status.visiblePreviewDrawExecuted(),
+                status.visiblePreviewFrameCount(),
+                status.minecraftMainFramebufferDrawn(),
+                status.k8FormalGeometryUsed(),
+                status.syntheticDrawFixtureUsed(),
+                status.formalModelIdDecodeOk(),
+                status.faceDataLookupOk(),
+                status.atlasSampleOk(),
+                status.originalGeometryHeapMutated(),
+                status.debugMdicCommandBuffersUsedAsFormal(),
+                status.sampleSetUsedAsFormalSource(),
+                status.lastFailureReason()
+        );
+    }
+
+    private static boolean expandedFormalLodPatchReady(ForgeFormalVisibleLodPreviewStats status) {
+        return status.previewDrawCommandBucketSummary().contains("expandedOwnerReady=true")
+                && status.previewDrawCommandBucketSummary().contains("expandedPatchReady=true")
                 && status.previewDrawCommandBucketSummary().contains("liveRendererEnabled=false");
     }
 
