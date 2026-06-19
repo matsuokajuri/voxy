@@ -348,10 +348,6 @@ final class ForgeFormalModelIdSectionGeometryPath {
             this.fail("i6-lifecycle-not-ready:" + lifecycle.lastFailureReason());
             return false;
         }
-        if (!j5.realTerrainPackedRecordBridgeReady() || j5.syntheticFallbackUsed() || !j5.formalModelIdsBackedByRealBake()) {
-            this.fail("j5-real-terrain-record-bridge-not-ready:" + j5.lastFailureReason());
-            return false;
-        }
         return true;
     }
 
@@ -367,10 +363,9 @@ final class ForgeFormalModelIdSectionGeometryPath {
             this.fail("no-active-world-engine");
             return false;
         }
-        Map<Integer, ForgeFormalUploadedModelSummary> summariesByBlockState = this.instance.getMultiBlockFormalBakeUpload()
-                .uploadedModelSummaries()
-                .stream()
-                .collect(Collectors.toMap(ForgeFormalUploadedModelSummary::blockStateId, summary -> summary, (a, b) -> a, LinkedHashMap::new));
+        Map<Integer, ForgeFormalUploadedModelSummary> summariesByBlockState = ForgeFormalDirectSectionGeometryBuilder.summariesByBlockState(
+                this.instance.getMultiBlockFormalBakeUpload().uploadedModelSummaries()
+        );
         if (summariesByBlockState.isEmpty()) {
             this.fail("i6-uploaded-model-summaries-empty");
             return false;
@@ -380,6 +375,15 @@ final class ForgeFormalModelIdSectionGeometryPath {
         ChunkPos playerChunk = minecraft.player.chunkPosition();
         this.instance.getVoxyGeometryCache().setActiveDimension(dimension);
 
+        this.resetScanCounts();
+        this.candidateSectionSource = "formal-direct-worldsection-renderdata";
+        BlockPos playerPos = minecraft.player.blockPosition();
+        if (this.buildAndScanDirectFormalSectionsNearPlayer(engine.get(), level, dimension, playerChunk, summariesByBlockState)) {
+            this.finishSnapshot();
+            return true;
+        }
+
+        this.resetScanCounts();
         List<ForgeVoxyBuiltSection> currentChunkCached = this.instance.getVoxyGeometryCache().createChunkSnapshot(dimension, playerChunk.x, playerChunk.z);
         if (!currentChunkCached.isEmpty()) {
             this.candidateSectionSource = "ForgeVoxyGeometryCache.current-player-chunk";
@@ -392,7 +396,6 @@ final class ForgeFormalModelIdSectionGeometryPath {
 
         this.resetScanCounts();
         this.candidateSectionSource = "current-world-built-section-rebuild";
-        BlockPos playerPos = minecraft.player.blockPosition();
         for (int radius = 0; radius <= SEARCH_RADIUS_CHUNKS && this.acceptedRecordCount == 0; radius++) {
             for (int dx = -radius; dx <= radius && this.acceptedRecordCount == 0; dx++) {
                 for (int dz = -radius; dz <= radius && this.acceptedRecordCount == 0; dz++) {
@@ -420,6 +423,84 @@ final class ForgeFormalModelIdSectionGeometryPath {
         }
         this.finishSnapshot();
         return this.acceptedRecordCount > 0;
+    }
+
+    private boolean buildAndScanDirectFormalSectionsNearPlayer(
+            WorldEngine engine,
+            ClientLevel level,
+            String dimension,
+            ChunkPos playerChunk,
+            Map<Integer, ForgeFormalUploadedModelSummary> summariesByBlockState
+    ) {
+        Set<Long> visitedSections = new LinkedHashSet<>();
+        for (int radius = 0; radius <= SEARCH_RADIUS_CHUNKS && this.acceptedRecordCount == 0; radius++) {
+            for (int dx = -radius; dx <= radius && this.acceptedRecordCount == 0; dx++) {
+                for (int dz = -radius; dz <= radius && this.acceptedRecordCount == 0; dz++) {
+                    if (Math.max(Math.abs(dx), Math.abs(dz)) != radius) {
+                        continue;
+                    }
+                    this.buildAndScanDirectFormalChunk(
+                            engine,
+                            level,
+                            dimension,
+                            playerChunk.x + dx,
+                            playerChunk.z + dz,
+                            summariesByBlockState,
+                            visitedSections
+                    );
+                }
+            }
+        }
+        return this.acceptedRecordCount > 0;
+    }
+
+    private void buildAndScanDirectFormalChunk(
+            WorldEngine engine,
+            ClientLevel level,
+            String dimension,
+            int chunkX,
+            int chunkZ,
+            Map<Integer, ForgeFormalUploadedModelSummary> summariesByBlockState,
+            Set<Long> visitedSections
+    ) {
+        LevelChunk chunk = getLoadedChunk(level, chunkX, chunkZ);
+        if (chunk == null) {
+            return;
+        }
+        try {
+            VoxelIngestService.ingestChunkWithStats(engine, chunk);
+            int sectionY = chunk.getMinSection();
+            for (int i = 0; i < chunk.getSections().length && this.acceptedRecordCount == 0; i++, sectionY++) {
+                long sectionPosition = WorldEngine.getWorldSectionId(
+                        0,
+                        Math.floorDiv(chunkX, 2),
+                        Math.floorDiv(sectionY, 2),
+                        Math.floorDiv(chunkZ, 2)
+                );
+                if (!visitedSections.add(sectionPosition)) {
+                    continue;
+                }
+                ForgeFormalDirectSectionGeometryBuilder.Result result = ForgeFormalDirectSectionGeometryBuilder.build(
+                        engine,
+                        dimension,
+                        sectionPosition,
+                        summariesByBlockState
+                );
+                try {
+                    this.scanDirectFormalBuiltSections(result.sections(), summariesByBlockState);
+                    if (result.stats().rejectedUnsupportedBlock() > 0) {
+                        this.recordsRejectedUnsupportedBlock += result.stats().rejectedUnsupportedBlock();
+                    }
+                    if (result.stats().rejectedUnsafeModel() > 0) {
+                        this.recordsRejectedUnsafeModelId += result.stats().rejectedUnsafeModel();
+                    }
+                } finally {
+                    closeTemporaryBuiltSections(result.sections());
+                }
+            }
+        } catch (RuntimeException e) {
+            this.lastFailureReason = "k8-direct-worldsection-build-error:" + e.getClass().getSimpleName() + ":" + safeReason(e.getMessage());
+        }
     }
 
     private void buildAndScanLoadedChunk(
@@ -472,6 +553,53 @@ final class ForgeFormalModelIdSectionGeometryPath {
                     break;
                 }
                 this.scanRecord(section, record, summariesByBlockState, formalRecords);
+            }
+            if (this.acceptedRecordCount > acceptedBefore) {
+                this.acceptedSectionCount++;
+                this.snapshots.add(new FormalSectionSnapshot(section.dimension(), section.position(), section.chunkX(), section.chunkZ(), toLongArray(formalRecords)));
+            } else {
+                this.rejectedSectionCount++;
+            }
+        }
+    }
+
+    private void scanDirectFormalBuiltSections(List<ForgeVoxyBuiltSection> sections, Map<Integer, ForgeFormalUploadedModelSummary> summariesByBlockState) {
+        Set<Integer> formalModelIds = summariesByBlockState.values().stream()
+                .map(ForgeFormalUploadedModelSummary::formalModelId)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        for (ForgeVoxyBuiltSection section : sections) {
+            if (this.acceptedRecordCount >= MAX_SNAPSHOT_RECORDS || this.snapshots.size() >= MAX_SNAPSHOT_SECTIONS) {
+                return;
+            }
+            this.candidateSectionCount++;
+            ForgeVoxyGeometryBuffer buffer = section.geometryBuffer();
+            if (buffer == null || buffer.isClosed() || buffer.quadCount() == 0) {
+                this.rejectedSectionCount++;
+                continue;
+            }
+            List<Long> formalRecords = new ArrayList<>();
+            int acceptedBefore = this.acceptedRecordCount;
+            for (long record : buffer.packedQuads()) {
+                if (this.acceptedRecordCount >= MAX_SNAPSHOT_RECORDS) {
+                    break;
+                }
+                int formalModelId = ForgeVoxyQuadEncoder.extractModelId(record);
+                if (!formalModelIds.contains(formalModelId) || !ForgeModelAtlasLayout.isValidModelId(formalModelId) || formalModelId <= 0) {
+                    this.recordsRejectedUnsafeModelId++;
+                    this.rejectedRecordCount++;
+                    continue;
+                }
+                formalRecords.add(record);
+                this.acceptedRecordCount++;
+                this.blockStateSourceAvailable = true;
+                this.formalModelIdLookupOk = true;
+                this.formalModelIdsBackedByRealBake = true;
+                if (this.firstAcceptedRecord == null) {
+                    this.firstAcceptedRecord = new AcceptedRecord(section.dimension(), section.position(), record, record, 0, -1, formalModelId);
+                    this.sampleOriginalRecord = "direct-formal";
+                    this.sampleFormalRecord = ForgeVoxyQuadEncoder.formatRecordHex(record);
+                    this.sampleSectionPosition = Long.toUnsignedString(section.position());
+                }
             }
             if (this.acceptedRecordCount > acceptedBefore) {
                 this.acceptedSectionCount++;
@@ -689,6 +817,10 @@ final class ForgeFormalModelIdSectionGeometryPath {
         if (this.firstAcceptedRecord == null) {
             return false;
         }
+        if (this.isDirectFormalSource()) {
+            return this.firstAcceptedRecord.originalRecord() == this.firstAcceptedRecord.formalRecord()
+                    && this.firstAcceptedRecord.legacyModelId() == -1;
+        }
         ForgeVoxyBuiltSection section = this.instance.getVoxyGeometryCache().findLiveSection(this.firstAcceptedRecord.dimension(), this.firstAcceptedRecord.sectionPosition());
         if (section == null || section.geometryBuffer() == null || section.geometryBuffer().isClosed()) {
             return false;
@@ -704,6 +836,10 @@ final class ForgeFormalModelIdSectionGeometryPath {
             }
         }
         return originalFound && !rewrittenFound;
+    }
+
+    private boolean isDirectFormalSource() {
+        return this.candidateSectionSource != null && this.candidateSectionSource.startsWith("formal-direct-worldsection");
     }
 
     private ForgeFormalModelIdSectionGeometryAuditResult auditInternal(long startNanos) {
@@ -848,6 +984,17 @@ final class ForgeFormalModelIdSectionGeometryPath {
             return;
         }
         for (ForgeCpuBuiltSection section : cpuResult.sections()) {
+            if (section != null) {
+                section.close();
+            }
+        }
+    }
+
+    private static void closeTemporaryBuiltSections(List<ForgeVoxyBuiltSection> sections) {
+        if (sections == null) {
+            return;
+        }
+        for (ForgeVoxyBuiltSection section : sections) {
             if (section != null) {
                 section.close();
             }

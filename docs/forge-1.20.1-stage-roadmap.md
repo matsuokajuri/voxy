@@ -1211,3 +1211,24 @@ production `cmdgen.comp`, formal traversal, `MDICSectionRenderer`, or
 `VoxyRenderSystem` are live. The required renderer readiness values remain:
 `formalDrawPipelineReady=false`, `formalRendererReady=false`, and
 `actualRendererDrawEnabled=false`.
+
+## K55 original Voxy render-path parity remediation
+
+K55 begins a stricter route-parity pass against original Voxy. The first
+implemented correction is K8 geometry source selection: K8 now prefers direct
+`WorldSection` raw-data to formal Voxy packed-record generation before falling
+back to legacy built-section bridge evidence.
+
+The detailed parity ledger is:
+
+```text
+docs/forge-1.20.1-original-voxy-full-render-path-parity-audit.md
+```
+
+Renderer readiness remains unchanged:
+
+```text
+formalDrawPipelineReady=false
+formalRendererReady=false
+actualRendererDrawEnabled=false
+```

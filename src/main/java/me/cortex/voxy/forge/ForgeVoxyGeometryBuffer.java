@@ -4,6 +4,7 @@ import java.util.Arrays;
 
 public final class ForgeVoxyGeometryBuffer implements AutoCloseable {
     public static final String PARTIAL_ORIGINAL_BIT_LAYOUT_FORMAT = ForgeVoxyQuadEncoder.GEOMETRY_FORMAT;
+    public static final String FORMAL_ORIGINAL_BIT_LAYOUT_FORMAT = "formal-original-bit-layout";
 
     private long[] packedQuads;
     private final boolean finalRendererFormat;
@@ -17,6 +18,10 @@ public final class ForgeVoxyGeometryBuffer implements AutoCloseable {
 
     public static ForgeVoxyGeometryBuffer partialOriginalBitLayout(long[] packedQuads) {
         return new ForgeVoxyGeometryBuffer(Arrays.copyOf(packedQuads, packedQuads.length), false, PARTIAL_ORIGINAL_BIT_LAYOUT_FORMAT);
+    }
+
+    public static ForgeVoxyGeometryBuffer formalOriginalBitLayout(long[] packedQuads) {
+        return new ForgeVoxyGeometryBuffer(Arrays.copyOf(packedQuads, packedQuads.length), true, FORMAL_ORIGINAL_BIT_LAYOUT_FORMAT);
     }
 
     public long[] packedQuads() {

@@ -1019,3 +1019,17 @@ The preview source selector now prefers the current player chunk and sorts
 nearby cached BuiltSections by distance before fallback use. This reduces stale
 preview anchors without claiming production visibility traversal or production
 geometry ownership.
+
+## K55 original Voxy render-path parity note
+
+K55 begins correcting confirmed route drift against the original Voxy renderer.
+The first correction moves K8's preferred geometry source toward the original
+`WorldSection -> packed quad record` path. A new direct formal section geometry
+builder reads Voxy `WorldSection` raw data, resolves formal model ids from the
+formal model lifecycle output, emits Voxy-format packed records, and feeds the
+isolated K8 snapshot.
+
+This does not integrate `MDICSectionRenderer`, does not run production
+`cmdgen.comp`, and does not make the visible preview a production renderer. It
+only removes the previous first-choice dependence on a Forge `BakedQuad` mesh
+conversion path for formal preview geometry.

@@ -1799,3 +1799,26 @@ actualRendererDrawEnabled=false
 MDICSectionRendererCalled=false
 VoxyRenderSystemCalled=false
 ```
+
+## K55 original Voxy render-path parity note
+
+K55 starts a full render-path parity remediation pass against original Voxy.
+The first confirmed drift is the section geometry path: original Voxy uses
+`WorldSection -> RenderDataFactory -> BuiltSection` direct packed-record
+generation, while the Forge preview path could prefer
+`BakedQuad -> CPU mesh -> legacy packed record -> temporary formal id rewrite`.
+
+K55 adds a direct formal `WorldSection` geometry builder and makes K8 prefer it
+for formal model-id snapshots. This is still not renderer readiness:
+
+```text
+formalDrawPipelineReady=false
+formalRendererReady=false
+actualRendererDrawEnabled=false
+```
+
+The remaining parity blockers are tracked in:
+
+```text
+docs/forge-1.20.1-original-voxy-full-render-path-parity-audit.md
+```
