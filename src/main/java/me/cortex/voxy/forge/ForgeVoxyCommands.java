@@ -31,7 +31,7 @@ public final class ForgeVoxyCommands {
     }
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
-        dispatcher.register(Commands.literal("voxy")
+        var root = Commands.literal("voxy")
                 .then(Commands.literal("parity_route_status")
                         .executes(ctx -> parityRouteStatus(ctx.getSource())))
                 .then(Commands.literal("ingest_current_chunk")
@@ -59,177 +59,11 @@ public final class ForgeVoxyCommands {
                 .then(Commands.literal("geometry_manager_clear")
                         .executes(ctx -> clearGeometryManager(ctx.getSource())))
                 .then(Commands.literal("geometry_manager_consume_clear")
-                        .executes(ctx -> clearGeometryManagerConsumeState(ctx.getSource())))
-                .then(Commands.literal("geometry_gpu_upload_status")
-                        .executes(ctx -> geometryGpuUploadStatus(ctx.getSource())))
-                .then(Commands.literal("geometry_gpu_validate_sample")
-                        .executes(ctx -> geometryGpuValidateSample(ctx.getSource())))
-                .then(Commands.literal("geometry_gpu_audit_sample")
-                        .executes(ctx -> geometryGpuAuditSample(ctx.getSource())))
-                .then(Commands.literal("geometry_gpu_audit_status")
-                        .executes(ctx -> geometryGpuAuditStatus(ctx.getSource())))
-                .then(Commands.literal("geometry_gpu_audit_clear")
-                        .executes(ctx -> geometryGpuAuditClear(ctx.getSource())))
-                .then(Commands.literal("geometry_gpu_stress_status")
-                        .executes(ctx -> geometryGpuStressStatus(ctx.getSource())))
-                .then(Commands.literal("geometry_gpu_stress_clear")
-                        .executes(ctx -> geometryGpuStressClear(ctx.getSource())))
-                .then(Commands.literal("geometry_gpu_stress_once")
-                        .executes(ctx -> geometryGpuStressOnce(ctx.getSource())))
-                .then(Commands.literal("geometry_gpu_visualize_sample")
-                        .executes(ctx -> geometryGpuVisualizeSample(ctx.getSource())))
-                .then(Commands.literal("geometry_gpu_visualize_status")
-                        .executes(ctx -> geometryGpuVisualizeStatus(ctx.getSource())))
-                .then(Commands.literal("geometry_gpu_visualize_clear")
-                        .executes(ctx -> geometryGpuVisualizeClear(ctx.getSource())))
-                .then(Commands.literal("geometry_gpu_visualize_enable")
-                        .executes(ctx -> setGeometryGpuVisualization(ctx.getSource(), true)))
-                .then(Commands.literal("geometry_gpu_visualize_disable")
-                        .executes(ctx -> setGeometryGpuVisualization(ctx.getSource(), false)))
-                .then(Commands.literal("geometry_gpu_readback_mesh_build")
-                        .executes(ctx -> geometryGpuReadbackMeshBuild(ctx.getSource())))
-                .then(Commands.literal("geometry_gpu_readback_mesh_status")
-                        .executes(ctx -> geometryGpuReadbackMeshStatus(ctx.getSource())))
-                .then(Commands.literal("geometry_gpu_readback_mesh_clear")
-                        .executes(ctx -> geometryGpuReadbackMeshClear(ctx.getSource())))
-                .then(Commands.literal("geometry_gpu_readback_mesh_refresh_enable")
-                        .executes(ctx -> setGeometryGpuReadbackMeshAutoRefresh(ctx.getSource(), true)))
-                .then(Commands.literal("geometry_gpu_readback_mesh_refresh_disable")
-                        .executes(ctx -> setGeometryGpuReadbackMeshAutoRefresh(ctx.getSource(), false)))
-                .then(Commands.literal("geometry_gpu_readback_mesh_refresh_once")
-                        .executes(ctx -> geometryGpuReadbackMeshRefreshOnce(ctx.getSource())))
-                .then(Commands.literal("geometry_gpu_upload_enable")
-                        .executes(ctx -> setGeometryGpuUpload(ctx.getSource(), true)))
-                .then(Commands.literal("geometry_gpu_upload_disable")
-                        .executes(ctx -> setGeometryGpuUpload(ctx.getSource(), false)))
-                .then(Commands.literal("geometry_gpu_upload_clear")
-                        .executes(ctx -> clearGeometryGpuUpload(ctx.getSource())))
-                .then(Commands.literal("direct_gl_renderer_status")
-                        .executes(ctx -> directGlRendererStatus(ctx.getSource())))
-                .then(Commands.literal("direct_gl_renderer_enable")
-                        .executes(ctx -> setDirectGlRenderer(ctx.getSource(), true)))
-                .then(Commands.literal("direct_gl_renderer_disable")
-                        .executes(ctx -> setDirectGlRenderer(ctx.getSource(), false)))
-                .then(Commands.literal("direct_gl_renderer_clear")
-                        .executes(ctx -> clearDirectGlRenderer(ctx.getSource())))
-                .then(Commands.literal("direct_gl_renderer_plan_sample")
-                        .executes(ctx -> directGlRendererPlanSample(ctx.getSource())))
-                .then(Commands.literal("direct_gl_renderer_build_draw_list")
-                        .executes(ctx -> directGlRendererBuildDrawList(ctx.getSource())))
-                .then(Commands.literal("direct_gl_renderer_draw_enable")
-                        .executes(ctx -> setDirectGlRendererDraw(ctx.getSource(), true)))
-                .then(Commands.literal("direct_gl_renderer_draw_disable")
-                        .executes(ctx -> setDirectGlRendererDraw(ctx.getSource(), false)))
-                .then(Commands.literal("direct_gl_renderer_draw_mode")
-                        .then(Commands.literal("loop")
-                                .executes(ctx -> setDirectGlRendererDrawMode(ctx.getSource(), ForgeDirectGpuGeometryDrawMode.LOOP_PER_SECTION)))
-                        .then(Commands.literal("multi_draw_arrays")
-                                .executes(ctx -> setDirectGlRendererDrawMode(ctx.getSource(), ForgeDirectGpuGeometryDrawMode.MULTI_DRAW_ARRAYS)))
-                        .then(Commands.literal("indirect")
-                                .executes(ctx -> setDirectGlRendererDrawMode(ctx.getSource(), ForgeDirectGpuGeometryDrawMode.MULTI_DRAW_ARRAYS_INDIRECT)))
-                        .then(Commands.literal("multi_draw_arrays_indirect")
-                                .executes(ctx -> setDirectGlRendererDrawMode(ctx.getSource(), ForgeDirectGpuGeometryDrawMode.MULTI_DRAW_ARRAYS_INDIRECT)))
-                        .then(Commands.literal("auto")
-                                .executes(ctx -> setDirectGlRendererDrawMode(ctx.getSource(), ForgeDirectGpuGeometryDrawMode.AUTO))))
-                .then(Commands.literal("direct_gl_renderer_shader_status")
-                        .executes(ctx -> directGlRendererShaderStatus(ctx.getSource())))
-                .then(Commands.literal("direct_gl_renderer_draw_list_status")
-                        .executes(ctx -> directGlRendererStatus(ctx.getSource())))
-                .then(Commands.literal("direct_gl_renderer_auto_plan_enable")
-                        .executes(ctx -> setDirectGlRendererAutoPlan(ctx.getSource(), true)))
-                .then(Commands.literal("direct_gl_renderer_auto_plan_disable")
-                        .executes(ctx -> setDirectGlRendererAutoPlan(ctx.getSource(), false)))
-                .then(Commands.literal("direct_gl_renderer_auto_plan_once")
-                        .executes(ctx -> directGlRendererAutoPlanOnce(ctx.getSource())))
-                .then(Commands.literal("direct_gl_renderer_auto_plan_status")
-                        .executes(ctx -> directGlRendererStatus(ctx.getSource())))
-                .then(Commands.literal("direct_gl_renderer_indirect_audit")
-                        .executes(ctx -> directGlRendererIndirectAudit(ctx.getSource())))
-                .then(Commands.literal("direct_gl_renderer_indirect_audit_status")
-                        .executes(ctx -> directGlRendererIndirectAuditStatus(ctx.getSource())))
-                .then(Commands.literal("direct_gl_renderer_indirect_audit_clear")
-                        .executes(ctx -> directGlRendererIndirectAuditClear(ctx.getSource())))
-                .then(Commands.literal("direct_gl_renderer_stress_once")
-                        .executes(ctx -> directGlRendererStressOnce(ctx.getSource())))
-                .then(Commands.literal("direct_gl_renderer_stress_status")
-                        .executes(ctx -> directGlRendererStressStatus(ctx.getSource())))
-                .then(Commands.literal("direct_gl_renderer_stress_clear")
-                        .executes(ctx -> directGlRendererStressClear(ctx.getSource())))
-                .then(Commands.literal("direct_gl_mdic_plan_sample")
-                        .executes(ctx -> directGlMdicPlanSample(ctx.getSource())))
-                .then(Commands.literal("direct_gl_mdic_build_buffer")
-                        .executes(ctx -> directGlMdicBuildBuffer(ctx.getSource())))
-                .then(Commands.literal("direct_gl_mdic_status")
-                        .executes(ctx -> directGlMdicStatus(ctx.getSource())))
-                .then(Commands.literal("direct_gl_mdic_clear")
-                        .executes(ctx -> directGlMdicClear(ctx.getSource())))
-                .then(Commands.literal("direct_gl_mdic_audit")
-                        .executes(ctx -> directGlMdicAudit(ctx.getSource())))
-                .then(Commands.literal("direct_gl_mdic_audit_status")
-                        .executes(ctx -> directGlMdicAuditStatus(ctx.getSource())))
-                .then(Commands.literal("direct_gl_mdic_audit_clear")
-                        .executes(ctx -> directGlMdicAuditClear(ctx.getSource())))
-                .then(Commands.literal("direct_gl_mdic_stress_once")
-                        .executes(ctx -> directGlMdicStressOnce(ctx.getSource())))
-                .then(Commands.literal("direct_gl_mdic_stress_status")
-                        .executes(ctx -> directGlMdicStressStatus(ctx.getSource())))
-                .then(Commands.literal("direct_gl_mdic_stress_clear")
-                        .executes(ctx -> directGlMdicStressClear(ctx.getSource())))
-                .then(Commands.literal("direct_gl_mdic_draw_enable")
-                        .executes(ctx -> setDirectGlMdicDraw(ctx.getSource(), true)))
-                .then(Commands.literal("direct_gl_mdic_draw_disable")
-                        .executes(ctx -> setDirectGlMdicDraw(ctx.getSource(), false)))
-                .then(Commands.literal("direct_gl_mdic_draw_status")
-                        .executes(ctx -> directGlMdicDrawStatus(ctx.getSource())))
-                .then(Commands.literal("direct_gl_mdic_shader_status")
-                        .executes(ctx -> directGlMdicShaderStatus(ctx.getSource())))
-                .then(Commands.literal("direct_gl_mdic_draw_mode")
-                        .then(Commands.literal("loop")
-                                .executes(ctx -> setDirectGlMdicDrawMode(ctx.getSource(), ForgeMdicDebugDrawMode.LOOP_PER_COMMAND)))
-                        .then(Commands.literal("multi_draw_arrays")
-                                .executes(ctx -> setDirectGlMdicDrawMode(ctx.getSource(), ForgeMdicDebugDrawMode.MULTI_DRAW_ARRAYS)))
-                        .then(Commands.literal("indirect")
-                                .executes(ctx -> setDirectGlMdicDrawMode(ctx.getSource(), ForgeMdicDebugDrawMode.MULTI_DRAW_ARRAYS_INDIRECT)))
-                        .then(Commands.literal("multi_draw_arrays_indirect")
-                                .executes(ctx -> setDirectGlMdicDrawMode(ctx.getSource(), ForgeMdicDebugDrawMode.MULTI_DRAW_ARRAYS_INDIRECT)))
-                        .then(Commands.literal("elements_indirect")
-                                .executes(ctx -> setDirectGlMdicDrawMode(ctx.getSource(), ForgeMdicDebugDrawMode.MULTI_DRAW_ELEMENTS_INDIRECT)))
-                        .then(Commands.literal("multi_draw_elements_indirect")
-                                .executes(ctx -> setDirectGlMdicDrawMode(ctx.getSource(), ForgeMdicDebugDrawMode.MULTI_DRAW_ELEMENTS_INDIRECT)))
-                        .then(Commands.literal("elements_indirect_count")
-                                .executes(ctx -> setDirectGlMdicDrawMode(ctx.getSource(), ForgeMdicDebugDrawMode.MULTI_DRAW_ELEMENTS_INDIRECT_COUNT)))
-                        .then(Commands.literal("multi_draw_elements_indirect_count")
-                                .executes(ctx -> setDirectGlMdicDrawMode(ctx.getSource(), ForgeMdicDebugDrawMode.MULTI_DRAW_ELEMENTS_INDIRECT_COUNT)))
-                        .then(Commands.literal("count")
-                                .executes(ctx -> setDirectGlMdicDrawMode(ctx.getSource(), ForgeMdicDebugDrawMode.MULTI_DRAW_ELEMENTS_INDIRECT_COUNT)))
-                        .then(Commands.literal("auto")
-                                .executes(ctx -> setDirectGlMdicDrawMode(ctx.getSource(), ForgeMdicDebugDrawMode.AUTO))))
-                .then(Commands.literal("direct_gl_mdic_draw_clear")
-                        .executes(ctx -> directGlMdicDrawClear(ctx.getSource())))
-                .then(Commands.literal("direct_gl_mdic_draw_indirect_audit")
-                        .executes(ctx -> directGlMdicDrawIndirectAudit(ctx.getSource())))
-                .then(Commands.literal("direct_gl_mdic_draw_indirect_audit_status")
-                        .executes(ctx -> directGlMdicDrawIndirectAuditStatus(ctx.getSource())))
-                .then(Commands.literal("direct_gl_mdic_draw_indirect_audit_clear")
-                        .executes(ctx -> directGlMdicDrawIndirectAuditClear(ctx.getSource())))
-                .then(Commands.literal("direct_gl_mdic_draw_elements_indirect_audit")
-                        .executes(ctx -> directGlMdicDrawElementsIndirectAudit(ctx.getSource())))
-                .then(Commands.literal("direct_gl_mdic_draw_elements_indirect_audit_status")
-                        .executes(ctx -> directGlMdicDrawElementsIndirectAuditStatus(ctx.getSource())))
-                .then(Commands.literal("direct_gl_mdic_draw_elements_indirect_audit_clear")
-                        .executes(ctx -> directGlMdicDrawElementsIndirectAuditClear(ctx.getSource())))
-                .then(Commands.literal("direct_gl_mdic_draw_count_audit")
-                        .executes(ctx -> directGlMdicDrawCountAudit(ctx.getSource())))
-                .then(Commands.literal("direct_gl_mdic_draw_count_audit_status")
-                        .executes(ctx -> directGlMdicDrawCountAuditStatus(ctx.getSource())))
-                .then(Commands.literal("direct_gl_mdic_draw_count_audit_clear")
-                        .executes(ctx -> directGlMdicDrawCountAuditClear(ctx.getSource())))
-                .then(Commands.literal("direct_gl_mdic_draw_stress_once")
-                        .executes(ctx -> directGlMdicDrawStressOnce(ctx.getSource())))
-                .then(Commands.literal("direct_gl_mdic_draw_stress_status")
-                        .executes(ctx -> directGlMdicDrawStressStatus(ctx.getSource())))
-                .then(Commands.literal("direct_gl_mdic_draw_stress_clear")
-                        .executes(ctx -> directGlMdicDrawStressClear(ctx.getSource())))
+                        .executes(ctx -> clearGeometryManagerConsumeState(ctx.getSource())));
+
+        ForgeVoxyLegacyDebugCommands.register(root);
+
+        root
                 .then(Commands.literal("model_bridge_check")
                         .executes(ctx -> modelBridgeCheck(ctx.getSource())))
                 .then(Commands.literal("model_bridge_status")
@@ -833,7 +667,8 @@ public final class ForgeVoxyCommands {
                 .then(Commands.literal("ingest_status")
                         .executes(ctx -> ingestStatus(ctx.getSource())))
                 .then(Commands.literal("ingest_clear_cache")
-                        .executes(ctx -> clearIngestCache(ctx.getSource()))));
+                        .executes(ctx -> clearIngestCache(ctx.getSource())));
+        dispatcher.register(root);
     }
 
     private static int parityRouteStatus(CommandSourceStack source) {
@@ -1448,7 +1283,7 @@ public final class ForgeVoxyCommands {
         return 1;
     }
 
-    private static int geometryGpuUploadStatus(CommandSourceStack source) {
+    static int geometryGpuUploadStatus(CommandSourceStack source) {
         var status = ForgeVoxyInstance.INSTANCE.getGpuGeometryUploadManager().createStatusSnapshot();
         var geometryStatus = ForgeVoxyInstance.INSTANCE.getSectionGeometryManager().createStatusSnapshot();
         String message = String.format(
@@ -1488,7 +1323,7 @@ public final class ForgeVoxyCommands {
         return status.enabled() ? 1 : 0;
     }
 
-    private static int geometryGpuValidateSample(CommandSourceStack source) {
+    static int geometryGpuValidateSample(CommandSourceStack source) {
         ForgeGpuGeometryValidationResult result = ForgeVoxyInstance.INSTANCE.getGpuGeometryUploadManager().validateSample(8);
         String message = String.format(
                 "Voxy upload-only GL geometry validation: success=%s reason=%s sectionId=%d geometryPtr=%s recordCount=%d metadataMatch=%s geometryMatch=%s expectedMetadataHash=%d actualMetadataHash=%d expectedGeometrySampleHash=%d actualGeometrySampleHash=%d expectedMetadata=%s actualMetadata=%s expectedRecords=%s actualRecords=%s readbackApi=glGetNamedBufferSubData renderThreadOnly=true draws=false",
@@ -1516,7 +1351,7 @@ public final class ForgeVoxyCommands {
         return 0;
     }
 
-    private static int geometryGpuAuditSample(CommandSourceStack source) {
+    static int geometryGpuAuditSample(CommandSourceStack source) {
         ForgeGpuGeometryAuditResult result = ForgeVoxyInstance.INSTANCE.getGpuGeometryUploadManager().auditSample();
         String message = String.format(
                 "Voxy upload-only GL geometry audit: success=%s reason=%s auditedSections=%d decodedRecords=%d invalidMetadata=%d invalidGeometryRecords=%d emptyBuckets=%d nonEmptyBuckets=%d maxQuadLength=%d maxQuadWidth=%d lastAuditedSectionId=%d lastAuditedPosition=%s lastAuditedGeometryPtr=%s lastAuditError=%s metadataWords=%s decodedMetadata=\"%s\" decodedRecords=\"%s\" readbackApi=glGetNamedBufferSubData renderThreadOnly=true drainsIntents=false draws=false",
@@ -1546,7 +1381,7 @@ public final class ForgeVoxyCommands {
         return 0;
     }
 
-    private static int geometryGpuAuditStatus(CommandSourceStack source) {
+    static int geometryGpuAuditStatus(CommandSourceStack source) {
         ForgeGpuGeometryAuditStats audit = ForgeVoxyInstance.INSTANCE.getGpuGeometryUploadManager().createAuditStatusSnapshot();
         ForgeGpuGeometryStats upload = ForgeVoxyInstance.INSTANCE.getGpuGeometryUploadManager().createStatusSnapshot();
         String message = String.format(
@@ -1573,13 +1408,13 @@ public final class ForgeVoxyCommands {
         return 1;
     }
 
-    private static int geometryGpuAuditClear(CommandSourceStack source) {
+    static int geometryGpuAuditClear(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getGpuGeometryUploadManager().clearAuditStats();
         source.sendSuccess(() -> Component.literal("Voxy: cleared upload-only GL geometry audit counters and last decoded sample. GL buffers and CPU geometry intents were left intact."), false);
         return 1;
     }
 
-    private static int geometryGpuStressStatus(CommandSourceStack source) {
+    static int geometryGpuStressStatus(CommandSourceStack source) {
         ForgeGpuGeometryStressStats stress = ForgeVoxyInstance.INSTANCE.getGpuGeometryUploadManager().createStressStatusSnapshot();
         ForgeGpuGeometryStats upload = ForgeVoxyInstance.INSTANCE.getGpuGeometryUploadManager().createStatusSnapshot();
         String message = String.format(
@@ -1607,13 +1442,13 @@ public final class ForgeVoxyCommands {
         return 1;
     }
 
-    private static int geometryGpuStressClear(CommandSourceStack source) {
+    static int geometryGpuStressClear(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getGpuGeometryUploadManager().clearStressStats();
         source.sendSuccess(() -> Component.literal("Voxy: cleared upload-only GL geometry heap stress counters and last-run lifetime stats. GL buffers and CPU geometry intents were left intact."), false);
         return 1;
     }
 
-    private static int geometryGpuStressOnce(CommandSourceStack source) {
+    static int geometryGpuStressOnce(CommandSourceStack source) {
         ForgeGpuGeometryStressStats stress = ForgeVoxyInstance.INSTANCE.getGpuGeometryUploadManager().stressOnce();
         String message = String.format(
                 "Voxy upload-only GL geometry stress once: success=%s stressRuns=%d stressFailures=%d lastStressError=%s lastStressDurationMs=%.2f beforeSections=%d afterSections=%d beforeGeometryBytes=%d afterGeometryBytes=%d validationAfterReenableMetadataMatch=%s validationAfterReenableGeometryMatch=%s enabledAfterRun=%s heapCreatedAfterRun=%s draws=false rendererUsesHeap=false",
@@ -1639,7 +1474,7 @@ public final class ForgeVoxyCommands {
         return 0;
     }
 
-    private static int geometryGpuVisualizeSample(CommandSourceStack source) {
+    static int geometryGpuVisualizeSample(CommandSourceStack source) {
         ForgeGpuGeometryVisualizationResult result = ForgeGpuGeometryVisualizationBuilder.buildSample(ForgeVoxyInstance.INSTANCE);
         String message = String.format(
                 "Voxy GL heap readback visualization sample: success=%s reason=%s builtSections=%d recordsRead=%d quads=%d vertices=%d invalidMetadata=%d invalidRecords=%d skippedBuckets=%d durationMs=%.2f lastSectionId=%d lastPosition=%s lastGeometryPtr=%s lastError=%s lastDecodedRecord=\"%s\" lastSource=%s readbackApi=glGetNamedBufferSubData drainsIntents=false formalRenderer=false",
@@ -1668,7 +1503,7 @@ public final class ForgeVoxyCommands {
         return 0;
     }
 
-    private static int geometryGpuVisualizeStatus(CommandSourceStack source) {
+    static int geometryGpuVisualizeStatus(CommandSourceStack source) {
         var status = ForgeVoxyInstance.INSTANCE.getGpuGeometryVisualizationCache().createStatusSnapshot();
         var build = status.lastBuildResult();
         var render = ForgeVoxyInstance.INSTANCE.getGpuGeometryReadbackDebugRenderer().getLastFrameStats();
@@ -1706,14 +1541,14 @@ public final class ForgeVoxyCommands {
         return status.cacheQuads();
     }
 
-    private static int geometryGpuVisualizeClear(CommandSourceStack source) {
+    static int geometryGpuVisualizeClear(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getGpuGeometryVisualizationCache().clear();
         ForgeVoxyInstance.INSTANCE.getGpuGeometryReadbackDebugRenderer().clearStats();
         source.sendSuccess(() -> Component.literal("Voxy: cleared GL heap readback visualization cache and render stats. Upload-only GL heap, CPU BuiltSection cache, and CPU section geometry manager were left intact."), false);
         return 1;
     }
 
-    private static int setGeometryGpuVisualization(CommandSourceStack source, boolean enabled) {
+    static int setGeometryGpuVisualization(CommandSourceStack source, boolean enabled) {
         ForgeVoxyRuntimeOverrides.setGeometryGpuVisualization(enabled);
         if (!enabled) {
             ForgeVoxyInstance.INSTANCE.getGpuGeometryVisualizationCache().clear();
@@ -1726,7 +1561,7 @@ public final class ForgeVoxyCommands {
         return 1;
     }
 
-    private static int geometryGpuReadbackMeshBuild(CommandSourceStack source) {
+    static int geometryGpuReadbackMeshBuild(CommandSourceStack source) {
         ForgeGpuGeometryReadbackMeshResult result = ForgeGpuGeometryReadbackMeshBuilder.buildSample(ForgeVoxyInstance.INSTANCE);
         if (ForgeGpuMeshUploadManager.getConfiguredSource() == SimpleGpuMeshSource.GL_HEAP_READBACK) {
             ForgeVoxyInstance.INSTANCE.getGpuMeshUploadManager().clear();
@@ -1761,7 +1596,7 @@ public final class ForgeVoxyCommands {
         return 0;
     }
 
-    private static int geometryGpuReadbackMeshStatus(CommandSourceStack source) {
+    static int geometryGpuReadbackMeshStatus(CommandSourceStack source) {
         var status = ForgeVoxyInstance.INSTANCE.getGpuGeometryReadbackMeshCache().createStatusSnapshot();
         var refresh = ForgeVoxyInstance.INSTANCE.getGpuGeometryReadbackMeshRefreshManager().createStatusSnapshot();
         var build = status.lastBuildResult();
@@ -1808,7 +1643,7 @@ public final class ForgeVoxyCommands {
         return status.cacheQuads();
     }
 
-    private static int geometryGpuReadbackMeshClear(CommandSourceStack source) {
+    static int geometryGpuReadbackMeshClear(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getGpuGeometryReadbackMeshCache().clear();
         ForgeVoxyInstance.INSTANCE.getGpuGeometryReadbackMeshRefreshManager().clear();
         if (ForgeGpuMeshUploadManager.getConfiguredSource() == SimpleGpuMeshSource.GL_HEAP_READBACK) {
@@ -1818,7 +1653,7 @@ public final class ForgeVoxyCommands {
         return 1;
     }
 
-    private static int setGeometryGpuReadbackMeshAutoRefresh(CommandSourceStack source, boolean enabled) {
+    static int setGeometryGpuReadbackMeshAutoRefresh(CommandSourceStack source, boolean enabled) {
         ForgeVoxyRuntimeOverrides.setGeometryGpuReadbackMeshAutoRefresh(enabled);
         if (enabled) {
             ForgeVoxyInstance.INSTANCE.getGpuGeometryReadbackMeshRefreshManager().requestRefresh(ForgeGpuGeometryReadbackMeshRefreshManager.REASON_MANUAL_COMMAND);
@@ -1832,7 +1667,7 @@ public final class ForgeVoxyCommands {
         return 1;
     }
 
-    private static int geometryGpuReadbackMeshRefreshOnce(CommandSourceStack source) {
+    static int geometryGpuReadbackMeshRefreshOnce(CommandSourceStack source) {
         var attempt = ForgeVoxyInstance.INSTANCE.getGpuGeometryReadbackMeshRefreshManager().refreshNow(ForgeGpuGeometryReadbackMeshRefreshManager.REASON_MANUAL_COMMAND);
         var result = attempt.result();
         var status = attempt.status();
@@ -1865,7 +1700,7 @@ public final class ForgeVoxyCommands {
         return 0;
     }
 
-    private static int setGeometryGpuUpload(CommandSourceStack source, boolean enabled) {
+    static int setGeometryGpuUpload(CommandSourceStack source, boolean enabled) {
         ForgeVoxyRuntimeOverrides.setGeometryGpuUpload(enabled);
         if (!enabled) {
             ForgeVoxyInstance.INSTANCE.getGpuGeometryUploadManager().clear();
@@ -1879,7 +1714,7 @@ public final class ForgeVoxyCommands {
         return 1;
     }
 
-    private static int clearGeometryGpuUpload(CommandSourceStack source) {
+    static int clearGeometryGpuUpload(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getGpuGeometryUploadManager().clear();
         ForgeVoxyInstance.INSTANCE.getDirectGpuGeometryRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getMdicCommandManager().clear();
@@ -1894,7 +1729,7 @@ public final class ForgeVoxyCommands {
         return 1;
     }
 
-    private static int directGlRendererStatus(CommandSourceStack source) {
+    static int directGlRendererStatus(CommandSourceStack source) {
         var status = ForgeVoxyInstance.INSTANCE.getDirectGpuGeometryRenderer().createStatusSnapshot();
         String message = String.format(
                 "Voxy direct GL renderer: stage=%s enabled=%s initialized=%s hasHeap=%s heapCreated=%s configuredDrawMode=%s effectiveDrawMode=%s autoModeSelectedReason=%s autoModeFallbackReason=%s multiDrawSupported=%s multiDrawUnsupportedReason=%s indirectSupported=%s indirectUnsupportedReason=%s multiDrawIndirectSupported=%s drawIndirectBufferSupported=%s drawIdSupported=%s baseInstanceSupported=%s shaderSupported=%s shaderCompiled=%s programCreated=%s loopShaderCompiled=%s multiDrawShaderCompiled=%s multiDrawProgramCreated=%s indirectShaderCompiled=%s indirectProgramCreated=%s drawItemSsboCreated=%s drawItemSsboBytes=%d drawItemSsboGeneration=%d indirectCommandBufferCreated=%s indirectCommandBufferBytes=%d indirectCommandBufferGeneration=%d usesSsbo=%s lastIndirectAuditOk=%s auditRuns=%d auditFailures=%d lastIndirectAuditError=%s lastIndirectAuditDurationMs=%.2f lastAuditedDrawItems=%d lastAuditedCommandBytes=%d lastAuditedDrawItemBytes=%d lastCommandBufferMatch=%s lastDrawItemBufferMatch=%s lastAuditHeapGeneration=%d lastAuditDimension=%s lastInvalidCommands=%d lastInvalidDrawItems=%d lastAuditedVertices=%d drawListValid=%s drawListStale=%s drawItems=%d drawListRecords=%d drawListVertices=%d plannedSections=%d plannedRecords=%d plannedVertices=%d candidateSections=%d acceptedSections=%d rejectedByRadius=%d rejectedByFrustum=%d frustumAvailable=%s cameraChunk=%s cameraSection=%s skippedSections=%d skippedRecords=%d selectionMode=%s uploadedSectionCandidates=%d invalidMetadata=%d lastPlanDurationMs=%.2f lastPlanError=%s lastSkippedReason=%s planRuns=%d planFailures=%d autoPlan=%s autoPlanCooldownTicks=%d ticksUntilNextAutoPlan=%d lastAutoPlanReason=%s lastAutoPlanSkippedReason=%s lastAutoPlanDurationMs=%.2f autoPlanRuns=%d autoPlanSkipped=%d lastAutoPlanFailures=%d drawListRuns=%d drawListFailures=%d lastDrawListMs=%.2f maxDrawListMs=%.2f lastDrawListError=%s lastDrawListSkippedReason=%s drawListHeapGeneration=%d currentHeapGeneration=%d drawListDimension=%s currentDimension=%s clears=%d maxPlanCandidates=%d maxDrawSections=%d maxDrawRecords=%d maxRecordsPerSection=%d renderDistanceChunks=%d alpha=%.2f ignoreDepth=%s doubleSided=%s actualDrawEnabled=%s lastFrameApiDrawCalls=%d lastFrameLogicalDrawItems=%d lastFrameVertices=%d drawApiCallsIssued=%d logicalDrawItemsIssued=%d verticesDrawn=%d lastFrameRenderMs=%.2f maxFrameRenderMs=%.2f avgFrameRenderMs=%.2f lastFrameOverBudget=%s overBudgetFrames=%d frameBudgetMs=%.2f planBudgetMs=%.2f lastDrawError=%s lastRenderSkippedReason=%s lastGlError=%s lastGlErrorStage=%s glErrorCount=%d lastPreExistingGlError=%s lastStateRestoreError=%s stateRestoreFailures=%d stressRuns=%d stressFailures=%d lastStressError=%s lastStressDurationMs=%.2f lastStressPlannedSections=%d lastStressPlannedRecords=%d lastStressDrawListValid=%s lastStressShaderSupported=%s lastStressSourceRegressionOk=%s lastStressLoopOk=%s lastStressMultiDrawOk=%s lastStressIndirectOk=%s lastStressIndirectAuditOk=%s lastStressGlErrorCount=%d lastStressStateRestoreFailures=%d mdic=false vboOwner=upload-only-heap",
@@ -2041,7 +1876,7 @@ public final class ForgeVoxyCommands {
         return status.enabled() ? 1 : 0;
     }
 
-    private static int setDirectGlRenderer(CommandSourceStack source, boolean enabled) {
+    static int setDirectGlRenderer(CommandSourceStack source, boolean enabled) {
         ForgeVoxyRuntimeOverrides.setDirectGpuGeometryRenderer(enabled);
         if (enabled) {
             ForgeVoxyInstance.INSTANCE.getDirectGpuGeometryRenderer().markEnabledRuntime();
@@ -2055,7 +1890,7 @@ public final class ForgeVoxyCommands {
         return 1;
     }
 
-    private static int setDirectGlRendererAutoPlan(CommandSourceStack source, boolean enabled) {
+    static int setDirectGlRendererAutoPlan(CommandSourceStack source, boolean enabled) {
         ForgeVoxyRuntimeOverrides.setDirectGpuGeometryAutoPlan(enabled);
         if (enabled) {
             ForgeVoxyInstance.INSTANCE.getDirectGpuGeometryRenderer().markEnabledRuntime();
@@ -2068,13 +1903,13 @@ public final class ForgeVoxyCommands {
         return 1;
     }
 
-    private static int clearDirectGlRenderer(CommandSourceStack source) {
+    static int clearDirectGlRenderer(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getDirectGpuGeometryRenderer().clear();
         source.sendSuccess(() -> Component.literal("Voxy direct GL renderer: state, draw list, and debug shader were cleared. CPU caches, SectionGeometryManager, and upload-only GL heap were left intact."), false);
         return 1;
     }
 
-    private static int directGlRendererPlanSample(CommandSourceStack source) {
+    static int directGlRendererPlanSample(CommandSourceStack source) {
         var result = ForgeVoxyInstance.INSTANCE.getDirectGpuGeometryRenderer().planSample();
         var status = ForgeVoxyInstance.INSTANCE.getDirectGpuGeometryRenderer().createStatusSnapshot();
         String message = String.format(
@@ -2108,7 +1943,7 @@ public final class ForgeVoxyCommands {
         return 0;
     }
 
-    private static int directGlRendererAutoPlanOnce(CommandSourceStack source) {
+    static int directGlRendererAutoPlanOnce(CommandSourceStack source) {
         var result = ForgeVoxyInstance.INSTANCE.getDirectGpuGeometryRenderer().autoPlanNow(ForgeDirectGpuGeometryRenderer.REASON_MANUAL_COMMAND);
         String message = String.format(
                 "Voxy direct GL renderer auto plan: success=%s skippedReason=%s error=%s uploadedSectionCandidates=%d candidateSections=%d acceptedSections=%d drawItems=%d drawRecords=%d drawVertices=%d rejectedByRadius=%d rejectedByFrustum=%d selectionMode=%s frustumAvailable=%s cameraChunk=%s cameraSection=%s heapGeneration=%d invalidMetadata=%d durationMs=%.2f autoPlan=%s actualDrawEnabled=%s stage=%s",
@@ -2142,7 +1977,7 @@ public final class ForgeVoxyCommands {
         return 0;
     }
 
-    private static int directGlRendererBuildDrawList(CommandSourceStack source) {
+    static int directGlRendererBuildDrawList(CommandSourceStack source) {
         var result = ForgeVoxyInstance.INSTANCE.getDirectGpuGeometryRenderer().buildDrawList();
         String message = String.format(
                 "Voxy direct GL renderer draw list: success=%s skippedReason=%s error=%s uploadedSectionCandidates=%d candidateSections=%d acceptedSections=%d drawItems=%d drawRecords=%d drawVertices=%d skippedSections=%d skippedRecords=%d rejectedByRadius=%d rejectedByFrustum=%d selectionMode=%s frustumAvailable=%s cameraChunk=%s cameraSection=%s heapGeneration=%d invalidMetadata=%d durationMs=%.2f maxPlanCandidates=%d maxDrawSections=%d maxDrawRecords=%d maxRecordsPerSection=%d actualDrawEnabled=%s stage=%s readback=metadata-only draw=false",
@@ -2181,7 +2016,7 @@ public final class ForgeVoxyCommands {
         return 0;
     }
 
-    private static int setDirectGlRendererDrawMode(CommandSourceStack source, ForgeDirectGpuGeometryDrawMode mode) {
+    static int setDirectGlRendererDrawMode(CommandSourceStack source, ForgeDirectGpuGeometryDrawMode mode) {
         ForgeDirectGpuGeometryRenderer renderer = ForgeVoxyInstance.INSTANCE.getDirectGpuGeometryRenderer();
         ForgeVoxyRuntimeOverrides.setDirectGpuGeometryRenderer(true);
         renderer.setDrawMode(mode);
@@ -2210,7 +2045,7 @@ public final class ForgeVoxyCommands {
         return 1;
     }
 
-    private static int setDirectGlRendererDraw(CommandSourceStack source, boolean enabled) {
+    static int setDirectGlRendererDraw(CommandSourceStack source, boolean enabled) {
         ForgeVoxyRuntimeOverrides.setDirectGpuGeometryRendererActualDraw(enabled);
         if (!enabled) {
             ForgeVoxyInstance.INSTANCE.getDirectGpuGeometryRenderer().markEnabledRuntime();
@@ -2253,7 +2088,7 @@ public final class ForgeVoxyCommands {
         return 1;
     }
 
-    private static int directGlRendererShaderStatus(CommandSourceStack source) {
+    static int directGlRendererShaderStatus(CommandSourceStack source) {
         ForgeDirectGpuGeometryShader.ShaderStatus status = ForgeVoxyInstance.INSTANCE.getDirectGpuGeometryRenderer().createShaderStatusSnapshot();
         ForgeDirectGpuGeometryRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getDirectGpuGeometryRenderer().createStatusSnapshot();
         String message = String.format(
@@ -2297,7 +2132,7 @@ public final class ForgeVoxyCommands {
         return status.ok() || status.multiDrawOk() || status.indirectOk() ? 1 : 0;
     }
 
-    private static int directGlRendererIndirectAudit(CommandSourceStack source) {
+    static int directGlRendererIndirectAudit(CommandSourceStack source) {
         ForgeDirectGpuGeometryIndirectAuditResult result = ForgeVoxyInstance.INSTANCE.getDirectGpuGeometryRenderer().auditIndirectBuffers();
         String message = String.format(
                 "Voxy direct GL renderer indirect audit: success=%s error=%s durationMs=%.2f auditedDrawItems=%d commandBytes=%d drawItemBytes=%d commandBufferMatch=%s drawItemBufferMatch=%s heapGeneration=%d dimension=%s invalidCommands=%d invalidDrawItems=%d auditedVertices=%d readbackApi=glGetNamedBufferSubData drainsIntents=false stage=%s",
@@ -2324,7 +2159,7 @@ public final class ForgeVoxyCommands {
         return 0;
     }
 
-    private static int directGlRendererIndirectAuditStatus(CommandSourceStack source) {
+    static int directGlRendererIndirectAuditStatus(CommandSourceStack source) {
         var status = ForgeVoxyInstance.INSTANCE.getDirectGpuGeometryRenderer().createStatusSnapshot();
         String message = String.format(
                 "Voxy direct GL renderer indirect audit: lastIndirectAuditOk=%s auditRuns=%d auditFailures=%d lastIndirectAuditError=%s lastIndirectAuditDurationMs=%.2f lastAuditedDrawItems=%d lastAuditedCommandBytes=%d lastAuditedDrawItemBytes=%d lastCommandBufferMatch=%s lastDrawItemBufferMatch=%s lastAuditHeapGeneration=%d lastAuditDimension=%s lastInvalidCommands=%d lastInvalidDrawItems=%d lastAuditedVertices=%d drawListValid=%s drawListStale=%s drawItems=%d indirectCommandBufferCreated=%s indirectCommandBufferGeneration=%d drawItemSsboCreated=%s drawItemSsboGeneration=%d currentHeapGeneration=%d currentDimension=%s stage=%s",
@@ -2358,13 +2193,13 @@ public final class ForgeVoxyCommands {
         return status.auditFailures() == 0 ? 1 : 0;
     }
 
-    private static int directGlRendererIndirectAuditClear(CommandSourceStack source) {
+    static int directGlRendererIndirectAuditClear(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getDirectGpuGeometryRenderer().clearIndirectAuditStats();
         source.sendSuccess(() -> Component.literal("Voxy direct GL renderer indirect audit: audit counters cleared. Draw list, shaders, buffers, CPU caches, simple renderer, and upload-only GL heap were left unchanged."), false);
         return 1;
     }
 
-    private static int directGlRendererStressOnce(CommandSourceStack source) {
+    static int directGlRendererStressOnce(CommandSourceStack source) {
         long start = System.nanoTime();
         ForgeDirectGpuGeometryRenderer renderer = ForgeVoxyInstance.INSTANCE.getDirectGpuGeometryRenderer();
         boolean sourceRegressionOk = false;
@@ -2505,7 +2340,7 @@ public final class ForgeVoxyCommands {
         return 0;
     }
 
-    private static int directGlRendererStressStatus(CommandSourceStack source) {
+    static int directGlRendererStressStatus(CommandSourceStack source) {
         var status = ForgeVoxyInstance.INSTANCE.getDirectGpuGeometryRenderer().createStatusSnapshot();
         String message = String.format(
                 "Voxy direct GL renderer stress: stressRuns=%d stressFailures=%d lastStressError=%s lastStressDurationMs=%.2f lastStressPlannedSections=%d lastStressPlannedRecords=%d lastStressDrawListValid=%s lastStressShaderSupported=%s lastStressLoopOk=%s lastStressMultiDrawOk=%s lastStressIndirectOk=%s lastStressIndirectAuditOk=%s lastStressSourceRegressionOk=%s lastStressGlErrorCount=%d lastStressStateRestoreFailures=%d stage=%s",
@@ -2530,13 +2365,13 @@ public final class ForgeVoxyCommands {
         return status.stressFailures() == 0 ? 1 : 0;
     }
 
-    private static int directGlRendererStressClear(CommandSourceStack source) {
+    static int directGlRendererStressClear(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getDirectGpuGeometryRenderer().clearStressStats();
         source.sendSuccess(() -> Component.literal("Voxy direct GL renderer stress: stress counters cleared. Renderer draw list, shader, CPU caches, simple renderer, and GL heap were left unchanged."), false);
         return 1;
     }
 
-    private static int directGlMdicPlanSample(CommandSourceStack source) {
+    static int directGlMdicPlanSample(CommandSourceStack source) {
         ForgeMdicCommandPlanner.PlanResult result = ForgeVoxyInstance.INSTANCE.getMdicCommandManager().planSample();
         ForgeMdicCommandStats status = ForgeVoxyInstance.INSTANCE.getMdicCommandManager().createStatusSnapshot();
         String message = String.format(
@@ -2628,7 +2463,7 @@ public final class ForgeVoxyCommands {
         return 0;
     }
 
-    private static int directGlMdicBuildBuffer(CommandSourceStack source) {
+    static int directGlMdicBuildBuffer(CommandSourceStack source) {
         boolean success = ForgeVoxyInstance.INSTANCE.getMdicCommandManager().buildBuffer();
         ForgeMdicCommandStats status = ForgeVoxyInstance.INSTANCE.getMdicCommandManager().createStatusSnapshot();
         String message = String.format(
@@ -2659,7 +2494,7 @@ public final class ForgeVoxyCommands {
         return 0;
     }
 
-    private static int directGlMdicAudit(CommandSourceStack source) {
+    static int directGlMdicAudit(CommandSourceStack source) {
         ForgeMdicCommandAuditResult result = ForgeVoxyInstance.INSTANCE.getMdicCommandManager().audit();
         String message = String.format(
                 "Voxy MDIC skeleton audit: success=%s error=%s durationMs=%.2f commandBufferMatch=%s layoutMatch=%s generationMatch=%s dimensionMatch=%s invalidCommands=%d invalidLayoutCommands=%d invalidGenerationCommands=%d invalidDimensionCommands=%d invalidBucketMaskCommands=%d invalidBucketRangeCommands=%d invalidBucketOffsetCommands=%d invalidGeometryPtrCommands=%d invalidFaceMaskCommands=%d lastFaceMaskAuditOk=%s lastSelectionAuditOk=%s invalidSelectionCommands=%d invalidRadiusCommands=%d invalidFrustumCommands=%d auditedCommands=%d auditedRecords=%d auditedBytes=%d heapGeneration=%d dimension=%s layoutVersion=%s readbackApi=glGetNamedBufferSubData actualDrawEnabled=false draw=false stage=%s",
@@ -2700,7 +2535,7 @@ public final class ForgeVoxyCommands {
         return 0;
     }
 
-    private static int directGlMdicStatus(CommandSourceStack source) {
+    static int directGlMdicStatus(CommandSourceStack source) {
         ForgeMdicCommandStats status = ForgeVoxyInstance.INSTANCE.getMdicCommandManager().createStatusSnapshot();
         ForgeMdicDebugDrawStats drawStatus = ForgeVoxyInstance.INSTANCE.getMdicDebugRenderer().createStatusSnapshot();
         String message = String.format(
@@ -2857,7 +2692,7 @@ public final class ForgeVoxyCommands {
         return status.enabled() ? 1 : 0;
     }
 
-    private static int directGlMdicAuditStatus(CommandSourceStack source) {
+    static int directGlMdicAuditStatus(CommandSourceStack source) {
         ForgeMdicCommandStats status = ForgeVoxyInstance.INSTANCE.getMdicCommandManager().createStatusSnapshot();
         String message = String.format(
                 "Voxy MDIC skeleton audit: auditRuns=%d auditFailures=%d lastAuditError=%s lastAuditDurationMs=%.2f lastAuditOk=%s lastCommandBufferMatch=%s lastLayoutMatch=%s lastGenerationMatch=%s lastDimensionMatch=%s lastInvalidCommands=%d lastInvalidLayoutCommands=%d lastInvalidGenerationCommands=%d lastInvalidDimensionCommands=%d lastInvalidBucketMaskCommands=%d lastInvalidBucketRangeCommands=%d lastInvalidBucketOffsetCommands=%d lastInvalidGeometryPtrCommands=%d lastInvalidFaceMaskCommands=%d lastFaceMaskAuditOk=%s lastSelectionAuditOk=%s invalidSelectionCommands=%d invalidRadiusCommands=%d invalidFrustumCommands=%d selectionMode=%s effectiveSelectionMode=%s selectionFallbackReason=%s frustumAvailable=%s rejectedByRadius=%d rejectedByFrustum=%d directionalFaceMask=%s faceMaskFallbackReason=%s faceMaskCommandsAccepted=%d faceMaskCommandsRejected=%d rejectedDirectionalBuckets=%d bucket2RejectedByFaceMask=%d bucket3RejectedByFaceMask=%d bucket4RejectedByFaceMask=%d bucket5RejectedByFaceMask=%d bucket6RejectedByFaceMask=%d bucket7RejectedByFaceMask=%d lastAuditedCommands=%d lastAuditedRecords=%d lastAuditedBytes=%d lastAuditHeapGeneration=%d lastAuditDimension=%s bucketAware=%s bucketCommands=%d sectionCommands=%d skippedEmptyBuckets=%d skippedTranslucentCommands=%d skippedBucketCommands=%d commandListValid=%s commandListStale=%s commandBufferCreated=%s commandBufferStale=%s commandBufferBytes=%d layoutVersion=%s stage=%s",
@@ -2924,13 +2759,13 @@ public final class ForgeVoxyCommands {
         return status.auditFailures() == 0 ? 1 : 0;
     }
 
-    private static int directGlMdicAuditClear(CommandSourceStack source) {
+    static int directGlMdicAuditClear(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getMdicCommandManager().clearAuditStats();
         source.sendSuccess(() -> Component.literal("Voxy MDIC skeleton audit: audit counters cleared. Command list, command buffer, geometry heap, direct renderer, and simple renderer were left unchanged."), false);
         return 1;
     }
 
-    private static int directGlMdicStressOnce(CommandSourceStack source) {
+    static int directGlMdicStressOnce(CommandSourceStack source) {
         ForgeMdicCommandStats status = ForgeVoxyInstance.INSTANCE.getMdicCommandManager().stressOnce();
         String message = String.format(
                 "Voxy MDIC skeleton stress: success=%s stressRuns=%d stressFailures=%d lastStressError=%s lastStressDurationMs=%.2f lastStressPlanOk=%s lastStressBuildOk=%s lastStressAuditOk=%s lastStressClearOk=%s lastStressHeapClearOk=%s lastStressRebuildOk=%s lastStressReauditOk=%s lastStressSourceRegressionOk=%s lastStressBucketAwareOk=%s lastStressBucketAuditOk=%s lastStressDirectionalFaceMaskOk=%s lastStressFaceMaskAuditOk=%s lastStressVisibilityPlanOk=%s lastStressSelectionAuditOk=%s lastStressFrustumFallbackOk=%s lastStressCommandCount=%d lastStressCommandRecords=%d lastStressInvalidCommands=%d commandListValid=%s commandBufferCreated=%s layoutVersion=%s stage=%s actualDrawEnabled=false draw=false",
@@ -2970,7 +2805,7 @@ public final class ForgeVoxyCommands {
         return 0;
     }
 
-    private static int directGlMdicStressStatus(CommandSourceStack source) {
+    static int directGlMdicStressStatus(CommandSourceStack source) {
         ForgeMdicCommandStats status = ForgeVoxyInstance.INSTANCE.getMdicCommandManager().createStatusSnapshot();
         String message = String.format(
                 "Voxy MDIC skeleton stress: stressRuns=%d stressFailures=%d lastStressError=%s lastStressDurationMs=%.2f lastStressPlanOk=%s lastStressBuildOk=%s lastStressAuditOk=%s lastStressClearOk=%s lastStressHeapClearOk=%s lastStressRebuildOk=%s lastStressReauditOk=%s lastStressSourceRegressionOk=%s lastStressBucketAwareOk=%s lastStressBucketAuditOk=%s lastStressDirectionalFaceMaskOk=%s lastStressFaceMaskAuditOk=%s lastStressVisibilityPlanOk=%s lastStressSelectionAuditOk=%s lastStressFrustumFallbackOk=%s lastStressCommandCount=%d lastStressCommandRecords=%d lastStressInvalidCommands=%d layoutVersion=%s stage=%s actualDrawEnabled=false draw=false",
@@ -3003,13 +2838,13 @@ public final class ForgeVoxyCommands {
         return status.stressFailures() == 0 ? 1 : 0;
     }
 
-    private static int directGlMdicStressClear(CommandSourceStack source) {
+    static int directGlMdicStressClear(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getMdicCommandManager().clearStressStats();
         source.sendSuccess(() -> Component.literal("Voxy MDIC skeleton stress: stress counters cleared. Command list, command buffer, audit state, geometry heap, direct renderer, and simple renderer were left unchanged."), false);
         return 1;
     }
 
-    private static int setDirectGlMdicDraw(CommandSourceStack source, boolean enabled) {
+    static int setDirectGlMdicDraw(CommandSourceStack source, boolean enabled) {
         if (enabled) {
             ForgeVoxyInstance.INSTANCE.getMdicDebugRenderer().enableDraw();
         } else {
@@ -3035,7 +2870,7 @@ public final class ForgeVoxyCommands {
         return 1;
     }
 
-    private static int setDirectGlMdicDrawMode(CommandSourceStack source, ForgeMdicDebugDrawMode mode) {
+    static int setDirectGlMdicDrawMode(CommandSourceStack source, ForgeMdicDebugDrawMode mode) {
         ForgeVoxyInstance.INSTANCE.getMdicDebugRenderer().setDrawMode(mode);
         ForgeMdicDebugDrawStats status = ForgeVoxyInstance.INSTANCE.getMdicDebugRenderer().createStatusSnapshot();
         String message = String.format(
@@ -3069,7 +2904,7 @@ public final class ForgeVoxyCommands {
         return 1;
     }
 
-    private static int directGlMdicDrawStatus(CommandSourceStack source) {
+    static int directGlMdicDrawStatus(CommandSourceStack source) {
         ForgeMdicDebugDrawStats status = ForgeVoxyInstance.INSTANCE.getMdicDebugRenderer().createStatusSnapshot();
         String message = String.format(
                 "Voxy MDIC debug draw: stage=%s drawEnabled=%s actualDrawEnabled=%s configuredDrawMode=%s effectiveDrawMode=%s autoModeSelectedReason=%s autoModeFallbackReason=%s multiDrawSupported=%s indirectSupported=%s elementsIndirectSupported=%s elementsIndirectUnsupportedReason=%s drawIdSupported=%s baseInstanceSupported=%s shaderSupported=%s shaderCompiled=%s programCreated=%s loopShaderCompiled=%s multiDrawShaderCompiled=%s indirectShaderCompiled=%s elementsIndirectShaderCompiled=%s elementsIndirectUsesBaseInstance=%s commandBufferCreated=%s commandListValid=%s commandListStale=%s commandBufferStale=%s derivedIndirectCommandBufferCreated=%s derivedIndirectCommandBufferBytes=%d derivedIndirectCommandBufferStale=%s sharedIndexBufferCreated=%s sharedIndexBufferBytes=%d sharedIndexMaxRecords=%d sharedIndexFormat=%s elementsIndirectCommandBufferCreated=%s elementsIndirectCommandBufferBytes=%d elementsIndirectCommandBufferStale=%s lastElementsIndirectCommandBufferMatch=%s lastInvalidElementsIndirectCommands=%d hasHeap=%s heapCreated=%s currentHeapGeneration=%d currentDimension=%s commandListGeneration=%d commandBufferGeneration=%d commandListDimension=%s commandBufferDimension=%s commandCount=%d commandRecords=%d maxCommands=%d maxRecords=%d alpha=%.2f ignoreDepth=%s doubleSided=%s lastFrameApiDrawCalls=%d lastFrameLogicalCommands=%d lastFrameVertices=%d lastFrameIndices=%d drawApiCallsIssued=%d logicalCommandsDrawn=%d verticesDrawn=%d indicesDrawn=%d lastFrameRenderMs=%.2f maxFrameRenderMs=%.2f avgFrameRenderMs=%.2f lastFrameOverBudget=%s overBudgetFrames=%d frameBudgetMs=%.2f lastIndirectAuditOk=%s indirectAuditRuns=%d indirectAuditFailures=%d lastIndirectAuditError=%s lastAuditedIndirectCommands=%d lastAuditedIndirectBytes=%d lastInvalidIndirectCommands=%d lastIndirectCommandBufferMatch=%s lastIndirectAuditVertices=%d lastElementsIndirectAuditOk=%s elementsIndirectAuditRuns=%d elementsIndirectAuditFailures=%d lastElementsIndirectAuditError=%s lastAuditedElementsIndirectCommands=%d lastAuditedElementsIndirectBytes=%d lastElementsIndirectAuditIndices=%d lastElementsIndirectAuditLogicalVertices=%d lastGlError=%s lastGlErrorStage=%s glErrorCount=%d stateRestoreFailures=%d lastStateRestoreError=%s lastRenderSkippedReason=%s lastDrawError=%s stressRuns=%d stressFailures=%d lastStressError=%s formalMdicRenderer=false voxyRenderSystem=false shaderpack=false",
@@ -3199,7 +3034,7 @@ public final class ForgeVoxyCommands {
         return status.actualDrawEnabled() ? 1 : 0;
     }
 
-    private static int directGlMdicShaderStatus(CommandSourceStack source) {
+    static int directGlMdicShaderStatus(CommandSourceStack source) {
         ForgeMdicDebugShader.ShaderStatus status = ForgeVoxyInstance.INSTANCE.getMdicDebugRenderer().createShaderStatusSnapshot();
         String message = String.format(
                 "Voxy MDIC debug shader: shaderSupported=%s shaderCompiled=%s programCreated=%s loopShaderCompiled=%s multiDrawSupported=%s drawIdSupported=%s multiDrawShaderCompiled=%s multiDrawProgramCreated=%s indirectSupported=%s multiDrawIndirectSupported=%s drawIndirectBufferSupported=%s baseInstanceSupported=%s indirectShaderCompiled=%s indirectProgramCreated=%s elementsIndirectSupported=%s elementsIndirectCountSupported=%s indirectParametersSupported=%s parameterBufferSupported=%s multiDrawElementsIndirectCountSupported=%s drawCountBufferSupported=%s elementsIndirectShaderCompiled=%s elementsIndirectProgramCreated=%s elementsIndirectCountShaderCompiled=%s elementsIndirectCountProgramCreated=%s elementsIndirectUsesBaseInstance=%s usesSsbo=%s lastShaderError=%s lastMultiDrawShaderError=%s lastIndirectShaderError=%s lastElementsIndirectShaderError=%s lastElementsIndirectCountShaderError=%s unsupportedReason=%s multiDrawUnsupportedReason=%s indirectUnsupportedReason=%s elementsIndirectUnsupportedReason=%s elementsIndirectCountUnsupportedReason=%s glVersion=%s glslVersion=%s stage=%s formalMdicRenderer=false voxyRenderSystem=false",
@@ -3247,13 +3082,13 @@ public final class ForgeVoxyCommands {
         return status.ok() || status.multiDrawShaderCompiled() || status.indirectShaderCompiled() || status.elementsIndirectShaderCompiled() || status.elementsIndirectCountShaderCompiled() ? 1 : 0;
     }
 
-    private static int directGlMdicDrawClear(CommandSourceStack source) {
+    static int directGlMdicDrawClear(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getMdicDebugRenderer().clear();
         source.sendSuccess(() -> Component.literal("Voxy MDIC debug draw: shader, draw counters, derived arrays indirect command buffer, shared index buffer, elements indirect command buffer, draw count buffer, indirect audit state, elements indirect audit state, draw count audit state, and transient render state cleared. MDIC command list/buffer, upload-only GL heap, G5 direct renderer, simple renderer, CPU caches, and SectionGeometryManager were left unchanged."), false);
         return 1;
     }
 
-    private static int directGlMdicDrawIndirectAudit(CommandSourceStack source) {
+    static int directGlMdicDrawIndirectAudit(CommandSourceStack source) {
         ForgeMdicDebugIndirectAuditResult result = ForgeVoxyInstance.INSTANCE.getMdicDebugRenderer().auditDerivedIndirectBuffer();
         ForgeMdicDebugDrawStats status = ForgeVoxyInstance.INSTANCE.getMdicDebugRenderer().createStatusSnapshot();
         String message = String.format(
@@ -3278,7 +3113,7 @@ public final class ForgeVoxyCommands {
         return 0;
     }
 
-    private static int directGlMdicDrawIndirectAuditStatus(CommandSourceStack source) {
+    static int directGlMdicDrawIndirectAuditStatus(CommandSourceStack source) {
         ForgeMdicDebugDrawStats status = ForgeVoxyInstance.INSTANCE.getMdicDebugRenderer().createStatusSnapshot();
         String message = String.format(
                 "Voxy MDIC debug derived indirect audit: lastIndirectAuditOk=%s auditRuns=%d auditFailures=%d lastIndirectAuditError=%s lastIndirectAuditDurationMs=%.2f lastAuditedIndirectCommands=%d lastAuditedIndirectBytes=%d lastInvalidIndirectCommands=%d lastIndirectCommandBufferMatch=%s lastIndirectAuditVertices=%d derivedIndirectCommandBufferCreated=%s derivedIndirectCommandBufferBytes=%d derivedIndirectCommandBufferStale=%s commandCount=%d commandRecords=%d currentHeapGeneration=%d currentDimension=%s stage=%s",
@@ -3305,13 +3140,13 @@ public final class ForgeVoxyCommands {
         return status.lastIndirectAuditOk() ? 1 : 0;
     }
 
-    private static int directGlMdicDrawIndirectAuditClear(CommandSourceStack source) {
+    static int directGlMdicDrawIndirectAuditClear(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getMdicDebugRenderer().clearIndirectAuditStats();
         source.sendSuccess(() -> Component.literal("Voxy MDIC debug derived indirect audit: audit counters cleared. Derived indirect command buffer, MDIC command list/buffer, upload-only GL heap, and render state were left unchanged."), false);
         return 1;
     }
 
-    private static int directGlMdicDrawElementsIndirectAudit(CommandSourceStack source) {
+    static int directGlMdicDrawElementsIndirectAudit(CommandSourceStack source) {
         ForgeMdicDebugElementsIndirectAuditResult result = ForgeVoxyInstance.INSTANCE.getMdicDebugRenderer().auditElementsIndirectBuffer();
         ForgeMdicDebugDrawStats status = ForgeVoxyInstance.INSTANCE.getMdicDebugRenderer().createStatusSnapshot();
         String message = String.format(
@@ -3338,7 +3173,7 @@ public final class ForgeVoxyCommands {
         return 0;
     }
 
-    private static int directGlMdicDrawElementsIndirectAuditStatus(CommandSourceStack source) {
+    static int directGlMdicDrawElementsIndirectAuditStatus(CommandSourceStack source) {
         ForgeMdicDebugDrawStats status = ForgeVoxyInstance.INSTANCE.getMdicDebugRenderer().createStatusSnapshot();
         String message = String.format(
                 "Voxy MDIC debug elements indirect audit: lastElementsIndirectAuditOk=%s auditRuns=%d auditFailures=%d lastElementsIndirectAuditError=%s lastElementsIndirectAuditDurationMs=%.2f lastAuditedElementsIndirectCommands=%d lastAuditedElementsIndirectBytes=%d lastInvalidElementsIndirectCommands=%d lastElementsIndirectCommandBufferMatch=%s lastElementsIndirectAuditIndices=%d lastElementsIndirectAuditLogicalVertices=%d sharedIndexBufferCreated=%s sharedIndexBufferBytes=%d sharedIndexMaxRecords=%d sharedIndexFormat=%s elementsIndirectCommandBufferCreated=%s elementsIndirectCommandBufferBytes=%d elementsIndirectCommandBufferStale=%s commandCount=%d commandRecords=%d currentHeapGeneration=%d currentDimension=%s stage=%s",
@@ -3370,13 +3205,13 @@ public final class ForgeVoxyCommands {
         return status.lastElementsIndirectAuditOk() ? 1 : 0;
     }
 
-    private static int directGlMdicDrawElementsIndirectAuditClear(CommandSourceStack source) {
+    static int directGlMdicDrawElementsIndirectAuditClear(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getMdicDebugRenderer().clearElementsIndirectAuditStats();
         source.sendSuccess(() -> Component.literal("Voxy MDIC debug elements indirect audit: audit counters cleared. Shared index buffer, elements indirect command buffer, MDIC command list/buffer, upload-only GL heap, and render state were left unchanged."), false);
         return 1;
     }
 
-    private static int directGlMdicDrawCountAudit(CommandSourceStack source) {
+    static int directGlMdicDrawCountAudit(CommandSourceStack source) {
         ForgeMdicDebugDrawCountAuditResult result = ForgeVoxyInstance.INSTANCE.getMdicDebugRenderer().auditDrawCountBuffer();
         ForgeMdicDebugDrawStats status = ForgeVoxyInstance.INSTANCE.getMdicDebugRenderer().createStatusSnapshot();
         String message = String.format(
@@ -3406,7 +3241,7 @@ public final class ForgeVoxyCommands {
         return 0;
     }
 
-    private static int directGlMdicDrawCountAuditStatus(CommandSourceStack source) {
+    static int directGlMdicDrawCountAuditStatus(CommandSourceStack source) {
         ForgeMdicDebugDrawStats status = ForgeVoxyInstance.INSTANCE.getMdicDebugRenderer().createStatusSnapshot();
         String message = String.format(
                 "Voxy MDIC debug draw count audit: lastDrawCountAuditOk=%s auditRuns=%d auditFailures=%d lastDrawCountAuditError=%s lastDrawCountAuditDurationMs=%.2f lastAuditedDrawCount=%d lastAuditedMaxDrawCount=%d lastInvalidDrawCount=%d lastDrawCountBufferMatch=%s lastDrawCountAuditGeneration=%d lastDrawCountAuditDimension=%s drawCountBufferCreated=%s drawCountBufferBytes=%d drawCountValue=%d maxDrawCount=%d drawCountBufferStale=%s commandCount=%d commandRecords=%d currentHeapGeneration=%d currentDimension=%s stage=%s",
@@ -3436,13 +3271,13 @@ public final class ForgeVoxyCommands {
         return status.lastDrawCountAuditOk() ? 1 : 0;
     }
 
-    private static int directGlMdicDrawCountAuditClear(CommandSourceStack source) {
+    static int directGlMdicDrawCountAuditClear(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getMdicDebugRenderer().clearDrawCountAuditStats();
         source.sendSuccess(() -> Component.literal("Voxy MDIC debug draw count audit: audit counters cleared. Draw count buffer, elements indirect command buffer, shared index buffer, MDIC command list/buffer, upload-only GL heap, and render state were left unchanged."), false);
         return 1;
     }
 
-    private static int directGlMdicDrawStressOnce(CommandSourceStack source) {
+    static int directGlMdicDrawStressOnce(CommandSourceStack source) {
         ForgeMdicDebugDrawStats status = ForgeVoxyInstance.INSTANCE.getMdicDebugRenderer().stressOnce();
         String message = String.format(
                 "Voxy MDIC debug draw stress: success=%s stressRuns=%d stressFailures=%d lastStressError=%s lastStressDurationMs=%.2f lastStressPlanOk=%s lastStressBuildOk=%s lastStressAuditOk=%s lastStressDrawEnableOk=%s lastStressDrawStatusOk=%s lastStressDrawDisableOk=%s lastStressDrawClearOk=%s lastStressHeapClearOk=%s lastStressRebuildOk=%s lastStressRedrawOk=%s lastStressLoopOk=%s lastStressMultiDrawOk=%s lastStressIndirectOk=%s lastStressElementsIndirectOk=%s lastStressAutoOk=%s lastStressDerivedIndirectAuditOk=%s lastStressElementsIndirectAuditOk=%s lastStressSharedIndexBufferOk=%s lastStressSourceRegressionOk=%s lastStressBucketDrawOk=%s lastStressBucketIndirectAuditOk=%s lastStressDirectionalFaceMaskOk=%s lastStressFaceMaskAuditOk=%s lastStressVisibilityPlanOk=%s lastStressSelectionAuditOk=%s lastStressFrustumFallbackOk=%s lastStressGlErrorCount=%d lastStressStateRestoreFailures=%d stage=%s effectiveDrawMode=%s formalMdicRenderer=false voxyRenderSystem=false",
@@ -3497,7 +3332,7 @@ public final class ForgeVoxyCommands {
         return 0;
     }
 
-    private static int directGlMdicDrawStressStatus(CommandSourceStack source) {
+    static int directGlMdicDrawStressStatus(CommandSourceStack source) {
         ForgeMdicDebugDrawStats status = ForgeVoxyInstance.INSTANCE.getMdicDebugRenderer().createStatusSnapshot();
         String message = String.format(
                 "Voxy MDIC debug draw stress: stressRuns=%d stressFailures=%d lastStressError=%s lastStressDurationMs=%.2f lastStressPlanOk=%s lastStressBuildOk=%s lastStressAuditOk=%s lastStressDrawEnableOk=%s lastStressDrawStatusOk=%s lastStressDrawDisableOk=%s lastStressDrawClearOk=%s lastStressHeapClearOk=%s lastStressRebuildOk=%s lastStressRedrawOk=%s lastStressLoopOk=%s lastStressMultiDrawOk=%s lastStressIndirectOk=%s lastStressElementsIndirectOk=%s lastStressAutoOk=%s lastStressDerivedIndirectAuditOk=%s lastStressElementsIndirectAuditOk=%s lastStressSharedIndexBufferOk=%s lastStressSourceRegressionOk=%s lastStressBucketDrawOk=%s lastStressBucketIndirectAuditOk=%s lastStressDirectionalFaceMaskOk=%s lastStressFaceMaskAuditOk=%s lastStressVisibilityPlanOk=%s lastStressSelectionAuditOk=%s lastStressFrustumFallbackOk=%s lastStressGlErrorCount=%d lastStressStateRestoreFailures=%d stage=%s effectiveDrawMode=%s formalMdicRenderer=false voxyRenderSystem=false",
@@ -3547,13 +3382,13 @@ public final class ForgeVoxyCommands {
         return status.stressFailures() == 0 ? 1 : 0;
     }
 
-    private static int directGlMdicDrawStressClear(CommandSourceStack source) {
+    static int directGlMdicDrawStressClear(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getMdicDebugRenderer().clearStressStats();
         source.sendSuccess(() -> Component.literal("Voxy MDIC debug draw stress: stress counters cleared. Draw state, command list/buffer, upload-only GL heap, direct renderer, simple renderer, CPU caches, and SectionGeometryManager were left unchanged."), false);
         return 1;
     }
 
-    private static int directGlMdicClear(CommandSourceStack source) {
+    static int directGlMdicClear(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getMdicCommandManager().clear();
         ForgeVoxyInstance.INSTANCE.getMdicDebugRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedMdicDebugRenderer().markStale("mdic-command-clear");

@@ -31,12 +31,13 @@ are all registered in one file.
 Retirement sequence:
 
 ```text
-1. keep /voxy parity_route_status as the visible boundary
-2. add no new commands to ForgeVoxyCommands
-3. move original-Voxy-parity commands into focused registrar classes
-4. move legacy debug/prototype commands behind an explicit legacy surface
-5. delete handlers once backing prototype objects are removed from ForgeVoxyInstance
-6. delete ForgeVoxyCommands when no longer needed
+1. keep /voxy parity_route_status as the visible boundary - done
+2. add no new commands to ForgeVoxyCommands - active rule
+3. split legacy debug/GPU/MDIC command registration into ForgeVoxyLegacyDebugCommands - done
+4. move original-Voxy-parity commands into focused registrar classes
+5. move remaining preview/sample commands behind explicit legacy surfaces
+6. delete handlers once backing prototype objects are removed from ForgeVoxyInstance
+7. delete ForgeVoxyCommands when no longer needed
 ```
 
 ### Debug/proof renderers
@@ -84,9 +85,10 @@ The next cleanup should split the command registration surface:
 
 ```text
 ForgeVoxyParityCommands
-ForgeVoxyLegacyDebugCommands
 ForgeVoxyLegacyPreviewCommands
 ```
 
-The split should preserve command behavior first, then allow entire legacy
-registrars to be disabled or deleted as prototype owners disappear.
+`ForgeVoxyLegacyDebugCommands` already owns the first migrated legacy debug
+registration group. The remaining split should preserve command behavior first,
+then allow entire legacy registrars to be disabled or deleted as prototype
+owners disappear.
