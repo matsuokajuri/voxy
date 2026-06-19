@@ -1,7 +1,6 @@
 package me.cortex.voxy.forge;
 
 import com.mojang.brigadier.CommandDispatcher;
-import com.mojang.brigadier.arguments.IntegerArgumentType;
 import me.cortex.voxy.common.world.service.VoxelIngestService;
 import me.cortex.voxy.config.SimpleGpuMeshLoadedChunkSkipMode;
 import me.cortex.voxy.config.SimpleGpuMeshSource;
@@ -33,34 +32,10 @@ public final class ForgeVoxyCommands {
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         var root = Commands.literal("voxy")
                 .then(Commands.literal("parity_route_status")
-                        .executes(ctx -> parityRouteStatus(ctx.getSource())))
-                .then(Commands.literal("ingest_current_chunk")
-                        .executes(ctx -> ingestCurrentChunk(ctx.getSource())))
-                .then(Commands.literal("build_current_chunk_mesh")
-                        .executes(ctx -> buildCurrentChunkMesh(ctx.getSource())))
-                .then(Commands.literal("build_current_chunk_model_mesh")
-                        .executes(ctx -> buildCurrentChunkModelMesh(ctx.getSource())))
-                .then(Commands.literal("build_current_chunk_cpu_mesh")
-                        .executes(ctx -> buildCurrentChunkCpuMesh(ctx.getSource())))
-                .then(Commands.literal("build_current_chunk_built_section")
-                        .executes(ctx -> buildCurrentChunkBuiltSection(ctx.getSource())))
-                .then(Commands.literal("built_section_cache_status")
-                        .executes(ctx -> builtSectionCacheStatus(ctx.getSource())))
-                .then(Commands.literal("built_section_cache_clear")
-                        .executes(ctx -> clearBuiltSectionCache(ctx.getSource())))
-                .then(Commands.literal("built_section_build_clear")
-                        .executes(ctx -> clearBuiltSectionBuildState(ctx.getSource())))
-                .then(Commands.literal("geometry_manager_consume_current_chunk")
-                        .executes(ctx -> consumeCurrentChunkGeometryManager(ctx.getSource())))
-                .then(Commands.literal("geometry_manager_status")
-                        .executes(ctx -> geometryManagerStatus(ctx.getSource())))
-                .then(Commands.literal("geometry_manager_dump_sample")
-                        .executes(ctx -> geometryManagerDumpSample(ctx.getSource())))
-                .then(Commands.literal("geometry_manager_clear")
-                        .executes(ctx -> clearGeometryManager(ctx.getSource())))
-                .then(Commands.literal("geometry_manager_consume_clear")
-                        .executes(ctx -> clearGeometryManagerConsumeState(ctx.getSource())));
+                        .executes(ctx -> parityRouteStatus(ctx.getSource())));
 
+        ForgeVoxyGeometryPipelineCommands.register(root);
+        ForgeVoxyModelPipelineCommands.register(root);
         ForgeVoxyLegacyDebugCommands.register(root);
         ForgeVoxyLegacyPreviewCommands.register(root);
         ForgeVoxyLegacyKPreviewCommands.register(root);
@@ -68,205 +43,6 @@ public final class ForgeVoxyCommands {
         ForgeVoxyPresetCommands.register(root);
 
         root
-                .then(Commands.literal("model_bridge_check")
-                        .executes(ctx -> modelBridgeCheck(ctx.getSource())))
-                .then(Commands.literal("model_bridge_status")
-                        .executes(ctx -> modelBridgeStatus(ctx.getSource())))
-                .then(Commands.literal("model_bridge_clear")
-                        .executes(ctx -> modelBridgeClear(ctx.getSource())))
-                .then(Commands.literal("model_bridge_dump_sample")
-                        .executes(ctx -> modelBridgeDumpSample(ctx.getSource())))
-                .then(Commands.literal("model_store_skeleton_build")
-                        .executes(ctx -> modelStoreSkeletonBuild(ctx.getSource())))
-                .then(Commands.literal("model_store_skeleton_status")
-                        .executes(ctx -> modelStoreSkeletonStatus(ctx.getSource())))
-                .then(Commands.literal("model_store_skeleton_audit")
-                        .executes(ctx -> modelStoreSkeletonAudit(ctx.getSource())))
-                .then(Commands.literal("model_store_skeleton_audit_status")
-                        .executes(ctx -> modelStoreSkeletonAuditStatus(ctx.getSource())))
-                .then(Commands.literal("model_store_skeleton_dump_sample")
-                        .executes(ctx -> modelStoreSkeletonDumpSample(ctx.getSource())))
-                .then(Commands.literal("model_store_skeleton_clear")
-                        .executes(ctx -> modelStoreSkeletonClear(ctx.getSource())))
-                .then(Commands.literal("model_store_layout_audit")
-                        .executes(ctx -> modelStoreLayoutAudit(ctx.getSource())))
-                .then(Commands.literal("model_store_layout_audit_status")
-                        .executes(ctx -> modelStoreLayoutAuditStatus(ctx.getSource())))
-                .then(Commands.literal("model_store_layout_audit_clear")
-                        .executes(ctx -> modelStoreLayoutAuditClear(ctx.getSource())))
-                .then(Commands.literal("model_bridge_resource_reload_status")
-                        .executes(ctx -> modelBridgeResourceReloadStatus(ctx.getSource())))
-                .then(Commands.literal("model_bridge_resource_reload_clear_stats")
-                        .executes(ctx -> modelBridgeResourceReloadClearStats(ctx.getSource())))
-                .then(Commands.literal("model_bridge_simulate_resource_reload")
-                        .executes(ctx -> modelBridgeSimulateResourceReload(ctx.getSource())))
-                .then(Commands.literal("baked_model_bridge_check")
-                        .executes(ctx -> bakedModelBridgeCheck(ctx.getSource())))
-                .then(Commands.literal("baked_model_bridge_status")
-                        .executes(ctx -> bakedModelBridgeStatus(ctx.getSource())))
-                .then(Commands.literal("baked_model_bridge_audit")
-                        .executes(ctx -> bakedModelBridgeAudit(ctx.getSource())))
-                .then(Commands.literal("baked_model_bridge_audit_status")
-                        .executes(ctx -> bakedModelBridgeAuditStatus(ctx.getSource())))
-                .then(Commands.literal("baked_model_bridge_dump_sample")
-                        .executes(ctx -> bakedModelBridgeDumpSample(ctx.getSource())))
-                .then(Commands.literal("baked_model_bridge_clear")
-                        .executes(ctx -> bakedModelBridgeClear(ctx.getSource())))
-                .then(Commands.literal("model_store_real_sample_build")
-                        .executes(ctx -> modelStoreRealSampleBuild(ctx.getSource())))
-                .then(Commands.literal("model_store_real_sample_status")
-                        .executes(ctx -> modelStoreRealSampleStatus(ctx.getSource())))
-                .then(Commands.literal("model_store_real_sample_audit")
-                        .executes(ctx -> modelStoreRealSampleAudit(ctx.getSource())))
-                .then(Commands.literal("model_store_real_sample_audit_status")
-                        .executes(ctx -> modelStoreRealSampleAuditStatus(ctx.getSource())))
-                .then(Commands.literal("model_store_real_sample_dump")
-                        .executes(ctx -> modelStoreRealSampleDump(ctx.getSource())))
-                .then(Commands.literal("model_store_real_sample_clear")
-                        .executes(ctx -> modelStoreRealSampleClear(ctx.getSource())))
-                .then(Commands.literal("model_sample_set_build")
-                        .executes(ctx -> modelSampleSetBuild(ctx.getSource())))
-                .then(Commands.literal("model_sample_set_status")
-                        .executes(ctx -> modelSampleSetStatus(ctx.getSource())))
-                .then(Commands.literal("model_sample_set_audit")
-                        .executes(ctx -> modelSampleSetAudit(ctx.getSource())))
-                .then(Commands.literal("model_sample_set_audit_status")
-                        .executes(ctx -> modelSampleSetAuditStatus(ctx.getSource())))
-                .then(Commands.literal("model_sample_set_dump")
-                        .executes(ctx -> modelSampleSetDump(ctx.getSource())))
-                .then(Commands.literal("model_sample_set_clear")
-                        .executes(ctx -> modelSampleSetClear(ctx.getSource())))
-                .then(Commands.literal("model_atlas_skeleton_build")
-                        .executes(ctx -> modelAtlasSkeletonBuild(ctx.getSource())))
-                .then(Commands.literal("model_atlas_skeleton_status")
-                        .executes(ctx -> modelAtlasSkeletonStatus(ctx.getSource())))
-                .then(Commands.literal("model_atlas_skeleton_audit")
-                        .executes(ctx -> modelAtlasSkeletonAudit(ctx.getSource())))
-                .then(Commands.literal("model_atlas_skeleton_audit_status")
-                        .executes(ctx -> modelAtlasSkeletonAuditStatus(ctx.getSource())))
-                .then(Commands.literal("model_atlas_skeleton_dump_sample")
-                        .executes(ctx -> modelAtlasSkeletonDumpSample(ctx.getSource())))
-                .then(Commands.literal("model_atlas_skeleton_clear")
-                        .executes(ctx -> modelAtlasSkeletonClear(ctx.getSource())))
-                .then(Commands.literal("model_atlas_upload_sample")
-                        .executes(ctx -> modelAtlasUploadSample(ctx.getSource())))
-                .then(Commands.literal("model_atlas_upload_status")
-                        .executes(ctx -> modelAtlasUploadStatus(ctx.getSource())))
-                .then(Commands.literal("model_atlas_upload_audit")
-                        .executes(ctx -> modelAtlasUploadAudit(ctx.getSource())))
-                .then(Commands.literal("model_atlas_upload_audit_status")
-                        .executes(ctx -> modelAtlasUploadAuditStatus(ctx.getSource())))
-                .then(Commands.literal("model_atlas_upload_dump_sample")
-                        .executes(ctx -> modelAtlasUploadDumpSample(ctx.getSource())))
-                .then(Commands.literal("model_atlas_upload_clear")
-                        .executes(ctx -> modelAtlasUploadClear(ctx.getSource())))
-                .then(Commands.literal("model_atlas_upload_sample_set")
-                        .executes(ctx -> modelAtlasUploadSampleSet(ctx.getSource())))
-                .then(Commands.literal("model_atlas_upload_sample_set_status")
-                        .executes(ctx -> modelAtlasUploadSampleSetStatus(ctx.getSource())))
-                .then(Commands.literal("model_atlas_upload_sample_set_audit")
-                        .executes(ctx -> modelAtlasUploadSampleSetAudit(ctx.getSource())))
-                .then(Commands.literal("model_atlas_upload_sample_set_dump")
-                        .executes(ctx -> modelAtlasUploadSampleSetDump(ctx.getSource())))
-                .then(Commands.literal("formal_shader_input_bridge_build")
-                        .executes(ctx -> formalShaderInputBridgeBuild(ctx.getSource())))
-                .then(Commands.literal("formal_shader_input_bridge_status")
-                        .executes(ctx -> formalShaderInputBridgeStatus(ctx.getSource())))
-                .then(Commands.literal("formal_shader_input_bridge_audit")
-                        .executes(ctx -> formalShaderInputBridgeAudit(ctx.getSource())))
-                .then(Commands.literal("formal_shader_input_bridge_audit_status")
-                        .executes(ctx -> formalShaderInputBridgeAuditStatus(ctx.getSource())))
-                .then(Commands.literal("formal_shader_input_bridge_clear")
-                        .executes(ctx -> formalShaderInputBridgeClear(ctx.getSource())))
-                .then(Commands.literal("formal_model_store_build")
-                        .executes(ctx -> formalModelStoreBuild(ctx.getSource())))
-                .then(Commands.literal("formal_model_store_status")
-                        .executes(ctx -> formalModelStoreStatus(ctx.getSource())))
-                .then(Commands.literal("formal_model_store_audit")
-                        .executes(ctx -> formalModelStoreAudit(ctx.getSource())))
-                .then(Commands.literal("formal_model_store_audit_status")
-                        .executes(ctx -> formalModelStoreAuditStatus(ctx.getSource())))
-                .then(Commands.literal("formal_model_store_clear")
-                        .executes(ctx -> formalModelStoreClear(ctx.getSource())))
-                .then(Commands.literal("formal_model_store_dump_layout")
-                        .executes(ctx -> formalModelStoreDumpLayout(ctx.getSource())))
-                .then(Commands.literal("formal_model_factory_request_current")
-                        .executes(ctx -> formalModelFactoryRequestCurrent(ctx.getSource())))
-                .then(Commands.literal("formal_model_factory_request_blockstate")
-                        .then(Commands.argument("blockStateId", IntegerArgumentType.integer())
-                                .executes(ctx -> formalModelFactoryRequestBlockState(ctx.getSource(), IntegerArgumentType.getInteger(ctx, "blockStateId")))))
-                .then(Commands.literal("formal_model_factory_process_skeleton")
-                        .executes(ctx -> formalModelFactoryProcessSkeleton(ctx.getSource())))
-                .then(Commands.literal("formal_model_factory_status")
-                        .executes(ctx -> formalModelFactoryStatus(ctx.getSource())))
-                .then(Commands.literal("formal_model_factory_audit")
-                        .executes(ctx -> formalModelFactoryAudit(ctx.getSource())))
-                .then(Commands.literal("formal_model_factory_audit_status")
-                        .executes(ctx -> formalModelFactoryAuditStatus(ctx.getSource())))
-                .then(Commands.literal("formal_model_factory_clear")
-                        .executes(ctx -> formalModelFactoryClear(ctx.getSource())))
-                .then(Commands.literal("formal_model_factory_dump_mappings")
-                        .executes(ctx -> formalModelFactoryDumpMappings(ctx.getSource())))
-                .then(Commands.literal("formal_model_factory_bake_one_current")
-                        .executes(ctx -> formalModelFactoryBakeOneCurrent(ctx.getSource())))
-                .then(Commands.literal("formal_model_factory_bake_one_status")
-                        .executes(ctx -> formalModelFactoryBakeOneStatus(ctx.getSource())))
-                .then(Commands.literal("formal_model_factory_bake_one_audit")
-                        .executes(ctx -> formalModelFactoryBakeOneAudit(ctx.getSource())))
-                .then(Commands.literal("formal_model_factory_bake_one_dump")
-                        .executes(ctx -> formalModelFactoryBakeOneDump(ctx.getSource())))
-                .then(Commands.literal("formal_model_factory_bake_one_clear")
-                        .executes(ctx -> formalModelFactoryBakeOneClear(ctx.getSource())))
-                .then(Commands.literal("qa_i4_formal_bake_upload")
-                        .executes(ctx -> qaI4FormalBakeUpload(ctx.getSource())))
-                .then(Commands.literal("formal_model_factory_bake_multi_safe")
-                        .executes(ctx -> formalModelFactoryBakeMultiSafe(ctx.getSource())))
-                .then(Commands.literal("formal_model_factory_bake_multi_status")
-                        .executes(ctx -> formalModelFactoryBakeMultiStatus(ctx.getSource())))
-                .then(Commands.literal("formal_model_factory_bake_multi_audit")
-                        .executes(ctx -> formalModelFactoryBakeMultiAudit(ctx.getSource())))
-                .then(Commands.literal("formal_model_factory_bake_multi_dump")
-                        .executes(ctx -> formalModelFactoryBakeMultiDump(ctx.getSource())))
-                .then(Commands.literal("formal_model_factory_bake_multi_clear")
-                        .executes(ctx -> formalModelFactoryBakeMultiClear(ctx.getSource())))
-                .then(Commands.literal("qa_i5_multi_block_bake_upload")
-                        .executes(ctx -> qaI5MultiBlockBakeUpload(ctx.getSource())))
-                .then(Commands.literal("formal_model_bakery_lifecycle_status")
-                        .executes(ctx -> formalModelBakeryLifecycleStatus(ctx.getSource())))
-                .then(Commands.literal("formal_model_bakery_lifecycle_audit")
-                        .executes(ctx -> formalModelBakeryLifecycleAudit(ctx.getSource())))
-                .then(Commands.literal("formal_model_bakery_lifecycle_rebuild_safe_set")
-                        .executes(ctx -> formalModelBakeryLifecycleRebuildSafeSet(ctx.getSource())))
-                .then(Commands.literal("formal_model_bakery_lifecycle_dump")
-                        .executes(ctx -> formalModelBakeryLifecycleDump(ctx.getSource())))
-                .then(Commands.literal("formal_model_bakery_lifecycle_clear")
-                        .executes(ctx -> formalModelBakeryLifecycleClear(ctx.getSource())))
-                .then(Commands.literal("qa_i6_model_lifecycle_rebuild")
-                        .executes(ctx -> qaI6ModelLifecycleRebuild(ctx.getSource())))
-                .then(Commands.literal("formal_shader_input_build")
-                        .executes(ctx -> formalShaderInputBuild(ctx.getSource())))
-                .then(Commands.literal("formal_shader_input_status")
-                        .executes(ctx -> formalShaderInputStatus(ctx.getSource())))
-                .then(Commands.literal("formal_shader_input_audit")
-                        .executes(ctx -> formalShaderInputAudit(ctx.getSource())))
-                .then(Commands.literal("formal_shader_input_dump")
-                        .executes(ctx -> formalShaderInputDump(ctx.getSource())))
-                .then(Commands.literal("formal_shader_input_clear")
-                        .executes(ctx -> formalShaderInputClear(ctx.getSource())))
-                .then(Commands.literal("qa_j1_formal_shader_input")
-                        .executes(ctx -> qaJ1FormalShaderInput(ctx.getSource())))
-                .then(Commands.literal("formal_shader_program_build")
-                        .executes(ctx -> formalShaderProgramBuild(ctx.getSource())))
-                .then(Commands.literal("formal_shader_program_status")
-                        .executes(ctx -> formalShaderProgramStatus(ctx.getSource())))
-                .then(Commands.literal("formal_shader_program_audit")
-                        .executes(ctx -> formalShaderProgramAudit(ctx.getSource())))
-                .then(Commands.literal("formal_shader_program_dump")
-                        .executes(ctx -> formalShaderProgramDump(ctx.getSource())))
-                .then(Commands.literal("formal_shader_program_clear")
-                        .executes(ctx -> formalShaderProgramClear(ctx.getSource())))
-                .then(Commands.literal("qa_j2_formal_shader_program")
-                        .executes(ctx -> qaJ2FormalShaderProgram(ctx.getSource())))
                 .then(Commands.literal("formal_terrain_renderer_owner_enable")
                         .executes(ctx -> formalTerrainRendererOwnerEnable(ctx.getSource())))
                 .then(Commands.literal("formal_terrain_renderer_owner_status")
@@ -322,38 +98,7 @@ public final class ForgeVoxyCommands {
                 .then(Commands.literal("formal_visibility_owner_clear")
                         .executes(ctx -> formalVisibilityOwnerClear(ctx.getSource())))
                 .then(Commands.literal("qa_k4_formal_visibility_owner")
-                        .executes(ctx -> qaK4FormalVisibilityOwner(ctx.getSource())))
-                .then(Commands.literal("mesh_cache_status")
-                        .executes(ctx -> meshCacheStatus(ctx.getSource())))
-                .then(Commands.literal("mesh_cache_clear")
-                        .executes(ctx -> clearMeshCache(ctx.getSource())))
-                .then(Commands.literal("gpu_mesh_status")
-                        .executes(ctx -> gpuMeshStatus(ctx.getSource())))
-                .then(Commands.literal("gpu_mesh_source")
-                        .then(Commands.literal("cpu")
-                                .executes(ctx -> setGpuMeshSource(ctx.getSource(), SimpleGpuMeshSource.CPU_MESH)))
-                        .then(Commands.literal("built_section")
-                                .executes(ctx -> setGpuMeshSource(ctx.getSource(), SimpleGpuMeshSource.BUILT_SECTION)))
-                        .then(Commands.literal("gl_heap_readback")
-                                .executes(ctx -> setGpuMeshSource(ctx.getSource(), SimpleGpuMeshSource.GL_HEAP_READBACK))))
-                .then(Commands.literal("lod_visibility_status")
-                        .executes(ctx -> lodVisibilityStatus(ctx.getSource())))
-                .then(Commands.literal("lod_overlay_debug")
-                        .executes(ctx -> lodOverlayDebug(ctx.getSource())))
-                .then(Commands.literal("lod_mode_advice")
-                        .executes(ctx -> lodModeAdvice(ctx.getSource())))
-                .then(Commands.literal("gpu_mesh_clear")
-                        .executes(ctx -> clearGpuMeshCache(ctx.getSource())))
-                .then(Commands.literal("mesh_build_clear")
-                        .executes(ctx -> clearMeshBuildState(ctx.getSource())))
-                .then(Commands.literal("debug_pipeline_status")
-                        .executes(ctx -> meshCacheStatus(ctx.getSource())))
-                .then(Commands.literal("debug_pipeline_clear")
-                        .executes(ctx -> clearDebugPipeline(ctx.getSource())))
-                .then(Commands.literal("ingest_status")
-                        .executes(ctx -> ingestStatus(ctx.getSource())))
-                .then(Commands.literal("ingest_clear_cache")
-                        .executes(ctx -> clearIngestCache(ctx.getSource())));
+                        .executes(ctx -> qaK4FormalVisibilityOwner(ctx.getSource())));
         dispatcher.register(root);
     }
 
@@ -372,7 +117,7 @@ public final class ForgeVoxyCommands {
         return 1;
     }
 
-    private static int ingestCurrentChunk(CommandSourceStack source) {
+    static int ingestCurrentChunk(CommandSourceStack source) {
         var minecraft = Minecraft.getInstance();
         var player = minecraft.player;
         var level = minecraft.level;
@@ -428,7 +173,7 @@ public final class ForgeVoxyCommands {
         }
     }
 
-    private static int buildCurrentChunkMesh(CommandSourceStack source) {
+    static int buildCurrentChunkMesh(CommandSourceStack source) {
         var minecraft = Minecraft.getInstance();
         var player = minecraft.player;
         var level = minecraft.level;
@@ -485,7 +230,7 @@ public final class ForgeVoxyCommands {
         }
     }
 
-    private static int buildCurrentChunkModelMesh(CommandSourceStack source) {
+    static int buildCurrentChunkModelMesh(CommandSourceStack source) {
         var minecraft = Minecraft.getInstance();
         var player = minecraft.player;
         var level = minecraft.level;
@@ -550,7 +295,7 @@ public final class ForgeVoxyCommands {
         }
     }
 
-    private static int buildCurrentChunkCpuMesh(CommandSourceStack source) {
+    static int buildCurrentChunkCpuMesh(CommandSourceStack source) {
         var minecraft = Minecraft.getInstance();
         var player = minecraft.player;
         var level = minecraft.level;
@@ -618,7 +363,7 @@ public final class ForgeVoxyCommands {
         }
     }
 
-    private static int buildCurrentChunkBuiltSection(CommandSourceStack source) {
+    static int buildCurrentChunkBuiltSection(CommandSourceStack source) {
         var minecraft = Minecraft.getInstance();
         var player = minecraft.player;
         var level = minecraft.level;
@@ -731,7 +476,7 @@ public final class ForgeVoxyCommands {
         }
     }
 
-    private static int builtSectionCacheStatus(CommandSourceStack source) {
+    static int builtSectionCacheStatus(CommandSourceStack source) {
         var status = ForgeVoxyInstance.INSTANCE.getVoxyGeometryCache().createStatusSnapshot();
         var buildStatus = ForgeVoxyInstance.INSTANCE.getBuiltSectionBuildManager().createStatusSnapshot();
         var gpuStatus = ForgeVoxyInstance.INSTANCE.getGpuMeshCache().createStatusSnapshot();
@@ -800,7 +545,7 @@ public final class ForgeVoxyCommands {
         return status.entries();
     }
 
-    private static int clearBuiltSectionCache(CommandSourceStack source) {
+    static int clearBuiltSectionCache(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getBuiltSectionBuildManager().clear();
         ForgeVoxyInstance.INSTANCE.getVoxyGeometryCache().clear();
         ForgeVoxyInstance.INSTANCE.getSectionGeometryConsumeManager().clear();
@@ -818,13 +563,13 @@ public final class ForgeVoxyCommands {
         return 1;
     }
 
-    private static int clearBuiltSectionBuildState(CommandSourceStack source) {
+    static int clearBuiltSectionBuildState(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getBuiltSectionBuildManager().clear();
         source.sendSuccess(() -> Component.literal("Voxy: cleared auto BuiltSection build queue and built-record. The BuiltSection cache was left intact."), false);
         return 1;
     }
 
-    private static int consumeCurrentChunkGeometryManager(CommandSourceStack source) {
+    static int consumeCurrentChunkGeometryManager(CommandSourceStack source) {
         var minecraft = Minecraft.getInstance();
         var player = minecraft.player;
         var level = minecraft.level;
@@ -895,7 +640,7 @@ public final class ForgeVoxyCommands {
         }
     }
 
-    private static int geometryManagerStatus(CommandSourceStack source) {
+    static int geometryManagerStatus(CommandSourceStack source) {
         var status = ForgeVoxyInstance.INSTANCE.getSectionGeometryManager().createStatusSnapshot();
         var consumeStatus = ForgeVoxyInstance.INSTANCE.getSectionGeometryConsumeManager().createStatusSnapshot();
         String message = String.format(
@@ -950,20 +695,20 @@ public final class ForgeVoxyCommands {
         return status.activeSections();
     }
 
-    private static int geometryManagerDumpSample(CommandSourceStack source) {
+    static int geometryManagerDumpSample(CommandSourceStack source) {
         String message = ForgeVoxyInstance.INSTANCE.getSectionGeometryManager().createSampleDump();
         source.sendSuccess(() -> Component.literal(message), false);
         return ForgeVoxyInstance.INSTANCE.getSectionGeometryManager().createStatusSnapshot().activeSections();
     }
 
-    private static int clearGeometryManager(CommandSourceStack source) {
+    static int clearGeometryManager(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getSectionGeometryConsumeManager().clear();
         ForgeVoxyInstance.INSTANCE.getGpuGeometryUploadManager().clear();
         source.sendSuccess(() -> Component.literal("Voxy: cleared CPU-only section geometry manager ids, heap allocation intents, metadata, upload intents, remove intents, dirty metadata ids, auto consume queue/records, and upload-only GL geometry heap. BuiltSection cache was left intact."), false);
         return 1;
     }
 
-    private static int clearGeometryManagerConsumeState(CommandSourceStack source) {
+    static int clearGeometryManagerConsumeState(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getSectionGeometryConsumeManager().clearRecords();
         source.sendSuccess(() -> Component.literal("Voxy: cleared CPU-only section geometry auto consume queue and records. Section geometry manager data was left intact."), false);
         return 1;
@@ -3082,7 +2827,7 @@ public final class ForgeVoxyCommands {
         return 1;
     }
 
-    private static int modelBridgeCheck(CommandSourceStack source) {
+    static int modelBridgeCheck(CommandSourceStack source) {
         ForgeModelBridgeAuditResult result = ForgeVoxyInstance.INSTANCE.getModelBridgeReadiness().check();
         ForgeModelBridgeReadinessStats status = result.stats();
         String message = String.format(
@@ -3129,7 +2874,7 @@ public final class ForgeVoxyCommands {
         return result.success() ? 1 : 0;
     }
 
-    private static int modelBridgeStatus(CommandSourceStack source) {
+    static int modelBridgeStatus(CommandSourceStack source) {
         ForgeModelBridgeReadinessStats status = ForgeVoxyInstance.INSTANCE.getModelBridgeReadiness().createStatusSnapshot();
         String message = String.format(
                 "Voxy model bridge status: stage=%s checkRuns=%d clearRuns=%d lastCheckError=%s lastCheckDurationMs=%.2f placeholderModelIdsPresent=%s stablePlaceholderModelIds=%s canMapModelIdToBlockState=%s placeholderModelStoreReady=%s placeholderModelDataBufferReady=%s placeholderModelColourBufferReady=%s realModelStoreReady=%s realModelFactoryReady=%s modelBakeryBridgeReady=%s textureAtlasReady=%s realModelDataBufferReady=%s realModelColourBufferReady=%s biomeTintReady=%s lightmapReady=%s resourceReloadReady=%s formalShaderInputsReady=%s formalModelBridgeReady=%s placeholderModelIdCount=%d builtSectionUniqueModelIds=%d missingModelRecords=%d currentDimension=%s activeWorldEnginePresent=%s blockStateIdSource=%s sampleModelId=%d sampleBlockStateId=%d sampleBlockState=\"%s\" sampleIsPlaceholder=%s sampleHasRealModelMetadata=%s sampleHasTextureMetadata=%s sampleNote=%s placeholderModelStoreIsNotRealModelStore=%s modelStoreBlocker=missing-real-ModelStore textureAtlasBlocker=no-atlas-upload formalShaderInputBlocker=debug-shader-only draw=false formalRenderer=false",
@@ -3176,7 +2921,7 @@ public final class ForgeVoxyCommands {
         return status.checkRuns() > 0 ? 1 : 0;
     }
 
-    private static int modelBridgeClear(CommandSourceStack source) {
+    static int modelBridgeClear(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getModelBridgeReadiness().clear();
         ForgeVoxyInstance.INSTANCE.getBakedModelBridge().clear();
         ForgeVoxyInstance.INSTANCE.getRealModelStoreSample().clear();
@@ -3190,13 +2935,13 @@ public final class ForgeVoxyCommands {
         return 1;
     }
 
-    private static int modelBridgeDumpSample(CommandSourceStack source) {
+    static int modelBridgeDumpSample(CommandSourceStack source) {
         String message = ForgeVoxyInstance.INSTANCE.getModelBridgeReadiness().dumpSample();
         source.sendSuccess(() -> Component.literal(message), false);
         return ForgeVoxyInstance.INSTANCE.getModelBridgeReadiness().createStatusSnapshot().sampleModelId() >= 0 ? 1 : 0;
     }
 
-    private static int modelStoreSkeletonBuild(CommandSourceStack source) {
+    static int modelStoreSkeletonBuild(CommandSourceStack source) {
         ForgeModelStoreStats status = ForgeVoxyInstance.INSTANCE.getModelStoreSkeleton().build();
         String message = String.format(
                 "Voxy placeholder ModelStore build: success=%s stage=%s layoutVersion=%s formalLayoutCompatible=%s placeholderModelStoreReady=%s placeholderModelRecords=%d placeholderModelRecordBytes=%d placeholderModelDataBufferCreated=%s placeholderModelDataBufferBytes=%d placeholderModelColourBufferCreated=%s placeholderModelColourBufferBytes=%d generation=%d dimension=%s durationMs=%.2f lastBuildError=%s realModelStoreReady=false textureAtlasReady=false formalShaderInputsReady=false formalModelBridgeReady=false draw=false atlasUpload=false renderer=none",
@@ -3222,7 +2967,7 @@ public final class ForgeVoxyCommands {
         return status.placeholderModelStoreReady() ? 1 : 0;
     }
 
-    private static int modelStoreSkeletonStatus(CommandSourceStack source) {
+    static int modelStoreSkeletonStatus(CommandSourceStack source) {
         ForgeModelStoreStats status = ForgeVoxyInstance.INSTANCE.getModelStoreSkeleton().createStatusSnapshot();
         String message = String.format(
                 "Voxy placeholder ModelStore status: stage=%s layoutVersion=%s placeholderLayoutVersion=%s formalModelLayoutVersion=%s formalModelRecordBytes=%d formalLayoutKnown=%s fieldMappingReady=%s faceDataMappingReady=%s atlasUvMappingReady=%s materialMappingReady=%s formalLayoutCompatible=%s buildRuns=%d clearRuns=%d lastBuildError=%s lastBuildDurationMs=%.2f placeholderModelStoreReady=%s placeholderModelRecords=%d placeholderModelRecordBytes=%d placeholderModelDataBufferCreated=%s placeholderModelDataBufferReady=%s placeholderModelDataBufferBytes=%d placeholderModelColourBufferCreated=%s placeholderModelColourBufferReady=%s placeholderModelColourBufferBytes=%d realModelStoreReady=%s realModelFactoryReady=%s modelBakeryBridgeReady=%s textureAtlasReady=%s realModelDataBufferReady=%s realModelColourBufferReady=%s biomeTintReady=%s lightmapReady=%s resourceReloadReady=%s formalShaderInputsReady=%s formalModelBridgeReady=%s generation=%d dimension=%s bufferStale=%s lastAuditOk=%s lastModelDataBufferMatch=%s lastModelColourBufferMatch=%s lastInvalidRecords=%d auditRuns=%d auditFailures=%d draw=false atlasUpload=false renderer=none",
@@ -3277,7 +3022,7 @@ public final class ForgeVoxyCommands {
         return status.placeholderModelStoreReady() ? 1 : 0;
     }
 
-    private static int modelStoreSkeletonAudit(CommandSourceStack source) {
+    static int modelStoreSkeletonAudit(CommandSourceStack source) {
         ForgeModelStoreAuditResult result = ForgeVoxyInstance.INSTANCE.getModelStoreSkeleton().audit();
         String message = String.format(
                 "Voxy placeholder ModelStore audit: success=%s error=%s durationMs=%.2f auditedRecords=%d auditedBytes=%d invalidRecords=%d modelDataBufferMatch=%s modelColourBufferMatch=%s generation=%d dimension=%s layoutVersion=%s formalLayoutCompatible=%s readbackApi=glGetNamedBufferSubData draw=false atlasUpload=false renderer=none",
@@ -3298,7 +3043,7 @@ public final class ForgeVoxyCommands {
         return result.success() ? 1 : 0;
     }
 
-    private static int modelStoreSkeletonAuditStatus(CommandSourceStack source) {
+    static int modelStoreSkeletonAuditStatus(CommandSourceStack source) {
         ForgeModelStoreStats status = ForgeVoxyInstance.INSTANCE.getModelStoreSkeleton().createStatusSnapshot();
         String message = String.format(
                 "Voxy placeholder ModelStore audit: auditRuns=%d auditFailures=%d lastAuditOk=%s lastAuditError=%s lastAuditDurationMs=%.2f lastAuditedRecords=%d lastAuditedBytes=%d lastInvalidRecords=%d lastModelDataBufferMatch=%s lastModelColourBufferMatch=%s placeholderModelRecords=%d placeholderModelDataBufferCreated=%s placeholderModelColourBufferCreated=%s generation=%d dimension=%s layoutVersion=%s formalLayoutCompatible=%s",
@@ -3324,19 +3069,19 @@ public final class ForgeVoxyCommands {
         return status.lastAuditOk() ? 1 : 0;
     }
 
-    private static int modelStoreSkeletonDumpSample(CommandSourceStack source) {
+    static int modelStoreSkeletonDumpSample(CommandSourceStack source) {
         String message = ForgeVoxyInstance.INSTANCE.getModelStoreSkeleton().dumpSample();
         source.sendSuccess(() -> Component.literal(message), false);
         return ForgeVoxyInstance.INSTANCE.getModelStoreSkeleton().createStatusSnapshot().sampleModelId() >= 0 ? 1 : 0;
     }
 
-    private static int modelStoreSkeletonClear(CommandSourceStack source) {
+    static int modelStoreSkeletonClear(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getModelStoreSkeleton().clear();
         source.sendSuccess(() -> Component.literal("Voxy placeholder ModelStore skeleton: cleared CPU placeholder records, placeholder modelData/modelColour GL buffers, and audit state. Placeholder mapper entries, real ModelStore state, texture atlas, GL geometry heap, MDIC debug renderer, simple renderer, and CPU caches were left unchanged."), false);
         return 1;
     }
 
-    private static int modelStoreLayoutAudit(CommandSourceStack source) {
+    static int modelStoreLayoutAudit(CommandSourceStack source) {
         ForgeModelStoreLayoutAuditResult result = ForgeVoxyInstance.INSTANCE.getModelStoreLayoutAuditor().audit();
         String message = String.format(
                 "Voxy formal ModelStore layout audit: success=%s error=%s durationMs=%.2f layoutAuditRuns=%d layoutAuditFailures=%d formalModelLayoutVersion=%s formalModelRecordBytes=%d placeholderRecordBytes=%d formalLayoutKnown=%s knownFieldCount=%d unknownFieldCount=%d faceDataLayoutKnown=%s flagsLayoutKnown=%s colourTintLayoutKnown=%s customIdLayoutKnown=%s atlasUvLayoutKnown=%s materialLayoutKnown=%s fieldMappingReady=%s formalLayoutCompatible=%s placeholderGap=\"%s\" fieldSummary=\"%s\" formalModelBridgeReady=false draw=false atlasUpload=false renderer=none",
@@ -3366,7 +3111,7 @@ public final class ForgeVoxyCommands {
         return result.success() ? 1 : 0;
     }
 
-    private static int modelStoreLayoutAuditStatus(CommandSourceStack source) {
+    static int modelStoreLayoutAuditStatus(CommandSourceStack source) {
         ForgeModelStoreLayoutAuditor auditor = ForgeVoxyInstance.INSTANCE.getModelStoreLayoutAuditor();
         ForgeModelStoreLayoutAuditResult result = auditor.lastResult();
         String message = String.format(
@@ -3398,45 +3143,45 @@ public final class ForgeVoxyCommands {
         return auditor.layoutAuditRuns() > 0L && auditor.layoutAuditFailures() == 0L ? 1 : 0;
     }
 
-    private static int modelStoreLayoutAuditClear(CommandSourceStack source) {
+    static int modelStoreLayoutAuditClear(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getModelStoreLayoutAuditor().clear();
         source.sendSuccess(() -> Component.literal("Voxy formal ModelStore layout audit: cleared layout audit counters. Placeholder ModelStore buffers, model bridge readiness, GL geometry heap, MDIC debug renderer, simple renderer, and CPU caches were left unchanged."), false);
         return 1;
     }
 
-    private static int modelBridgeResourceReloadStatus(CommandSourceStack source) {
+    static int modelBridgeResourceReloadStatus(CommandSourceStack source) {
         ForgeModelBridgeResourceReloadStats status = ForgeVoxyInstance.INSTANCE.getModelBridgeResourceReloadTracker().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy model bridge resource reload: " + formatModelBridgeResourceReloadStatus(status)), false);
         return status.reloadLifecycleSkeletonReady() ? 1 : 0;
     }
 
-    private static int modelBridgeResourceReloadClearStats(CommandSourceStack source) {
+    static int modelBridgeResourceReloadClearStats(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getModelBridgeResourceReloadTracker().clearStats();
         ForgeModelBridgeResourceReloadStats status = ForgeVoxyInstance.INSTANCE.getModelBridgeResourceReloadTracker().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy model bridge resource reload stats clear: " + formatModelBridgeResourceReloadStatus(status) + " Model bridge resources, atlas buffers, GL geometry heap, MDIC command buffers, existing MDIC debug renderer, simple renderer, and CPU SectionGeometryManager were left unchanged."), false);
         return 1;
     }
 
-    private static int modelBridgeSimulateResourceReload(CommandSourceStack source) {
+    static int modelBridgeSimulateResourceReload(CommandSourceStack source) {
         ForgeModelBridgeResourceReloadStats status = ForgeVoxyInstance.INSTANCE.getModelBridgeResourceReloadTracker().simulateReload("command-simulated-resource-reload");
         source.sendSuccess(() -> Component.literal("Voxy model bridge resource reload simulation: " + formatModelBridgeResourceReloadStatus(status) + " GL geometry heap, MDIC command buffers, MDIC debug renderer, simple renderer, and CPU SectionGeometryManager were left unchanged."), false);
         return status.reloadLifecycleSkeletonReady() ? 1 : 0;
     }
 
-    private static int bakedModelBridgeCheck(CommandSourceStack source) {
+    static int bakedModelBridgeCheck(CommandSourceStack source) {
         ForgeBakedModelBridgeStats status = ForgeVoxyInstance.INSTANCE.getBakedModelBridge().check();
         String message = "Voxy baked model bridge check: " + formatBakedModelBridgeStatus(status);
         source.sendSuccess(() -> Component.literal(message), false);
         return status.bakedModelBridgeReady() ? 1 : 0;
     }
 
-    private static int bakedModelBridgeStatus(CommandSourceStack source) {
+    static int bakedModelBridgeStatus(CommandSourceStack source) {
         ForgeBakedModelBridgeStats status = ForgeVoxyInstance.INSTANCE.getBakedModelBridge().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy baked model bridge status: " + formatBakedModelBridgeStatus(status)), false);
         return status.checkRuns() > 0L ? 1 : 0;
     }
 
-    private static int bakedModelBridgeAudit(CommandSourceStack source) {
+    static int bakedModelBridgeAudit(CommandSourceStack source) {
         ForgeBakedModelBridgeAuditResult result = ForgeVoxyInstance.INSTANCE.getBakedModelBridge().audit();
         ForgeBakedModelBridgeStats status = result.stats();
         String message = String.format(
@@ -3464,7 +3209,7 @@ public final class ForgeVoxyCommands {
         return result.success() ? 1 : 0;
     }
 
-    private static int bakedModelBridgeAuditStatus(CommandSourceStack source) {
+    static int bakedModelBridgeAuditStatus(CommandSourceStack source) {
         ForgeBakedModelBridgeAuditResult result = ForgeVoxyInstance.INSTANCE.getBakedModelBridge().createAuditStatusSnapshot();
         ForgeBakedModelBridgeStats status = result.stats();
         String message = String.format(
@@ -3491,31 +3236,31 @@ public final class ForgeVoxyCommands {
         return result.success() ? 1 : 0;
     }
 
-    private static int bakedModelBridgeDumpSample(CommandSourceStack source) {
+    static int bakedModelBridgeDumpSample(CommandSourceStack source) {
         String message = ForgeVoxyInstance.INSTANCE.getBakedModelBridge().dumpSample();
         source.sendSuccess(() -> Component.literal(message), false);
         return ForgeVoxyInstance.INSTANCE.getBakedModelBridge().createStatusSnapshot().sampleModelId() >= 0 ? 1 : 0;
     }
 
-    private static int bakedModelBridgeClear(CommandSourceStack source) {
+    static int bakedModelBridgeClear(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getBakedModelBridge().clear();
         source.sendSuccess(() -> Component.literal("Voxy baked model bridge: cleared no-draw baked model, baked quad, sprite, audit, and reload-stale sample state. Placeholder mapper entries, placeholder ModelStore buffers, GL geometry heap, MDIC debug renderer, simple renderer, and CPU caches were left unchanged."), false);
         return 1;
     }
 
-    private static int modelStoreRealSampleBuild(CommandSourceStack source) {
+    static int modelStoreRealSampleBuild(CommandSourceStack source) {
         ForgeRealModelStoreSampleStats status = ForgeVoxyInstance.INSTANCE.getRealModelStoreSample().build();
         source.sendSuccess(() -> Component.literal("Voxy real ModelStore sample build: " + formatRealModelStoreSampleStatus(status) + modelAtlasSkeletonStatusSuffix() + modelAtlasUploadStatusSuffix()), false);
         return status.realModelRecordSampleReady() ? 1 : 0;
     }
 
-    private static int modelStoreRealSampleStatus(CommandSourceStack source) {
+    static int modelStoreRealSampleStatus(CommandSourceStack source) {
         ForgeRealModelStoreSampleStats status = ForgeVoxyInstance.INSTANCE.getRealModelStoreSample().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy real ModelStore sample status: " + formatRealModelStoreSampleStatus(status) + modelAtlasSkeletonStatusSuffix() + modelAtlasUploadStatusSuffix()), false);
         return status.buildRuns() > 0L || status.realModelRecordSampleStale() ? 1 : 0;
     }
 
-    private static int modelStoreRealSampleAudit(CommandSourceStack source) {
+    static int modelStoreRealSampleAudit(CommandSourceStack source) {
         ForgeRealModelStoreSampleAuditResult result = ForgeVoxyInstance.INSTANCE.getRealModelStoreSample().audit();
         ForgeRealModelStoreSampleStats status = ForgeVoxyInstance.INSTANCE.getRealModelStoreSample().createStatusSnapshot();
         String message = String.format(
@@ -3541,7 +3286,7 @@ public final class ForgeVoxyCommands {
         return result.success() ? 1 : 0;
     }
 
-    private static int modelStoreRealSampleAuditStatus(CommandSourceStack source) {
+    static int modelStoreRealSampleAuditStatus(CommandSourceStack source) {
         ForgeRealModelStoreSampleStats status = ForgeVoxyInstance.INSTANCE.getRealModelStoreSample().createStatusSnapshot();
         String message = String.format(
                 "Voxy real ModelStore sample audit: auditRuns=%d auditFailures=%d lastAuditOk=%s lastAuditError=%s lastAuditDurationMs=%.2f lastAuditedRecords=%d lastAuditedBytes=%d lastInvalidRecords=%d lastModelDataBufferMatch=%s lastModelColourBufferMatch=%s realModelRecordSampleReady=%s realModelRecordSampleBufferReady=%s generation=%d dimension=%s layoutVersion=%s formalLayoutCompatible=%s formalModelBridgeReady=false",
@@ -3566,13 +3311,13 @@ public final class ForgeVoxyCommands {
         return status.lastAuditOk() ? 1 : 0;
     }
 
-    private static int modelStoreRealSampleDump(CommandSourceStack source) {
+    static int modelStoreRealSampleDump(CommandSourceStack source) {
         String message = ForgeVoxyInstance.INSTANCE.getRealModelStoreSample().dumpSample();
         source.sendSuccess(() -> Component.literal(message), false);
         return ForgeVoxyInstance.INSTANCE.getRealModelStoreSample().createStatusSnapshot().realModelRecordSampleReady() ? 1 : 0;
     }
 
-    private static int modelStoreRealSampleClear(CommandSourceStack source) {
+    static int modelStoreRealSampleClear(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getRealModelStoreSample().clear();
         ForgeVoxyInstance.INSTANCE.getModelSampleSet().markStale("real-model-sample-clear");
         ForgeVoxyInstance.INSTANCE.getModelAtlasSampleSetUploader().markStale("real-model-sample-clear");
@@ -3585,7 +3330,7 @@ public final class ForgeVoxyCommands {
         return 1;
     }
 
-    private static int modelSampleSetBuild(CommandSourceStack source) {
+    static int modelSampleSetBuild(CommandSourceStack source) {
         ForgeModelSampleSetStats status = ForgeVoxyInstance.INSTANCE.getModelSampleSet().build();
         ForgeVoxyInstance.INSTANCE.getModelAtlasSampleSetUploader().markStale("model-sample-set-rebuilt");
         ForgeVoxyInstance.INSTANCE.getFormalShaderInputBridge().markStale("model-sample-set-rebuilt");
@@ -3594,13 +3339,13 @@ public final class ForgeVoxyCommands {
         return status.sampleSetReady() ? 1 : 0;
     }
 
-    private static int modelSampleSetStatus(CommandSourceStack source) {
+    static int modelSampleSetStatus(CommandSourceStack source) {
         ForgeModelSampleSetStats status = ForgeVoxyInstance.INSTANCE.getModelSampleSet().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy model sample set status: " + formatModelSampleSetStatus(status) + modelAtlasSampleSetUploadStatusSuffix()), false);
         return status.sampleSetReady() || status.sampleSetStale() ? 1 : 0;
     }
 
-    private static int modelSampleSetAudit(CommandSourceStack source) {
+    static int modelSampleSetAudit(CommandSourceStack source) {
         ForgeModelSampleSetAuditResult result = ForgeVoxyInstance.INSTANCE.getModelSampleSet().audit();
         ForgeModelSampleSetStats status = ForgeVoxyInstance.INSTANCE.getModelSampleSet().createStatusSnapshot();
         String message = String.format(
@@ -3624,7 +3369,7 @@ public final class ForgeVoxyCommands {
         return result.success() ? 1 : 0;
     }
 
-    private static int modelSampleSetAuditStatus(CommandSourceStack source) {
+    static int modelSampleSetAuditStatus(CommandSourceStack source) {
         ForgeModelSampleSetStats status = ForgeVoxyInstance.INSTANCE.getModelSampleSet().createStatusSnapshot();
         String message = String.format(
                 "Voxy model sample set audit: auditRuns=%d auditFailures=%d lastAuditOk=%s lastAuditError=%s lastAuditDurationMs=%.2f lastAuditedRecords=%d lastAuditedBytes=%d lastInvalidRecords=%d lastModelDataBufferMatch=%s lastModelColourBufferMatch=%s sampleSetReady=%s acceptedSamples=%d sampleSetStale=%s formalLayoutCompatible=false formalModelBridgeReady=false",
@@ -3646,13 +3391,13 @@ public final class ForgeVoxyCommands {
         return status.lastAuditOk() ? 1 : 0;
     }
 
-    private static int modelSampleSetDump(CommandSourceStack source) {
+    static int modelSampleSetDump(CommandSourceStack source) {
         String message = ForgeVoxyInstance.INSTANCE.getModelSampleSet().dump();
         source.sendSuccess(() -> Component.literal(message), false);
         return ForgeVoxyInstance.INSTANCE.getModelSampleSet().createStatusSnapshot().sampleSetReady() ? 1 : 0;
     }
 
-    private static int modelSampleSetClear(CommandSourceStack source) {
+    static int modelSampleSetClear(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getModelSampleSet().clear();
         ForgeVoxyInstance.INSTANCE.getModelAtlasSampleSetUploader().markStale("model-sample-set-clear");
         ForgeVoxyInstance.INSTANCE.getFormalShaderInputBridge().markStale("model-sample-set-clear");
@@ -3661,7 +3406,7 @@ public final class ForgeVoxyCommands {
         return 1;
     }
 
-    private static int modelAtlasSkeletonBuild(CommandSourceStack source) {
+    static int modelAtlasSkeletonBuild(CommandSourceStack source) {
         ForgeModelAtlasStats status = ForgeVoxyInstance.INSTANCE.getModelAtlasSkeleton().build();
         ForgeVoxyInstance.INSTANCE.getModelAtlasPixelUploader().markStale("atlas-skeleton-rebuilt");
         ForgeVoxyInstance.INSTANCE.getModelAtlasSampleSetUploader().markStale("atlas-skeleton-rebuilt");
@@ -3672,13 +3417,13 @@ public final class ForgeVoxyCommands {
         return status.atlasSkeletonReady() ? 1 : 0;
     }
 
-    private static int modelAtlasSkeletonStatus(CommandSourceStack source) {
+    static int modelAtlasSkeletonStatus(CommandSourceStack source) {
         ForgeModelAtlasStats status = ForgeVoxyInstance.INSTANCE.getModelAtlasSkeleton().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy model atlas skeleton status: " + formatModelAtlasSkeletonStatus(status) + modelAtlasUploadStatusSuffix()), false);
         return status.atlasSkeletonReady() || status.atlasSkeletonStale() ? 1 : 0;
     }
 
-    private static int modelAtlasSkeletonAudit(CommandSourceStack source) {
+    static int modelAtlasSkeletonAudit(CommandSourceStack source) {
         ForgeModelAtlasAuditResult result = ForgeVoxyInstance.INSTANCE.getModelAtlasSkeleton().audit();
         ForgeModelAtlasStats status = ForgeVoxyInstance.INSTANCE.getModelAtlasSkeleton().createStatusSnapshot();
         String message = String.format(
@@ -3699,7 +3444,7 @@ public final class ForgeVoxyCommands {
         return result.success() ? 1 : 0;
     }
 
-    private static int modelAtlasSkeletonAuditStatus(CommandSourceStack source) {
+    static int modelAtlasSkeletonAuditStatus(CommandSourceStack source) {
         ForgeModelAtlasStats status = ForgeVoxyInstance.INSTANCE.getModelAtlasSkeleton().createStatusSnapshot();
         String message = String.format(
                 "Voxy model atlas skeleton audit: auditRuns=%d auditFailures=%d lastAuditOk=%s lastAuditError=%s lastAuditDurationMs=%.2f invalidLayout=%d invalidModelCoordinate=%d invalidFaceTileCoordinate=%d atlasSkeletonReady=%s atlasLayoutReady=%s atlasOwnershipReady=%s atlasPixelsUploaded=false formalTextureAtlasReady=false formalModelBridgeReady=false",
@@ -3719,13 +3464,13 @@ public final class ForgeVoxyCommands {
         return status.lastAuditOk() ? 1 : 0;
     }
 
-    private static int modelAtlasSkeletonDumpSample(CommandSourceStack source) {
+    static int modelAtlasSkeletonDumpSample(CommandSourceStack source) {
         String message = ForgeVoxyInstance.INSTANCE.getModelAtlasSkeleton().dumpSample();
         source.sendSuccess(() -> Component.literal(message), false);
         return ForgeVoxyInstance.INSTANCE.getModelAtlasSkeleton().createStatusSnapshot().sampleModelId() >= 0 ? 1 : 0;
     }
 
-    private static int modelAtlasSkeletonClear(CommandSourceStack source) {
+    static int modelAtlasSkeletonClear(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getModelAtlasSkeleton().clear();
         ForgeVoxyInstance.INSTANCE.getModelAtlasPixelUploader().markStale("atlas-skeleton-clear");
         ForgeVoxyInstance.INSTANCE.getModelAtlasSampleSetUploader().markStale("atlas-skeleton-clear");
@@ -3737,7 +3482,7 @@ public final class ForgeVoxyCommands {
         return 1;
     }
 
-    private static int modelAtlasUploadSample(CommandSourceStack source) {
+    static int modelAtlasUploadSample(CommandSourceStack source) {
         ForgeModelAtlasUploadStats status = ForgeVoxyInstance.INSTANCE.getModelAtlasPixelUploader().uploadSample();
         ForgeVoxyInstance.INSTANCE.getTexturedDebugQuadRenderer().markStale("atlas-upload-rebuilt");
         ForgeVoxyInstance.INSTANCE.getTexturedReadbackRenderer().markStale("atlas-upload-rebuilt");
@@ -3746,13 +3491,13 @@ public final class ForgeVoxyCommands {
         return status.lastUploadOk() ? 1 : 0;
     }
 
-    private static int modelAtlasUploadStatus(CommandSourceStack source) {
+    static int modelAtlasUploadStatus(CommandSourceStack source) {
         ForgeModelAtlasUploadStats status = ForgeVoxyInstance.INSTANCE.getModelAtlasPixelUploader().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy model atlas upload status: " + formatModelAtlasUploadStatus(status)), false);
         return status.sampleAtlasPixelsUploaded() || status.atlasPixelsStale() ? 1 : 0;
     }
 
-    private static int modelAtlasUploadAudit(CommandSourceStack source) {
+    static int modelAtlasUploadAudit(CommandSourceStack source) {
         ForgeModelAtlasUploadAuditResult result = ForgeVoxyInstance.INSTANCE.getModelAtlasPixelUploader().audit();
         ForgeModelAtlasUploadStats status = ForgeVoxyInstance.INSTANCE.getModelAtlasPixelUploader().createStatusSnapshot();
         String message = String.format(
@@ -3794,7 +3539,7 @@ public final class ForgeVoxyCommands {
         return result.success() ? 1 : 0;
     }
 
-    private static int modelAtlasUploadAuditStatus(CommandSourceStack source) {
+    static int modelAtlasUploadAuditStatus(CommandSourceStack source) {
         ForgeModelAtlasUploadStats status = ForgeVoxyInstance.INSTANCE.getModelAtlasPixelUploader().createStatusSnapshot();
         String message = String.format(
                 "Voxy model atlas upload audit: uploadRuns=%d uploadFailures=%d auditRuns=%d auditFailures=%d lastUploadOk=%s lastUploadError=%s lastAuditOk=%s lastAuditError=%s lastAuditDurationMs=%.2f lastUploadedFaces=%d lastUploadedPixels=%d lastMissingFaces=%d lastPixelMismatches=%d lastAtlasReadbackOk=%s face0Checksum=%s face1Checksum=%s face2Checksum=%s face3Checksum=%s face4Checksum=%s face5Checksum=%s atlasPixelsUploaded=%s sampleAtlasPixelsUploaded=%s realAtlasPixelUploadReady=%s formalTextureAtlasReady=false formalTexturedShaderReady=false formalModelBridgeReady=false",
@@ -3826,13 +3571,13 @@ public final class ForgeVoxyCommands {
         return status.lastAuditOk() ? 1 : 0;
     }
 
-    private static int modelAtlasUploadDumpSample(CommandSourceStack source) {
+    static int modelAtlasUploadDumpSample(CommandSourceStack source) {
         String message = ForgeVoxyInstance.INSTANCE.getModelAtlasPixelUploader().dumpSample();
         source.sendSuccess(() -> Component.literal(message), false);
         return ForgeVoxyInstance.INSTANCE.getModelAtlasPixelUploader().createStatusSnapshot().sampleAtlasPixelsUploaded() ? 1 : 0;
     }
 
-    private static int modelAtlasUploadClear(CommandSourceStack source) {
+    static int modelAtlasUploadClear(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getModelAtlasPixelUploader().clear();
         ForgeVoxyInstance.INSTANCE.getModelAtlasSampleSetUploader().clear();
         ForgeVoxyInstance.INSTANCE.getFormalShaderInputBridge().markStale("atlas-upload-clear");
@@ -3843,7 +3588,7 @@ public final class ForgeVoxyCommands {
         return 1;
     }
 
-    private static int modelAtlasUploadSampleSet(CommandSourceStack source) {
+    static int modelAtlasUploadSampleSet(CommandSourceStack source) {
         ForgeModelAtlasSampleSetUploadStats status = ForgeVoxyInstance.INSTANCE.getModelAtlasSampleSetUploader().uploadSampleSet();
         ForgeVoxyInstance.INSTANCE.getFormalShaderInputBridge().markStale("atlas-sample-set-upload-rebuilt");
         ForgeVoxyInstance.INSTANCE.getTexturedMdicDebugRenderer().markStale("atlas-sample-set-upload-rebuilt");
@@ -3851,13 +3596,13 @@ public final class ForgeVoxyCommands {
         return status.lastUploadOk() ? 1 : 0;
     }
 
-    private static int modelAtlasUploadSampleSetStatus(CommandSourceStack source) {
+    static int modelAtlasUploadSampleSetStatus(CommandSourceStack source) {
         ForgeModelAtlasSampleSetUploadStats status = ForgeVoxyInstance.INSTANCE.getModelAtlasSampleSetUploader().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy model atlas upload sample set status: " + formatModelAtlasSampleSetUploadStatus(status)), false);
         return status.sampleSetAtlasUploadReady() || status.atlasSampleSetStale() ? 1 : 0;
     }
 
-    private static int modelAtlasUploadSampleSetAudit(CommandSourceStack source) {
+    static int modelAtlasUploadSampleSetAudit(CommandSourceStack source) {
         ForgeModelAtlasSampleSetUploadAuditResult result = ForgeVoxyInstance.INSTANCE.getModelAtlasSampleSetUploader().audit();
         ForgeModelAtlasSampleSetUploadStats status = ForgeVoxyInstance.INSTANCE.getModelAtlasSampleSetUploader().createStatusSnapshot();
         String message = String.format(
@@ -3887,26 +3632,26 @@ public final class ForgeVoxyCommands {
         return result.success() ? 1 : 0;
     }
 
-    private static int modelAtlasUploadSampleSetDump(CommandSourceStack source) {
+    static int modelAtlasUploadSampleSetDump(CommandSourceStack source) {
         String message = ForgeVoxyInstance.INSTANCE.getModelAtlasSampleSetUploader().dumpSampleSet();
         source.sendSuccess(() -> Component.literal(message), false);
         return ForgeVoxyInstance.INSTANCE.getModelAtlasSampleSetUploader().createStatusSnapshot().sampleSetAtlasUploadReady() ? 1 : 0;
     }
 
-    private static int formalShaderInputBridgeBuild(CommandSourceStack source) {
+    static int formalShaderInputBridgeBuild(CommandSourceStack source) {
         ForgeFormalShaderInputStats status = ForgeVoxyInstance.INSTANCE.getFormalShaderInputBridge().build();
         ForgeVoxyInstance.INSTANCE.getTexturedMdicDebugRenderer().markStale("formal-shader-input-bridge-rebuilt");
         source.sendSuccess(() -> Component.literal("Voxy formal shader input bridge build: " + formatFormalShaderInputBridgeStatus(status)), false);
         return status.formalShaderInputBridgeReady() ? 1 : 0;
     }
 
-    private static int formalShaderInputBridgeStatus(CommandSourceStack source) {
+    static int formalShaderInputBridgeStatus(CommandSourceStack source) {
         ForgeFormalShaderInputStats status = ForgeVoxyInstance.INSTANCE.getFormalShaderInputBridge().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy formal shader input bridge status: " + formatFormalShaderInputBridgeStatus(status)), false);
         return status.formalShaderInputBridgeReady() || status.formalShaderInputBridgeStale() ? 1 : 0;
     }
 
-    private static int formalShaderInputBridgeAudit(CommandSourceStack source) {
+    static int formalShaderInputBridgeAudit(CommandSourceStack source) {
         ForgeFormalShaderInputAuditResult result = ForgeVoxyInstance.INSTANCE.getFormalShaderInputBridge().audit();
         ForgeFormalShaderInputStats status = ForgeVoxyInstance.INSTANCE.getFormalShaderInputBridge().createStatusSnapshot();
         String message = String.format(
@@ -3931,7 +3676,7 @@ public final class ForgeVoxyCommands {
         return result.success() ? 1 : 0;
     }
 
-    private static int formalShaderInputBridgeAuditStatus(CommandSourceStack source) {
+    static int formalShaderInputBridgeAuditStatus(CommandSourceStack source) {
         ForgeFormalShaderInputStats status = ForgeVoxyInstance.INSTANCE.getFormalShaderInputBridge().createStatusSnapshot();
         String message = String.format(
                 "Voxy formal shader input bridge audit: auditRuns=%d auditFailures=%d lastAuditOk=%s lastAuditError=%s lastAuditDurationMs=%.2f modelDataBufferMatch=%s modelColourBufferMatch=%s atlasUploadStillValid=%s sampleModelCount=%d invalidModelRecords=%d invalidColourRecords=%d missingAtlasTiles=%d formalShaderInputBridgeReady=%s formalShaderInputBridgeStale=%s formalTexturedShaderReady=false formalModelBridgeReady=false",
@@ -3954,7 +3699,7 @@ public final class ForgeVoxyCommands {
         return status.lastAuditOk() ? 1 : 0;
     }
 
-    private static int formalShaderInputBridgeClear(CommandSourceStack source) {
+    static int formalShaderInputBridgeClear(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getFormalShaderInputBridge().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedMdicDebugRenderer().markStale("formal-shader-input-bridge-clear");
         ForgeFormalShaderInputStats status = ForgeVoxyInstance.INSTANCE.getFormalShaderInputBridge().createStatusSnapshot();
@@ -3962,128 +3707,128 @@ public final class ForgeVoxyCommands {
         return 1;
     }
 
-    private static int formalModelStoreBuild(CommandSourceStack source) {
+    static int formalModelStoreBuild(CommandSourceStack source) {
         ForgeFormalModelStoreStats status = ForgeVoxyInstance.INSTANCE.getFormalModelStore().build();
         source.sendSuccess(() -> Component.literal("Voxy formal ModelStore build: " + formatFormalModelStoreStatus(status) + " No bake, shader bind, formal draw, MDICSectionRenderer, or VoxyRenderSystem call was performed."), false);
         return status.formalModelStoreSkeletonReady() ? 1 : 0;
     }
 
-    private static int formalModelStoreStatus(CommandSourceStack source) {
+    static int formalModelStoreStatus(CommandSourceStack source) {
         ForgeFormalModelStoreStats status = ForgeVoxyInstance.INSTANCE.getFormalModelStore().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy formal ModelStore status: " + formatFormalModelStoreStatus(status)), false);
         return status.formalModelStoreSkeletonReady() || status.stale() ? 1 : 0;
     }
 
-    private static int formalModelStoreAudit(CommandSourceStack source) {
+    static int formalModelStoreAudit(CommandSourceStack source) {
         ForgeFormalModelStoreAuditResult audit = ForgeVoxyInstance.INSTANCE.getFormalModelStore().audit();
         ForgeFormalModelStoreStats status = ForgeVoxyInstance.INSTANCE.getFormalModelStore().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy formal ModelStore audit: " + formatFormalModelStoreAudit(audit) + " " + formatFormalModelStoreStatus(status)), false);
         return audit.success() ? 1 : 0;
     }
 
-    private static int formalModelStoreAuditStatus(CommandSourceStack source) {
+    static int formalModelStoreAuditStatus(CommandSourceStack source) {
         ForgeFormalModelStoreAuditResult audit = ForgeVoxyInstance.INSTANCE.getFormalModelStore().createAuditStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy formal ModelStore audit status: " + formatFormalModelStoreAudit(audit)), false);
         return audit.success() ? 1 : 0;
     }
 
-    private static int formalModelStoreClear(CommandSourceStack source) {
+    static int formalModelStoreClear(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getFormalModelStore().clear();
         ForgeFormalModelStoreStats status = ForgeVoxyInstance.INSTANCE.getFormalModelStore().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy formal ModelStore clear: " + formatFormalModelStoreStatus(status) + " GL geometry heap, MDIC command buffer, existing MDIC debug renderer, textured MDIC debug renderer, sample-set debug resources, simple renderer, and CPU caches were left unchanged."), false);
         return 1;
     }
 
-    private static int formalModelStoreDumpLayout(CommandSourceStack source) {
+    static int formalModelStoreDumpLayout(CommandSourceStack source) {
         String message = ForgeVoxyInstance.INSTANCE.getFormalModelStore().dumpLayout();
         source.sendSuccess(() -> Component.literal(message), false);
         return 1;
     }
 
-    private static int formalModelFactoryRequestCurrent(CommandSourceStack source) {
+    static int formalModelFactoryRequestCurrent(CommandSourceStack source) {
         ForgeFormalModelFactoryStats status = ForgeVoxyInstance.INSTANCE.getFormalModelFactory().requestCurrent();
         source.sendSuccess(() -> Component.literal("Voxy formal ModelFactory request current: " + formatFormalModelFactoryStatus(status) + " No BakedModel bake, formal ModelStore upload, atlas pixel upload, shader bind, or draw was performed."), false);
         return status.lastRequestBlockStateId() >= 0 && "none".equals(status.lastFailureReason()) ? 1 : 0;
     }
 
-    private static int formalModelFactoryRequestBlockState(CommandSourceStack source, int blockStateId) {
+    static int formalModelFactoryRequestBlockState(CommandSourceStack source, int blockStateId) {
         ForgeFormalModelFactoryStats status = ForgeVoxyInstance.INSTANCE.getFormalModelFactory().requestBlockState(blockStateId);
         source.sendSuccess(() -> Component.literal("Voxy formal ModelFactory request blockstate: " + formatFormalModelFactoryStatus(status) + " No BakedModel bake, formal ModelStore upload, atlas pixel upload, shader bind, or draw was performed."), false);
         return status.lastRequestBlockStateId() == blockStateId && "none".equals(status.lastFailureReason()) ? 1 : 0;
     }
 
-    private static int formalModelFactoryProcessSkeleton(CommandSourceStack source) {
+    static int formalModelFactoryProcessSkeleton(CommandSourceStack source) {
         ForgeFormalModelFactoryStats status = ForgeVoxyInstance.INSTANCE.getFormalModelFactory().processSkeleton();
         source.sendSuccess(() -> Component.literal("Voxy formal ModelFactory process skeleton: " + formatFormalModelFactoryStatus(status) + " Formal model ids are skeleton ids only; real bake/upload is still disabled."), false);
         return status.formalModelFactorySkeletonReady() ? 1 : 0;
     }
 
-    private static int formalModelFactoryStatus(CommandSourceStack source) {
+    static int formalModelFactoryStatus(CommandSourceStack source) {
         ForgeFormalModelFactoryStats status = ForgeVoxyInstance.INSTANCE.getFormalModelFactory().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy formal ModelFactory status: " + formatFormalModelFactoryStatus(status)), false);
         return status.formalModelFactorySkeletonReady() || status.stale() ? 1 : 0;
     }
 
-    private static int formalModelFactoryAudit(CommandSourceStack source) {
+    static int formalModelFactoryAudit(CommandSourceStack source) {
         ForgeFormalModelFactoryAuditResult audit = ForgeVoxyInstance.INSTANCE.getFormalModelFactory().audit();
         ForgeFormalModelFactoryStats status = ForgeVoxyInstance.INSTANCE.getFormalModelFactory().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy formal ModelFactory audit: " + formatFormalModelFactoryAudit(audit) + " " + formatFormalModelFactoryStatus(status)), false);
         return audit.success() ? 1 : 0;
     }
 
-    private static int formalModelFactoryAuditStatus(CommandSourceStack source) {
+    static int formalModelFactoryAuditStatus(CommandSourceStack source) {
         ForgeFormalModelFactoryAuditResult audit = ForgeVoxyInstance.INSTANCE.getFormalModelFactory().createAuditStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy formal ModelFactory audit status: " + formatFormalModelFactoryAudit(audit)), false);
         return audit.success() ? 1 : 0;
     }
 
-    private static int formalModelFactoryClear(CommandSourceStack source) {
+    static int formalModelFactoryClear(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getFormalModelFactory().clear();
         ForgeFormalModelFactoryStats status = ForgeVoxyInstance.INSTANCE.getFormalModelFactory().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy formal ModelFactory clear: " + formatFormalModelFactoryStatus(status) + " Formal ModelStore owner, GL geometry heap, MDIC command buffer, existing MDIC debug renderer, textured MDIC debug renderer, simple renderer, and CPU caches were left unchanged."), false);
         return 1;
     }
 
-    private static int formalModelFactoryDumpMappings(CommandSourceStack source) {
+    static int formalModelFactoryDumpMappings(CommandSourceStack source) {
         String message = ForgeVoxyInstance.INSTANCE.getFormalModelFactory().dumpMappings();
         source.sendSuccess(() -> Component.literal(message), false);
         return 1;
     }
 
-    private static int formalModelFactoryBakeOneCurrent(CommandSourceStack source) {
+    static int formalModelFactoryBakeOneCurrent(CommandSourceStack source) {
         ForgeOneBlockFormalBakeUploadStats status = ForgeVoxyInstance.INSTANCE.getOneBlockFormalBakeUpload().bakeOneCurrent();
         ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("i4-bake-one-current");
         source.sendSuccess(() -> Component.literal("Voxy I4 one-block bake/upload: " + formatOneBlockFormalBakeUploadStatus(status)), false);
         return status.oneBlockFormalUploadReady() && status.oneBlockRealBakeReady() ? 1 : 0;
     }
 
-    private static int formalModelFactoryBakeOneStatus(CommandSourceStack source) {
+    static int formalModelFactoryBakeOneStatus(CommandSourceStack source) {
         ForgeOneBlockFormalBakeUploadStats status = ForgeVoxyInstance.INSTANCE.getOneBlockFormalBakeUpload().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy I4 one-block bake/upload status: " + formatOneBlockFormalBakeUploadStatus(status)), false);
         return status.oneBlockBakePrototypeReady() || status.stale() ? 1 : 0;
     }
 
-    private static int formalModelFactoryBakeOneAudit(CommandSourceStack source) {
+    static int formalModelFactoryBakeOneAudit(CommandSourceStack source) {
         ForgeOneBlockFormalBakeUploadAuditResult audit = ForgeVoxyInstance.INSTANCE.getOneBlockFormalBakeUpload().audit();
         ForgeOneBlockFormalBakeUploadStats status = ForgeVoxyInstance.INSTANCE.getOneBlockFormalBakeUpload().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy I4 one-block bake/upload audit: " + formatOneBlockFormalBakeUploadAudit(audit) + " " + formatOneBlockFormalBakeUploadStatus(status)), false);
         return audit.success() ? 1 : 0;
     }
 
-    private static int formalModelFactoryBakeOneDump(CommandSourceStack source) {
+    static int formalModelFactoryBakeOneDump(CommandSourceStack source) {
         String message = ForgeVoxyInstance.INSTANCE.getOneBlockFormalBakeUpload().dump();
         source.sendSuccess(() -> Component.literal(message), false);
         return ForgeVoxyInstance.INSTANCE.getOneBlockFormalBakeUpload().createStatusSnapshot().oneBlockBakePrototypeReady() ? 1 : 0;
     }
 
-    private static int formalModelFactoryBakeOneClear(CommandSourceStack source) {
+    static int formalModelFactoryBakeOneClear(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getOneBlockFormalBakeUpload().clear();
         ForgeOneBlockFormalBakeUploadStats status = ForgeVoxyInstance.INSTANCE.getOneBlockFormalBakeUpload().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy I4 one-block bake/upload clear: " + formatOneBlockFormalBakeUploadStatus(status) + " Formal ModelStore owner resources, GL heap, debug renderers, and sample-set resources were left unchanged."), false);
         return 1;
     }
 
-    private static int qaI4FormalBakeUpload(CommandSourceStack source) {
+    static int qaI4FormalBakeUpload(CommandSourceStack source) {
         ForgeOneBlockFormalBakeUploadStats buildStatus = ForgeVoxyInstance.INSTANCE.getOneBlockFormalBakeUpload().bakeOneCurrent();
         ForgeOneBlockFormalBakeUploadAuditResult audit = ForgeVoxyInstance.INSTANCE.getOneBlockFormalBakeUpload().audit();
         ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("qa-i4-formal-bake-upload");
@@ -4105,40 +3850,40 @@ public final class ForgeVoxyCommands {
                 && !status.actualDrawEnabled() ? 1 : 0;
     }
 
-    private static int formalModelFactoryBakeMultiSafe(CommandSourceStack source) {
+    static int formalModelFactoryBakeMultiSafe(CommandSourceStack source) {
         ForgeMultiBlockFormalBakeUploadStats status = ForgeVoxyInstance.INSTANCE.getMultiBlockFormalBakeUpload().bakeMultiSafe();
         ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("i5-bake-multi-safe");
         source.sendSuccess(() -> Component.literal("Voxy I5 multi-block bake/upload: " + formatMultiBlockFormalBakeUploadStatus(status)), false);
         return status.multiBlockFormalUploadReady() && status.multiBlockFormalBakeReady() ? 1 : 0;
     }
 
-    private static int formalModelFactoryBakeMultiStatus(CommandSourceStack source) {
+    static int formalModelFactoryBakeMultiStatus(CommandSourceStack source) {
         ForgeMultiBlockFormalBakeUploadStats status = ForgeVoxyInstance.INSTANCE.getMultiBlockFormalBakeUpload().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy I5 multi-block bake/upload status: " + formatMultiBlockFormalBakeUploadStatus(status)), false);
         return status.multiBlockBakePrototypeReady() || status.stale() ? 1 : 0;
     }
 
-    private static int formalModelFactoryBakeMultiAudit(CommandSourceStack source) {
+    static int formalModelFactoryBakeMultiAudit(CommandSourceStack source) {
         ForgeMultiBlockFormalBakeUploadAuditResult audit = ForgeVoxyInstance.INSTANCE.getMultiBlockFormalBakeUpload().audit();
         ForgeMultiBlockFormalBakeUploadStats status = ForgeVoxyInstance.INSTANCE.getMultiBlockFormalBakeUpload().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy I5 multi-block bake/upload audit: " + formatMultiBlockFormalBakeUploadAudit(audit) + " " + formatMultiBlockFormalBakeUploadStatus(status)), false);
         return audit.success() ? 1 : 0;
     }
 
-    private static int formalModelFactoryBakeMultiDump(CommandSourceStack source) {
+    static int formalModelFactoryBakeMultiDump(CommandSourceStack source) {
         String message = ForgeVoxyInstance.INSTANCE.getMultiBlockFormalBakeUpload().dump();
         source.sendSuccess(() -> Component.literal(message), false);
         return ForgeVoxyInstance.INSTANCE.getMultiBlockFormalBakeUpload().createStatusSnapshot().multiBlockBakePrototypeReady() ? 1 : 0;
     }
 
-    private static int formalModelFactoryBakeMultiClear(CommandSourceStack source) {
+    static int formalModelFactoryBakeMultiClear(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getMultiBlockFormalBakeUpload().clear();
         ForgeMultiBlockFormalBakeUploadStats status = ForgeVoxyInstance.INSTANCE.getMultiBlockFormalBakeUpload().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy I5 multi-block bake/upload clear: " + formatMultiBlockFormalBakeUploadStatus(status) + " Formal ModelStore owner resources, GL heap, debug renderers, and sample-set resources were left unchanged."), false);
         return 1;
     }
 
-    private static int qaI5MultiBlockBakeUpload(CommandSourceStack source) {
+    static int qaI5MultiBlockBakeUpload(CommandSourceStack source) {
         ForgeMultiBlockFormalBakeUploadStats buildStatus = ForgeVoxyInstance.INSTANCE.getMultiBlockFormalBakeUpload().bakeMultiSafe();
         ForgeMultiBlockFormalBakeUploadAuditResult audit = ForgeVoxyInstance.INSTANCE.getMultiBlockFormalBakeUpload().audit();
         ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("qa-i5-multi-block-bake-upload");
@@ -4167,20 +3912,20 @@ public final class ForgeVoxyCommands {
                 && !status.actualDrawEnabled() ? 1 : 0;
     }
 
-    private static int formalModelBakeryLifecycleStatus(CommandSourceStack source) {
+    static int formalModelBakeryLifecycleStatus(CommandSourceStack source) {
         ForgeFormalModelBakeryLifecycleStats status = ForgeVoxyInstance.INSTANCE.getFormalModelBakeryLifecycle().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy I6 formal ModelBakery lifecycle status: " + formatFormalModelBakeryLifecycleStatus(status)), false);
         return status.formalModelBakeryLifecycleSkeletonReady() || status.stale() ? 1 : 0;
     }
 
-    private static int formalModelBakeryLifecycleAudit(CommandSourceStack source) {
+    static int formalModelBakeryLifecycleAudit(CommandSourceStack source) {
         ForgeFormalModelBakeryLifecycleAuditResult audit = ForgeVoxyInstance.INSTANCE.getFormalModelBakeryLifecycle().audit();
         ForgeFormalModelBakeryLifecycleStats status = ForgeVoxyInstance.INSTANCE.getFormalModelBakeryLifecycle().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy I6 formal ModelBakery lifecycle audit: " + formatFormalModelBakeryLifecycleAudit(audit) + " " + formatFormalModelBakeryLifecycleStatus(status)), false);
         return audit.success() ? 1 : 0;
     }
 
-    private static int formalModelBakeryLifecycleRebuildSafeSet(CommandSourceStack source) {
+    static int formalModelBakeryLifecycleRebuildSafeSet(CommandSourceStack source) {
         ForgeFormalModelBakeryLifecycleStats status = ForgeVoxyInstance.INSTANCE.getFormalModelBakeryLifecycle().rebuildSafeSet("command-rebuild-safe-set");
         ForgeFormalModelBakeryLifecycleAuditResult audit = ForgeVoxyInstance.INSTANCE.getFormalModelBakeryLifecycle().createAuditStatusSnapshot();
         ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("i6-rebuild-safe-set");
@@ -4197,20 +3942,20 @@ public final class ForgeVoxyCommands {
                 && !status.actualDrawEnabled() ? 1 : 0;
     }
 
-    private static int formalModelBakeryLifecycleDump(CommandSourceStack source) {
+    static int formalModelBakeryLifecycleDump(CommandSourceStack source) {
         String message = ForgeVoxyInstance.INSTANCE.getFormalModelBakeryLifecycle().dump();
         source.sendSuccess(() -> Component.literal(message), false);
         return ForgeVoxyInstance.INSTANCE.getFormalModelBakeryLifecycle().createStatusSnapshot().formalModelBakeryLifecycleSkeletonReady() ? 1 : 0;
     }
 
-    private static int formalModelBakeryLifecycleClear(CommandSourceStack source) {
+    static int formalModelBakeryLifecycleClear(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getFormalModelBakeryLifecycle().clear();
         ForgeFormalModelBakeryLifecycleStats status = ForgeVoxyInstance.INSTANCE.getFormalModelBakeryLifecycle().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy I6 formal ModelBakery lifecycle clear: " + formatFormalModelBakeryLifecycleStatus(status) + " Formal ModelStore owner resources, GL heap, debug renderers, and sample-set resources were left unchanged."), false);
         return 1;
     }
 
-    private static int qaI6ModelLifecycleRebuild(CommandSourceStack source) {
+    static int qaI6ModelLifecycleRebuild(CommandSourceStack source) {
         ForgeFormalModelBakeryLifecycleStats qaStatus = ForgeVoxyInstance.INSTANCE.getFormalModelBakeryLifecycle().runQaLifecycleRebuild();
         ForgeFormalModelBakeryLifecycleAuditResult audit = ForgeVoxyInstance.INSTANCE.getFormalModelBakeryLifecycle().createAuditStatusSnapshot();
         ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("qa-i6-model-lifecycle-rebuild");
@@ -4242,7 +3987,7 @@ public final class ForgeVoxyCommands {
                 && !status.actualDrawEnabled() ? 1 : 0;
     }
 
-    private static int formalShaderInputBuild(CommandSourceStack source) {
+    static int formalShaderInputBuild(CommandSourceStack source) {
         ForgeFormalShaderInputConsumerStats status = ForgeVoxyInstance.INSTANCE.getFormalShaderInputConsumer().build();
         ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("j1-formal-shader-input-build-command");
         source.sendSuccess(() -> Component.literal("Voxy J1 formal shader input build: "
@@ -4257,13 +4002,13 @@ public final class ForgeVoxyCommands {
                 && !status.formalRendererReady() ? 1 : 0;
     }
 
-    private static int formalShaderInputStatus(CommandSourceStack source) {
+    static int formalShaderInputStatus(CommandSourceStack source) {
         ForgeFormalShaderInputConsumerStats status = ForgeVoxyInstance.INSTANCE.getFormalShaderInputConsumer().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy J1 formal shader input status: " + formatFormalShaderInputConsumerStatus(status)), false);
         return status.formalShaderInputConsumerReady() || status.stale() ? 1 : 0;
     }
 
-    private static int formalShaderInputAudit(CommandSourceStack source) {
+    static int formalShaderInputAudit(CommandSourceStack source) {
         ForgeFormalShaderInputConsumerAuditResult audit = ForgeVoxyInstance.INSTANCE.getFormalShaderInputConsumer().audit();
         ForgeFormalShaderInputConsumerStats status = ForgeVoxyInstance.INSTANCE.getFormalShaderInputConsumer().createStatusSnapshot();
         ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("j1-formal-shader-input-audit-command");
@@ -4276,13 +4021,13 @@ public final class ForgeVoxyCommands {
         return audit.success() ? 1 : 0;
     }
 
-    private static int formalShaderInputDump(CommandSourceStack source) {
+    static int formalShaderInputDump(CommandSourceStack source) {
         String message = ForgeVoxyInstance.INSTANCE.getFormalShaderInputConsumer().dump();
         source.sendSuccess(() -> Component.literal(message), false);
         return ForgeVoxyInstance.INSTANCE.getFormalShaderInputConsumer().createStatusSnapshot().formalShaderInputConsumerReady() ? 1 : 0;
     }
 
-    private static int formalShaderInputClear(CommandSourceStack source) {
+    static int formalShaderInputClear(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getFormalShaderInputConsumer().clear();
         ForgeFormalShaderInputConsumerStats status = ForgeVoxyInstance.INSTANCE.getFormalShaderInputConsumer().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy J1 formal shader input clear: "
@@ -4291,7 +4036,7 @@ public final class ForgeVoxyCommands {
         return 1;
     }
 
-    private static int qaJ1FormalShaderInput(CommandSourceStack source) {
+    static int qaJ1FormalShaderInput(CommandSourceStack source) {
         ForgeFormalShaderInputConsumerStats buildStatus = ForgeVoxyInstance.INSTANCE.getFormalShaderInputConsumer().build();
         ForgeFormalShaderInputConsumerAuditResult audit = ForgeVoxyInstance.INSTANCE.getFormalShaderInputConsumer().createAuditStatusSnapshot();
         ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("qa-j1-formal-shader-input");
@@ -4326,7 +4071,7 @@ public final class ForgeVoxyCommands {
                 && !status.formalRendererReady() ? 1 : 0;
     }
 
-    private static int formalShaderProgramBuild(CommandSourceStack source) {
+    static int formalShaderProgramBuild(CommandSourceStack source) {
         ForgeFormalShaderProgramStats status = ForgeVoxyInstance.INSTANCE.getFormalShaderProgramValidator().build();
         ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("j2-formal-shader-program-build-command");
         source.sendSuccess(() -> Component.literal("Voxy J2 formal shader program build: "
@@ -4344,13 +4089,13 @@ public final class ForgeVoxyCommands {
                 && !status.formalRendererReady() ? 1 : 0;
     }
 
-    private static int formalShaderProgramStatus(CommandSourceStack source) {
+    static int formalShaderProgramStatus(CommandSourceStack source) {
         ForgeFormalShaderProgramStats status = ForgeVoxyInstance.INSTANCE.getFormalShaderProgramValidator().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy J2 formal shader program status: " + formatFormalShaderProgramStatus(status)), false);
         return status.formalShaderProgramValidatorReady() || status.stale() ? 1 : 0;
     }
 
-    private static int formalShaderProgramAudit(CommandSourceStack source) {
+    static int formalShaderProgramAudit(CommandSourceStack source) {
         ForgeFormalShaderProgramAuditResult audit = ForgeVoxyInstance.INSTANCE.getFormalShaderProgramValidator().audit();
         ForgeFormalShaderProgramStats status = ForgeVoxyInstance.INSTANCE.getFormalShaderProgramValidator().createStatusSnapshot();
         ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("j2-formal-shader-program-audit-command");
@@ -4363,13 +4108,13 @@ public final class ForgeVoxyCommands {
         return audit.success() ? 1 : 0;
     }
 
-    private static int formalShaderProgramDump(CommandSourceStack source) {
+    static int formalShaderProgramDump(CommandSourceStack source) {
         String message = ForgeVoxyInstance.INSTANCE.getFormalShaderProgramValidator().dump();
         source.sendSuccess(() -> Component.literal(message), false);
         return ForgeVoxyInstance.INSTANCE.getFormalShaderProgramValidator().createStatusSnapshot().formalShaderProgramValidatorReady() ? 1 : 0;
     }
 
-    private static int formalShaderProgramClear(CommandSourceStack source) {
+    static int formalShaderProgramClear(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getFormalShaderProgramValidator().clear();
         ForgeFormalShaderProgramStats status = ForgeVoxyInstance.INSTANCE.getFormalShaderProgramValidator().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy J2 formal shader program clear: "
@@ -4378,7 +4123,7 @@ public final class ForgeVoxyCommands {
         return 1;
     }
 
-    private static int qaJ2FormalShaderProgram(CommandSourceStack source) {
+    static int qaJ2FormalShaderProgram(CommandSourceStack source) {
         ForgeFormalShaderProgramStats buildStatus = ForgeVoxyInstance.INSTANCE.getFormalShaderProgramValidator().build();
         ForgeFormalShaderProgramAuditResult audit = ForgeVoxyInstance.INSTANCE.getFormalShaderProgramValidator().createAuditStatusSnapshot();
         ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("qa-j2-formal-shader-program");
@@ -10029,7 +9774,7 @@ public final class ForgeVoxyCommands {
         );
     }
 
-    private static int meshCacheStatus(CommandSourceStack source) {
+    static int meshCacheStatus(CommandSourceStack source) {
         var cache = ForgeVoxyInstance.INSTANCE.getCpuMeshCache();
         var status = cache.createStatusSnapshot();
         var minecraft = Minecraft.getInstance();
@@ -10114,7 +9859,7 @@ public final class ForgeVoxyCommands {
         return status.entries();
     }
 
-    private static int gpuMeshStatus(CommandSourceStack source) {
+    static int gpuMeshStatus(CommandSourceStack source) {
         var cacheStatus = ForgeVoxyInstance.INSTANCE.getGpuMeshCache().createStatusSnapshot();
         var builtSectionStatus = ForgeVoxyInstance.INSTANCE.getVoxyGeometryCache().createStatusSnapshot();
         var builtSectionBuildStatus = ForgeVoxyInstance.INSTANCE.getBuiltSectionBuildManager().createStatusSnapshot();
@@ -10234,7 +9979,7 @@ public final class ForgeVoxyCommands {
         return cacheStatus.buffers();
     }
 
-    private static int setGpuMeshSource(CommandSourceStack source, SimpleGpuMeshSource meshSource) {
+    static int setGpuMeshSource(CommandSourceStack source, SimpleGpuMeshSource meshSource) {
         if (meshSource == SimpleGpuMeshSource.GL_HEAP_READBACK) {
             ForgeVoxyRuntimeOverrides.setGlHeapReadbackMeshSource();
             ForgeVoxyInstance.INSTANCE.getGpuGeometryVisualizationCache().clear();
@@ -10258,7 +10003,7 @@ public final class ForgeVoxyCommands {
         return 1;
     }
 
-    private static int lodVisibilityStatus(CommandSourceStack source) {
+    static int lodVisibilityStatus(CommandSourceStack source) {
         var minecraft = Minecraft.getInstance();
         LodVisibilityContext context = createLodVisibilityContext(minecraft);
         if (context == null) {
@@ -10313,11 +10058,11 @@ public final class ForgeVoxyCommands {
         return visibility.renderableChunks();
     }
 
-    private static int lodOverlayDebug(CommandSourceStack source) {
+    static int lodOverlayDebug(CommandSourceStack source) {
         return applyPresetOverlay(source);
     }
 
-    private static int lodModeAdvice(CommandSourceStack source) {
+    static int lodModeAdvice(CommandSourceStack source) {
         var minecraft = Minecraft.getInstance();
         LodVisibilityContext context = createLodVisibilityContext(minecraft);
         if (context == null) {
@@ -11559,7 +11304,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getFormalRendererManager().markDebugPipelineClear();
     }
 
-    private static int clearMeshCache(CommandSourceStack source) {
+    static int clearMeshCache(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getCpuMeshCache().clear();
         ForgeVoxyInstance.INSTANCE.getVoxyGeometryCache().clear();
         ForgeVoxyInstance.INSTANCE.getSectionGeometryConsumeManager().clear();
@@ -11592,19 +11337,19 @@ public final class ForgeVoxyCommands {
         return 1;
     }
 
-    private static int clearGpuMeshCache(CommandSourceStack source) {
+    static int clearGpuMeshCache(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getGpuMeshUploadManager().clear();
         source.sendSuccess(() -> Component.literal("Voxy: cleared simple GPU mesh buffers. CPU mesh and BuiltSection caches were left intact and can re-upload."), false);
         return 1;
     }
 
-    private static int clearMeshBuildState(CommandSourceStack source) {
+    static int clearMeshBuildState(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getCpuMeshBuildManager().clear();
         source.sendSuccess(() -> Component.literal("Voxy: cleared auto CPU mesh build queue and built-record."), false);
         return 1;
     }
 
-    private static int clearDebugPipeline(CommandSourceStack source) {
+    static int clearDebugPipeline(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getChunkIngestManager().clear();
         ForgeVoxyInstance.INSTANCE.getCpuMeshBuildManager().clear();
         ForgeVoxyInstance.INSTANCE.getBuiltSectionBuildManager().clear();
@@ -11656,7 +11401,7 @@ public final class ForgeVoxyCommands {
         return 1;
     }
 
-    private static int ingestStatus(CommandSourceStack source) {
+    static int ingestStatus(CommandSourceStack source) {
         var status = ForgeVoxyInstance.INSTANCE.getChunkIngestManager().createStatusSnapshot();
         String dimension = status.dimension() == null ? "none" : status.dimension();
         String message = String.format(
@@ -11675,7 +11420,7 @@ public final class ForgeVoxyCommands {
         return 1;
     }
 
-    private static int clearIngestCache(CommandSourceStack source) {
+    static int clearIngestCache(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getChunkIngestManager().clear();
         ForgeVoxyInstance.INSTANCE.getCpuMeshBuildManager().clear();
         ForgeVoxyInstance.INSTANCE.getBuiltSectionBuildManager().clear();

@@ -38,9 +38,11 @@ Retirement sequence:
 5. split first preview/sample command group into ForgeVoxyLegacyPreviewCommands - done
 6. split K-stage preview/update commands into ForgeVoxyLegacyKPreviewCommands - done
 7. split preset subtree into ForgeVoxyPresetCommands - done
-8. move original-Voxy-parity commands into focused registrar classes
-9. delete handlers once backing prototype objects are removed from ForgeVoxyInstance
-10. delete ForgeVoxyCommands when no longer needed
+8. split geometry/ingest command registration into ForgeVoxyGeometryPipelineCommands - done
+9. split model pipeline command registration into ForgeVoxyModelPipelineCommands - done
+10. move remaining K1-K4 owner command registration into a focused registrar
+11. delete handlers once backing prototype objects are removed from ForgeVoxyInstance
+12. delete ForgeVoxyCommands when no longer needed
 ```
 
 ### Debug/proof renderers
@@ -84,12 +86,10 @@ stays useful after each cleanup batch.
 
 ## Next cleanup batch
 
-The next cleanup should split the command registration surface:
+The next cleanup should finish the command registration split:
 
 ```text
-ForgeVoxyParityCommands
-ForgeVoxyModelPipelineCommands
-ForgeVoxyGeometryPipelineCommands
+ForgeVoxyFormalOwnerCommands
 ```
 
 `ForgeVoxyLegacyDebugCommands` already owns the first migrated legacy debug
@@ -97,6 +97,8 @@ registration group. `ForgeVoxyLegacyPreviewCommands` owns the first migrated
 preview/sample group: J3-J5 preview commands and textured debug/readback
 commands. `ForgeVoxyLegacyKPreviewCommands` owns K5-K54 preview/update
 commands, `ForgeVoxyFormalRendererCommands` owns formal renderer status
-commands, and `ForgeVoxyPresetCommands` owns the preset subtree. The remaining
-split should move the actual original-Voxy-parity model and geometry command
-surfaces out of the old monolithic file before owner deletion begins.
+commands, `ForgeVoxyPresetCommands` owns the preset subtree,
+`ForgeVoxyGeometryPipelineCommands` owns ingest/geometry commands, and
+`ForgeVoxyModelPipelineCommands` owns model pipeline commands. The only
+remaining registration group in the old monolithic file is the K1-K4 formal
+owner skeleton command set.
