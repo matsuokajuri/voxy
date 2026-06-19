@@ -6,6 +6,8 @@ record ForgeFormalUploadedModelSummary(
         int formalModelId,
         String dedupeSignature,
         String primarySprite,
-        int modelRecordBytes
+        int modelRecordBytes,
+        long voxyMetadata,
+        int fluidFormalModelId
 ) {
 }

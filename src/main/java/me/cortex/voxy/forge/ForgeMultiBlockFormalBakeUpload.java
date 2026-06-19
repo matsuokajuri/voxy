@@ -4,13 +4,10 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import me.cortex.voxy.common.world.WorldEngine;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.color.block.BlockColors;
-import net.minecraft.client.renderer.block.BlockRenderDispatcher;
-import net.minecraft.client.renderer.block.model.BakedQuad;
-import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.core.Direction;
-import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.LiquidBlock;
 import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.ArrayList;
@@ -24,13 +21,13 @@ import java.util.stream.Collectors;
 final class ForgeMultiBlockFormalBakeUpload {
     static final String STAGE = "I5_MULTI_BLOCK_FORMAL_BAKE_UPLOAD_AND_DEDUPE";
     private static final Direction[] DIRECTIONS = Direction.values();
-    private static final int VERTICES_PER_QUAD = 4;
     private static final int MIN_ACCEPTED_BLOCKS = 3;
 
     private final ForgeVoxyInstance instance;
     private final List<AcceptedModel> acceptedModels = new ArrayList<>();
     private final List<RejectedModel> rejectedModels = new ArrayList<>();
     private final Map<String, Integer> modelTexture2id = new LinkedHashMap<>();
+    private final ForgeSoftwareModelTextureBakery softwareBakery = new ForgeSoftwareModelTextureBakery();
     private long buildRuns;
     private long auditRuns;
     private long clearRuns;
@@ -190,7 +187,9 @@ final class ForgeMultiBlockFormalBakeUpload {
                         model.formalModelId(),
                         model.build().signature(),
                         model.build().primarySprite(),
-                        ForgeModelStoreFormalLayout.MODEL_RECORD_BYTES
+                        ForgeModelStoreFormalLayout.MODEL_RECORD_BYTES,
+                        model.build().voxyMetadata(),
+                        model.build().fluidFormalModelId()
                 ))
                 .toList();
     }
@@ -448,7 +447,10 @@ final class ForgeMultiBlockFormalBakeUpload {
                 this.candidateFor(Blocks.GRANITE.defaultBlockState()),
                 this.candidateFor(Blocks.DIORITE.defaultBlockState()),
                 this.candidateFor(Blocks.ANDESITE.defaultBlockState()),
-                this.candidateFor(Blocks.CLAY.defaultBlockState())
+                this.candidateFor(Blocks.CLAY.defaultBlockState()),
+                this.candidateFor(Blocks.OAK_LEAVES.defaultBlockState()),
+                this.candidateFor(Blocks.GLASS.defaultBlockState()),
+                this.candidateFor(Blocks.WATER.defaultBlockState())
         );
     }
 
@@ -460,27 +462,21 @@ final class ForgeMultiBlockFormalBakeUpload {
         if (candidate.state() == null || candidate.state().isAir()) {
             return BuildResult.rejected(RejectCategory.AIR, "air");
         }
-        if (!candidate.state().getFluidState().isEmpty()) {
-            return BuildResult.rejected(RejectCategory.FLUID, "fluid");
-        }
         ForgeCpuMeshLayer layer = ForgeCpuMeshLayer.fromBlockState(candidate.state());
-        if (layer == ForgeCpuMeshLayer.CUTOUT) {
-            return BuildResult.rejected(RejectCategory.CUTOUT, "cutout-render-layer");
-        }
-        if (layer == ForgeCpuMeshLayer.TRANSLUCENT) {
-            return BuildResult.rejected(RejectCategory.TRANSLUCENT, "translucent-render-layer");
-        }
-        if (layer != ForgeCpuMeshLayer.SOLID) {
+        if (layer == ForgeCpuMeshLayer.OTHER) {
             return BuildResult.rejected(RejectCategory.RENDER_LAYER, "unsupported-render-layer-" + layer.displayName);
         }
         if (candidate.blockStateId() <= 0) {
             return BuildResult.rejected(RejectCategory.NO_MODEL, "invalid-blockstate-id");
         }
 
-        BlockRenderDispatcher blockRenderer = minecraft.getBlockRenderer();
-        var model = blockRenderer.getBlockModel(candidate.state());
-        if (model == null || model.isCustomRenderer()) {
-            return BuildResult.rejected(RejectCategory.NO_MODEL, "baked-model-missing-or-custom");
+        ForgeSoftwareModelTextureBakery.BakeResult softwareBake = this.softwareBakery.renderToOutput(minecraft, candidate.state(), candidate.blockStateId());
+        if (!"none".equals(softwareBake.failureReason())) {
+            return BuildResult.rejected("no-quads".equals(softwareBake.failureReason()) ? RejectCategory.NO_QUADS : RejectCategory.NO_MODEL, softwareBake.failureReason());
+        }
+        layer = softwareBake.layer();
+        if (layer == ForgeCpuMeshLayer.OTHER) {
+            return BuildResult.rejected(RejectCategory.RENDER_LAYER, "software-bakery-unsupported-render-layer");
         }
 
         int[] faceWords = new int[ForgeModelStoreFormalLayout.FACE_DATA_WORDS];
@@ -493,55 +489,45 @@ final class ForgeMultiBlockFormalBakeUpload {
         int writtenFaces = 0;
         String primarySprite = "none";
         String primaryAtlas = "none";
-        boolean shaded;
-        try {
-            shaded = model.useAmbientOcclusion();
-        } catch (RuntimeException ignored) {
-            shaded = false;
-        }
+        boolean shaded = (softwareBake.flags() & 1) != 0;
 
         for (Direction direction : DIRECTIONS) {
             int faceIndex = direction.get3DDataValue();
-            BakedQuad quad = firstQuadForFace(model, candidate.state(), direction, candidate.blockStateId());
-            if (quad == null || quad.getSprite() == null) {
+            ForgeSoftwareModelTextureBakery.FaceTexture faceTexture = softwareBake.faces()[faceIndex];
+            int writtenPixels = faceTexture == null ? 0 : faceTexture.writtenPixelCount(layer);
+            if (writtenPixels == 0) {
                 missingFaces++;
                 builtFaces.add(FaceBuild.missing(faceIndex, direction.getName()));
                 continue;
             }
-            FaceEncoding encoding = encodeFace(quad, direction);
-            if (isMissingSprite(encoding.spriteName())) {
-                return BuildResult.rejected(RejectCategory.MISSING_SPRITE, "missing-sprite-" + encoding.spriteName());
-            }
-            if (quad.isTinted()) {
+            int tintState = faceTexture.tintState(layer);
+            if (tintState == 2 || tintState == 3) {
                 tintedFaces++;
             }
-            byte[] pixels = spritePixels(quad.getSprite());
+            byte[] pixels = ForgeSoftwareModelTextureBakery.rgbaBytes(faceTexture);
+            int faceDataWord = encodeSoftwareFaceData(faceTexture, layer);
             FaceUpload face = new FaceUpload(
                     faceIndex,
                     direction.getName(),
-                    encoding.spriteName(),
-                    encoding.spriteAtlas(),
+                    "software-bakery-face-" + direction.getName(),
+                    "minecraft:block-atlas-software-rasterized",
                     pixels,
                     ForgeModelAtlasPixelSample.checksum(pixels),
                     false,
-                    quad.isTinted(),
-                    quad.getTintIndex(),
-                    encoding.faceDataWord()
+                    tintState == 2 || tintState == 3,
+                    0,
+                    faceDataWord
             );
             faces[faceIndex] = face;
-            faceWords[faceIndex] = encoding.faceDataWord();
-            if (encoding.faceDataWord() >= 0) {
+            faceWords[faceIndex] = faceDataWord;
+            if (faceDataWord >= 0) {
                 writtenFaces++;
             }
-            if (!"none".equals(encoding.spriteName()) && "none".equals(primarySprite)) {
-                primarySprite = encoding.spriteName();
-                primaryAtlas = encoding.spriteAtlas();
+            if ("none".equals(primarySprite)) {
+                primarySprite = face.spriteName();
+                primaryAtlas = face.spriteAtlas();
             }
             builtFaces.add(new FaceBuild(faceIndex, direction.getName(), face));
-        }
-
-        if (tintedFaces > 0) {
-            return BuildResult.rejected(RejectCategory.TINTED, "tinted-faces-" + tintedFaces);
         }
 
         Optional<FaceUpload> fallback = Arrays.stream(faces).filter(face -> face != null && face.pixels().length == ForgeModelAtlasPixelSample.BYTES_PER_FACE).findFirst();
@@ -558,6 +544,8 @@ final class ForgeMultiBlockFormalBakeUpload {
 
         int flags = shaded ? 8 : 0;
         int tint = sampleTintColour(minecraft, candidate.state(), faces);
+        int fluidFormalModelId = resolveFluidFormalModelId(candidate.state());
+        long voxyMetadata = buildVoxyMetadata(candidate.state(), layer, faces, tintedFaces > 0, fluidFormalModelId);
         int[] words = new int[ForgeModelStoreFormalLayout.MODEL_RECORD_WORDS];
         System.arraycopy(faceWords, 0, words, 0, ForgeModelStoreFormalLayout.FACE_DATA_WORDS);
         words[ForgeModelStoreFormalLayout.WORD_FLAGS_A] = flags;
@@ -572,12 +560,175 @@ final class ForgeMultiBlockFormalBakeUpload {
                 writtenFaces,
                 missingFaces,
                 fallbackFaces,
-                model.getClass().getSimpleName(),
+                "ForgeSoftwareModelTextureBakery",
                 primarySprite,
                 primaryAtlas,
-                signature(words, tint, faces)
+                signature(words, tint, faces),
+                voxyMetadata,
+                fluidFormalModelId
         );
         return BuildResult.accepted(build);
+    }
+
+    private int resolveFluidFormalModelId(BlockState state) {
+        if (state == null || state.getFluidState().isEmpty() || state.getBlock() instanceof LiquidBlock) {
+            return -1;
+        }
+        try {
+            BlockState fluidBlockState = state.getFluidState().createLegacyBlock();
+            int fluidBlockStateId = this.blockStateIdForState(fluidBlockState);
+            Optional<ForgeFormalModelIdMapping> mapping = this.instance.getFormalModelFactory().mappingForBlockStateId(fluidBlockStateId);
+            return mapping.map(ForgeFormalModelIdMapping::formalModelId).orElse(-1);
+        } catch (RuntimeException ignored) {
+            return -1;
+        }
+    }
+
+    private static long buildVoxyMetadata(
+            BlockState state,
+            ForgeCpuMeshLayer layer,
+            FaceUpload[] faces,
+            boolean biomeColourDependent,
+            int fluidFormalModelId
+    ) {
+        boolean isFluid = state.getBlock() instanceof LiquidBlock;
+        boolean containsFluid = !isFluid && !state.getFluidState().isEmpty();
+        boolean translucent = layer == ForgeCpuMeshLayer.TRANSLUCENT || isFluid;
+        boolean doubleSided = needsDoubleSidedQuads(faces, layer);
+        boolean cullsSame = cullsSame(state);
+        boolean fullyOpaque = true;
+        long metadata = 0L;
+        for (int face = ForgeModelAtlasLayout.FACE_COUNT - 1; face >= 0; face--) {
+            metadata <<= 8;
+            FaceUpload upload = faces[face];
+            if (upload == null || upload.faceDataWord() < 0) {
+                metadata |= 0xFFL;
+                fullyOpaque = false;
+                continue;
+            }
+            int faceData = upload.faceDataWord();
+            int minU = faceData & 0xF;
+            int maxU = (faceData >>> 4) & 0xF;
+            int minV = (faceData >>> 8) & 0xF;
+            int maxV = (faceData >>> 12) & 0xF;
+            int depth = (faceData >>> 16) & 0x3F;
+            int writtenPixels = writtenPixelCount(upload.pixels(), layer);
+            int area = Math.max(1, (maxU - minU + 1) * (maxV - minV + 1));
+            boolean faceCoversFullBlock = minU == 0 && maxU == 15 && minV == 0 && maxV == 15;
+            boolean occludesFace = layer != ForgeCpuMeshLayer.TRANSLUCENT
+                    && !isFluid
+                    && depth < 7
+                    && ((float) writtenPixels / (float) (ForgeModelAtlasLayout.MODEL_TEXTURE_SIZE * ForgeModelAtlasLayout.MODEL_TEXTURE_SIZE)) > 0.9F;
+            boolean canBeOccluded = depth < 20;
+            boolean selfLighting = depth > 1 || translucent;
+            long faceMetadata = 0L;
+            faceMetadata |= occludesFace ? 1L : 0L;
+            faceMetadata |= faceCoversFullBlock ? 2L : 0L;
+            faceMetadata |= canBeOccluded ? 4L : 0L;
+            faceMetadata |= selfLighting ? 8L : 0L;
+            metadata |= faceMetadata;
+            fullyOpaque &= occludesFace && area == 256;
+        }
+        long global = 0L;
+        global |= biomeColourDependent ? 1L : 0L;
+        global |= translucent ? 2L : 0L;
+        global |= doubleSided ? 4L : 0L;
+        global |= containsFluid ? 8L : 0L;
+        global |= isFluid ? 16L : 0L;
+        global |= cullsSame ? 32L : 0L;
+        global |= fullyOpaque ? 64L : 0L;
+        global |= ((long) clampInt(state.getLightEmission(), 0, 15)) << 7;
+        metadata |= global << (8 * ForgeModelAtlasLayout.FACE_COUNT);
+        return metadata;
+    }
+
+    private static boolean needsDoubleSidedQuads(FaceUpload[] faces, ForgeCpuMeshLayer layer) {
+        if (layer == ForgeCpuMeshLayer.SOLID) {
+            return false;
+        }
+        return isMissingFace(faces, 0) && isMissingFace(faces, 1)
+                || isMissingFace(faces, 2) && isMissingFace(faces, 3)
+                || isMissingFace(faces, 4) && isMissingFace(faces, 5);
+    }
+
+    private static boolean isMissingFace(FaceUpload[] faces, int face) {
+        return faces == null || face < 0 || face >= faces.length || faces[face] == null || faces[face].faceDataWord() < 0;
+    }
+
+    private static boolean cullsSame(BlockState state) {
+        boolean allTrue = true;
+        boolean allFalse = true;
+        for (Direction direction : DIRECTIONS) {
+            if (state.skipRendering(state, direction)) {
+                allFalse = false;
+            } else {
+                allTrue = false;
+            }
+        }
+        return allTrue && !allFalse;
+    }
+
+    private static int writtenPixelCount(byte[] pixels, ForgeCpuMeshLayer layer) {
+        if (pixels == null || pixels.length < ForgeModelAtlasPixelSample.BYTES_PER_PIXEL) {
+            return 0;
+        }
+        int count = 0;
+        for (int i = ForgeModelAtlasPixelSample.BYTES_PER_PIXEL - 1; i < pixels.length; i += ForgeModelAtlasPixelSample.BYTES_PER_PIXEL) {
+            int alpha = pixels[i] & 0xFF;
+            if (layer == ForgeCpuMeshLayer.TRANSLUCENT ? alpha > 0 : alpha >= 128) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    Optional<ForgeFormalUploadedModelSummary> ensureUploadedBlockState(int blockStateId, BlockState state) {
+        for (AcceptedModel model : this.acceptedModels) {
+            if (model.candidate().blockStateId() == blockStateId) {
+                return Optional.of(new ForgeFormalUploadedModelSummary(
+                        model.candidate().blockStateId(),
+                        model.candidate().state().toString(),
+                        model.formalModelId(),
+                        model.build().signature(),
+                        model.build().primarySprite(),
+                        ForgeModelStoreFormalLayout.MODEL_RECORD_BYTES,
+                        model.build().voxyMetadata(),
+                        model.build().fluidFormalModelId()
+                ));
+            }
+        }
+        if (state == null || state.isAir()) {
+            return Optional.empty();
+        }
+        Minecraft minecraft = Minecraft.getInstance();
+        BuildResult result = this.tryBuildRecord(minecraft, new Candidate(blockStateId, state));
+        if (!result.accepted()) {
+            this.reject(new Candidate(blockStateId, state), result.rejectCategory(), result.rejectReason());
+            this.lastFailureReason = "on-demand-formal-model-rejected:" + result.rejectReason();
+            return Optional.empty();
+        }
+        Optional<Integer> formalModelId = this.assignFormalModelId(new Candidate(blockStateId, state));
+        if (formalModelId.isEmpty()) {
+            return Optional.empty();
+        }
+        String uploadError = this.uploadModel(formalModelId.get(), result.build());
+        if (!"none".equals(uploadError)) {
+            this.fail(uploadError);
+            return Optional.empty();
+        }
+        AcceptedModel accepted = new AcceptedModel(new Candidate(blockStateId, state), formalModelId.get(), result.build());
+        this.acceptedModels.add(accepted);
+        this.modelTexture2id.putIfAbsent(result.build().signature(), formalModelId.get());
+        return Optional.of(new ForgeFormalUploadedModelSummary(
+                blockStateId,
+                state.toString(),
+                formalModelId.get(),
+                result.build().signature(),
+                result.build().primarySprite(),
+                ForgeModelStoreFormalLayout.MODEL_RECORD_BYTES,
+                result.build().voxyMetadata(),
+                result.build().fluidFormalModelId()
+        ));
     }
 
     private Optional<Integer> assignFormalModelId(Candidate candidate) {
@@ -735,124 +886,40 @@ final class ForgeMultiBlockFormalBakeUpload {
         return builder.toString();
     }
 
-    private static BakedQuad firstQuadForFace(net.minecraft.client.resources.model.BakedModel model, BlockState state, Direction direction, int blockStateId) {
-        List<BakedQuad> quads = safeGetQuads(model, state, direction, blockStateId);
-        if (!quads.isEmpty()) {
-            return quads.get(0);
+    private static int encodeSoftwareFaceData(ForgeSoftwareModelTextureBakery.FaceTexture texture, ForgeCpuMeshLayer layer) {
+        int[] bounds = texture.bounds(layer);
+        if (bounds[1] < bounds[0] || bounds[3] < bounds[2]) {
+            return -1;
         }
-        for (BakedQuad quad : safeGetQuads(model, state, null, blockStateId)) {
-            if (quad.getDirection() == direction) {
-                return quad;
-            }
+        float depth = texture.depth(layer, layer != ForgeCpuMeshLayer.SOLID);
+        if (depth < -0.1F) {
+            return -1;
         }
-        return null;
-    }
-
-    private static List<BakedQuad> safeGetQuads(net.minecraft.client.resources.model.BakedModel model, BlockState state, Direction direction, int blockStateId) {
-        try {
-            List<BakedQuad> quads = model.getQuads(state, direction, RandomSource.create(blockStateId * 31L + (direction == null ? 17L : direction.ordinal())));
-            return quads == null ? List.of() : quads;
-        } catch (RuntimeException e) {
-            return List.of();
-        }
-    }
-
-    private static FaceEncoding encodeFace(BakedQuad quad, Direction direction) {
-        TextureAtlasSprite sprite = quad.getSprite();
-        String spriteName = "none";
-        String spriteAtlas = "none";
-        float spriteU0 = 0.0F;
-        float spriteU1 = 1.0F;
-        float spriteV0 = 0.0F;
-        float spriteV1 = 1.0F;
-        if (sprite != null) {
-            try {
-                spriteName = sprite.contents().name().toString();
-                spriteAtlas = sprite.atlasLocation().toString();
-                spriteU0 = sprite.getU0();
-                spriteU1 = sprite.getU1();
-                spriteV0 = sprite.getV0();
-                spriteV1 = sprite.getV1();
-            } catch (RuntimeException ignored) {
-                spriteName = "unavailable";
-                spriteAtlas = "unavailable";
-            }
-        }
-
-        int[] vertices = quad.getVertices();
-        if (vertices == null || vertices.length < 24 || vertices.length % VERTICES_PER_QUAD != 0) {
-            return new FaceEncoding(spriteName, spriteAtlas, -1);
-        }
-
-        int stride = vertices.length / VERTICES_PER_QUAD;
-        if (stride < 6) {
-            return new FaceEncoding(spriteName, spriteAtlas, -1);
-        }
-
-        float minU = Float.POSITIVE_INFINITY;
-        float minV = Float.POSITIVE_INFINITY;
-        float maxU = Float.NEGATIVE_INFINITY;
-        float maxV = Float.NEGATIVE_INFINITY;
-        float axisSum = 0.0F;
-        for (int vertex = 0; vertex < VERTICES_PER_QUAD; vertex++) {
-            int offset = vertex * stride;
-            float x = Float.intBitsToFloat(vertices[offset]);
-            float y = Float.intBitsToFloat(vertices[offset + 1]);
-            float z = Float.intBitsToFloat(vertices[offset + 2]);
-            float u = Float.intBitsToFloat(vertices[offset + 4]);
-            float v = Float.intBitsToFloat(vertices[offset + 5]);
-            minU = Math.min(minU, u);
-            minV = Math.min(minV, v);
-            maxU = Math.max(maxU, u);
-            maxV = Math.max(maxV, v);
-            axisSum += switch (direction.getAxis()) {
-                case X -> x;
-                case Y -> y;
-                case Z -> z;
-            };
-        }
-
-        if (!Float.isFinite(minU) || !Float.isFinite(minV) || !Float.isFinite(maxU) || !Float.isFinite(maxV)) {
-            return new FaceEncoding(spriteName, spriteAtlas, -1);
-        }
-
-        int minUTexel = quantizeUvMin(minU, spriteU0, spriteU1);
-        int maxUTexel = quantizeUvMax(maxU, spriteU0, spriteU1);
-        int minVTexel = quantizeUvMin(minV, spriteV0, spriteV1);
-        int maxVTexel = quantizeUvMax(maxV, spriteV0, spriteV1);
-        float axisAverage = axisSum / VERTICES_PER_QUAD;
-        float indentation = direction.getAxisDirection() == Direction.AxisDirection.POSITIVE
-                ? 1.0F - axisAverage
-                : axisAverage;
-        int indentationEncoded = clampInt(Math.round(indentation * 64.0F), 0, 62);
-        int faceData = minUTexel
-                | (maxUTexel << 4)
-                | (minVTexel << 8)
-                | (maxVTexel << 12)
-                | (indentationEncoded << 16);
-        if (quad.isTinted()) {
+        int minU = clampInt(bounds[0], 0, 15);
+        int maxU = clampInt(bounds[1], 0, 15);
+        int minV = clampInt(bounds[2], 0, 15);
+        int maxV = clampInt(bounds[3], 0, 15);
+        int depthEncoded = clampInt(Math.round(depth * 64.0F), 0, 62);
+        int faceData = minU
+                | (maxU << 4)
+                | (minV << 8)
+                | (maxV << 12)
+                | (depthEncoded << 16);
+        int area = Math.max(1, (maxU - minU + 1) * (maxV - minV + 1));
+        int written = texture.writtenPixelCount(layer);
+        boolean faceCoversFullBlock = minU == 0 && maxU == 15 && minV == 0 && maxV == 15;
+        boolean needsAlphaDiscard = ((float) written / (float) area) < 0.9F;
+        needsAlphaDiscard |= layer != ForgeCpuMeshLayer.SOLID;
+        needsAlphaDiscard &= layer != ForgeCpuMeshLayer.TRANSLUCENT;
+        faceData |= needsAlphaDiscard ? 1 << 22 : 0;
+        faceData |= (!faceCoversFullBlock && layer != ForgeCpuMeshLayer.TRANSLUCENT) ? 1 << 23 : 0;
+        int tintState = texture.tintState(layer);
+        if (tintState == 2) {
+            faceData |= 1 << 24;
+        } else if (tintState == 3) {
             faceData |= 2 << 24;
         }
-        return new FaceEncoding(spriteName, spriteAtlas, faceData);
-    }
-
-    private static byte[] spritePixels(TextureAtlasSprite sprite) {
-        byte[] pixels = new byte[ForgeModelAtlasPixelSample.BYTES_PER_FACE];
-        int spriteWidth = Math.max(1, sprite.contents().width());
-        int spriteHeight = Math.max(1, sprite.contents().height());
-        for (int y = 0; y < ForgeModelAtlasLayout.MODEL_TEXTURE_SIZE; y++) {
-            int sourceY = Math.min(spriteHeight - 1, (y * spriteHeight) / ForgeModelAtlasLayout.MODEL_TEXTURE_SIZE);
-            for (int x = 0; x < ForgeModelAtlasLayout.MODEL_TEXTURE_SIZE; x++) {
-                int sourceX = Math.min(spriteWidth - 1, (x * spriteWidth) / ForgeModelAtlasLayout.MODEL_TEXTURE_SIZE);
-                int pixel = sprite.getPixelRGBA(0, sourceX, sourceY);
-                int offset = ((y * ForgeModelAtlasLayout.MODEL_TEXTURE_SIZE) + x) * ForgeModelAtlasPixelSample.BYTES_PER_PIXEL;
-                pixels[offset] = (byte) (pixel & 0xFF);
-                pixels[offset + 1] = (byte) ((pixel >> 8) & 0xFF);
-                pixels[offset + 2] = (byte) ((pixel >> 16) & 0xFF);
-                pixels[offset + 3] = (byte) ((pixel >> 24) & 0xFF);
-            }
-        }
-        return pixels;
+        return faceData;
     }
 
     private static int sampleTintColour(Minecraft minecraft, BlockState state, FaceUpload[] faces) {
@@ -890,10 +957,6 @@ final class ForgeMultiBlockFormalBakeUpload {
         return builder.toString();
     }
 
-    private static boolean isMissingSprite(String spriteName) {
-        return spriteName == null || spriteName.isBlank() || spriteName.contains("missingno") || "unavailable".equals(spriteName);
-    }
-
     private static int countPixelMismatches(byte[] expected, byte[] actual) {
         if (expected == null || actual == null) {
             return Integer.MAX_VALUE;
@@ -906,22 +969,6 @@ final class ForgeMultiBlockFormalBakeUpload {
             }
         }
         return mismatches;
-    }
-
-    private static int quantizeUvMin(float uv, float spriteMin, float spriteMax) {
-        float range = spriteMax - spriteMin;
-        if (!Float.isFinite(range) || Math.abs(range) < 1.0E-6F) {
-            return 0;
-        }
-        return clampInt((int) Math.floor(((uv - spriteMin) / range) * 16.0F), 0, 15);
-    }
-
-    private static int quantizeUvMax(float uv, float spriteMin, float spriteMax) {
-        float range = spriteMax - spriteMin;
-        if (!Float.isFinite(range) || Math.abs(range) < 1.0E-6F) {
-            return 15;
-        }
-        return clampInt((int) Math.ceil(((uv - spriteMin) / range) * 16.0F) - 1, 0, 15);
     }
 
     private static int clampInt(int value, int min, int max) {
@@ -962,9 +1009,6 @@ final class ForgeMultiBlockFormalBakeUpload {
         static BuildResult rejected(RejectCategory category, String reason) {
             return new BuildResult(false, null, category, reason == null || reason.isBlank() ? "unsupported" : reason.replace(' ', '-'));
         }
-    }
-
-    private record FaceEncoding(String spriteName, String spriteAtlas, int faceDataWord) {
     }
 
     private record FaceBuild(int faceIndex, String direction, FaceUpload face) {
@@ -1013,7 +1057,9 @@ final class ForgeMultiBlockFormalBakeUpload {
             String bakedModelClass,
             String primarySprite,
             String primarySpriteAtlas,
-            String signature
+            String signature,
+            long voxyMetadata,
+            int fluidFormalModelId
     ) {
     }
 }
