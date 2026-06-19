@@ -15,6 +15,13 @@ import org.lwjgl.system.MemoryStack;
 
 import java.nio.FloatBuffer;
 
+/**
+ * Deprecated historical textured readback proof renderer.
+ *
+ * <p>This class is not part of the formal original-Voxy parity route. Keep it
+ * isolated until command/status references are retired.</p>
+ */
+@Deprecated(forRemoval = false)
 final class ForgeTexturedReadbackRenderer {
     static final String STAGE = "G6_17_TEXTURED_GL_HEAP_READBACK_SAMPLE";
 

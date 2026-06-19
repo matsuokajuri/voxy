@@ -35,6 +35,15 @@ ForgeFormalCmdgenRealSectionDryRun
 ForgeFormalIsolatedMdicDrawSmokeTest
 ForgeFormalTerrainShaderIntegration
 ForgeFormalVisibleLodPreview
+ForgeVoxyCommands legacy monolithic debug/prototype command surface
+ForgeDirectGpuGeometryRenderer
+ForgeSimpleGpuMeshRenderer
+ForgeDebugMeshRenderer
+ForgeGpuGeometryReadbackDebugRenderer
+ForgeMdicDebugRenderer
+ForgeTexturedDebugQuadRenderer
+ForgeTexturedReadbackRenderer
+ForgeTexturedMdicDebugRenderer
 ```
 
 They must not feed new formal readiness, new production ownership, or new K/L
@@ -55,6 +64,8 @@ temporary model-id rewrite as geometry path
 BakedQuad CPU mesh back-conversion as RenderDataFactory substitute
 radius/frustum debug candidate snapshots as traversal substitute
 validation cmdgen compute shader as production cmdgen.comp
+giant all-in-one command files as the home for new parity work
+debug pipeline clear commands as lifecycle substitutes
 ```
 
 ## Not deleted yet
@@ -65,6 +76,25 @@ them must be done in controlled batches that keep the project compiling.
 
 Until removed, they are explicitly deprecated and must remain isolated from the
 new formal parity route.
+
+## Command surface status
+
+`ForgeVoxyCommands` is now treated as a legacy monolithic command surface. It
+still exists because many historical status, clear, and QA handlers reference
+prototype objects that have not yet been safely removed from `ForgeVoxyInstance`.
+
+New original-Voxy parity work must not add more branches to that file. The
+retirement direction is:
+
+```text
+split current-route commands into focused parity registrars
+ -> move legacy debug/prototype commands behind an explicit legacy surface
+ -> remove command handlers once their backing prototype objects are deleted
+ -> delete the old monolithic command file
+```
+
+The command `/voxy parity_route_status` exists only to make this boundary
+visible while the old command surface is still compiled.
 
 ## Replacement direction
 

@@ -13,6 +13,13 @@ import net.minecraftforge.client.event.RenderLevelStageEvent;
 import net.minecraftforge.common.MinecraftForge;
 import org.joml.Matrix4f;
 
+/**
+ * Deprecated GL heap readback debug renderer.
+ *
+ * <p>This class is not part of the formal original-Voxy parity route. Keep it
+ * isolated until command/status references are retired.</p>
+ */
+@Deprecated(forRemoval = false)
 public final class ForgeGpuGeometryReadbackDebugRenderer {
     private static final String RENDER_STAGE = "AFTER_TRANSLUCENT_BLOCKS";
 

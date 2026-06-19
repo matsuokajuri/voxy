@@ -15,6 +15,13 @@ import org.joml.Matrix4f;
 
 import java.util.List;
 
+/**
+ * Deprecated CPU/debug mesh renderer.
+ *
+ * <p>This class is not part of the formal original-Voxy parity route. Keep it
+ * isolated until command/status references are retired.</p>
+ */
+@Deprecated(forRemoval = false)
 public final class ForgeDebugMeshRenderer {
     private static final String RENDER_STAGE = "AFTER_TRANSLUCENT_BLOCKS";
     private static final int SOLID_COLOR = 0xFF00FF;

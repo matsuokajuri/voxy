@@ -17,6 +17,13 @@ import java.util.List;
 import static org.lwjgl.opengl.GL11C.GL_NO_ERROR;
 import static org.lwjgl.opengl.GL11C.glGetError;
 
+/**
+ * Deprecated direct-GL proof renderer.
+ *
+ * <p>This class is not part of the formal original-Voxy parity route. Keep it
+ * isolated until command/status references are retired.</p>
+ */
+@Deprecated(forRemoval = false)
 public final class ForgeDirectGpuGeometryRenderer {
     static final String REASON_MANUAL_COMMAND = "MANUAL_COMMAND";
     static final String REASON_PRESET = "PRESET";

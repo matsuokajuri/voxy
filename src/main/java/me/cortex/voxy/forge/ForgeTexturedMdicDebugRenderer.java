@@ -43,6 +43,13 @@ import static org.lwjgl.opengl.GL40C.GL_DRAW_INDIRECT_BUFFER_BINDING;
 import static org.lwjgl.opengl.GL43C.GL_SHADER_STORAGE_BUFFER;
 import static org.lwjgl.opengl.GL43C.GL_SHADER_STORAGE_BUFFER_BINDING;
 
+/**
+ * Deprecated historical textured MDIC proof renderer.
+ *
+ * <p>This class is not part of the formal original-Voxy parity route. Keep it
+ * isolated until command/status references are retired.</p>
+ */
+@Deprecated(forRemoval = false)
 final class ForgeTexturedMdicDebugRenderer {
     static final String STAGE = "G6_18_TEXTURED_MDIC_DEBUG_ONE_MODEL";
 

@@ -12,6 +12,14 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.world.level.chunk.ChunkStatus;
 import net.minecraft.world.level.chunk.LevelChunk;
 
+/**
+ * Legacy monolithic command surface kept temporarily for historical diagnostics.
+ *
+ * <p>New renderer migration work must follow the original Voxy parity route and
+ * should not add more prototype/debug command branches here. Split new parity
+ * commands into focused registrars as this file is retired.</p>
+ */
+@Deprecated(forRemoval = false)
 public final class ForgeVoxyCommands {
     private static final SimpleGpuMeshSource RECOMMENDED_MESH_SOURCE = SimpleGpuMeshSource.BUILT_SECTION;
     private static final SimpleGpuMeshSource FALLBACK_MESH_SOURCE = SimpleGpuMeshSource.CPU_MESH;
@@ -24,6 +32,8 @@ public final class ForgeVoxyCommands {
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal("voxy")
+                .then(Commands.literal("parity_route_status")
+                        .executes(ctx -> parityRouteStatus(ctx.getSource())))
                 .then(Commands.literal("ingest_current_chunk")
                         .executes(ctx -> ingestCurrentChunk(ctx.getSource())))
                 .then(Commands.literal("build_current_chunk_mesh")
@@ -824,6 +834,21 @@ public final class ForgeVoxyCommands {
                         .executes(ctx -> ingestStatus(ctx.getSource())))
                 .then(Commands.literal("ingest_clear_cache")
                         .executes(ctx -> clearIngestCache(ctx.getSource()))));
+    }
+
+    private static int parityRouteStatus(CommandSourceStack source) {
+        String message = String.join(" ",
+                "Voxy parity route:",
+                "originalVoxySourceBaseline=true",
+                "legacyCommandSurfaceDeprecated=true",
+                "debugRendererRoutesDeprecated=true",
+                "previewRoutesDeprecated=true",
+                "sampleSetRoutesDeprecated=true",
+                "formalRendererReady=false",
+                "actualRendererDrawEnabled=false",
+                "newWorkTarget=original-voxy-parity");
+        source.sendSuccess(() -> Component.literal(message), false);
+        return 1;
     }
 
     private static int ingestCurrentChunk(CommandSourceStack source) {

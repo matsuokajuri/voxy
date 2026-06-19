@@ -12,6 +12,13 @@ import org.joml.Matrix4f;
 import static org.lwjgl.opengl.GL11C.GL_NO_ERROR;
 import static org.lwjgl.opengl.GL11C.glGetError;
 
+/**
+ * Deprecated historical MDIC proof renderer.
+ *
+ * <p>This class is not part of the formal original-Voxy parity route. Keep it
+ * isolated until command/status references are retired.</p>
+ */
+@Deprecated(forRemoval = false)
 final class ForgeMdicDebugRenderer {
     static final String STAGE = "G6_7_ELEMENTS_INDIRECT_COUNT_MDIC_DEBUG_DRAW";
 

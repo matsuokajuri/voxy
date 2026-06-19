@@ -17,6 +17,13 @@ import org.joml.Matrix4f;
 import java.util.HashSet;
 import java.util.List;
 
+/**
+ * Deprecated simple GPU mesh proof renderer.
+ *
+ * <p>This class is not part of the formal original-Voxy parity route. Keep it
+ * isolated until command/status references are retired.</p>
+ */
+@Deprecated(forRemoval = false)
 public final class ForgeSimpleGpuMeshRenderer {
     private static final String RENDER_STAGE = "AFTER_TRANSLUCENT_BLOCKS";
 

@@ -13,6 +13,13 @@ import org.lwjgl.system.MemoryStack;
 
 import java.nio.FloatBuffer;
 
+/**
+ * Deprecated historical textured quad proof renderer.
+ *
+ * <p>This class is not part of the formal original-Voxy parity route. Keep it
+ * isolated until command/status references are retired.</p>
+ */
+@Deprecated(forRemoval = false)
 final class ForgeTexturedDebugQuadRenderer {
     static final String STAGE = "G6_16_TINY_TEXTURED_DEBUG_QUAD";
 
