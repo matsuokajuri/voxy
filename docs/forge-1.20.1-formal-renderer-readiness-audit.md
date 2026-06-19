@@ -1563,6 +1563,33 @@ VoxyRenderSystemCalled=false
 productionLiveRendererDrawExecuted=false
 ```
 
+## K43-K48 moving update lifecycle note
+
+K43-K48 adds explicit lifecycle evidence around the expanded preview patch. The
+preview owner now records the chunk anchor used for the current expanded patch,
+computes the player's current chunk, and reports the chunk delta against a
+bounded update threshold:
+
+```text
+movingUpdateLifecycleReady
+movingUpdateBuiltAnchor
+movingUpdateCurrentAnchor
+movingUpdateDeltaChunks
+movingUpdateThresholdChunks
+movingUpdateRebuildNeeded
+movingUpdateRebuildRequested
+movingUpdateRebuildCompleted
+```
+
+When a rebuild is needed, the command path only requests the existing
+render-thread expanded-patch prepare flow. It does not do GL work, shader
+compile, readback, or synchronous rebuilds on the command thread. This keeps
+the K10/K37 performance boundary intact.
+
+This remains preview evidence. It does not make the formal renderer ready and
+does not reduce the production blockers for traversal, cmdgen, live MDIC draw,
+or full terrain shader semantics.
+
 ## K10.1 observe/performance hotfix note
 
 K10.1 is a hotfix on the K10 visible preview, not a new renderer stage. It

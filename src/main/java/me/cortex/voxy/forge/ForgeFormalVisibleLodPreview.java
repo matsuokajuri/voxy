@@ -41,6 +41,7 @@ final class ForgeFormalVisibleLodPreview {
     static final String K23_K30_STAGE = "K23_K30_MINIMAL_FORMAL_LOD_RENDERER_PROTOTYPE";
     static final String K31_K36_STAGE = "K31_K36_FORMAL_LOD_PREVIEW_MOVING_PATCH_OWNER";
     static final String K37_K42_STAGE = "K37_K42_EXPANDED_FORMAL_LOD_PATCH_PREVIEW";
+    static final String K43_K48_STAGE = "K43_K48_FORMAL_LOD_PREVIEW_MOVING_UPDATE_LIFECYCLE";
     private static final boolean DEFAULT_ENABLED = false;
     private static final boolean DEBUG_OPT_IN_ONLY = true;
     private static final int QA_VISIBLE_FRAMES = 1;
@@ -64,6 +65,8 @@ final class ForgeFormalVisibleLodPreview {
     private static final int EXPANDED_LOD_PATCH_PREVIEW_MIN_RECORDS = 192;
     private static final int EXPANDED_LOD_PATCH_PREVIEW_MIN_SECTIONS = 3;
     private static final int EXPANDED_LOD_PATCH_PREVIEW_MIN_Y_BANDS = 2;
+    private static final int MOVING_UPDATE_THRESHOLD_CHUNKS = 1;
+    private static final int NO_CHUNK_ANCHOR = Integer.MIN_VALUE;
     private static final int OBSERVE_MAX_DRAW_INDICES = EXPANDED_LOD_PATCH_PREVIEW_MAX_RECORDS * 6;
     private static final int PREVIEW_SECTION_DATA_BINDING_INDEX = 6;
     private static final float LEGACY_OBSERVE_TINT_STRENGTH = 0.68F;
@@ -534,7 +537,28 @@ final class ForgeFormalVisibleLodPreview {
     private String expandedPatchYBands = "none";
     private String expandedPatchSelectionStrategy = "none";
     private boolean expandedPatchLiveRendererEnabled;
+    private boolean movingUpdateLifecycleReady;
+    private boolean movingUpdateAnchorTracked;
+    private boolean movingUpdateRebuildNeeded;
+    private boolean movingUpdateRebuildRequested;
+    private boolean movingUpdateRebuildCompleted;
+    private boolean movingUpdateRebuildFailedSafely;
+    private int movingUpdateThresholdChunks = MOVING_UPDATE_THRESHOLD_CHUNKS;
+    private int movingUpdateBuiltChunkX = NO_CHUNK_ANCHOR;
+    private int movingUpdateBuiltChunkZ = NO_CHUNK_ANCHOR;
+    private int movingUpdateCurrentChunkX = NO_CHUNK_ANCHOR;
+    private int movingUpdateCurrentChunkZ = NO_CHUNK_ANCHOR;
+    private int movingUpdateDeltaChunks;
+    private int movingUpdateRebuildCount;
+    private String movingUpdateBuiltAnchor = "none";
+    private String movingUpdateCurrentAnchor = "none";
+    private String movingUpdatePatchSourceAnchors = "none";
+    private boolean movingUpdateSourceAnchorMatchesBuiltAnchor;
+    private String movingUpdateLastUpdateReason = "none";
+    private String movingUpdateLastRebuildReason = "none";
+    private boolean movingUpdateLiveRendererEnabled;
     private int lastPreviewChunkCount;
+    private String lastPreviewChunkAnchors = "none";
     private int lastPreviewYBandCount;
     private String lastPreviewYBands = "none";
     private int activePreviewDrawIndexLimit = OBSERVE_MAX_DRAW_INDICES;
@@ -909,6 +933,7 @@ final class ForgeFormalVisibleLodPreview {
         this.resetBuildFlags();
         this.minimalPatchLocalCommandUsed = true;
         this.expandedPatchSelectionStrategy = "interleaved-near-player-section-snapshot";
+        this.resetMovingUpdateBuildState();
 
         if (!RenderSystem.isOnRenderThread()) {
             this.fail("not-render-thread");
@@ -1007,6 +1032,7 @@ final class ForgeFormalVisibleLodPreview {
                     && !this.productionMdicIndirectDrawUsed
                     && !this.syntheticDrawFixtureUsed;
             if (this.expandedFormalLodPreviewOwnerReady) {
+                this.captureMovingUpdateBuiltAnchor("expanded-patch-build-complete");
                 this.stale = false;
                 this.requiresRebuild = false;
                 this.lifecycleState = "K37_K42_EXPANDED_PATCH_BUILT_DISABLED";
@@ -1159,6 +1185,31 @@ final class ForgeFormalVisibleLodPreview {
 
     ForgeFormalVisibleLodPreviewStats requestExpandedFormalLodPatchPrepare(String reason) {
         return this.requestPreviewPrepare(reason, false, false, true);
+    }
+
+    ForgeFormalVisibleLodPreviewStats refreshMovingUpdateLifecycleStatus(String reason) {
+        this.updateMovingUpdateLifecycle(reason);
+        this.audit();
+        this.instance.getFormalRendererManager().checkReadiness("k43-k48-moving-update-status");
+        return this.createStatusSnapshot();
+    }
+
+    ForgeFormalVisibleLodPreviewStats requestMovingUpdateRebuildIfNeeded(String reason) {
+        this.updateMovingUpdateLifecycle(reason);
+        this.movingUpdateRebuildRequested = true;
+        this.movingUpdateRebuildCompleted = false;
+        this.movingUpdateRebuildFailedSafely = false;
+        this.movingUpdateLastRebuildReason = safeReason(reason);
+        if (this.movingUpdateRebuildNeeded || !this.movingUpdateLifecycleReady || this.stale || this.requiresRebuild) {
+            this.stale = true;
+            this.requiresRebuild = true;
+            return this.requestExpandedFormalLodPatchPrepare(reason);
+        }
+        this.movingUpdateRebuildRequested = false;
+        this.movingUpdateRebuildCompleted = true;
+        this.movingUpdateLastRebuildReason = "skipped-no-rebuild-needed";
+        this.audit();
+        return this.createStatusSnapshot();
     }
 
     private ForgeFormalVisibleLodPreviewStats requestPreviewPrepare(String reason, boolean minimalPatchMode) {
@@ -1716,7 +1767,7 @@ final class ForgeFormalVisibleLodPreview {
 
     private String formatExpandedFormalLodPreviewSummary() {
         return String.format(Locale.ROOT,
-                "k37K42Stage=%s,expandedOwnerReady=%s,expandedPatchReady=%s,ownedByFormalTerrainRenderer=%s,candidateSnapshotUsed=%s,interleavedSectionsUsed=%s,usesFormalModelIdGeometry=%s,recordLimit=%d,recordCount=%d,minRecords=%d,sectionCount=%d,minSections=%d,chunkCount=%d,yBandCount=%d,minYBands=%d,drawIndexCount=%d,rebuildCount=%d,lastBuildMs=%.2f,anchor=%s,sectionPositions=%s,sectionBases=%s,yBands=%s,selectionStrategy=%s,liveRendererEnabled=%s,visiblePreviewEnabled=%s,mainFramebufferDrawn=%s,previewOnly=true,defaultEnabled=%s,formalDrawPipelineReady=false,formalRendererReady=false,actualRendererDrawEnabled=false",
+                "k37K42Stage=%s,expandedOwnerReady=%s,expandedPatchReady=%s,ownedByFormalTerrainRenderer=%s,candidateSnapshotUsed=%s,interleavedSectionsUsed=%s,usesFormalModelIdGeometry=%s,recordLimit=%d,recordCount=%d,minRecords=%d,sectionCount=%d,minSections=%d,chunkCount=%d,yBandCount=%d,minYBands=%d,drawIndexCount=%d,rebuildCount=%d,lastBuildMs=%.2f,anchor=%s,sectionPositions=%s,sectionBases=%s,yBands=%s,selectionStrategy=%s,liveRendererEnabled=%s,visiblePreviewEnabled=%s,mainFramebufferDrawn=%s,previewOnly=true,defaultEnabled=%s,movingUpdateSummary=%s,formalDrawPipelineReady=false,formalRendererReady=false,actualRendererDrawEnabled=false",
                 K37_K42_STAGE,
                 this.expandedFormalLodPreviewOwnerReady,
                 this.expandedFormalLodPatchReady,
@@ -1743,8 +1794,116 @@ final class ForgeFormalVisibleLodPreview {
                 this.expandedPatchLiveRendererEnabled,
                 this.visiblePreviewEnabled,
                 this.minecraftMainFramebufferDrawn,
+                DEFAULT_ENABLED,
+                this.formatMovingUpdateLifecycleSummary()
+        );
+    }
+
+    private String formatMovingUpdateLifecycleSummary() {
+        return String.format(Locale.ROOT,
+                "k43K48Stage=%s,movingUpdateLifecycleReady=%s,movingUpdateAnchorTracked=%s,movingUpdateBuiltAnchor=%s,movingUpdateCurrentAnchor=%s,movingUpdateDeltaChunks=%d,movingUpdateThresholdChunks=%d,movingUpdateRebuildNeeded=%s,movingUpdateRebuildRequested=%s,movingUpdateRebuildCompleted=%s,movingUpdateRebuildFailedSafely=%s,movingUpdatePatchSourceAnchors=%s,movingUpdateSourceAnchorMatchesBuiltAnchor=%s,movingUpdateRebuildCount=%d,movingUpdateLastUpdateReason=%s,movingUpdateLastRebuildReason=%s,expandedPatchReady=%s,liveRendererEnabled=%s,visiblePreviewEnabled=%s,previewOnly=true,defaultEnabled=%s,formalDrawPipelineReady=false,formalRendererReady=false,actualRendererDrawEnabled=false",
+                K43_K48_STAGE,
+                this.movingUpdateLifecycleReady,
+                this.movingUpdateAnchorTracked,
+                this.movingUpdateBuiltAnchor,
+                this.movingUpdateCurrentAnchor,
+                this.movingUpdateDeltaChunks,
+                this.movingUpdateThresholdChunks,
+                this.movingUpdateRebuildNeeded,
+                this.movingUpdateRebuildRequested,
+                this.movingUpdateRebuildCompleted,
+                this.movingUpdateRebuildFailedSafely,
+                this.movingUpdatePatchSourceAnchors,
+                this.movingUpdateSourceAnchorMatchesBuiltAnchor,
+                this.movingUpdateRebuildCount,
+                this.movingUpdateLastUpdateReason,
+                this.movingUpdateLastRebuildReason,
+                this.expandedFormalLodPatchReady,
+                this.movingUpdateLiveRendererEnabled,
+                this.visiblePreviewEnabled,
                 DEFAULT_ENABLED
         );
+    }
+
+    private void resetMovingUpdateBuildState() {
+        this.movingUpdateLifecycleReady = false;
+        this.movingUpdateAnchorTracked = false;
+        this.movingUpdateRebuildNeeded = false;
+        this.movingUpdateRebuildCompleted = false;
+        this.movingUpdateRebuildFailedSafely = false;
+        this.movingUpdateCurrentChunkX = NO_CHUNK_ANCHOR;
+        this.movingUpdateCurrentChunkZ = NO_CHUNK_ANCHOR;
+        this.movingUpdateDeltaChunks = 0;
+        this.movingUpdateCurrentAnchor = "none";
+        this.movingUpdatePatchSourceAnchors = "none";
+        this.movingUpdateSourceAnchorMatchesBuiltAnchor = false;
+        this.movingUpdateLastUpdateReason = "build-reset";
+        this.movingUpdateLiveRendererEnabled = false;
+    }
+
+    private void captureMovingUpdateBuiltAnchor(String reason) {
+        int[] chunk = currentPlayerChunkCoordinates();
+        if (chunk == null) {
+            this.movingUpdateBuiltChunkX = NO_CHUNK_ANCHOR;
+            this.movingUpdateBuiltChunkZ = NO_CHUNK_ANCHOR;
+            this.movingUpdateBuiltAnchor = "none";
+        } else {
+            this.movingUpdateBuiltChunkX = chunk[0];
+            this.movingUpdateBuiltChunkZ = chunk[1];
+            this.movingUpdateBuiltAnchor = chunk[0] + "," + chunk[1];
+        }
+        this.movingUpdateRebuildCount++;
+        this.movingUpdateRebuildCompleted = this.expandedFormalLodPreviewOwnerReady;
+        if (this.movingUpdateRebuildCompleted) {
+            this.movingUpdateRebuildRequested = false;
+        }
+        this.movingUpdateRebuildFailedSafely = false;
+        this.movingUpdatePatchSourceAnchors = this.lastPreviewChunkAnchors;
+        this.movingUpdateSourceAnchorMatchesBuiltAnchor = containsChunkAnchor(
+                this.movingUpdatePatchSourceAnchors,
+                this.movingUpdateBuiltAnchor);
+        this.movingUpdateLastRebuildReason = safeReason(reason);
+        this.updateMovingUpdateLifecycle(reason);
+    }
+
+    private void updateMovingUpdateLifecycle(String reason) {
+        int[] current = currentPlayerChunkCoordinates();
+        if (current == null) {
+            this.movingUpdateCurrentChunkX = NO_CHUNK_ANCHOR;
+            this.movingUpdateCurrentChunkZ = NO_CHUNK_ANCHOR;
+            this.movingUpdateCurrentAnchor = "none";
+            this.movingUpdateDeltaChunks = 0;
+            this.movingUpdateAnchorTracked = false;
+            this.movingUpdateRebuildNeeded = false;
+            this.movingUpdateLifecycleReady = false;
+            this.movingUpdateLastUpdateReason = "no-player:" + safeReason(reason);
+            return;
+        }
+        this.movingUpdateCurrentChunkX = current[0];
+        this.movingUpdateCurrentChunkZ = current[1];
+        this.movingUpdateCurrentAnchor = current[0] + "," + current[1];
+        boolean builtAnchorKnown = this.movingUpdateBuiltChunkX != NO_CHUNK_ANCHOR
+                && this.movingUpdateBuiltChunkZ != NO_CHUNK_ANCHOR
+                && !"none".equals(this.movingUpdateBuiltAnchor);
+        this.movingUpdateAnchorTracked = builtAnchorKnown;
+        if (builtAnchorKnown) {
+            int dx = Math.abs(this.movingUpdateCurrentChunkX - this.movingUpdateBuiltChunkX);
+            int dz = Math.abs(this.movingUpdateCurrentChunkZ - this.movingUpdateBuiltChunkZ);
+            this.movingUpdateDeltaChunks = Math.max(dx, dz);
+        } else {
+            this.movingUpdateDeltaChunks = 0;
+        }
+        this.movingUpdateRebuildNeeded = builtAnchorKnown
+                && this.expandedFormalLodPreviewOwnerReady
+                && !this.stale
+                && this.movingUpdateDeltaChunks >= this.movingUpdateThresholdChunks;
+        this.movingUpdateLifecycleReady = this.expandedFormalLodPreviewOwnerReady
+                && this.formalLodPreviewOwnedByTerrainRenderer
+                && builtAnchorKnown
+                && this.movingUpdateThresholdChunks > 0
+                && !this.movingUpdateLiveRendererEnabled
+                && !this.expandedPatchLiveRendererEnabled;
+        this.movingUpdateLastUpdateReason = safeReason(reason);
     }
 
     private static String currentPlayerChunkAnchor() {
@@ -1756,6 +1915,18 @@ final class ForgeFormalVisibleLodPreview {
         int chunkZ = minecraft.player.blockPosition().getZ() >> 4;
         return chunkX + "," + chunkZ;
     }
+
+    private static int[] currentPlayerChunkCoordinates() {
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft.player == null) {
+            return null;
+        }
+        return new int[] {
+                minecraft.player.blockPosition().getX() >> 4,
+                minecraft.player.blockPosition().getZ() >> 4
+        };
+    }
+
 
     String dump() {
         ForgeFormalVisibleLodPreviewStats status = this.createStatusSnapshot();
@@ -2541,6 +2712,10 @@ final class ForgeFormalVisibleLodPreview {
         this.observePrepareNextAttemptFrame = 0;
         this.minimalPatchPrepareMode = false;
         this.movingPatchPrepareMode = false;
+        if (this.expandedPatchPrepareMode && this.movingUpdateRebuildRequested) {
+            this.movingUpdateRebuildFailedSafely = true;
+            this.movingUpdateRebuildCompleted = false;
+        }
         this.expandedPatchPrepareMode = false;
         this.lastObservePrepareFailureReason = safeReason;
         this.observeEnableFailedSafely = true;
@@ -3081,6 +3256,7 @@ final class ForgeFormalVisibleLodPreview {
         this.worldPlacedPreviewRecordCount = previewRecords.length;
         this.worldPlacedPreviewSectionBases = formatPreviewSectionBases(previewRecords);
         this.lastPreviewChunkCount = countUniquePreviewChunks(previewRecords);
+        this.lastPreviewChunkAnchors = formatPreviewChunkAnchors(previewRecords);
         this.lastPreviewYBandCount = countUniquePreviewYBands(previewRecords);
         this.lastPreviewYBands = formatPreviewYBands(previewRecords);
         this.packedQuadLocalPositionUsed = true;
@@ -3609,6 +3785,7 @@ final class ForgeFormalVisibleLodPreview {
         this.expandedPatchSelectionStrategy = "none";
         this.expandedPatchLiveRendererEnabled = false;
         this.lastPreviewChunkCount = 0;
+        this.lastPreviewChunkAnchors = "none";
         this.lastPreviewYBandCount = 0;
         this.lastPreviewYBands = "none";
         this.activePreviewDrawIndexLimit = OBSERVE_MAX_DRAW_INDICES;
@@ -3783,6 +3960,27 @@ final class ForgeFormalVisibleLodPreview {
             seen[count++] = yBand;
         }
         return count;
+    }
+
+    private static String formatPreviewChunkAnchors(ForgeFormalModelIdSectionGeometryPath.PreviewRecord[] records) {
+        String value = java.util.Arrays.stream(records)
+                .map(record -> record.chunkX() + "," + record.chunkZ())
+                .distinct()
+                .limit(8)
+                .collect(Collectors.joining("|"));
+        return value.isEmpty() ? "none" : value;
+    }
+
+    private static boolean containsChunkAnchor(String anchors, String anchor) {
+        if (anchors == null || anchor == null || anchors.isEmpty() || "none".equals(anchors) || "none".equals(anchor)) {
+            return false;
+        }
+        for (String value : anchors.split("\\|")) {
+            if (anchor.equals(value)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static int[] rawSectionPositionWords(long position) {

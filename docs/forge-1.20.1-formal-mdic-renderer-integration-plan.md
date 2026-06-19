@@ -969,3 +969,26 @@ K37-K42 still does not run production `cmdgen.comp`, does not populate the K2
 formal command buffers as live renderer inputs, does not submit production
 indirect draws, does not call `MDICSectionRenderer`, and does not call
 `VoxyRenderSystem`.
+
+## K43-K48 moving update lifecycle note
+
+K43-K48 adds the first explicit update decision layer above the expanded
+preview patch:
+
+```text
+expanded patch built anchor
+ + current player chunk
+ -> movingUpdateDeltaChunks
+ -> movingUpdateRebuildNeeded
+ -> render-thread expanded patch prepare request
+```
+
+This is the beginning of renderer-like patch lifecycle behavior, but the
+resources are still K10 preview resources. The rebuild-if-needed command marks
+stale and requests the existing render-thread prepare path only when the player
+has moved beyond the threshold, avoiding command-thread GL work and avoiding
+per-frame rebuild attempts.
+
+K43-K48 does not implement production visibility traversal, does not dispatch
+production `cmdgen.comp`, does not hand commands to `MDICSectionRenderer`, and
+does not enable a live formal renderer.

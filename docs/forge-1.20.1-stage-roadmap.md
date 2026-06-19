@@ -886,6 +886,45 @@ does not call `MDICSectionRenderer` or `VoxyRenderSystem`, and still reports
 `formalDrawPipelineReady=false`, `formalRendererReady=false`, and
 `actualRendererDrawEnabled=false`.
 
+## K43/K48 status note
+
+K43/K48 hardens the K37/K42 expanded patch with a moving-update lifecycle. The
+visible proof can now track the chunk anchor used to build the current expanded
+patch, compare it with the player's current chunk, and report whether the patch
+needs a rebuild after crossing the configured threshold.
+
+New compact commands:
+
+```text
+/voxy qa_k43_k48_formal_lod_preview_update_lifecycle
+/voxy formal_lod_preview_update_prepare
+/voxy formal_lod_preview_update_status
+/voxy formal_lod_preview_update_rebuild_if_needed
+/voxy formal_lod_preview_update_enable
+/voxy formal_lod_preview_update_disable
+```
+
+The key status evidence is embedded in `movingUpdateSummary`:
+
+```text
+movingUpdateLifecycleReady
+movingUpdateBuiltAnchor
+movingUpdateCurrentAnchor
+movingUpdateDeltaChunks
+movingUpdateThresholdChunks
+movingUpdateRebuildNeeded
+movingUpdateRebuildCompleted
+movingUpdatePatchSourceAnchors
+movingUpdateSourceAnchorMatchesBuiltAnchor
+```
+
+The rebuild path reuses the existing render-thread prepare flow instead of
+performing GL work from command handlers. K43/K48 still remains preview-only:
+it does not run production traversal, does not run production `cmdgen.comp`,
+does not call `MDICSectionRenderer`, does not call `VoxyRenderSystem`, and
+keeps `formalDrawPipelineReady=false`, `formalRendererReady=false`, and
+`actualRendererDrawEnabled=false`.
+
 ## K23-K30 status note
 
 K23-K30 creates the first minimal formal LoD renderer prototype, still bounded
