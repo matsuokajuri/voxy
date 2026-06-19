@@ -909,3 +909,40 @@ does not call `MDICSectionRenderer`, and does not make the formal renderer
 default-enabled. The next production-facing step is still to move from this
 prototype-owned bounded copy into formal renderer-owned section geometry,
 visibility, and command resources.
+
+## K31-K36 moving formal LoD preview owner note
+
+K31-K36 adds the first moving-patch ownership shell above the K23-K30 bounded
+LoD prototype. The path is still preview-only, but it is less hardcoded:
+
+```text
+formal terrain renderer owner shell
+ -> K8 formal model-id section geometry snapshot
+ -> interleaved bounded patch copy
+ -> K10-owned SectionMeta / positionScratch / DrawCommand preview resources
+ -> explicit visible preview toggle
+```
+
+The moving patch records a player chunk anchor, section count, record count,
+rebuild count, update threshold, and whether the source was a real candidate
+snapshot. This makes the preview closer to a future renderer-managed region
+without changing the live renderer contract.
+
+K31-K36 still does not:
+
+```text
+run production cmdgen.comp
+populate K2 formal command buffers as live renderer input
+call MDICSectionRenderer
+call VoxyRenderSystem
+mutate the original geometry heap
+enable default LoD drawing
+claim formalDrawPipelineReady
+claim formalRendererReady
+claim actualRendererDrawEnabled
+```
+
+The next MDIC-facing work should convert this preview-owned moving patch into
+formal renderer-owned update scheduling and command resource handoff, still
+with explicit opt-in and bounded draw scope until production traversal and
+shader semantics are ready.

@@ -809,6 +809,45 @@ K10.3 remains below K11: it does not call `MDICSectionRenderer`, does not call
 `formalDrawPipelineReady=false`, `formalRendererReady=false`, and
 `actualRendererDrawEnabled=false`.
 
+## K31/K36 status note
+
+K31/K36 moves the K23-K30 visible proof from a fixed bounded patch toward a
+formal-owner preview path that can be rebuilt around the current player
+position. The implementation still uses the K10 visible preview hook, but the
+patch source now prefers an interleaved multi-section copy from the K8 formal
+model-id geometry snapshot and records explicit ownership under the K1 formal
+terrain renderer shell.
+
+New compact commands:
+
+```text
+/voxy qa_k31_k36_formal_lod_preview_moving_patch
+/voxy formal_lod_preview_moving_prepare
+/voxy formal_lod_preview_moving_status
+/voxy formal_lod_preview_moving_enable
+/voxy formal_lod_preview_moving_disable
+```
+
+The key status evidence is embedded in `movingSummary`:
+
+```text
+movingOwnerReady
+movingPatchReady
+ownedByFormalTerrainRenderer
+candidateSnapshotUsed
+interleavedSectionsUsed
+recordCount
+sectionCount
+anchor
+liveRendererEnabled=false
+```
+
+K31/K36 deliberately does not enter the production renderer boundary. The patch
+is still opt-in, preview-only, K10-owned validation geometry. It does not call
+`MDICSectionRenderer`, does not call `VoxyRenderSystem`, does not enable live
+MDIC rendering, and still requires `formalDrawPipelineReady=false`,
+`formalRendererReady=false`, and `actualRendererDrawEnabled=false`.
+
 ## K23-K30 status note
 
 K23-K30 creates the first minimal formal LoD renderer prototype, still bounded

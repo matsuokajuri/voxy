@@ -39,6 +39,7 @@ final class ForgeFormalVisibleLodPreview {
     static final String K19_K20_STAGE = "K19_K20_FORMAL_SECTION_METADATA_POSITION_SCRATCH_PREVIEW_ALIGNMENT";
     static final String K21_K22_STAGE = "K21_K22_FORMAL_PREVIEW_DRAW_COMMAND_BUCKET_ALIGNMENT";
     static final String K23_K30_STAGE = "K23_K30_MINIMAL_FORMAL_LOD_RENDERER_PROTOTYPE";
+    static final String K31_K36_STAGE = "K31_K36_FORMAL_LOD_PREVIEW_MOVING_PATCH_OWNER";
     private static final boolean DEFAULT_ENABLED = false;
     private static final boolean DEBUG_OPT_IN_ONLY = true;
     private static final int QA_VISIBLE_FRAMES = 1;
@@ -55,7 +56,10 @@ final class ForgeFormalVisibleLodPreview {
     private static final int FORMAL_LOD_PATCH_PREVIEW_MAX_RECORDS = 96;
     private static final int FORMAL_LOD_PATCH_PREVIEW_MIN_RECORDS = 48;
     private static final int FORMAL_LOD_PATCH_PREVIEW_MIN_INDICES = 192;
-    private static final int OBSERVE_MAX_DRAW_INDICES = FORMAL_LOD_PATCH_PREVIEW_MAX_RECORDS * 6;
+    private static final int MOVING_LOD_PATCH_PREVIEW_MAX_RECORDS = 384;
+    private static final int MOVING_LOD_PATCH_PREVIEW_MIN_RECORDS = 96;
+    private static final int MOVING_LOD_PATCH_PREVIEW_UPDATE_THRESHOLD_CHUNKS = 1;
+    private static final int OBSERVE_MAX_DRAW_INDICES = MOVING_LOD_PATCH_PREVIEW_MAX_RECORDS * 6;
     private static final int PREVIEW_SECTION_DATA_BINDING_INDEX = 6;
     private static final float LEGACY_OBSERVE_TINT_STRENGTH = 0.68F;
     private static final float MINIMAL_LOD_PATCH_OBSERVE_TINT_STRENGTH = 0.22F;
@@ -485,6 +489,27 @@ final class ForgeFormalVisibleLodPreview {
     private boolean boundedFormalLodPatchTextureTintReduced;
     private boolean minimalPatchPrepareMode;
     private boolean minimalPatchLocalCommandUsed;
+    private boolean movingPatchPrepareMode;
+    private boolean movingFormalLodPreviewOwnerReady;
+    private boolean movingFormalLodPatchReady;
+    private boolean formalLodPreviewOwnedByTerrainRenderer;
+    private boolean movingPatchCandidateSnapshotUsed;
+    private boolean movingPatchInterleavedSectionsUsed;
+    private boolean movingPatchUsesFormalModelIdGeometry;
+    private int movingPatchRecordLimit = MOVING_LOD_PATCH_PREVIEW_MAX_RECORDS;
+    private int movingPatchRecordCount;
+    private int movingPatchSectionCount;
+    private int movingPatchDrawIndexCount;
+    private int movingPatchRebuildCount;
+    private double movingPatchLastBuildDurationMs;
+    private String movingPatchAnchor = "none";
+    private String movingPatchSectionPositions = "none";
+    private boolean movingPatchUpdateThresholdReady;
+    private int movingPatchUpdateThresholdChunks = MOVING_LOD_PATCH_PREVIEW_UPDATE_THRESHOLD_CHUNKS;
+    private boolean movingPatchRebuildNeeded;
+    private String movingPatchLastUpdateReason = "none";
+    private boolean movingPatchLiveRendererEnabled;
+    private int activePreviewDrawIndexLimit = OBSERVE_MAX_DRAW_INDICES;
     private int commandBufferId;
     private int drawCountBufferId;
     private int positionScratchBufferId;
@@ -715,6 +740,133 @@ final class ForgeFormalVisibleLodPreview {
         return this.createStatusSnapshot();
     }
 
+    ForgeFormalVisibleLodPreviewStats buildMovingFormalLodPatch() {
+        long startNanos = System.nanoTime();
+        this.buildRuns++;
+        this.movingPatchRebuildCount++;
+        if (this.buildRuns > 1) {
+            this.previewRebuildRuns++;
+        }
+        this.lifecycleState = "K31_K36_MOVING_PATCH_BUILDING";
+        this.lastLifecycleEvent = "moving-formal-lod-patch-build";
+        this.lastFailureReason = "none";
+        this.visiblePreviewDefaultDisabledVerified = !DEFAULT_ENABLED;
+        this.resetBuildFlags();
+        this.minimalPatchLocalCommandUsed = true;
+        this.movingPatchLastUpdateReason = "explicit-build";
+
+        if (!RenderSystem.isOnRenderThread()) {
+            this.fail("not-render-thread");
+            this.audit();
+            return this.createStatusSnapshot();
+        }
+        if (!this.instance.ensureActiveWorldSkeletonForCurrentWorldIfAllowed()) {
+            this.fail("world-engine-skeleton-not-ready");
+            this.audit();
+            return this.createStatusSnapshot();
+        }
+
+        ForgeFormalTerrainRendererStats terrainOwner = this.instance.getFormalTerrainRendererOwner()
+                .enable("k31-k36-moving-formal-lod-preview-owner");
+        this.formalLodPreviewOwnedByTerrainRenderer = terrainOwner.formalTerrainRendererOwnerReady()
+                && terrainOwner.lifecycleState().contains("ENABLED_NO_DRAW");
+
+        ForgeFormalModelIdSectionGeometryStats k8 = this.instance.getFormalModelIdSectionGeometryPath().createStatusSnapshot();
+        if (!k8.formalModelIdGeometryPathReady() || k8.stale() || k8.requiresRebuild()) {
+            k8 = this.instance.getFormalModelIdSectionGeometryPath().build();
+        }
+        ForgeFormalModelStoreStats store = this.instance.getFormalModelStore().createStatusSnapshot();
+        if (!this.captureMinimalPatchPrerequisites(k8, store)) {
+            this.audit();
+            this.instance.getFormalRendererManager().checkReadiness("k31-k36-moving-formal-lod-prerequisite-failed");
+            return this.createStatusSnapshot();
+        }
+
+        try {
+            this.closeOwnedResourcesOnRenderThread();
+            this.captureFormalModelReadbacks(k8);
+            this.visiblePreviewShaderProgramId = this.compileVisiblePreviewShaderProgram();
+            this.createValidationDrawBuffers(null, k8, true, true, MOVING_LOD_PATCH_PREVIEW_MAX_RECORDS);
+            this.movingPatchLastBuildDurationMs = elapsedMs(startNanos);
+            this.movingPatchAnchor = currentPlayerChunkAnchor();
+            this.movingPatchSectionPositions = this.multiSectionPreviewSectionPositions;
+            this.movingPatchCandidateSnapshotUsed = k8.realSectionInputUsed();
+            this.movingPatchInterleavedSectionsUsed = this.interleavedPreviewUsedForCommandPath;
+            this.movingPatchUsesFormalModelIdGeometry = this.k8FormalGeometryUsed
+                    && this.formalModelIdDecodeOk
+                    && !this.syntheticDrawFixtureUsed;
+            this.movingPatchRecordLimit = MOVING_LOD_PATCH_PREVIEW_MAX_RECORDS;
+            this.movingPatchRecordCount = this.boundedFormalLodPatchRecordCount;
+            this.movingPatchSectionCount = this.bucketCommandSectionCount;
+            this.movingPatchDrawIndexCount = this.boundedFormalLodPatchDrawIndexCount;
+            this.movingPatchUpdateThresholdReady = true;
+            this.movingPatchUpdateThresholdChunks = MOVING_LOD_PATCH_PREVIEW_UPDATE_THRESHOLD_CHUNKS;
+            this.movingPatchRebuildNeeded = false;
+            this.movingPatchLiveRendererEnabled = false;
+            this.ownerReady = this.renderHookRegistered
+                    && this.visiblePreviewDefaultDisabledVerified
+                    && this.formalLodPreviewOwnedByTerrainRenderer
+                    && this.visiblePreviewShaderProgramCompileOk
+                    && this.visiblePreviewShaderProgramLinkOk
+                    && this.k8FormalGeometryUsed
+                    && this.minimalPatchLocalCommandUsed
+                    && !this.syntheticDrawFixtureUsed
+                    && this.formalModelIdDecodeOk
+                    && this.faceDataLookupOk
+                    && this.atlasSampleOk
+                    && this.modelDataReadOk
+                    && this.modelColourReadOk
+                    && this.sectionMetadataPreviewReady
+                    && this.sectionMetadataPathUsed
+                    && this.positionScratchPathUsed
+                    && this.previewDrawCommandBucketAlignmentReady
+                    && this.boundedFormalLodPatchReady
+                    && this.acceptedDrawCommandCount >= 1;
+            this.movingFormalLodPatchReady = this.ownerReady
+                    && this.movingPatchCandidateSnapshotUsed
+                    && this.movingPatchInterleavedSectionsUsed
+                    && this.movingPatchUsesFormalModelIdGeometry
+                    && this.movingPatchRecordCount >= MOVING_LOD_PATCH_PREVIEW_MIN_RECORDS
+                    && this.movingPatchSectionCount > 1
+                    && !this.movingPatchLiveRendererEnabled;
+            this.movingFormalLodPreviewOwnerReady = this.movingFormalLodPatchReady
+                    && this.formalLodPreviewOwnedByTerrainRenderer;
+            this.multiSectionPreviewPipelineReady = this.ownerReady
+                    && this.multiSectionPreviewInputReady
+                    && this.multiSectionFormalGeometryUsed
+                    && this.multiSectionPreviewBudgetReady
+                    && this.multiSectionPreviewDrawRecordCount > 1
+                    && !this.singleSectionFallbackUsed
+                    && !this.multiSectionSyntheticFallbackUsed;
+            this.worldPlacedPreviewReady = this.ownerReady
+                    && this.worldPlacedPreviewUsed
+                    && this.sectionMetadataPreviewReady
+                    && this.worldPlacedPreviewRecordCount > 0
+                    && !this.cameraBillboardFallbackUsed;
+            this.minimalFormalLodRendererPrototypeReady = this.ownerReady
+                    && this.boundedFormalLodPatchReady
+                    && this.previewDrawCommandBucketAlignmentReady
+                    && this.worldPlacedPreviewReady
+                    && !this.productionMdicIndirectDrawUsed
+                    && !this.syntheticDrawFixtureUsed;
+            if (this.movingFormalLodPreviewOwnerReady) {
+                this.stale = false;
+                this.requiresRebuild = false;
+                this.lifecycleState = "K31_K36_MOVING_PATCH_BUILT_DISABLED";
+                this.lastLifecycleEvent = "moving-formal-lod-patch-build-complete";
+                this.lastFailureReason = "none";
+            } else {
+                this.fail("moving-formal-lod-patch-incomplete");
+            }
+        } catch (RuntimeException e) {
+            this.fail(e.getClass().getSimpleName() + ":" + e.getMessage());
+        }
+
+        this.audit();
+        this.instance.getFormalRendererManager().checkReadiness("k31-k36-moving-formal-lod-preview-build");
+        return this.createStatusSnapshot();
+    }
+
     ForgeFormalVisibleLodPreviewStats enable(String reason) {
         this.enableRuns++;
         ForgeFormalVisibleLodPreviewStats status = this.ownerReady && !this.stale
@@ -841,10 +993,18 @@ final class ForgeFormalVisibleLodPreview {
     }
 
     ForgeFormalVisibleLodPreviewStats requestMinimalFormalLodPatchPrepare(String reason) {
-        return this.requestPreviewPrepare(reason, true);
+        return this.requestPreviewPrepare(reason, true, false);
+    }
+
+    ForgeFormalVisibleLodPreviewStats requestMovingFormalLodPatchPrepare(String reason) {
+        return this.requestPreviewPrepare(reason, false, true);
     }
 
     private ForgeFormalVisibleLodPreviewStats requestPreviewPrepare(String reason, boolean minimalPatchMode) {
+        return this.requestPreviewPrepare(reason, minimalPatchMode, false);
+    }
+
+    private ForgeFormalVisibleLodPreviewStats requestPreviewPrepare(String reason, boolean minimalPatchMode, boolean movingPatchMode) {
         long startNanos = System.nanoTime();
         long buildRunsBeforeCommand = this.buildRuns;
         long shaderCompileRunsBeforeCommand = this.shaderCompileRuns;
@@ -873,7 +1033,8 @@ final class ForgeFormalVisibleLodPreview {
             return this.createStatusSnapshot();
         }
         boolean preparedForRequestedMode = this.ownerReady && !this.stale
-                && (!minimalPatchMode || this.minimalFormalLodRendererPrototypeReady);
+                && (!minimalPatchMode || this.minimalFormalLodRendererPrototypeReady)
+                && (!movingPatchMode || this.movingFormalLodPreviewOwnerReady);
         if (preparedForRequestedMode) {
             this.prepareReuseCount++;
             this.observePrepareRequested = false;
@@ -918,6 +1079,7 @@ final class ForgeFormalVisibleLodPreview {
         }
         this.resetPrepareTimingForNewRun();
         this.minimalPatchPrepareMode = minimalPatchMode;
+        this.movingPatchPrepareMode = movingPatchMode;
         this.observePrepareRequested = true;
         this.observePrepareInProgress = false;
         this.observePrepareCompleted = false;
@@ -1313,7 +1475,7 @@ final class ForgeFormalVisibleLodPreview {
 
     private String formatPreviewDrawCommandBucketSummary() {
         return String.format(Locale.ROOT,
-                "bufferCreated=%s,layoutUsed=%s,strideBytes=%d,fieldCount=%d,commandCount=%d,indexCount=%d,firstIndex=%d,baseVertex=%d,baseInstance=%d,matchesK6=%s,drivesDrawCount=%s,bucketPathUsed=%s,contiguous=%s,interleavedUsed=%s,bucketSectionCount=%d,bucketRecordCount=%d,bucketIndexCount=%d,bucketQuadCount=%d,bucketSectionPosition=%s,positionScratchBaseInstanceCompatible=%s,commandBaseInstancePositionScratchUsed=%s,productionMdicIndirectDrawUsed=%s,k23K30Stage=%s,minimalPrototypeReady=%s,boundedPatchReady=%s,minimalPatchLocalCommandUsed=%s,patchRecordLimit=%d,patchRecordCount=%d,minPatchRecords=%d,patchDrawIndexCount=%d,minPatchDrawIndices=%d,reducedObserveTint=%s,observeTintStrength=%.2f,worldPlaced=%s,optInOnly=%s,defaultEnabled=%s,productionRenderer=false,formalRendererReady=false,actualRendererDrawEnabled=false",
+                "bufferCreated=%s,layoutUsed=%s,strideBytes=%d,fieldCount=%d,commandCount=%d,indexCount=%d,firstIndex=%d,baseVertex=%d,baseInstance=%d,matchesK6=%s,drivesDrawCount=%s,bucketPathUsed=%s,contiguous=%s,interleavedUsed=%s,bucketSectionCount=%d,bucketRecordCount=%d,bucketIndexCount=%d,bucketQuadCount=%d,bucketSectionPosition=%s,positionScratchBaseInstanceCompatible=%s,commandBaseInstancePositionScratchUsed=%s,productionMdicIndirectDrawUsed=%s,k23K30Stage=%s,minimalPrototypeReady=%s,boundedPatchReady=%s,minimalPatchLocalCommandUsed=%s,patchRecordLimit=%d,patchRecordCount=%d,minPatchRecords=%d,patchDrawIndexCount=%d,minPatchDrawIndices=%d,reducedObserveTint=%s,observeTintStrength=%.2f,worldPlaced=%s,optInOnly=%s,defaultEnabled=%s,movingSummary=%s,productionRenderer=false,formalRendererReady=false,actualRendererDrawEnabled=false",
                 this.previewDrawCommandBufferCreated,
                 this.previewDrawCommandLayoutUsed,
                 this.previewDrawCommandStrideBytes,
@@ -1349,8 +1511,49 @@ final class ForgeFormalVisibleLodPreview {
                 this.minimalFormalLodRendererPrototypeReady ? MINIMAL_LOD_PATCH_OBSERVE_TINT_STRENGTH : LEGACY_OBSERVE_TINT_STRENGTH,
                 this.worldPlacedPreviewReady,
                 DEBUG_OPT_IN_ONLY,
+                DEFAULT_ENABLED,
+                this.formatMovingFormalLodPreviewSummary()
+        );
+    }
+
+    private String formatMovingFormalLodPreviewSummary() {
+        return String.format(Locale.ROOT,
+                "k31K36Stage=%s,movingOwnerReady=%s,movingPatchReady=%s,ownedByFormalTerrainRenderer=%s,candidateSnapshotUsed=%s,interleavedSectionsUsed=%s,usesFormalModelIdGeometry=%s,recordLimit=%d,recordCount=%d,minRecords=%d,sectionCount=%d,drawIndexCount=%d,rebuildCount=%d,lastBuildMs=%.2f,anchor=%s,sectionPositions=%s,updateThresholdReady=%s,updateThresholdChunks=%d,rebuildNeeded=%s,lastUpdateReason=%s,liveRendererEnabled=%s,visiblePreviewEnabled=%s,mainFramebufferDrawn=%s,previewOnly=true,defaultEnabled=%s,formalDrawPipelineReady=false,formalRendererReady=false,actualRendererDrawEnabled=false",
+                K31_K36_STAGE,
+                this.movingFormalLodPreviewOwnerReady,
+                this.movingFormalLodPatchReady,
+                this.formalLodPreviewOwnedByTerrainRenderer,
+                this.movingPatchCandidateSnapshotUsed,
+                this.movingPatchInterleavedSectionsUsed,
+                this.movingPatchUsesFormalModelIdGeometry,
+                this.movingPatchRecordLimit,
+                this.movingPatchRecordCount,
+                MOVING_LOD_PATCH_PREVIEW_MIN_RECORDS,
+                this.movingPatchSectionCount,
+                this.movingPatchDrawIndexCount,
+                this.movingPatchRebuildCount,
+                this.movingPatchLastBuildDurationMs,
+                this.movingPatchAnchor,
+                this.movingPatchSectionPositions,
+                this.movingPatchUpdateThresholdReady,
+                this.movingPatchUpdateThresholdChunks,
+                this.movingPatchRebuildNeeded,
+                this.movingPatchLastUpdateReason,
+                this.movingPatchLiveRendererEnabled,
+                this.visiblePreviewEnabled,
+                this.minecraftMainFramebufferDrawn,
                 DEFAULT_ENABLED
         );
+    }
+
+    private static String currentPlayerChunkAnchor() {
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft.player == null) {
+            return "none";
+        }
+        int chunkX = minecraft.player.blockPosition().getX() >> 4;
+        int chunkZ = minecraft.player.blockPosition().getZ() >> 4;
+        return chunkX + "," + chunkZ;
     }
 
     String dump() {
@@ -1586,6 +1789,10 @@ final class ForgeFormalVisibleLodPreview {
             this.runMinimalFormalLodPatchPrepareStep();
             return;
         }
+        if (this.movingPatchPrepareMode) {
+            this.runMovingFormalLodPatchPrepareStep();
+            return;
+        }
         try {
             switch (this.observePrepareStep) {
                 case 0 -> {
@@ -1807,6 +2014,95 @@ final class ForgeFormalVisibleLodPreview {
         }
     }
 
+    private void runMovingFormalLodPatchPrepareStep() {
+        try {
+            switch (this.observePrepareStep) {
+                case 0 -> {
+                    long stepStart = System.nanoTime();
+                    String stepName = "ensure-world";
+                    this.lastObservePrepareStepName = stepName;
+                    if (!this.instance.ensureActiveWorldSkeletonForCurrentWorldIfAllowed()) {
+                        String reason = "moving-lod-prepare-world-engine-skeleton-not-ready";
+                        this.recordPrepareStepTiming(stepName, stepStart);
+                        this.setPrepareBlocking(stepName, reason);
+                        this.failObservePrepareSafely(reason, null);
+                        return;
+                    }
+                    this.recordPrepareStepTiming(stepName, stepStart);
+                    this.observePrepareStep++;
+                }
+                case 1 -> {
+                    long stepStart = System.nanoTime();
+                    String stepName = "k8-formal-model-id-geometry";
+                    this.lastObservePrepareStepName = stepName;
+                    ForgeFormalModelIdSectionGeometryStats k8 = this.instance.getFormalModelIdSectionGeometryPath().createStatusSnapshot();
+                    if (!k8.formalModelIdGeometryPathReady() || k8.stale() || k8.requiresRebuild()) {
+                        k8 = this.instance.getFormalModelIdSectionGeometryPath().build();
+                    }
+                    if (!k8.formalModelIdGeometryPathReady()) {
+                        String reason = "moving-lod-prepare-k8-not-ready:" + k8.lastFailureReason();
+                        this.recordPrepareStepTiming(stepName, stepStart);
+                        this.setPrepareBlocking(stepName, reason);
+                        this.failObservePrepareSafely(reason, null);
+                        return;
+                    }
+                    this.recordPrepareStepTiming(stepName, stepStart);
+                    this.observePrepareStep++;
+                }
+                case 2 -> {
+                    long stepStart = System.nanoTime();
+                    String stepName = "k31-k36-moving-visible-preview-build";
+                    this.lastObservePrepareStepName = stepName;
+                    ForgeFormalVisibleLodPreviewStats status = this.buildMovingFormalLodPatch();
+                    this.restoreObserveEnableCommandSafetyAfterRenderPrepare();
+                    if (!status.visibleLodPreviewOwnerReady() || !this.movingFormalLodPreviewOwnerReady) {
+                        String reason = "moving-lod-prepare-build-not-ready:" + status.lastFailureReason();
+                        this.recordPrepareStepTiming(stepName, stepStart);
+                        this.setPrepareBlocking(stepName, reason);
+                        this.failObservePrepareSafely(reason, null);
+                        return;
+                    }
+                    this.recordPrepareStepTiming(stepName, stepStart);
+                    this.observePrepareStep++;
+                }
+                case 3 -> {
+                    long stepStart = System.nanoTime();
+                    this.lastObservePrepareStepName = this.observePrepareAutoEnable ? "enable-moving-lod-observe" : "moving-lod-prepared-disabled";
+                    this.observePrepareInProgress = false;
+                    this.observePrepareCompleted = true;
+                    this.observePrepareFailedSafely = false;
+                    this.lastObservePrepareFailureReason = "none";
+                    if (this.observePrepareAutoEnable) {
+                        if (!this.enableObserveFromPreparedResources("moving-lod-prepare-complete", true)) {
+                            String reason = "moving-lod-prepare-enable-failed:ownerReady=" + this.ownerReady + ":stale=" + this.stale;
+                            this.recordPrepareStepTiming(this.lastObservePrepareStepName, stepStart);
+                            this.setPrepareBlocking(this.lastObservePrepareStepName, reason);
+                            this.failObservePrepareSafely(reason, null);
+                            return;
+                        }
+                        this.observeAutoEnabledAfterPrepare = true;
+                    } else {
+                        this.visiblePreviewEnabled = false;
+                        this.observeModeEnabled = false;
+                        this.observeAutoEnabledAfterPrepare = false;
+                        this.lifecycleState = "K31_K36_MOVING_PATCH_PREPARED_DISABLED";
+                        this.lastLifecycleEvent = "moving-lod-prepare-complete";
+                        this.lastFailureReason = "none";
+                        this.renderHookEarlyReturnWhenDisabled = true;
+                    }
+                    this.instance.getFormalRendererManager().checkReadiness("k31-k36-moving-formal-lod-prepare-complete");
+                    this.recordPrepareStepTiming(this.lastObservePrepareStepName, stepStart);
+                    this.finishPrepareTiming();
+                    this.movingPatchPrepareMode = false;
+                }
+                default -> this.observePrepareInProgress = false;
+            }
+        } catch (RuntimeException e) {
+            this.setPrepareBlocking(this.lastObservePrepareStepName, e.getClass().getSimpleName() + ":" + e.getMessage());
+            this.failObservePrepareSafely(e.getClass().getSimpleName() + ":" + e.getMessage(), e);
+        }
+    }
+
     private void resetPrepareTimingForNewRun() {
         this.prepareStartedNanos = 0L;
         this.prepareTimingReady = false;
@@ -1840,6 +2136,7 @@ final class ForgeFormalVisibleLodPreview {
             case "k9-terrain-shader-integration" -> this.prepareK9DurationMs = durationMs;
             case "k10-visible-preview-build" -> this.prepareK10DurationMs = durationMs;
             case "k23-k30-minimal-visible-preview-build" -> this.prepareK10DurationMs = durationMs;
+            case "k31-k36-moving-visible-preview-build" -> this.prepareK10DurationMs = durationMs;
             default -> {
                 // Final enable/disabled steps are tracked as last/slowest only.
             }
@@ -1948,6 +2245,7 @@ final class ForgeFormalVisibleLodPreview {
         this.observePrepareFrameBudgetExceeded = safeReason.contains("frame-budget-exceeded");
         this.observePrepareNextAttemptFrame = 0;
         this.minimalPatchPrepareMode = false;
+        this.movingPatchPrepareMode = false;
         this.lastObservePrepareFailureReason = safeReason;
         this.observeEnableFailedSafely = true;
         this.lastObserveEnableFailureReason = safeReason;
@@ -2001,6 +2299,7 @@ final class ForgeFormalVisibleLodPreview {
         this.observeAutoEnabledAfterPrepare = false;
         this.observePrepareFrameBudgetExceeded = false;
         this.minimalPatchPrepareMode = false;
+        this.movingPatchPrepareMode = false;
         this.observePrepareStep = 0;
         this.observePrepareFrameCount = 0;
         this.observePrepareNextAttemptFrame = 0;
@@ -2384,21 +2683,46 @@ final class ForgeFormalVisibleLodPreview {
     }
 
     private void createValidationDrawBuffers(ForgeFormalCmdgenRealSectionDryRunStats k6, ForgeFormalModelIdSectionGeometryStats k8, boolean useMinimalPatchLocalCommand) {
+        this.createValidationDrawBuffers(k6, k8, useMinimalPatchLocalCommand, false, FORMAL_LOD_PATCH_PREVIEW_MAX_RECORDS);
+    }
+
+    private void createValidationDrawBuffers(
+            ForgeFormalCmdgenRealSectionDryRunStats k6,
+            ForgeFormalModelIdSectionGeometryStats k8,
+            boolean useMinimalPatchLocalCommand,
+            boolean preferInterleavedPatch,
+            int maxPreviewRecords
+    ) {
         this.glAllocationRuns++;
-        ForgeFormalModelIdSectionGeometryPath.PreviewRecord[] previewRecords = this.instance.getFormalModelIdSectionGeometryPath()
-                .copyPreviewRecordsCommandContiguousDetailed(FORMAL_LOD_PATCH_PREVIEW_MAX_RECORDS);
-        boolean interleavedPatchInput = false;
-        if (previewRecords.length == 0 && useMinimalPatchLocalCommand) {
+        int recordLimit = Math.max(1, maxPreviewRecords);
+        ForgeFormalModelIdSectionGeometryPath.PreviewRecord[] previewRecords;
+        boolean interleavedPatchInput;
+        if (preferInterleavedPatch) {
             previewRecords = this.instance.getFormalModelIdSectionGeometryPath()
-                    .copyPreviewRecordsInterleavedDetailed(FORMAL_LOD_PATCH_PREVIEW_MAX_RECORDS);
+                    .copyPreviewRecordsInterleavedDetailed(recordLimit);
             interleavedPatchInput = previewRecords.length > 0;
+            if (previewRecords.length == 0) {
+                previewRecords = this.instance.getFormalModelIdSectionGeometryPath()
+                        .copyPreviewRecordsCommandContiguousDetailed(recordLimit);
+                interleavedPatchInput = false;
+            }
+        } else {
+            previewRecords = this.instance.getFormalModelIdSectionGeometryPath()
+                    .copyPreviewRecordsCommandContiguousDetailed(recordLimit);
+            interleavedPatchInput = false;
+            if (previewRecords.length == 0 && useMinimalPatchLocalCommand) {
+                previewRecords = this.instance.getFormalModelIdSectionGeometryPath()
+                        .copyPreviewRecordsInterleavedDetailed(recordLimit);
+                interleavedPatchInput = previewRecords.length > 0;
+            }
         }
         if (previewRecords.length == 0) {
             throw new IllegalStateException("empty-command-contiguous-preview-records");
         }
         if (useMinimalPatchLocalCommand) {
             this.minimalPatchLocalCommandUsed = true;
-            this.k6FirstCommandCount = Math.min(previewRecords.length * 6, OBSERVE_MAX_DRAW_INDICES);
+            this.activePreviewDrawIndexLimit = Math.min(OBSERVE_MAX_DRAW_INDICES, recordLimit * 6);
+            this.k6FirstCommandCount = Math.min(previewRecords.length * 6, this.activePreviewDrawIndexLimit);
             this.k6FirstCommandInstanceCount = 1;
             this.k6FirstCommandFirstIndex = 0;
             this.k6FirstCommandBaseVertex = 0;
@@ -2443,8 +2767,8 @@ final class ForgeFormalVisibleLodPreview {
         this.formalGeometryRecordCount = previewRecords.length;
         this.multiSectionPreviewSectionCount = k8.formalGeometrySnapshotSectionCount();
         this.multiSectionPreviewInputRecordCount = k8.formalGeometrySnapshotRecordCount();
-        this.multiSectionPreviewDrawRecordLimit = FORMAL_LOD_PATCH_PREVIEW_MAX_RECORDS;
-        this.multiSectionPreviewDrawRecordCount = Math.min(previewRecords.length, FORMAL_LOD_PATCH_PREVIEW_MAX_RECORDS);
+        this.multiSectionPreviewDrawRecordLimit = recordLimit;
+        this.multiSectionPreviewDrawRecordCount = Math.min(previewRecords.length, recordLimit);
         this.multiSectionPreviewDrawCapped = k8.formalGeometrySnapshotRecordCount() > this.multiSectionPreviewDrawRecordCount;
         this.multiSectionPreviewSectionPositions = this.instance.getFormalModelIdSectionGeometryPath().previewSectionPositionsSummary();
         this.multiSectionPreviewModelIds = collectPreviewModelIds(previewRecordValues);
@@ -2452,8 +2776,8 @@ final class ForgeFormalVisibleLodPreview {
                 && k8.formalGeometrySnapshotRecordCount() > 1
                 && k8.realSectionInputUsed();
         this.multiSectionFormalGeometryUsed = this.k8FormalGeometryUsed;
-        this.multiSectionPreviewBudgetReady = previewRecords.length <= FORMAL_LOD_PATCH_PREVIEW_MAX_RECORDS
-                && this.multiSectionPreviewDrawRecordLimit == FORMAL_LOD_PATCH_PREVIEW_MAX_RECORDS;
+        this.multiSectionPreviewBudgetReady = previewRecords.length <= recordLimit
+                && this.multiSectionPreviewDrawRecordLimit == recordLimit;
         this.singleSectionFallbackUsed = false;
         this.multiSectionSyntheticFallbackUsed = this.syntheticDrawFixtureUsed;
         this.previewSectionSidecarBufferCreated = false;
@@ -2506,13 +2830,14 @@ final class ForgeFormalVisibleLodPreview {
         this.commandBaseInstancePositionScratchUsed = this.positionScratchPathUsed
                 && this.positionScratchBaseInstanceCompatible;
         this.productionMdicIndirectDrawUsed = false;
-        this.boundedFormalLodPatchRecordLimit = FORMAL_LOD_PATCH_PREVIEW_MAX_RECORDS;
+        this.boundedFormalLodPatchRecordLimit = recordLimit;
         this.boundedFormalLodPatchRecordCount = previewRecords.length;
         this.boundedFormalLodPatchDrawIndexCount = Math.min(this.previewDrawCommandIndexCount, previewRecords.length * 6);
         this.boundedFormalLodPatchTextureTintReduced = true;
         boolean formalPatchCommandReady = this.minimalPatchLocalCommandUsed
                 || (this.k9TerrainShaderIntegrationUsed && this.k6RealSectionCommandUsed);
-        this.boundedFormalLodPatchReady = this.boundedFormalLodPatchRecordCount >= FORMAL_LOD_PATCH_PREVIEW_MIN_RECORDS
+        int minRecords = preferInterleavedPatch ? MOVING_LOD_PATCH_PREVIEW_MIN_RECORDS : FORMAL_LOD_PATCH_PREVIEW_MIN_RECORDS;
+        this.boundedFormalLodPatchReady = this.boundedFormalLodPatchRecordCount >= minRecords
                 && this.boundedFormalLodPatchDrawIndexCount >= FORMAL_LOD_PATCH_PREVIEW_MIN_INDICES
                 && (this.bucketCommandContiguousGeometryUsed || this.minimalPatchLocalCommandUsed)
                 && this.k8FormalGeometryUsed
@@ -2642,7 +2967,7 @@ final class ForgeFormalVisibleLodPreview {
                 }
                 int commandIndexCount = Math.max(0, this.previewDrawCommandIndexCount);
                 int recordIndexCap = Math.max(1, this.multiSectionPreviewDrawRecordCount) * 6;
-                int drawIndexCap = Math.min(OBSERVE_MAX_DRAW_INDICES, recordIndexCap);
+                int drawIndexCap = Math.min(Math.max(1, this.activePreviewDrawIndexLimit), recordIndexCap);
                 int drawIndexCount = Math.min(commandIndexCount, drawIndexCap);
                 this.visiblePreviewCommandIndexCount = commandIndexCount;
                 this.visiblePreviewDrawIndexCount = drawIndexCount;
@@ -2947,6 +3272,25 @@ final class ForgeFormalVisibleLodPreview {
         this.boundedFormalLodPatchDrawIndexCount = 0;
         this.boundedFormalLodPatchTextureTintReduced = false;
         this.minimalPatchLocalCommandUsed = false;
+        this.movingFormalLodPreviewOwnerReady = false;
+        this.movingFormalLodPatchReady = false;
+        this.formalLodPreviewOwnedByTerrainRenderer = false;
+        this.movingPatchCandidateSnapshotUsed = false;
+        this.movingPatchInterleavedSectionsUsed = false;
+        this.movingPatchUsesFormalModelIdGeometry = false;
+        this.movingPatchRecordLimit = MOVING_LOD_PATCH_PREVIEW_MAX_RECORDS;
+        this.movingPatchRecordCount = 0;
+        this.movingPatchSectionCount = 0;
+        this.movingPatchDrawIndexCount = 0;
+        this.movingPatchLastBuildDurationMs = 0.0D;
+        this.movingPatchAnchor = "none";
+        this.movingPatchSectionPositions = "none";
+        this.movingPatchUpdateThresholdReady = false;
+        this.movingPatchUpdateThresholdChunks = MOVING_LOD_PATCH_PREVIEW_UPDATE_THRESHOLD_CHUNKS;
+        this.movingPatchRebuildNeeded = false;
+        this.movingPatchLastUpdateReason = "none";
+        this.movingPatchLiveRendererEnabled = false;
+        this.activePreviewDrawIndexLimit = OBSERVE_MAX_DRAW_INDICES;
         this.k6FirstCommandCount = 0;
         this.k6FirstCommandInstanceCount = 0;
         this.k6FirstCommandFirstIndex = 0;

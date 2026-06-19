@@ -1456,6 +1456,49 @@ visibleTerrainPreviewOnly=true
 productionLiveRendererDrawExecuted=false
 ```
 
+## K31-K36 moving formal LoD preview owner note
+
+K31-K36 keeps the K23-K30 minimal visible LoD proof in preview mode, but makes
+the ownership and patch source more renderer-shaped. The preview now has a
+compact moving-patch prepare path:
+
+```text
+K1 formal terrain renderer owner shell
+ -> K8 formal model-id geometry snapshot
+ -> interleaved bounded preview records
+ -> K10-owned visible preview buffers
+ -> explicit opt-in main-framebuffer preview draw
+```
+
+The positive readiness evidence is intentionally limited:
+
+```text
+movingOwnerReady=true
+movingPatchReady=true
+ownedByFormalTerrainRenderer=true
+candidateSnapshotUsed=true
+interleavedSectionsUsed=true
+liveRendererEnabled=false
+```
+
+This means the visible prototype can be prepared as a bounded, player-anchored
+formal LoD patch rather than a fixed bucket proof. It does not remove the
+production blockers. The formal renderer remains not ready because production
+cmdgen, full formal visibility traversal, live formal MDIC draw ownership,
+full terrain shader semantics, light/biome/material handling, and default-off
+runtime policy are still incomplete.
+
+Required safety values remain:
+
+```text
+formalDrawPipelineReady=false
+formalRendererReady=false
+actualRendererDrawEnabled=false
+MDICSectionRendererCalled=false
+VoxyRenderSystemCalled=false
+productionLiveRendererDrawExecuted=false
+```
+
 K10 consumes the already-audited formal inputs instead of debug/sample sources:
 
 ```text
