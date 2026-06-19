@@ -17,6 +17,12 @@ import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.stream.Collectors;
 
+/**
+ * Deprecated bridge route: kept only as historical proof that real terrain
+ * records could be mapped. New formal work must generate packed records
+ * through the original Voxy RenderDataFactory-style path, not this bridge.
+ */
+@Deprecated(forRemoval = false)
 final class ForgeFormalTerrainPackedRecordBridge {
     static final String STAGE = "J5_REAL_TERRAIN_PACKED_RECORD_FORMAL_MODEL_ID_BRIDGE";
     private static final int SEARCH_RADIUS_CHUNKS = 2;

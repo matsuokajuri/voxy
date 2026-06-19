@@ -58,6 +58,25 @@ That means:
 * Do not silently turn debug prototypes into formal renderer components.
 * Do not call something `formal ready` just because a debug or sample path works.
 
+### Original Voxy parity iron law
+
+The renderer migration must follow the original Voxy chain layer by layer. When
+original Voxy has its own component, data structure, lifecycle owner, shader
+contract, or algorithm, the first implementation choice is to find it, inspect
+it, and port or adapt that mechanism to Forge 1.20.1.
+
+Do not substitute a convenient Forge/debug/preview/sample path for an original
+Voxy mechanism. Do not keep a substitute path as the formal route. A deviation
+is allowed only when the original mechanism is impossible to express on Forge
+1.20.1; in that case, document the exact blocker and the smallest equivalent
+adaptation.
+
+Legacy proof systems, synthetic fixtures, preview renderers, sample-set bridges,
+manual QA-only paths, and fallback render paths are deprecated as formal
+direction. They may remain temporarily for historical comparison or regression
+evidence, but they must be labelled as deprecated and must not feed new formal
+renderer readiness.
+
 However, avoid overly tiny stages. Each stage should complete one coherent feature chain where safe.
 
 Good batching:

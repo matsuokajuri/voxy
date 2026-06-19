@@ -22,6 +22,11 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalInt;
 
+/**
+ * Deprecated sample route: kept only as historical G6 evidence. New model work
+ * must use the formal ModelFactory/ModelBakery/ModelStore path.
+ */
+@Deprecated(forRemoval = false)
 final class ForgeModelSampleSet {
     static final String STAGE = "G6_19_MULTI_BLOCK_MODEL_SAMPLE_SET";
     static final String LAYOUT_VERSION = "REAL_MODEL_RECORD_SAMPLE_SET_V1";

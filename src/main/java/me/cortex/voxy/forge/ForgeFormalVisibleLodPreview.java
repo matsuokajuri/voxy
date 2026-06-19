@@ -31,6 +31,12 @@ import java.util.Locale;
 import java.util.stream.Collectors;
 import java.util.zip.CRC32;
 
+/**
+ * Deprecated visible-preview route: kept only as historical visual proof. New
+ * formal renderer work must port original Voxy lifecycle, traversal, cmdgen,
+ * MDIC renderer, and shader ownership instead of extending this preview owner.
+ */
+@Deprecated(forRemoval = false)
 final class ForgeFormalVisibleLodPreview {
     static final String STAGE = "K10_FORMAL_VISIBLE_LOD_PREVIEW_DEBUG_TOGGLE";
     static final String K12_K13_STAGE = "K12_K13_FORMAL_VISIBLE_PREVIEW_PREPARE_BUDGET_AND_REUSE";

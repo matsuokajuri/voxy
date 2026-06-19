@@ -27,6 +27,12 @@ import static org.lwjgl.opengl.ARBIndirectParameters.GL_PARAMETER_BUFFER_ARB;
 import static org.lwjgl.opengl.ARBIndirectParameters.GL_PARAMETER_BUFFER_BINDING_ARB;
 import static org.lwjgl.opengl.ARBIndirectParameters.glMultiDrawElementsIndirectCountARB;
 
+/**
+ * Deprecated smoke-test route: kept only as historical offscreen draw evidence.
+ * New formal work must wire original Voxy MDIC viewport/renderer ownership
+ * rather than extending this isolated validation draw.
+ */
+@Deprecated(forRemoval = false)
 final class ForgeFormalIsolatedMdicDrawSmokeTest {
     static final String STAGE = "K7_FORMAL_ISOLATED_MDIC_DRAW_SMOKE_TEST_OFFSCREEN";
     private static final int PREVIEW_WIDTH = 64;

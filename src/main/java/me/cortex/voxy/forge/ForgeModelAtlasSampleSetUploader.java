@@ -19,6 +19,11 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * Deprecated sample atlas route: kept only as historical G6 audit evidence.
+ * New atlas uploads must go through the formal ModelStore/ModelFactory path.
+ */
+@Deprecated(forRemoval = false)
 final class ForgeModelAtlasSampleSetUploader {
     static final String STAGE = "G6_19_MULTI_BLOCK_ATLAS_UPLOAD_AUDIT";
     static final String ATLAS_FORMAT = "RGBA8";

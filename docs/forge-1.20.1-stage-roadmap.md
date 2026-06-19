@@ -4,6 +4,23 @@ This document corrects the project stage taxonomy after the extended G6.x
 sequence. It does not rename old commits, tags, commands, or code constants. It
 only defines how future work should be described.
 
+## Original Voxy parity rule
+
+From this point on, the project route is strict original Voxy parity. If the
+original renderer has a component or algorithm, the Forge path must port or
+adapt that original mechanism first. Convenient Forge/debug/preview/sample
+substitutes are not acceptable as the formal route.
+
+All earlier synthetic fixtures, preview renderers, sample-set bridges,
+validation-only shaders, manual QA-only draw paths, and fallback geometry
+bridges are deprecated as implementation direction. They may remain referenced
+below only as historical evidence explaining why a later parity correction was
+needed.
+
+See also:
+
+- `docs/forge-1.20.1-deprecated-prototype-routes.md`
+
 ## Why this correction exists
 
 The project already had an A-F stage taxonomy before the current conversation
@@ -90,8 +107,9 @@ extended G complete enough for ownership audit
 
 Stage correction does not mean starting over. The debug renderer, atlas upload,
 MDIC command, indirect-count, sample-set, and formal-input-bridge work remain
-valuable validation results. The correction means future work should stop
-expanding debug renderers and start defining formal renderer ownership.
+historical validation results, but they are deprecated as future implementation
+direction. The correction means future work should stop expanding debug or
+preview renderers and should instead port the original Voxy chain directly.
 
 ## New stage taxonomy
 

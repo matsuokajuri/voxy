@@ -11,6 +11,12 @@ import static org.lwjgl.opengl.GL45C.glCreateBuffers;
 import static org.lwjgl.opengl.GL45C.nglGetNamedBufferSubData;
 import static org.lwjgl.opengl.GL45C.nglNamedBufferData;
 
+/**
+ * Deprecated sample-set bridge: this is not a formal ModelStore/shader source.
+ * Keep only for historical comparison; new formal shader work must consume the
+ * real formal ModelStore and original Voxy shader binding contract.
+ */
+@Deprecated(forRemoval = false)
 final class ForgeFormalShaderInputBridge {
     static final String STAGE = "G6_20_FORMAL_SHADER_INPUT_BRIDGE_SAMPLE_SET";
     static final int MODEL_DATA_BINDING_INDEX = 3;

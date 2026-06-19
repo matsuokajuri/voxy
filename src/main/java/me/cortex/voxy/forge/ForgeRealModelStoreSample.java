@@ -20,6 +20,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+/**
+ * Deprecated one-off sample route: kept only as historical model-record
+ * evidence. New model-store work must use the formal Voxy ModelFactory path.
+ */
+@Deprecated(forRemoval = false)
 final class ForgeRealModelStoreSample {
     static final String STAGE = "G6_13_REAL_MODELSTORE_RECORD_SAMPLE";
     private static final int MAX_MAPPER_CANDIDATES = 32;

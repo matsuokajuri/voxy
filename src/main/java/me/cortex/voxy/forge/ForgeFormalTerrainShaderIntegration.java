@@ -27,6 +27,12 @@ import static org.lwjgl.opengl.ARBIndirectParameters.GL_PARAMETER_BUFFER_ARB;
 import static org.lwjgl.opengl.ARBIndirectParameters.GL_PARAMETER_BUFFER_BINDING_ARB;
 import static org.lwjgl.opengl.ARBIndirectParameters.glMultiDrawElementsIndirectCountARB;
 
+/**
+ * Deprecated shader-adapter route: kept only as historical offscreen shader
+ * evidence. New formal work must port original Voxy terrain shader contracts
+ * and renderer binding ownership instead of extending this adapter.
+ */
+@Deprecated(forRemoval = false)
 final class ForgeFormalTerrainShaderIntegration {
     static final String STAGE = "K9_FORMAL_TERRAIN_SHADER_OFFSCREEN_INTEGRATION";
     private static final int PREVIEW_WIDTH = 64;

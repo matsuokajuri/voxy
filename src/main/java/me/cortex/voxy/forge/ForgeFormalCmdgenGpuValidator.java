@@ -16,6 +16,12 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.stream.Collectors;
 
+/**
+ * Deprecated validation-only route: kept only as historical cmdgen buffer
+ * evidence. New formal work must port original cmdgen.comp ownership and input
+ * contracts instead of extending this synthetic validator.
+ */
+@Deprecated(forRemoval = false)
 final class ForgeFormalCmdgenGpuValidator {
     static final String STAGE = "K5_FORMAL_CMDGEN_GPU_VALIDATION_NO_DRAW";
     private static final int DRAW_BUFFER_BINDING = 1;

@@ -19,6 +19,12 @@ import java.util.List;
 import java.util.stream.Collectors;
 import java.util.zip.CRC32;
 
+/**
+ * Deprecated prototype route: kept only as historical shader-preview evidence.
+ * New formal renderer work must port the original Voxy shader/renderer chain
+ * instead of extending this preview path.
+ */
+@Deprecated(forRemoval = false)
 final class ForgeFormalTexturedShaderPreview {
     static final String STAGE = "J3_FORMAL_TEXTURED_SHADER_PREVIEW_PROTOTYPE";
     private static final int PREVIEW_MODEL_ID_BINDING_INDEX = 6;

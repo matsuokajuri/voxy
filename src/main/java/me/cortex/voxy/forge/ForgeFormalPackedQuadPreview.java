@@ -26,6 +26,12 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.zip.CRC32;
 
+/**
+ * Deprecated prototype route: kept only as historical packed-quad preview
+ * evidence. New formal geometry work must follow original Voxy
+ * RenderDataFactory and geometry-manager ownership instead.
+ */
+@Deprecated(forRemoval = false)
 final class ForgeFormalPackedQuadPreview {
     static final String STAGE = "J4_FORMAL_PACKED_QUAD_SHADER_GEOMETRY_PREVIEW";
     private static final int PACKED_QUAD_BINDING_INDEX = 7;

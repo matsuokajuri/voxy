@@ -26,6 +26,12 @@ import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+/**
+ * Deprecated dry-run route: kept only as historical command-generation
+ * evidence. New formal work must consume real Voxy section metadata through
+ * the original command-generation pipeline, not this isolated dry run.
+ */
+@Deprecated(forRemoval = false)
 final class ForgeFormalCmdgenRealSectionDryRun {
     static final String STAGE = "K6_FORMAL_CMDGEN_REAL_SECTION_DRY_RUN_NO_DRAW";
     private static final int DRAW_BUFFER_BINDING = 1;

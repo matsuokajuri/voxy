@@ -6,6 +6,18 @@ This is the route-control ledger for comparing the current Forge formal LoD
 path against the original Voxy renderer. The purpose is to find and remove
 architectural drift, not to justify the preview path.
 
+## Current route rule
+
+Strict original Voxy parity is now the controlling rule. Old preview,
+synthetic, sample-set, fallback, bridge, and QA-only paths are deprecated as
+implementation direction. They may remain only as historical evidence until
+their references can be safely removed.
+
+Future remediation must proceed by locating the corresponding original Voxy
+owner/algorithm/shader/data structure first, then porting or adapting it to
+Forge 1.20.1. If that cannot be done, the blocker must be documented before any
+alternative is introduced.
+
 ## Summary verdict
 
 ```text

@@ -9,6 +9,15 @@ Stage numbering note: G6.x labels are now treated as legacy labels for the
 extended G phase. New work after G6.22 should use the H/I/J/K stage taxonomy,
 starting with H1 formal renderer no-draw skeleton.
 
+## Deprecation notice
+
+This audit predates the strict original Voxy parity rule. Any sample-set bridge,
+synthetic fixture, preview-only renderer, validation shader, fallback source, or
+manual QA draw path described here is now deprecated as implementation
+direction. Those paths may still explain historical evidence, but new formal
+renderer work must port the original Voxy ownership chain and shader/data
+contracts instead of extending these substitutes.
+
 ## Summary conclusion
 
 The project has not gone off the rails, but it has reached the point where the
