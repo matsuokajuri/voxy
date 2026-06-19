@@ -671,6 +671,14 @@ public final class ForgeVoxyCommands {
                         .executes(ctx -> formalVisibleLodPreviewObserveDisable(ctx.getSource())))
                 .then(Commands.literal("qa_k43_k48_formal_lod_preview_update_lifecycle")
                         .executes(ctx -> qaK43K48FormalLodPreviewUpdateLifecycle(ctx.getSource())))
+                .then(Commands.literal("formal_lod_preview_auto_update_enable")
+                        .executes(ctx -> formalLodPreviewAutoUpdateEnable(ctx.getSource())))
+                .then(Commands.literal("formal_lod_preview_auto_update_status")
+                        .executes(ctx -> formalLodPreviewAutoUpdateStatus(ctx.getSource())))
+                .then(Commands.literal("formal_lod_preview_auto_update_disable")
+                        .executes(ctx -> formalLodPreviewAutoUpdateDisable(ctx.getSource())))
+                .then(Commands.literal("qa_k49_k54_formal_lod_preview_auto_update")
+                        .executes(ctx -> qaK49K54FormalLodPreviewAutoUpdate(ctx.getSource())))
                 .then(Commands.literal("formal_renderer_check")
                         .executes(ctx -> formalRendererCheck(ctx.getSource())))
                 .then(Commands.literal("formal_renderer_status")
@@ -6859,6 +6867,63 @@ public final class ForgeVoxyCommands {
                 && !rendererStatus.actualDrawEnabled() ? 1 : 0;
     }
 
+    private static int formalLodPreviewAutoUpdateEnable(CommandSourceStack source) {
+        ForgeVoxyRuntimeOverrides.applyFormalVisibleLodPreviewDebugPreset();
+        boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
+        ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview()
+                .requestAutoUpdateEnable("k49-k54-formal-lod-preview-auto-update-enable");
+        source.sendSuccess(() -> Component.literal("Voxy K49-K54 formal LoD preview auto update enable: "
+                + (engineReady ? "WorldEngine active. " : "No active client world; auto update may wait/fail safely. ")
+                + formatFormalLodPreviewAutoUpdateStatus(status)
+                + " move-test=/tp @s 176 140 128; status=/voxy formal_lod_preview_auto_update_status"), false);
+        return autoUpdateCommandSafe(status)
+                && !status.formalRendererReady()
+                && !status.actualRendererDrawEnabled() ? 1 : 0;
+    }
+
+    private static int formalLodPreviewAutoUpdateStatus(CommandSourceStack source) {
+        ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview()
+                .refreshAutoUpdateStatus("k49-k54-formal-lod-preview-auto-update-status");
+        source.sendSuccess(() -> Component.literal("Voxy K49-K54 formal LoD preview auto update status: "
+                + formatFormalLodPreviewAutoUpdateStatus(status)), false);
+        return !status.formalRendererReady()
+                && !status.actualRendererDrawEnabled()
+                && status.previewDrawCommandBucketSummary().contains("autoUpdateSummary=") ? 1 : 0;
+    }
+
+    private static int formalLodPreviewAutoUpdateDisable(CommandSourceStack source) {
+        ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview()
+                .requestAutoUpdateDisable("k49-k54-formal-lod-preview-auto-update-disable");
+        source.sendSuccess(() -> Component.literal("Voxy K49-K54 formal LoD preview auto update disable: "
+                + formatFormalLodPreviewAutoUpdateStatus(status)), false);
+        return !status.visiblePreviewEnabled()
+                && !status.formalRendererReady()
+                && !status.actualRendererDrawEnabled() ? 1 : 0;
+    }
+
+    private static int qaK49K54FormalLodPreviewAutoUpdate(CommandSourceStack source) {
+        ForgeVoxyRuntimeOverrides.applyFormalVisibleLodPreviewDebugPreset();
+        boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
+        ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview()
+                .requestAutoUpdateEnable("qa-k49-k54-formal-lod-preview-auto-update");
+        ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager()
+                .checkReadiness("qa-k49-k54-formal-lod-preview-auto-update");
+        String message = "Voxy QA K49-K54 formal LoD preview auto update: "
+                + (engineReady ? "WorldEngine active. " : "No active client world; auto update may wait/fail safely. ")
+                + formatFormalLodPreviewAutoUpdateStatus(status)
+                + " "
+                + formatFormalRendererStatus(rendererStatus)
+                + " manual-check=wait-for-preview,then-move-across-chunks,stop,then-/voxy formal_lod_preview_auto_update_status; expected=no-stutter,automatic-refresh-after-stable-position; then-disable";
+        VoxyForge.LOGGER.info(message);
+        source.sendSuccess(() -> Component.literal(message), false);
+        return autoUpdateCommandSafe(status)
+                && !status.formalDrawPipelineReady()
+                && !status.formalRendererReady()
+                && !status.actualRendererDrawEnabled()
+                && !rendererStatus.formalRendererReady()
+                && !rendererStatus.actualDrawEnabled() ? 1 : 0;
+    }
+
     private static int formalRendererCheck(CommandSourceStack source) {
         ForgeFormalRendererStats status = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("command-check");
         source.sendSuccess(() -> Component.literal("Voxy formal renderer check: " + formatFormalRendererStatus(status)), false);
@@ -9396,6 +9461,66 @@ public final class ForgeVoxyCommands {
 
     private static boolean movingUpdateRebuildNeeded(ForgeFormalVisibleLodPreviewStats status) {
         return status.previewDrawCommandBucketSummary().contains("movingUpdateRebuildNeeded=true");
+    }
+
+    private static String formatFormalLodPreviewAutoUpdateStatus(ForgeFormalVisibleLodPreviewStats status) {
+        return String.format(
+                "stage=%s k49_k54_stage=K49_K54_FORMAL_LOD_PREVIEW_AUTO_UPDATE_THROTTLE "
+                        + "autoUpdateEnabled=%s autoUpdateLifecycleReady=%s autoUpdateRebuildPending=%s autoUpdateRebuildScheduled=%s "
+                        + "autoUpdateRebuildCompleted=%s autoUpdateRebuildFailedSafely=%s autoUpdateThrottled=%s "
+                        + "autoUpdateAutomaticRenderThreadRebuildEnabled=%s autoUpdatePendingRebuildOnly=%s autoUpdateRequiresManualPrepare=%s "
+                        + "movingUpdateLifecycleReady=%s movingUpdateRebuildNeeded=%s updateSummary=%s "
+                        + "visiblePreviewEnabled=%s visiblePreviewDrawExecuted=%s minecraftMainFramebufferDrawn=%s "
+                        + "visibleTerrainPreviewOnly=true debugOptInOnly=true visiblePreviewDefaultEnabled=false "
+                        + "originalGeometryHeapMutated=%s debugMdicCommandBuffersUsedAsFormal=%s sampleSetUsedAsFormalSource=%s "
+                        + "MDICSectionRendererCalled=false VoxyRenderSystemCalled=false productionLiveRendererDrawExecuted=false "
+                        + "formalDrawPipelineReady=false formalRendererReady=false actualRendererDrawEnabled=false lastFailureReason=%s",
+                status.stage(),
+                autoUpdateEnabled(status),
+                autoUpdateLifecycleReady(status),
+                containsSummary(status, "autoUpdateRebuildPending=true"),
+                containsSummary(status, "autoUpdateRebuildScheduled=true"),
+                containsSummary(status, "autoUpdateRebuildCompleted=true"),
+                containsSummary(status, "autoUpdateRebuildFailedSafely=true"),
+                containsSummary(status, "autoUpdateThrottled=true"),
+                containsSummary(status, "autoUpdateAutomaticRenderThreadRebuildEnabled=true"),
+                containsSummary(status, "autoUpdatePendingRebuildOnly=true"),
+                containsSummary(status, "autoUpdateRequiresManualPrepare=true"),
+                movingUpdateLifecycleReady(status),
+                movingUpdateRebuildNeeded(status),
+                status.previewDrawCommandBucketSummary(),
+                status.visiblePreviewEnabled(),
+                status.visiblePreviewDrawExecuted(),
+                status.minecraftMainFramebufferDrawn(),
+                status.originalGeometryHeapMutated(),
+                status.debugMdicCommandBuffersUsedAsFormal(),
+                status.sampleSetUsedAsFormalSource(),
+                status.lastFailureReason()
+        );
+    }
+
+    private static boolean autoUpdateCommandSafe(ForgeFormalVisibleLodPreviewStats status) {
+        return (autoUpdateEnabled(status)
+                || status.observePrepareRequested()
+                || status.observePrepareInProgress()
+                || status.observeEnableRequested()
+                || status.visiblePreviewEnabled())
+                && status.observeEnableCommandReturnedQuickly()
+                && !status.observeEnableDidGlWorkOnCommandThread()
+                && !status.observeEnableDidReadbackOnCommandThread()
+                && !status.observeEnableDidSynchronousRebuild();
+    }
+
+    private static boolean autoUpdateEnabled(ForgeFormalVisibleLodPreviewStats status) {
+        return containsSummary(status, "autoUpdateEnabled=true");
+    }
+
+    private static boolean autoUpdateLifecycleReady(ForgeFormalVisibleLodPreviewStats status) {
+        return containsSummary(status, "autoUpdateLifecycleReady=true");
+    }
+
+    private static boolean containsSummary(ForgeFormalVisibleLodPreviewStats status, String value) {
+        return status.previewDrawCommandBucketSummary().contains(value);
     }
 
     private static String formatFormalVisibleLodPreviewStatus(ForgeFormalVisibleLodPreviewStats status) {

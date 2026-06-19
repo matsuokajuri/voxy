@@ -925,6 +925,61 @@ does not call `MDICSectionRenderer`, does not call `VoxyRenderSystem`, and
 keeps `formalDrawPipelineReady=false`, `formalRendererReady=false`, and
 `actualRendererDrawEnabled=false`.
 
+## K49/K54 status note
+
+K49/K54 adds a preview-only automatic update throttle above the K43/K48 moving
+update lifecycle. When explicitly enabled, the K10 render hook performs a cheap
+chunk-anchor check at a fixed interval. If the player has moved beyond the
+threshold, it waits for the player position to settle, then schedules the
+existing render-thread expanded-patch prepare path and auto-enables the preview
+after the rebuild completes. K49/K54 also keeps the visible preview shader and
+GL buffer owners persistent across refreshes, so updates replace data instead
+of deleting/recreating the shader program and buffer objects.
+
+New compact commands:
+
+```text
+/voxy qa_k49_k54_formal_lod_preview_auto_update
+/voxy formal_lod_preview_auto_update_enable
+/voxy formal_lod_preview_auto_update_status
+/voxy formal_lod_preview_auto_update_disable
+```
+
+The key status evidence is embedded in `autoUpdateSummary`:
+
+```text
+autoUpdateRebuildThresholdChunks
+autoUpdateStableFrameThreshold
+autoUpdateWaitingForStablePosition
+autoUpdateRebuildDeferredWhileMoving
+autoUpdateAutomaticRenderThreadRebuildEnabled=true
+autoUpdatePendingRebuildOnly=false
+autoUpdateRequiresManualPrepare
+```
+
+```text
+autoUpdateEnabled
+autoUpdateLifecycleReady
+autoUpdateCheckIntervalFrames
+autoUpdateRebuildCooldownFrames
+autoUpdateRebuildPending
+autoUpdateRebuildScheduled
+autoUpdateRebuildCompleted
+autoUpdateRebuildFailedSafely
+autoUpdateThrottled
+autoUpdateRebuildRequestCount
+autoUpdateRebuildCompleteCount
+```
+
+The automatic path remains opt-in and preview-only. It does not run production
+visibility traversal, does not run production `cmdgen.comp`, does not call
+`MDICSectionRenderer`, does not call `VoxyRenderSystem`, does not mutate the
+original geometry heap, and keeps `formalDrawPipelineReady=false`,
+`formalRendererReady=false`, and `actualRendererDrawEnabled=false`.
+The formal geometry snapshot prefers the current player chunk before scanning
+nearby cached sections, and nearby cache snapshots are distance-sorted so stale
+chunks inside the search radius do not mask the current preview anchor.
+
 ## K23-K30 status note
 
 K23-K30 creates the first minimal formal LoD renderer prototype, still bounded

@@ -5,6 +5,7 @@ import me.cortex.voxy.config.ForgeVoxyConfig;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.Set;
 import java.util.List;
@@ -103,9 +104,15 @@ public final class ForgeVoxyGeometryCache {
                 continue;
             }
             snapshot.add(section);
-            if (snapshot.size() >= limit) {
-                break;
-            }
+        }
+        snapshot.sort(Comparator
+                .comparingInt((ForgeVoxyBuiltSection section) -> chebyshevDistance(section, centerChunkX, centerChunkZ))
+                .thenComparingInt(section -> manhattanDistance(section, centerChunkX, centerChunkZ))
+                .thenComparingInt(ForgeVoxyBuiltSection::chunkX)
+                .thenComparingInt(ForgeVoxyBuiltSection::chunkZ)
+                .thenComparingLong(ForgeVoxyBuiltSection::position));
+        if (snapshot.size() > limit) {
+            return new ArrayList<>(snapshot.subList(0, limit));
         }
         return snapshot;
     }
@@ -277,6 +284,14 @@ public final class ForgeVoxyGeometryCache {
         } catch (IllegalStateException e) {
             return FALLBACK_MAX_ENTRIES;
         }
+    }
+
+    private static int chebyshevDistance(ForgeVoxyBuiltSection section, int centerChunkX, int centerChunkZ) {
+        return Math.max(Math.abs(section.chunkX() - centerChunkX), Math.abs(section.chunkZ() - centerChunkZ));
+    }
+
+    private static int manhattanDistance(ForgeVoxyBuiltSection section, int centerChunkX, int centerChunkZ) {
+        return Math.abs(section.chunkX() - centerChunkX) + Math.abs(section.chunkZ() - centerChunkZ);
     }
 
     public record StatusSnapshot(

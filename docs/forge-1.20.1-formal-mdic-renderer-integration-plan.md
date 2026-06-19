@@ -992,3 +992,30 @@ per-frame rebuild attempts.
 K43-K48 does not implement production visibility traversal, does not dispatch
 production `cmdgen.comp`, does not hand commands to `MDICSectionRenderer`, and
 does not enable a live formal renderer.
+
+## K49-K54 auto update throttle note
+
+K49-K54 extends the preview owner with an automatic, throttled update loop:
+
+```text
+visible preview enabled
+ -> cheap chunk-anchor check every N render-hook invocations
+ -> movingUpdateRebuildNeeded
+ -> defer while player position is still changing
+ -> schedule existing expanded-patch prepare
+ -> reuse persistent visible shader/buffer owners
+ -> auto-enable preview after data refresh
+```
+
+This is intentionally not a production MDIC update loop. It does not own formal
+visibility traversal, does not run production command generation, does not call
+`MDICSectionRenderer`, and does not route through `VoxyRenderSystem`. Its value
+is proving that the current preview can detect movement-driven staleness and
+refresh without repeatedly compiling shaders or recreating GL buffer objects.
+The original Voxy renderer goes further by generating section meshes
+asynchronously and uploading/swapping them incrementally; that production-grade
+owner remains future work.
+The preview source selector now prefers the current player chunk and sorts
+nearby cached BuiltSections by distance before fallback use. This reduces stale
+preview anchors without claiming production visibility traversal or production
+geometry ownership.

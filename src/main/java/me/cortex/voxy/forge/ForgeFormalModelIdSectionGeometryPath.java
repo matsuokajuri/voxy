@@ -173,6 +173,11 @@ final class ForgeFormalModelIdSectionGeometryPath {
         return this.createStatusSnapshot();
     }
 
+    ForgeFormalModelIdSectionGeometryStats rebuildForPreviewRefresh(String reason) {
+        this.markStale(reason);
+        return this.build();
+    }
+
     ForgeFormalModelIdSectionGeometryAuditResult audit() {
         this.auditRuns++;
         long start = System.nanoTime();
@@ -374,11 +379,12 @@ final class ForgeFormalModelIdSectionGeometryPath {
         String dimension = level.dimension().location().toString();
         ChunkPos playerChunk = minecraft.player.chunkPosition();
         this.instance.getVoxyGeometryCache().setActiveDimension(dimension);
-        List<ForgeVoxyBuiltSection> cached = this.instance.getVoxyGeometryCache().createAreaSnapshot(dimension, playerChunk.x, playerChunk.z, SEARCH_RADIUS_CHUNKS, MAX_SNAPSHOT_SECTIONS * 4);
-        this.candidateSectionSource = cached.isEmpty()
-                ? "current-world-built-section-rebuild"
-                : "ForgeVoxyGeometryCache.current-world-built-section";
-        this.scanBuiltSections(cached, summariesByBlockState);
+
+        List<ForgeVoxyBuiltSection> currentChunkCached = this.instance.getVoxyGeometryCache().createChunkSnapshot(dimension, playerChunk.x, playerChunk.z);
+        if (!currentChunkCached.isEmpty()) {
+            this.candidateSectionSource = "ForgeVoxyGeometryCache.current-player-chunk";
+            this.scanBuiltSections(currentChunkCached, summariesByBlockState);
+        }
         if (this.acceptedRecordCount > 0) {
             this.finishSnapshot();
             return true;
@@ -397,6 +403,17 @@ final class ForgeFormalModelIdSectionGeometryPath {
                 }
             }
         }
+        if (this.acceptedRecordCount > 0) {
+            this.finishSnapshot();
+            return true;
+        }
+
+        this.resetScanCounts();
+        List<ForgeVoxyBuiltSection> cached = this.instance.getVoxyGeometryCache().createAreaSnapshot(dimension, playerChunk.x, playerChunk.z, SEARCH_RADIUS_CHUNKS, MAX_SNAPSHOT_SECTIONS * 4);
+        this.candidateSectionSource = cached.isEmpty()
+                ? "near-player-built-section-cache-empty"
+                : "ForgeVoxyGeometryCache.nearest-player-area-fallback";
+        this.scanBuiltSections(cached, summariesByBlockState);
         if (this.acceptedRecordCount == 0 && "none".equals(this.lastFailureReason)) {
             this.fail("no-records-mapped-near-player:" + playerPos.getX() + "," + playerPos.getY() + "," + playerPos.getZ());
             return false;

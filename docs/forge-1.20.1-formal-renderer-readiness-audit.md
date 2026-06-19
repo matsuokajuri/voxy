@@ -1590,6 +1590,46 @@ This remains preview evidence. It does not make the formal renderer ready and
 does not reduce the production blockers for traversal, cmdgen, live MDIC draw,
 or full terrain shader semantics.
 
+## K49-K54 auto update throttle note
+
+K49-K54 adds opt-in automatic update scheduling for the visible LoD preview.
+The render hook now has a lightweight check interval, a rebuild cooldown, a
+larger auto-update chunk threshold, and a short player-position stability gate.
+After comparison with original Voxy, the K49/K54 refresh path keeps the visible
+preview shader program and GL buffer owners persistent, replacing their data
+instead of deleting/recreating all resources for each movement update.
+
+```text
+autoUpdateEnabled
+autoUpdateLifecycleReady
+autoUpdateCheckIntervalFrames
+autoUpdateRebuildCooldownFrames
+autoUpdateRebuildThresholdChunks
+autoUpdateStableFrameThreshold
+autoUpdateRebuildDeferredWhileMoving
+autoUpdateWaitingForStablePosition
+autoUpdateRebuildPending
+autoUpdateRebuildCompleted
+autoUpdateThrottled
+autoUpdateAutomaticRenderThreadRebuildEnabled=true
+autoUpdatePendingRebuildOnly=false
+autoUpdateRequiresManualPrepare
+```
+
+The auto path does not rebuild every frame or every chunk crossing. It waits
+for the player to settle, reuses the same resource owners, and runs the existing
+prepare state machine only when the movement threshold is crossed. A fully
+original-Voxy-like path still requires later async section generation and
+incremental upload/swap ownership; K49/K54 deliberately does not claim that
+production path is complete.
+K49/K54 also tightens formal geometry source selection: K8 now prefers current
+player chunk snapshots and uses distance-sorted nearby cache fallback, so
+movement refresh does not silently keep an older cached chunk as the draw source.
+
+Readiness remains unchanged: this is still a preview system with explicit
+opt-in. `formalDrawPipelineReady=false`, `formalRendererReady=false`, and
+`actualRendererDrawEnabled=false` remain required.
+
 ## K10.1 observe/performance hotfix note
 
 K10.1 is a hotfix on the K10 visible preview, not a new renderer stage. It

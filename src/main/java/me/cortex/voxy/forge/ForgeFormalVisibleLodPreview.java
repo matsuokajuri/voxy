@@ -42,6 +42,7 @@ final class ForgeFormalVisibleLodPreview {
     static final String K31_K36_STAGE = "K31_K36_FORMAL_LOD_PREVIEW_MOVING_PATCH_OWNER";
     static final String K37_K42_STAGE = "K37_K42_EXPANDED_FORMAL_LOD_PATCH_PREVIEW";
     static final String K43_K48_STAGE = "K43_K48_FORMAL_LOD_PREVIEW_MOVING_UPDATE_LIFECYCLE";
+    static final String K49_K54_STAGE = "K49_K54_FORMAL_LOD_PREVIEW_AUTO_UPDATE_THROTTLE";
     private static final boolean DEFAULT_ENABLED = false;
     private static final boolean DEBUG_OPT_IN_ONLY = true;
     private static final int QA_VISIBLE_FRAMES = 1;
@@ -66,6 +67,11 @@ final class ForgeFormalVisibleLodPreview {
     private static final int EXPANDED_LOD_PATCH_PREVIEW_MIN_SECTIONS = 3;
     private static final int EXPANDED_LOD_PATCH_PREVIEW_MIN_Y_BANDS = 2;
     private static final int MOVING_UPDATE_THRESHOLD_CHUNKS = 1;
+    private static final int AUTO_UPDATE_CHECK_INTERVAL_FRAMES = 20;
+    private static final int AUTO_UPDATE_REBUILD_COOLDOWN_FRAMES = 240;
+    private static final int AUTO_UPDATE_REBUILD_THRESHOLD_CHUNKS = 3;
+    private static final int AUTO_UPDATE_STABLE_FRAMES = 60;
+    private static final double AUTO_UPDATE_MOVEMENT_EPSILON_SQUARED = 0.015625D;
     private static final int NO_CHUNK_ANCHOR = Integer.MIN_VALUE;
     private static final int OBSERVE_MAX_DRAW_INDICES = EXPANDED_LOD_PATCH_PREVIEW_MAX_RECORDS * 6;
     private static final int PREVIEW_SECTION_DATA_BINDING_INDEX = 6;
@@ -557,6 +563,37 @@ final class ForgeFormalVisibleLodPreview {
     private String movingUpdateLastUpdateReason = "none";
     private String movingUpdateLastRebuildReason = "none";
     private boolean movingUpdateLiveRendererEnabled;
+    private boolean autoUpdateEnabled;
+    private boolean autoUpdateDesiredAfterPrepare;
+    private boolean autoUpdateRestoreAfterPrepare;
+    private boolean autoUpdateLifecycleReady;
+    private boolean autoUpdateRebuildPending;
+    private boolean autoUpdateRebuildScheduled;
+    private boolean autoUpdateRebuildCompleted;
+    private boolean autoUpdateRebuildFailedSafely;
+    private boolean autoUpdateThrottled;
+    private boolean autoUpdateRebuildDeferredWhileMoving;
+    private boolean autoUpdateWaitingForStablePosition;
+    private boolean autoUpdateRequiresManualPrepare;
+    private int autoUpdateCheckIntervalFrames = AUTO_UPDATE_CHECK_INTERVAL_FRAMES;
+    private int autoUpdateRebuildCooldownFrames = AUTO_UPDATE_REBUILD_COOLDOWN_FRAMES;
+    private int autoUpdateRebuildThresholdChunks = AUTO_UPDATE_REBUILD_THRESHOLD_CHUNKS;
+    private int autoUpdateStableFrameThreshold = AUTO_UPDATE_STABLE_FRAMES;
+    private long autoUpdateCheckCount;
+    private long autoUpdateSkippedCount;
+    private long autoUpdateRebuildRequestCount;
+    private long autoUpdateRebuildCompleteCount;
+    private long autoUpdatePendingRebuildCount;
+    private long autoUpdateLastCheckFrame;
+    private long autoUpdateLastScheduleFrame;
+    private long autoUpdateNextAllowedFrame;
+    private long autoUpdateLastMovementFrame;
+    private long autoUpdateStableFrameCount;
+    private double autoUpdateLastPlayerX = Double.NaN;
+    private double autoUpdateLastPlayerZ = Double.NaN;
+    private String autoUpdateLastReason = "none";
+    private String autoUpdateLastFailureReason = "none";
+    private String autoUpdateDeferredReason = "none";
     private int lastPreviewChunkCount;
     private String lastPreviewChunkAnchors = "none";
     private int lastPreviewYBandCount;
@@ -639,9 +676,8 @@ final class ForgeFormalVisibleLodPreview {
         }
 
         try {
-            this.closeOwnedResourcesOnRenderThread();
             this.captureFormalModelReadbacks(k8);
-            this.visiblePreviewShaderProgramId = this.compileVisiblePreviewShaderProgram();
+            this.visiblePreviewShaderProgramId = this.ensureVisiblePreviewShaderProgram();
             this.createValidationDrawBuffers(k6, k8, false);
             this.ownerReady = this.renderHookRegistered
                     && this.visiblePreviewDefaultDisabledVerified
@@ -734,9 +770,8 @@ final class ForgeFormalVisibleLodPreview {
         }
 
         try {
-            this.closeOwnedResourcesOnRenderThread();
             this.captureFormalModelReadbacks(k8);
-            this.visiblePreviewShaderProgramId = this.compileVisiblePreviewShaderProgram();
+            this.visiblePreviewShaderProgramId = this.ensureVisiblePreviewShaderProgram();
             this.createValidationDrawBuffers(null, k8, true);
             this.ownerReady = this.renderHookRegistered
                     && this.visiblePreviewDefaultDisabledVerified
@@ -835,9 +870,8 @@ final class ForgeFormalVisibleLodPreview {
         }
 
         try {
-            this.closeOwnedResourcesOnRenderThread();
             this.captureFormalModelReadbacks(k8);
-            this.visiblePreviewShaderProgramId = this.compileVisiblePreviewShaderProgram();
+            this.visiblePreviewShaderProgramId = this.ensureVisiblePreviewShaderProgram();
             this.createValidationDrawBuffers(null, k8, true, true, MOVING_LOD_PATCH_PREVIEW_MAX_RECORDS);
             this.movingPatchLastBuildDurationMs = elapsedMs(startNanos);
             this.movingPatchAnchor = currentPlayerChunkAnchor();
@@ -952,7 +986,10 @@ final class ForgeFormalVisibleLodPreview {
                 && terrainOwner.lifecycleState().contains("ENABLED_NO_DRAW");
 
         ForgeFormalModelIdSectionGeometryStats k8 = this.instance.getFormalModelIdSectionGeometryPath().createStatusSnapshot();
-        if (!k8.formalModelIdGeometryPathReady() || k8.stale() || k8.requiresRebuild()) {
+        if (this.movingUpdateRebuildRequested) {
+            k8 = this.instance.getFormalModelIdSectionGeometryPath()
+                    .rebuildForPreviewRefresh("k37-k42-expanded-formal-lod-preview-moving-refresh");
+        } else if (!k8.formalModelIdGeometryPathReady() || k8.stale() || k8.requiresRebuild()) {
             k8 = this.instance.getFormalModelIdSectionGeometryPath().build();
         }
         ForgeFormalModelStoreStats store = this.instance.getFormalModelStore().createStatusSnapshot();
@@ -963,9 +1000,8 @@ final class ForgeFormalVisibleLodPreview {
         }
 
         try {
-            this.closeOwnedResourcesOnRenderThread();
             this.captureFormalModelReadbacks(k8);
-            this.visiblePreviewShaderProgramId = this.compileVisiblePreviewShaderProgram();
+            this.visiblePreviewShaderProgramId = this.ensureVisiblePreviewShaderProgram();
             this.createValidationDrawBuffers(null, k8, true, true, EXPANDED_LOD_PATCH_PREVIEW_MAX_RECORDS);
             this.expandedPatchLastBuildDurationMs = elapsedMs(startNanos);
             this.expandedPatchAnchor = currentPlayerChunkAnchor();
@@ -1212,6 +1248,57 @@ final class ForgeFormalVisibleLodPreview {
         return this.createStatusSnapshot();
     }
 
+    ForgeFormalVisibleLodPreviewStats requestAutoUpdateEnable(String reason) {
+        this.autoUpdateEnabled = true;
+        this.autoUpdateDesiredAfterPrepare = true;
+        this.autoUpdateRestoreAfterPrepare = true;
+        this.autoUpdateLifecycleReady = true;
+        this.autoUpdateLastReason = safeReason(reason);
+        this.autoUpdateLastFailureReason = "none";
+        this.autoUpdateRebuildFailedSafely = false;
+        this.autoUpdateThrottled = false;
+        this.autoUpdateRequiresManualPrepare = false;
+        this.resetAutoUpdateMovementState();
+        this.updateMovingUpdateLifecycle(reason);
+        if (this.ownerReady && !this.stale && !this.movingUpdateRebuildNeeded) {
+            return this.requestObserveEnable(reason);
+        }
+        this.autoUpdateRebuildPending = true;
+        this.autoUpdateRebuildScheduled = true;
+        this.autoUpdateRebuildCompleted = false;
+        this.autoUpdateRebuildRequestCount++;
+        this.autoUpdateLastScheduleFrame = this.renderHookInvocationCount;
+        this.autoUpdateNextAllowedFrame = this.renderHookInvocationCount + this.autoUpdateRebuildCooldownFrames;
+        this.stale = true;
+        this.requiresRebuild = true;
+        ForgeFormalVisibleLodPreviewStats status = this.requestExpandedFormalLodPatchPrepare(reason);
+        this.observePrepareAutoEnable = true;
+        this.autoUpdateLastReason = safeReason(reason);
+        return status;
+    }
+
+    ForgeFormalVisibleLodPreviewStats requestAutoUpdateDisable(String reason) {
+        this.autoUpdateEnabled = false;
+        this.autoUpdateDesiredAfterPrepare = false;
+        this.autoUpdateRestoreAfterPrepare = false;
+        this.autoUpdateLifecycleReady = false;
+        this.autoUpdateRebuildPending = false;
+        this.autoUpdateRebuildScheduled = false;
+        this.autoUpdateThrottled = false;
+        this.autoUpdateRequiresManualPrepare = false;
+        this.resetAutoUpdateMovementState();
+        this.autoUpdateLastReason = safeReason(reason);
+        return this.disable(reason);
+    }
+
+    ForgeFormalVisibleLodPreviewStats refreshAutoUpdateStatus(String reason) {
+        this.updateMovingUpdateLifecycle(reason);
+        this.updateAutoUpdateLifecycle(reason);
+        this.audit();
+        this.instance.getFormalRendererManager().checkReadiness("k49-k54-auto-update-status");
+        return this.createStatusSnapshot();
+    }
+
     private ForgeFormalVisibleLodPreviewStats requestPreviewPrepare(String reason, boolean minimalPatchMode) {
         return this.requestPreviewPrepare(reason, minimalPatchMode, false, false);
     }
@@ -1399,6 +1486,13 @@ final class ForgeFormalVisibleLodPreview {
         this.observeModeCameraRelative = false;
         this.observeEnableRequested = false;
         this.observeEnableFailedSafely = false;
+        this.autoUpdateEnabled = false;
+        this.autoUpdateDesiredAfterPrepare = false;
+        this.autoUpdateRestoreAfterPrepare = false;
+        this.autoUpdateLifecycleReady = false;
+        this.autoUpdateRebuildPending = false;
+        this.autoUpdateRebuildScheduled = false;
+        this.autoUpdateThrottled = false;
         this.cancelObservePrepare("disable");
         this.readbackPending = false;
         this.qaReadbackAllowed = false;
@@ -1693,7 +1787,7 @@ final class ForgeFormalVisibleLodPreview {
 
     private String formatPreviewDrawCommandBucketSummary() {
         return String.format(Locale.ROOT,
-                "bufferCreated=%s,layoutUsed=%s,strideBytes=%d,fieldCount=%d,commandCount=%d,indexCount=%d,firstIndex=%d,baseVertex=%d,baseInstance=%d,matchesK6=%s,drivesDrawCount=%s,bucketPathUsed=%s,contiguous=%s,interleavedUsed=%s,bucketSectionCount=%d,bucketRecordCount=%d,bucketIndexCount=%d,bucketQuadCount=%d,bucketSectionPosition=%s,positionScratchBaseInstanceCompatible=%s,commandBaseInstancePositionScratchUsed=%s,productionMdicIndirectDrawUsed=%s,k23K30Stage=%s,minimalPrototypeReady=%s,boundedPatchReady=%s,minimalPatchLocalCommandUsed=%s,patchRecordLimit=%d,patchRecordCount=%d,minPatchRecords=%d,patchDrawIndexCount=%d,minPatchDrawIndices=%d,reducedObserveTint=%s,observeTintStrength=%.2f,worldPlaced=%s,optInOnly=%s,defaultEnabled=%s,movingSummary=%s,expandedSummary=%s,productionRenderer=false,formalRendererReady=false,actualRendererDrawEnabled=false",
+                "bufferCreated=%s,layoutUsed=%s,strideBytes=%d,fieldCount=%d,commandCount=%d,indexCount=%d,firstIndex=%d,baseVertex=%d,baseInstance=%d,matchesK6=%s,drivesDrawCount=%s,bucketPathUsed=%s,contiguous=%s,interleavedUsed=%s,bucketSectionCount=%d,bucketRecordCount=%d,bucketIndexCount=%d,bucketQuadCount=%d,bucketSectionPosition=%s,positionScratchBaseInstanceCompatible=%s,commandBaseInstancePositionScratchUsed=%s,productionMdicIndirectDrawUsed=%s,k23K30Stage=%s,minimalPrototypeReady=%s,boundedPatchReady=%s,minimalPatchLocalCommandUsed=%s,patchRecordLimit=%d,patchRecordCount=%d,minPatchRecords=%d,patchDrawIndexCount=%d,minPatchDrawIndices=%d,reducedObserveTint=%s,observeTintStrength=%.2f,worldPlaced=%s,optInOnly=%s,defaultEnabled=%s,movingSummary=%s,expandedSummary=%s,autoUpdateSummary=%s,productionRenderer=false,formalRendererReady=false,actualRendererDrawEnabled=false",
                 this.previewDrawCommandBufferCreated,
                 this.previewDrawCommandLayoutUsed,
                 this.previewDrawCommandStrideBytes,
@@ -1731,8 +1825,46 @@ final class ForgeFormalVisibleLodPreview {
                 DEBUG_OPT_IN_ONLY,
                 DEFAULT_ENABLED,
                 this.formatMovingFormalLodPreviewSummary(),
-                this.formatExpandedFormalLodPreviewSummary()
+                this.formatExpandedFormalLodPreviewSummary(),
+                this.formatAutoUpdateSummary()
         );
+    }
+
+    private String formatAutoUpdateSummary() {
+        return String.format(Locale.ROOT,
+                "k49K54Stage=%s,autoUpdateEnabled=%s,autoUpdateDesiredAfterPrepare=%s,autoUpdateRestoreAfterPrepare=%s,autoUpdateLifecycleReady=%s,autoUpdateAutomaticRenderThreadRebuildEnabled=%s,autoUpdatePendingRebuildOnly=%s,autoUpdateRequiresManualPrepare=%s,autoUpdateCheckIntervalFrames=%d,autoUpdateRebuildCooldownFrames=%d,autoUpdateRebuildThresholdChunks=%d,autoUpdateStableFrameThreshold=%d,autoUpdateStableFrameCount=%d,autoUpdateWaitingForStablePosition=%s,autoUpdateRebuildDeferredWhileMoving=%s,autoUpdateDeferredReason=%s,autoUpdateCheckCount=%d,autoUpdateSkippedCount=%d,autoUpdateRebuildPending=%s,autoUpdateRebuildScheduled=%s,autoUpdateRebuildCompleted=%s,autoUpdateRebuildFailedSafely=%s,autoUpdateThrottled=%s,autoUpdateRebuildRequestCount=%d,autoUpdateRebuildCompleteCount=%d,autoUpdatePendingRebuildCount=%d,autoUpdateLastCheckFrame=%d,autoUpdateLastScheduleFrame=%d,autoUpdateNextAllowedFrame=%d,autoUpdateLastReason=%s,autoUpdateLastFailureReason=%s,previewOnly=true,defaultEnabled=%s,formalDrawPipelineReady=false,formalRendererReady=false,actualRendererDrawEnabled=false",
+                K49_K54_STAGE,
+                this.autoUpdateEnabled,
+                this.autoUpdateDesiredAfterPrepare,
+                this.autoUpdateRestoreAfterPrepare,
+                this.autoUpdateLifecycleReady,
+                true,
+                false,
+                this.autoUpdateRequiresManualPrepare,
+                this.autoUpdateCheckIntervalFrames,
+                this.autoUpdateRebuildCooldownFrames,
+                this.autoUpdateRebuildThresholdChunks,
+                this.autoUpdateStableFrameThreshold,
+                this.autoUpdateStableFrameCount,
+                this.autoUpdateWaitingForStablePosition,
+                this.autoUpdateRebuildDeferredWhileMoving,
+                this.autoUpdateDeferredReason,
+                this.autoUpdateCheckCount,
+                this.autoUpdateSkippedCount,
+                this.autoUpdateRebuildPending,
+                this.autoUpdateRebuildScheduled,
+                this.autoUpdateRebuildCompleted,
+                this.autoUpdateRebuildFailedSafely,
+                this.autoUpdateThrottled,
+                this.autoUpdateRebuildRequestCount,
+                this.autoUpdateRebuildCompleteCount,
+                this.autoUpdatePendingRebuildCount,
+                this.autoUpdateLastCheckFrame,
+                this.autoUpdateLastScheduleFrame,
+                this.autoUpdateNextAllowedFrame,
+                this.autoUpdateLastReason,
+                this.autoUpdateLastFailureReason,
+                DEFAULT_ENABLED);
     }
 
     private String formatMovingFormalLodPreviewSummary() {
@@ -1950,6 +2082,15 @@ final class ForgeFormalVisibleLodPreview {
         this.ownerReady = false;
         this.observeEnableRequested = false;
         this.observeEnableFailedSafely = false;
+        this.autoUpdateEnabled = false;
+        this.autoUpdateDesiredAfterPrepare = false;
+        this.autoUpdateRestoreAfterPrepare = false;
+        this.autoUpdateLifecycleReady = false;
+        this.autoUpdateRebuildPending = false;
+        this.autoUpdateRebuildScheduled = false;
+        this.autoUpdateThrottled = false;
+        this.autoUpdateRequiresManualPrepare = false;
+        this.resetAutoUpdateMovementState();
         this.cancelObservePrepare("clear");
         this.stale = false;
         this.requiresRebuild = false;
@@ -1967,6 +2108,16 @@ final class ForgeFormalVisibleLodPreview {
             this.visiblePreviewEnabled = false;
             this.observeModeEnabled = false;
             this.ownerReady = false;
+            if (!this.autoUpdateRestoreAfterPrepare) {
+                this.autoUpdateEnabled = false;
+                this.autoUpdateDesiredAfterPrepare = false;
+                this.autoUpdateLifecycleReady = false;
+                this.autoUpdateRebuildPending = false;
+                this.autoUpdateRebuildScheduled = false;
+                this.autoUpdateThrottled = false;
+                this.autoUpdateRequiresManualPrepare = false;
+                this.resetAutoUpdateMovementState();
+            }
             this.stale = true;
             this.requiresRebuild = true;
             this.lifecycleState = "VISIBLE_PREVIEW_OBSERVE_PREPARE_RESOURCE_RELOAD_SEEN";
@@ -2027,6 +2178,7 @@ final class ForgeFormalVisibleLodPreview {
         if (this.observePrepareInProgress) {
             this.runObservePrepareStep();
         }
+        this.handleAutoUpdateOnRenderThread();
         if (!this.visiblePreviewEnabled) {
             this.renderHookDisabledEarlyReturnCount++;
             this.renderHookEarlyReturnWhenDisabled = true;
@@ -2114,6 +2266,154 @@ final class ForgeFormalVisibleLodPreview {
         } catch (RuntimeException e) {
             this.failObserveEnableSafely(e.getClass().getSimpleName() + ":" + e.getMessage(), e);
         }
+    }
+
+    private void handleAutoUpdateOnRenderThread() {
+        if (!this.autoUpdateEnabled) {
+            return;
+        }
+        this.updateAutoUpdateLifecycle("render-hook");
+        if (this.observePrepareRequested || this.observePrepareInProgress) {
+            return;
+        }
+        if (this.autoUpdateRebuildPending
+                && !this.autoUpdateRequiresManualPrepare
+                && this.ownerReady
+                && !this.stale
+                && this.visiblePreviewEnabled) {
+            this.recordAutoUpdateRebuildComplete("auto-update-render-thread-complete");
+            return;
+        }
+        if (!this.visiblePreviewEnabled || !this.ownerReady || this.stale) {
+            this.autoUpdateSkippedCount++;
+            return;
+        }
+        long frame = this.renderHookInvocationCount;
+        if (frame - this.autoUpdateLastCheckFrame < this.autoUpdateCheckIntervalFrames) {
+            return;
+        }
+        this.autoUpdateLastCheckFrame = frame;
+        this.autoUpdateCheckCount++;
+        this.updateMovingUpdateLifecycle("auto-update-check");
+        if (!this.movingUpdateRebuildNeeded) {
+            this.autoUpdateThrottled = false;
+            this.autoUpdateRebuildDeferredWhileMoving = false;
+            this.autoUpdateWaitingForStablePosition = false;
+            return;
+        }
+        if (this.movingUpdateDeltaChunks < this.autoUpdateRebuildThresholdChunks) {
+            this.autoUpdateRebuildDeferredWhileMoving = true;
+            this.autoUpdateWaitingForStablePosition = true;
+            this.autoUpdateDeferredReason = "delta-below-auto-threshold:" + this.movingUpdateDeltaChunks;
+            this.autoUpdateSkippedCount++;
+            return;
+        }
+        if (!this.isAutoUpdatePositionStable(frame)) {
+            this.autoUpdateRebuildDeferredWhileMoving = true;
+            this.autoUpdateDeferredReason = "waiting-for-stable-position";
+            this.autoUpdateSkippedCount++;
+            return;
+        }
+        if (frame < this.autoUpdateNextAllowedFrame) {
+            this.autoUpdateThrottled = true;
+            this.autoUpdateSkippedCount++;
+            return;
+        }
+        this.autoUpdateThrottled = false;
+        this.autoUpdateRebuildDeferredWhileMoving = false;
+        this.autoUpdateWaitingForStablePosition = false;
+        this.autoUpdateDeferredReason = "none";
+        this.autoUpdateEnabled = true;
+        this.autoUpdateDesiredAfterPrepare = true;
+        this.autoUpdateRestoreAfterPrepare = true;
+        this.autoUpdateRebuildPending = true;
+        this.autoUpdateRebuildScheduled = true;
+        this.autoUpdateRebuildCompleted = false;
+        this.autoUpdateRebuildFailedSafely = false;
+        this.autoUpdateRequiresManualPrepare = false;
+        this.autoUpdateRebuildRequestCount++;
+        this.autoUpdateLastScheduleFrame = frame;
+        this.autoUpdateNextAllowedFrame = frame + this.autoUpdateRebuildCooldownFrames;
+        this.autoUpdateLastReason = "auto-update-threshold-crossed";
+        this.autoUpdateLastFailureReason = "none";
+        this.movingUpdateRebuildRequested = true;
+        this.movingUpdateRebuildCompleted = false;
+        this.movingUpdateRebuildFailedSafely = false;
+        this.movingUpdateLastRebuildReason = "auto-update-threshold-crossed";
+        this.stale = true;
+        this.requiresRebuild = true;
+        this.requestExpandedFormalLodPatchPrepare("k49-k54-auto-update-threshold-crossed");
+        this.observePrepareAutoEnable = true;
+    }
+
+    private boolean isAutoUpdatePositionStable(long frame) {
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft.player == null) {
+            this.autoUpdateWaitingForStablePosition = true;
+            this.autoUpdateStableFrameCount = 0L;
+            this.autoUpdateDeferredReason = "player-missing";
+            return false;
+        }
+        double x = minecraft.player.getX();
+        double z = minecraft.player.getZ();
+        if (Double.isNaN(this.autoUpdateLastPlayerX) || Double.isNaN(this.autoUpdateLastPlayerZ)) {
+            this.autoUpdateLastPlayerX = x;
+            this.autoUpdateLastPlayerZ = z;
+            this.autoUpdateLastMovementFrame = frame;
+            this.autoUpdateStableFrameCount = 0L;
+            this.autoUpdateWaitingForStablePosition = true;
+            return false;
+        }
+        double dx = x - this.autoUpdateLastPlayerX;
+        double dz = z - this.autoUpdateLastPlayerZ;
+        this.autoUpdateLastPlayerX = x;
+        this.autoUpdateLastPlayerZ = z;
+        if (dx * dx + dz * dz > AUTO_UPDATE_MOVEMENT_EPSILON_SQUARED) {
+            this.autoUpdateLastMovementFrame = frame;
+            this.autoUpdateStableFrameCount = 0L;
+            this.autoUpdateWaitingForStablePosition = true;
+            return false;
+        }
+        this.autoUpdateStableFrameCount = Math.max(0L, frame - this.autoUpdateLastMovementFrame);
+        this.autoUpdateWaitingForStablePosition = this.autoUpdateStableFrameCount < this.autoUpdateStableFrameThreshold;
+        return !this.autoUpdateWaitingForStablePosition;
+    }
+
+    private void recordAutoUpdateRebuildComplete(String reason) {
+        this.autoUpdateRebuildPending = false;
+        this.autoUpdateRebuildScheduled = false;
+        this.autoUpdateRebuildCompleted = true;
+        this.autoUpdateRebuildFailedSafely = false;
+        this.autoUpdateRestoreAfterPrepare = false;
+        this.autoUpdateRequiresManualPrepare = false;
+        this.autoUpdateRebuildDeferredWhileMoving = false;
+        this.autoUpdateWaitingForStablePosition = false;
+        this.autoUpdateDeferredReason = "none";
+        this.autoUpdateStableFrameCount = 0L;
+        this.autoUpdateLastMovementFrame = this.renderHookInvocationCount;
+        this.autoUpdateRebuildCompleteCount++;
+        this.autoUpdateLastReason = safeReason(reason);
+        this.autoUpdateLastFailureReason = "none";
+        this.updateAutoUpdateLifecycle(reason);
+    }
+
+    private void resetAutoUpdateMovementState() {
+        this.autoUpdateRebuildDeferredWhileMoving = false;
+        this.autoUpdateWaitingForStablePosition = false;
+        this.autoUpdateStableFrameCount = 0L;
+        this.autoUpdateLastMovementFrame = 0L;
+        this.autoUpdateLastPlayerX = Double.NaN;
+        this.autoUpdateLastPlayerZ = Double.NaN;
+        this.autoUpdateDeferredReason = "none";
+    }
+
+    private void updateAutoUpdateLifecycle(String reason) {
+        this.autoUpdateLifecycleReady = this.autoUpdateEnabled
+                && this.renderHookRegistered
+                && !this.autoUpdateRebuildFailedSafely
+                && !this.movingUpdateLiveRendererEnabled
+                && !this.expandedPatchLiveRendererEnabled;
+        this.autoUpdateLastReason = safeReason(reason);
     }
 
     private void startObservePrepareOnRenderThread(String reason) {
@@ -2546,6 +2846,16 @@ final class ForgeFormalVisibleLodPreview {
                             return;
                         }
                         this.observeAutoEnabledAfterPrepare = true;
+                        if (this.autoUpdateDesiredAfterPrepare || this.autoUpdateRestoreAfterPrepare) {
+                            this.autoUpdateEnabled = true;
+                            this.autoUpdateDesiredAfterPrepare = true;
+                            this.autoUpdateLifecycleReady = true;
+                        }
+                        if (this.autoUpdateRebuildPending
+                                || (this.autoUpdateRestoreAfterPrepare
+                                && this.autoUpdateRebuildRequestCount > this.autoUpdateRebuildCompleteCount)) {
+                            this.recordAutoUpdateRebuildComplete("expanded-lod-auto-update-prepare-complete");
+                        }
                     } else {
                         this.visiblePreviewEnabled = false;
                         this.observeModeEnabled = false;
@@ -2715,6 +3025,17 @@ final class ForgeFormalVisibleLodPreview {
         if (this.expandedPatchPrepareMode && this.movingUpdateRebuildRequested) {
             this.movingUpdateRebuildFailedSafely = true;
             this.movingUpdateRebuildCompleted = false;
+        }
+        if (this.autoUpdateRebuildPending) {
+            this.autoUpdateRebuildFailedSafely = true;
+            this.autoUpdateRebuildCompleted = false;
+            this.autoUpdateRebuildPending = false;
+            this.autoUpdateRebuildScheduled = false;
+            this.autoUpdateEnabled = false;
+            this.autoUpdateDesiredAfterPrepare = false;
+            this.autoUpdateRestoreAfterPrepare = false;
+            this.autoUpdateRequiresManualPrepare = false;
+            this.autoUpdateLastFailureReason = safeReason;
         }
         this.expandedPatchPrepareMode = false;
         this.lastObservePrepareFailureReason = safeReason;
@@ -3100,6 +3421,16 @@ final class ForgeFormalVisibleLodPreview {
         );
     }
 
+    private int ensureVisiblePreviewShaderProgram() {
+        if (this.visiblePreviewShaderProgramId != 0) {
+            this.visiblePreviewShaderProgramCompileAttempted = true;
+            this.visiblePreviewShaderProgramCompileOk = true;
+            this.visiblePreviewShaderProgramLinkOk = true;
+            return this.visiblePreviewShaderProgramId;
+        }
+        return this.compileVisiblePreviewShaderProgram();
+    }
+
     private int compileVisiblePreviewShaderProgram() {
         this.visiblePreviewShaderProgramCompileAttempted = true;
         this.shaderCompileRuns++;
@@ -3165,7 +3496,6 @@ final class ForgeFormalVisibleLodPreview {
             boolean preferInterleavedPatch,
             int maxPreviewRecords
     ) {
-        this.glAllocationRuns++;
         int recordLimit = Math.max(1, maxPreviewRecords);
         ForgeFormalModelIdSectionGeometryPath.PreviewRecord[] previewRecords;
         boolean interleavedPatchInput;
@@ -3203,28 +3533,53 @@ final class ForgeFormalVisibleLodPreview {
         long[] previewRecordValues = copyPreviewRecordValues(previewRecords);
         int[] previewSectionMetadata = createPreviewSectionMetadata(previewRecords);
         int[] previewPositionScratch = createPreviewPositionScratch(previewRecords);
-        this.geometryBufferId = GL45C.glCreateBuffers();
-        this.previewSectionDataBufferId = GL45C.glCreateBuffers();
+        boolean allocatedResources = false;
+        if (this.geometryBufferId == 0 || !this.geometryBufferOwnedByK10) {
+            this.geometryBufferId = GL45C.glCreateBuffers();
+            this.geometryBufferOwnedByK10 = true;
+            allocatedResources = true;
+        }
+        if (this.previewSectionDataBufferId == 0) {
+            this.previewSectionDataBufferId = GL45C.glCreateBuffers();
+            allocatedResources = true;
+        }
         this.previewSectionMetadataBufferId = this.previewSectionDataBufferId;
-        this.geometryBufferOwnedByK10 = true;
-        this.commandBufferId = GL45C.glCreateBuffers();
-        this.drawCountBufferId = GL45C.glCreateBuffers();
-        this.indexBufferId = GL45C.glCreateBuffers();
-        this.positionScratchBufferId = GL45C.glCreateBuffers();
-        this.vertexArrayId = GL30C.glGenVertexArrays();
-        uploadLongs(this.geometryBufferId, previewRecordValues, GL15C.GL_STATIC_DRAW);
-        uploadInts(this.previewSectionDataBufferId, previewSectionMetadata, GL15C.GL_STATIC_DRAW);
+        if (this.commandBufferId == 0) {
+            this.commandBufferId = GL45C.glCreateBuffers();
+            allocatedResources = true;
+        }
+        if (this.drawCountBufferId == 0) {
+            this.drawCountBufferId = GL45C.glCreateBuffers();
+            allocatedResources = true;
+        }
+        if (this.indexBufferId == 0) {
+            this.indexBufferId = GL45C.glCreateBuffers();
+            allocatedResources = true;
+        }
+        if (this.positionScratchBufferId == 0) {
+            this.positionScratchBufferId = GL45C.glCreateBuffers();
+            allocatedResources = true;
+        }
+        if (this.vertexArrayId == 0) {
+            this.vertexArrayId = GL30C.glGenVertexArrays();
+            allocatedResources = true;
+        }
+        if (allocatedResources) {
+            this.glAllocationRuns++;
+        }
+        uploadLongs(this.geometryBufferId, previewRecordValues, GL15C.GL_DYNAMIC_DRAW);
+        uploadInts(this.previewSectionDataBufferId, previewSectionMetadata, GL15C.GL_DYNAMIC_DRAW);
         uploadInts(this.commandBufferId, new int[] {
                 this.k6FirstCommandCount,
                 this.k6FirstCommandInstanceCount,
                 this.k6FirstCommandFirstIndex,
                 this.k6FirstCommandBaseVertex,
                 this.k6FirstCommandBaseInstance
-        }, GL15C.GL_STATIC_DRAW);
-        uploadInts(this.drawCountBufferId, new int[] {0, 0, 0, 1}, GL15C.GL_STATIC_DRAW);
+        }, GL15C.GL_DYNAMIC_DRAW);
+        uploadInts(this.drawCountBufferId, new int[] {0, 0, 0, 1}, GL15C.GL_DYNAMIC_DRAW);
         int indexBufferCount = Math.max(0, this.k6FirstCommandFirstIndex) + Math.max(0, this.k6FirstCommandCount);
-        uploadShorts(this.indexBufferId, createVoxyQuadIndexSequence(indexBufferCount), GL15C.GL_STATIC_DRAW);
-        uploadInts(this.positionScratchBufferId, previewPositionScratch, GL15C.GL_STATIC_DRAW);
+        uploadShorts(this.indexBufferId, createVoxyQuadIndexSequence(indexBufferCount), GL15C.GL_DYNAMIC_DRAW);
+        uploadInts(this.positionScratchBufferId, previewPositionScratch, GL15C.GL_DYNAMIC_DRAW);
         this.acceptedDrawCommandCount = 1;
         this.drawCommandMatchesK6 = !useMinimalPatchLocalCommand
                 && k6 != null
@@ -3553,6 +3908,15 @@ final class ForgeFormalVisibleLodPreview {
         this.ownerReady = false;
         this.observeEnableRequested = false;
         this.observeEnableFailedSafely = false;
+        this.autoUpdateEnabled = false;
+        this.autoUpdateDesiredAfterPrepare = false;
+        this.autoUpdateRestoreAfterPrepare = false;
+        this.autoUpdateLifecycleReady = false;
+        this.autoUpdateRebuildPending = false;
+        this.autoUpdateRebuildScheduled = false;
+        this.autoUpdateThrottled = false;
+        this.autoUpdateRequiresManualPrepare = false;
+        this.resetAutoUpdateMovementState();
         this.cancelObservePrepare(reason);
         this.resetBuildFlags();
         this.renderHookEarlyReturnWhenStale = true;
@@ -3601,6 +3965,7 @@ final class ForgeFormalVisibleLodPreview {
         }
         this.visiblePreviewShaderProgramId = 0;
         this.vertexArrayId = 0;
+        this.geometryBufferId = 0;
         this.geometryBufferOwnedByK10 = false;
         this.previewSectionDataBufferId = 0;
         this.previewSectionMetadataBufferId = 0;
@@ -3677,13 +4042,11 @@ final class ForgeFormalVisibleLodPreview {
         this.validationFormalModelId = 0;
         this.validationFace = 0;
         this.validationFormalModelIds = "none";
-        this.geometryBufferId = 0;
         this.modelDataBufferId = 0;
         this.modelColourBufferId = 0;
         this.atlasTextureId = 0;
         this.samplerId = 0;
         this.formalGeometryRecordCount = 0;
-        this.geometryBufferOwnedByK10 = false;
         this.multiSectionPreviewPipelineReady = false;
         this.multiSectionPreviewInputReady = false;
         this.multiSectionFormalGeometryUsed = false;
@@ -3703,7 +4066,6 @@ final class ForgeFormalVisibleLodPreview {
         this.sectionWorldBaseUsed = false;
         this.sectionLodScaleUsed = false;
         this.previewSectionSidecarBufferCreated = false;
-        this.previewSectionDataBufferId = 0;
         this.worldPlacedPreviewRecordCount = 0;
         this.worldPlacedPreviewSectionBases = "none";
         this.cameraBillboardFallbackUsed = false;
@@ -3711,7 +4073,6 @@ final class ForgeFormalVisibleLodPreview {
         this.sectionMetadataPathUsed = false;
         this.positionScratchPathUsed = false;
         this.previewSectionMetadataBufferCreated = false;
-        this.previewSectionMetadataBufferId = 0;
         this.previewSectionMetadataRecordCount = 0;
         this.positionScratchEntryCount = 0;
         this.previewSectionMetadataRawPositions = "none";
