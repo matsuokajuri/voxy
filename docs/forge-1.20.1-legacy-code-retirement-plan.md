@@ -35,9 +35,10 @@ Retirement sequence:
 2. add no new commands to ForgeVoxyCommands - active rule
 3. split legacy debug/GPU/MDIC command registration into ForgeVoxyLegacyDebugCommands - done
 4. move original-Voxy-parity commands into focused registrar classes
-5. move remaining preview/sample commands behind explicit legacy surfaces
-6. delete handlers once backing prototype objects are removed from ForgeVoxyInstance
-7. delete ForgeVoxyCommands when no longer needed
+5. split first preview/sample command group into ForgeVoxyLegacyPreviewCommands - done
+6. move remaining K-stage preview/update commands behind explicit legacy surfaces
+7. delete handlers once backing prototype objects are removed from ForgeVoxyInstance
+8. delete ForgeVoxyCommands when no longer needed
 ```
 
 ### Debug/proof renderers
@@ -89,6 +90,8 @@ ForgeVoxyLegacyPreviewCommands
 ```
 
 `ForgeVoxyLegacyDebugCommands` already owns the first migrated legacy debug
-registration group. The remaining split should preserve command behavior first,
-then allow entire legacy registrars to be disabled or deleted as prototype
-owners disappear.
+registration group. `ForgeVoxyLegacyPreviewCommands` owns the first migrated
+preview/sample group: J3-J5 preview commands and textured debug/readback
+commands. The remaining split should preserve command behavior first, then
+allow entire legacy registrars to be disabled or deleted as prototype owners
+disappear.

@@ -62,6 +62,7 @@ public final class ForgeVoxyCommands {
                         .executes(ctx -> clearGeometryManagerConsumeState(ctx.getSource())));
 
         ForgeVoxyLegacyDebugCommands.register(root);
+        ForgeVoxyLegacyPreviewCommands.register(root);
 
         root
                 .then(Commands.literal("model_bridge_check")
@@ -263,46 +264,6 @@ public final class ForgeVoxyCommands {
                         .executes(ctx -> formalShaderProgramClear(ctx.getSource())))
                 .then(Commands.literal("qa_j2_formal_shader_program")
                         .executes(ctx -> qaJ2FormalShaderProgram(ctx.getSource())))
-                .then(Commands.literal("formal_textured_shader_build")
-                        .executes(ctx -> formalTexturedShaderBuild(ctx.getSource())))
-                .then(Commands.literal("formal_textured_shader_status")
-                        .executes(ctx -> formalTexturedShaderStatus(ctx.getSource())))
-                .then(Commands.literal("formal_textured_shader_audit")
-                        .executes(ctx -> formalTexturedShaderAudit(ctx.getSource())))
-                .then(Commands.literal("formal_textured_shader_dump")
-                        .executes(ctx -> formalTexturedShaderDump(ctx.getSource())))
-                .then(Commands.literal("formal_textured_shader_clear")
-                        .executes(ctx -> formalTexturedShaderClear(ctx.getSource())))
-                .then(Commands.literal("formal_textured_shader_preview_enable")
-                        .executes(ctx -> formalTexturedShaderPreviewEnable(ctx.getSource())))
-                .then(Commands.literal("formal_textured_shader_preview_disable")
-                        .executes(ctx -> formalTexturedShaderPreviewDisable(ctx.getSource())))
-                .then(Commands.literal("qa_j3_formal_textured_shader_preview")
-                        .executes(ctx -> qaJ3FormalTexturedShaderPreview(ctx.getSource())))
-                .then(Commands.literal("formal_packed_quad_preview_build")
-                        .executes(ctx -> formalPackedQuadPreviewBuild(ctx.getSource())))
-                .then(Commands.literal("formal_packed_quad_preview_status")
-                        .executes(ctx -> formalPackedQuadPreviewStatus(ctx.getSource())))
-                .then(Commands.literal("formal_packed_quad_preview_audit")
-                        .executes(ctx -> formalPackedQuadPreviewAudit(ctx.getSource())))
-                .then(Commands.literal("formal_packed_quad_preview_dump")
-                        .executes(ctx -> formalPackedQuadPreviewDump(ctx.getSource())))
-                .then(Commands.literal("formal_packed_quad_preview_clear")
-                        .executes(ctx -> formalPackedQuadPreviewClear(ctx.getSource())))
-                .then(Commands.literal("qa_j4_formal_packed_quad_preview")
-                        .executes(ctx -> qaJ4FormalPackedQuadPreview(ctx.getSource())))
-                .then(Commands.literal("formal_terrain_record_bridge_build")
-                        .executes(ctx -> formalTerrainRecordBridgeBuild(ctx.getSource())))
-                .then(Commands.literal("formal_terrain_record_bridge_status")
-                        .executes(ctx -> formalTerrainRecordBridgeStatus(ctx.getSource())))
-                .then(Commands.literal("formal_terrain_record_bridge_audit")
-                        .executes(ctx -> formalTerrainRecordBridgeAudit(ctx.getSource())))
-                .then(Commands.literal("formal_terrain_record_bridge_dump")
-                        .executes(ctx -> formalTerrainRecordBridgeDump(ctx.getSource())))
-                .then(Commands.literal("formal_terrain_record_bridge_clear")
-                        .executes(ctx -> formalTerrainRecordBridgeClear(ctx.getSource())))
-                .then(Commands.literal("qa_j5_real_terrain_record_bridge")
-                        .executes(ctx -> qaJ5RealTerrainRecordBridge(ctx.getSource())))
                 .then(Commands.literal("formal_terrain_renderer_owner_enable")
                         .executes(ctx -> formalTerrainRendererOwnerEnable(ctx.getSource())))
                 .then(Commands.literal("formal_terrain_renderer_owner_status")
@@ -535,41 +496,6 @@ public final class ForgeVoxyCommands {
                         .executes(ctx -> formalRendererClear(ctx.getSource())))
                 .then(Commands.literal("formal_renderer_dump_blockers")
                         .executes(ctx -> formalRendererDumpBlockers(ctx.getSource())))
-                .then(Commands.literal("textured_debug_quad_build_sample")
-                        .executes(ctx -> texturedDebugQuadBuildSample(ctx.getSource())))
-                .then(Commands.literal("textured_debug_quad_enable")
-                        .executes(ctx -> texturedDebugQuadEnable(ctx.getSource())))
-                .then(Commands.literal("textured_debug_quad_disable")
-                        .executes(ctx -> texturedDebugQuadDisable(ctx.getSource())))
-                .then(Commands.literal("textured_debug_quad_status")
-                        .executes(ctx -> texturedDebugQuadStatus(ctx.getSource())))
-                .then(Commands.literal("textured_debug_quad_clear")
-                        .executes(ctx -> texturedDebugQuadClear(ctx.getSource())))
-                .then(Commands.literal("textured_readback_build_sample")
-                        .executes(ctx -> texturedReadbackBuildSample(ctx.getSource())))
-                .then(Commands.literal("textured_readback_enable")
-                        .executes(ctx -> texturedReadbackEnable(ctx.getSource())))
-                .then(Commands.literal("textured_readback_disable")
-                        .executes(ctx -> texturedReadbackDisable(ctx.getSource())))
-                .then(Commands.literal("textured_readback_status")
-                        .executes(ctx -> texturedReadbackStatus(ctx.getSource())))
-                .then(Commands.literal("textured_readback_clear")
-                        .executes(ctx -> texturedReadbackClear(ctx.getSource())))
-                .then(Commands.literal("textured_mdic_debug_build")
-                        .executes(ctx -> texturedMdicDebugBuild(ctx.getSource())))
-                .then(Commands.literal("textured_mdic_debug_input_mode")
-                        .then(Commands.literal("sample_set")
-                                .executes(ctx -> texturedMdicDebugInputMode(ctx.getSource(), ForgeTexturedMdicDebugInputMode.SAMPLE_SET_DIRECT)))
-                        .then(Commands.literal("formal_bridge")
-                                .executes(ctx -> texturedMdicDebugInputMode(ctx.getSource(), ForgeTexturedMdicDebugInputMode.FORMAL_INPUT_BRIDGE))))
-                .then(Commands.literal("textured_mdic_debug_enable")
-                        .executes(ctx -> texturedMdicDebugEnable(ctx.getSource())))
-                .then(Commands.literal("textured_mdic_debug_disable")
-                        .executes(ctx -> texturedMdicDebugDisable(ctx.getSource())))
-                .then(Commands.literal("textured_mdic_debug_status")
-                        .executes(ctx -> texturedMdicDebugStatus(ctx.getSource())))
-                .then(Commands.literal("textured_mdic_debug_clear")
-                        .executes(ctx -> texturedMdicDebugClear(ctx.getSource())))
                 .then(Commands.literal("mesh_cache_status")
                         .executes(ctx -> meshCacheStatus(ctx.getSource())))
                 .then(Commands.literal("mesh_cache_clear")
@@ -4735,7 +4661,7 @@ public final class ForgeVoxyCommands {
                 && !rendererStatus.actualDrawEnabled() ? 1 : 0;
     }
 
-    private static int formalTexturedShaderBuild(CommandSourceStack source) {
+    static int formalTexturedShaderBuild(CommandSourceStack source) {
         ForgeFormalTexturedShaderPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalTexturedShaderPreview().build();
         ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("j3-formal-textured-shader-preview-build-command");
         source.sendSuccess(() -> Component.literal("Voxy J3 formal textured shader preview build: "
@@ -4753,13 +4679,13 @@ public final class ForgeVoxyCommands {
                 && !status.formalRendererReady() ? 1 : 0;
     }
 
-    private static int formalTexturedShaderStatus(CommandSourceStack source) {
+    static int formalTexturedShaderStatus(CommandSourceStack source) {
         ForgeFormalTexturedShaderPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalTexturedShaderPreview().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy J3 formal textured shader preview status: " + formatFormalTexturedShaderPreviewStatus(status)), false);
         return status.formalTexturedShaderPrototypeReady() || status.stale() ? 1 : 0;
     }
 
-    private static int formalTexturedShaderAudit(CommandSourceStack source) {
+    static int formalTexturedShaderAudit(CommandSourceStack source) {
         ForgeFormalTexturedShaderPreviewAuditResult audit = ForgeVoxyInstance.INSTANCE.getFormalTexturedShaderPreview().audit();
         ForgeFormalTexturedShaderPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalTexturedShaderPreview().createStatusSnapshot();
         ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("j3-formal-textured-shader-preview-audit-command");
@@ -4772,13 +4698,13 @@ public final class ForgeVoxyCommands {
         return audit.success() ? 1 : 0;
     }
 
-    private static int formalTexturedShaderDump(CommandSourceStack source) {
+    static int formalTexturedShaderDump(CommandSourceStack source) {
         String message = ForgeVoxyInstance.INSTANCE.getFormalTexturedShaderPreview().dump();
         source.sendSuccess(() -> Component.literal(message), false);
         return ForgeVoxyInstance.INSTANCE.getFormalTexturedShaderPreview().createStatusSnapshot().formalTexturedShaderPrototypeReady() ? 1 : 0;
     }
 
-    private static int formalTexturedShaderClear(CommandSourceStack source) {
+    static int formalTexturedShaderClear(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getFormalTexturedShaderPreview().clear();
         ForgeFormalTexturedShaderPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalTexturedShaderPreview().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy J3 formal textured shader preview clear: "
@@ -4787,7 +4713,7 @@ public final class ForgeVoxyCommands {
         return 1;
     }
 
-    private static int formalTexturedShaderPreviewEnable(CommandSourceStack source) {
+    static int formalTexturedShaderPreviewEnable(CommandSourceStack source) {
         ForgeFormalTexturedShaderPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalTexturedShaderPreview().enableVisiblePreview();
         source.sendSuccess(() -> Component.literal("Voxy J3 visible formal textured shader preview enable rejected: "
                 + formatFormalTexturedShaderPreviewStatus(status)
@@ -4795,13 +4721,13 @@ public final class ForgeVoxyCommands {
         return !status.visiblePreviewEnabled() && !status.actualRendererDrawEnabled() ? 1 : 0;
     }
 
-    private static int formalTexturedShaderPreviewDisable(CommandSourceStack source) {
+    static int formalTexturedShaderPreviewDisable(CommandSourceStack source) {
         ForgeFormalTexturedShaderPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalTexturedShaderPreview().disableVisiblePreview();
         source.sendSuccess(() -> Component.literal("Voxy J3 formal textured shader preview disable: " + formatFormalTexturedShaderPreviewStatus(status)), false);
         return !status.visiblePreviewEnabled() ? 1 : 0;
     }
 
-    private static int qaJ3FormalTexturedShaderPreview(CommandSourceStack source) {
+    static int qaJ3FormalTexturedShaderPreview(CommandSourceStack source) {
         ForgeFormalTexturedShaderPreviewStats buildStatus = ForgeVoxyInstance.INSTANCE.getFormalTexturedShaderPreview().build();
         ForgeFormalTexturedShaderPreviewAuditResult audit = ForgeVoxyInstance.INSTANCE.getFormalTexturedShaderPreview().createAuditStatusSnapshot();
         ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("qa-j3-formal-textured-shader-preview");
@@ -4843,7 +4769,7 @@ public final class ForgeVoxyCommands {
                 && !rendererStatus.actualDrawEnabled() ? 1 : 0;
     }
 
-    private static int formalPackedQuadPreviewBuild(CommandSourceStack source) {
+    static int formalPackedQuadPreviewBuild(CommandSourceStack source) {
         ForgeFormalPackedQuadPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalPackedQuadPreview().build();
         ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("j4-formal-packed-quad-preview-build-command");
         source.sendSuccess(() -> Component.literal("Voxy J4 formal packed quad preview build: "
@@ -4868,13 +4794,13 @@ public final class ForgeVoxyCommands {
                 && !status.formalRendererReady() ? 1 : 0;
     }
 
-    private static int formalPackedQuadPreviewStatus(CommandSourceStack source) {
+    static int formalPackedQuadPreviewStatus(CommandSourceStack source) {
         ForgeFormalPackedQuadPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalPackedQuadPreview().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy J4 formal packed quad preview status: " + formatFormalPackedQuadPreviewStatus(status)), false);
         return status.formalPackedQuadPreviewReady() || status.stale() ? 1 : 0;
     }
 
-    private static int formalPackedQuadPreviewAudit(CommandSourceStack source) {
+    static int formalPackedQuadPreviewAudit(CommandSourceStack source) {
         ForgeFormalPackedQuadPreviewAuditResult audit = ForgeVoxyInstance.INSTANCE.getFormalPackedQuadPreview().audit();
         ForgeFormalPackedQuadPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalPackedQuadPreview().createStatusSnapshot();
         ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("j4-formal-packed-quad-preview-audit-command");
@@ -4887,13 +4813,13 @@ public final class ForgeVoxyCommands {
         return audit.success() ? 1 : 0;
     }
 
-    private static int formalPackedQuadPreviewDump(CommandSourceStack source) {
+    static int formalPackedQuadPreviewDump(CommandSourceStack source) {
         String message = ForgeVoxyInstance.INSTANCE.getFormalPackedQuadPreview().dump();
         source.sendSuccess(() -> Component.literal(message), false);
         return ForgeVoxyInstance.INSTANCE.getFormalPackedQuadPreview().createStatusSnapshot().formalPackedQuadPreviewReady() ? 1 : 0;
     }
 
-    private static int formalPackedQuadPreviewClear(CommandSourceStack source) {
+    static int formalPackedQuadPreviewClear(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getFormalPackedQuadPreview().clear();
         ForgeFormalPackedQuadPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalPackedQuadPreview().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy J4 formal packed quad preview clear: "
@@ -4902,7 +4828,7 @@ public final class ForgeVoxyCommands {
         return 1;
     }
 
-    private static int qaJ4FormalPackedQuadPreview(CommandSourceStack source) {
+    static int qaJ4FormalPackedQuadPreview(CommandSourceStack source) {
         ForgeFormalPackedQuadPreviewStats buildStatus = ForgeVoxyInstance.INSTANCE.getFormalPackedQuadPreview().build();
         ForgeFormalPackedQuadPreviewAuditResult audit = ForgeVoxyInstance.INSTANCE.getFormalPackedQuadPreview().createAuditStatusSnapshot();
         ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("qa-j4-formal-packed-quad-preview");
@@ -4940,7 +4866,7 @@ public final class ForgeVoxyCommands {
                 && !rendererStatus.actualDrawEnabled() ? 1 : 0;
     }
 
-    private static int formalTerrainRecordBridgeBuild(CommandSourceStack source) {
+    static int formalTerrainRecordBridgeBuild(CommandSourceStack source) {
         ForgeFormalTerrainPackedRecordBridgeStats status = ForgeVoxyInstance.INSTANCE.getFormalTerrainPackedRecordBridge().build();
         ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("j5-real-terrain-record-bridge-build-command");
         String message = "Voxy J5 real terrain record bridge build: "
@@ -4964,7 +4890,7 @@ public final class ForgeVoxyCommands {
                 && !status.formalRendererReady() ? 1 : 0;
     }
 
-    private static int formalTerrainRecordBridgeStatus(CommandSourceStack source) {
+    static int formalTerrainRecordBridgeStatus(CommandSourceStack source) {
         ForgeFormalTerrainPackedRecordBridgeStats status = ForgeVoxyInstance.INSTANCE.getFormalTerrainPackedRecordBridge().createStatusSnapshot();
         String message = "Voxy J5 real terrain record bridge status: " + formatFormalTerrainRecordBridgeStatus(status);
         VoxyForge.LOGGER.info(message);
@@ -4972,7 +4898,7 @@ public final class ForgeVoxyCommands {
         return status.formalTerrainPackedRecordBridgeReady() || status.stale() ? 1 : 0;
     }
 
-    private static int formalTerrainRecordBridgeAudit(CommandSourceStack source) {
+    static int formalTerrainRecordBridgeAudit(CommandSourceStack source) {
         ForgeFormalTerrainPackedRecordBridgeAuditResult audit = ForgeVoxyInstance.INSTANCE.getFormalTerrainPackedRecordBridge().audit();
         ForgeFormalTerrainPackedRecordBridgeStats status = ForgeVoxyInstance.INSTANCE.getFormalTerrainPackedRecordBridge().createStatusSnapshot();
         ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("j5-real-terrain-record-bridge-audit-command");
@@ -4987,14 +4913,14 @@ public final class ForgeVoxyCommands {
         return audit.success() ? 1 : 0;
     }
 
-    private static int formalTerrainRecordBridgeDump(CommandSourceStack source) {
+    static int formalTerrainRecordBridgeDump(CommandSourceStack source) {
         String message = ForgeVoxyInstance.INSTANCE.getFormalTerrainPackedRecordBridge().dump();
         VoxyForge.LOGGER.info(message);
         source.sendSuccess(() -> Component.literal(message), false);
         return ForgeVoxyInstance.INSTANCE.getFormalTerrainPackedRecordBridge().createStatusSnapshot().formalTerrainPackedRecordBridgeReady() ? 1 : 0;
     }
 
-    private static int formalTerrainRecordBridgeClear(CommandSourceStack source) {
+    static int formalTerrainRecordBridgeClear(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getFormalTerrainPackedRecordBridge().clear();
         ForgeFormalTerrainPackedRecordBridgeStats status = ForgeVoxyInstance.INSTANCE.getFormalTerrainPackedRecordBridge().createStatusSnapshot();
         String message = "Voxy J5 real terrain record bridge clear: "
@@ -5005,7 +4931,7 @@ public final class ForgeVoxyCommands {
         return 1;
     }
 
-    private static int qaJ5RealTerrainRecordBridge(CommandSourceStack source) {
+    static int qaJ5RealTerrainRecordBridge(CommandSourceStack source) {
         ForgeFormalTerrainPackedRecordBridgeStats buildStatus = ForgeVoxyInstance.INSTANCE.getFormalTerrainPackedRecordBridge().build();
         ForgeFormalTerrainPackedRecordBridgeAuditResult audit = ForgeVoxyInstance.INSTANCE.getFormalTerrainPackedRecordBridge().createAuditStatusSnapshot();
         ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("qa-j5-real-terrain-record-bridge");
@@ -6821,106 +6747,106 @@ public final class ForgeVoxyCommands {
         return status.blockerCount() > 0 ? 1 : 0;
     }
 
-    private static int texturedDebugQuadBuildSample(CommandSourceStack source) {
+    static int texturedDebugQuadBuildSample(CommandSourceStack source) {
         ForgeTexturedDebugStats status = ForgeVoxyInstance.INSTANCE.getTexturedDebugQuadRenderer().buildSample();
         source.sendSuccess(() -> Component.literal("Voxy textured debug quad build sample: " + formatTexturedDebugQuadStatus(status)), false);
         return status.sampleReady() && status.atlasTextureReady() && status.atlasPixelsUploaded() ? 1 : 0;
     }
 
-    private static int texturedDebugQuadEnable(CommandSourceStack source) {
+    static int texturedDebugQuadEnable(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getTexturedDebugQuadRenderer().enable();
         ForgeTexturedDebugStats status = ForgeVoxyInstance.INSTANCE.getTexturedDebugQuadRenderer().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy textured debug quad enable: " + formatTexturedDebugQuadStatus(status)), false);
         return status.enabled() ? 1 : 0;
     }
 
-    private static int texturedDebugQuadDisable(CommandSourceStack source) {
+    static int texturedDebugQuadDisable(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getTexturedDebugQuadRenderer().disable();
         ForgeTexturedDebugStats status = ForgeVoxyInstance.INSTANCE.getTexturedDebugQuadRenderer().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy textured debug quad disable: " + formatTexturedDebugQuadStatus(status)), false);
         return 1;
     }
 
-    private static int texturedDebugQuadStatus(CommandSourceStack source) {
+    static int texturedDebugQuadStatus(CommandSourceStack source) {
         ForgeTexturedDebugStats status = ForgeVoxyInstance.INSTANCE.getTexturedDebugQuadRenderer().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy textured debug quad status: " + formatTexturedDebugQuadStatus(status)), false);
         return status.actualDrawEnabled() || status.texturedDebugQuadStale() ? 1 : 0;
     }
 
-    private static int texturedDebugQuadClear(CommandSourceStack source) {
+    static int texturedDebugQuadClear(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getTexturedDebugQuadRenderer().clear();
         ForgeTexturedDebugStats status = ForgeVoxyInstance.INSTANCE.getTexturedDebugQuadRenderer().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy textured debug quad clear: " + formatTexturedDebugQuadStatus(status) + " Atlas upload, MDIC debug renderer, GL geometry heap, simple renderer, and CPU caches were left unchanged."), false);
         return 1;
     }
 
-    private static int texturedReadbackBuildSample(CommandSourceStack source) {
+    static int texturedReadbackBuildSample(CommandSourceStack source) {
         ForgeTexturedReadbackStats status = ForgeVoxyInstance.INSTANCE.getTexturedReadbackRenderer().buildSample();
         source.sendSuccess(() -> Component.literal("Voxy textured readback build sample: " + formatTexturedReadbackStatus(status)), false);
         return status.sampleReady() && status.atlasTextureReady() && status.atlasPixelsUploaded() && status.builtQuads() > 0 ? 1 : 0;
     }
 
-    private static int texturedReadbackEnable(CommandSourceStack source) {
+    static int texturedReadbackEnable(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getTexturedReadbackRenderer().enable();
         ForgeTexturedReadbackStats status = ForgeVoxyInstance.INSTANCE.getTexturedReadbackRenderer().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy textured readback enable: " + formatTexturedReadbackStatus(status)), false);
         return status.enabled() ? 1 : 0;
     }
 
-    private static int texturedReadbackDisable(CommandSourceStack source) {
+    static int texturedReadbackDisable(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getTexturedReadbackRenderer().disable();
         ForgeTexturedReadbackStats status = ForgeVoxyInstance.INSTANCE.getTexturedReadbackRenderer().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy textured readback disable: " + formatTexturedReadbackStatus(status)), false);
         return 1;
     }
 
-    private static int texturedReadbackStatus(CommandSourceStack source) {
+    static int texturedReadbackStatus(CommandSourceStack source) {
         ForgeTexturedReadbackStats status = ForgeVoxyInstance.INSTANCE.getTexturedReadbackRenderer().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy textured readback status: " + formatTexturedReadbackStatus(status)), false);
         return status.actualDrawEnabled() || status.texturedReadbackStale() ? 1 : 0;
     }
 
-    private static int texturedReadbackClear(CommandSourceStack source) {
+    static int texturedReadbackClear(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getTexturedReadbackRenderer().clear();
         ForgeTexturedReadbackStats status = ForgeVoxyInstance.INSTANCE.getTexturedReadbackRenderer().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy textured readback clear: " + formatTexturedReadbackStatus(status) + " Atlas upload, MDIC debug renderer, GL geometry heap, simple renderer, and CPU caches were left unchanged."), false);
         return 1;
     }
 
-    private static int texturedMdicDebugBuild(CommandSourceStack source) {
+    static int texturedMdicDebugBuild(CommandSourceStack source) {
         ForgeTexturedMdicDebugStats status = ForgeVoxyInstance.INSTANCE.getTexturedMdicDebugRenderer().build();
         source.sendSuccess(() -> Component.literal("Voxy textured MDIC debug build: " + formatTexturedMdicDebugStatus(status)), false);
         return status.sampleReady() && status.atlasTextureReady() && status.atlasPixelsUploaded() && status.mdicCommandReady() ? 1 : 0;
     }
 
-    private static int texturedMdicDebugInputMode(CommandSourceStack source, ForgeTexturedMdicDebugInputMode mode) {
+    static int texturedMdicDebugInputMode(CommandSourceStack source, ForgeTexturedMdicDebugInputMode mode) {
         ForgeVoxyInstance.INSTANCE.getTexturedMdicDebugRenderer().setInputMode(mode);
         ForgeTexturedMdicDebugStats status = ForgeVoxyInstance.INSTANCE.getTexturedMdicDebugRenderer().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy textured MDIC debug input mode: " + formatTexturedMdicDebugStatus(status)), false);
         return 1;
     }
 
-    private static int texturedMdicDebugEnable(CommandSourceStack source) {
+    static int texturedMdicDebugEnable(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getTexturedMdicDebugRenderer().enable();
         ForgeTexturedMdicDebugStats status = ForgeVoxyInstance.INSTANCE.getTexturedMdicDebugRenderer().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy textured MDIC debug enable: " + formatTexturedMdicDebugStatus(status)), false);
         return status.enabled() ? 1 : 0;
     }
 
-    private static int texturedMdicDebugDisable(CommandSourceStack source) {
+    static int texturedMdicDebugDisable(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getTexturedMdicDebugRenderer().disable();
         ForgeTexturedMdicDebugStats status = ForgeVoxyInstance.INSTANCE.getTexturedMdicDebugRenderer().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy textured MDIC debug disable: " + formatTexturedMdicDebugStatus(status)), false);
         return 1;
     }
 
-    private static int texturedMdicDebugStatus(CommandSourceStack source) {
+    static int texturedMdicDebugStatus(CommandSourceStack source) {
         ForgeTexturedMdicDebugStats status = ForgeVoxyInstance.INSTANCE.getTexturedMdicDebugRenderer().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy textured MDIC debug status: " + formatTexturedMdicDebugStatus(status)), false);
         return status.actualDrawEnabled() || status.texturedMdicDebugStale() ? 1 : 0;
     }
 
-    private static int texturedMdicDebugClear(CommandSourceStack source) {
+    static int texturedMdicDebugClear(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getTexturedMdicDebugRenderer().clear();
         ForgeTexturedMdicDebugStats status = ForgeVoxyInstance.INSTANCE.getTexturedMdicDebugRenderer().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy textured MDIC debug clear: " + formatTexturedMdicDebugStatus(status) + " Atlas upload, existing MDIC debug renderer, GL geometry heap, simple renderer, and CPU caches were left unchanged."), false);
