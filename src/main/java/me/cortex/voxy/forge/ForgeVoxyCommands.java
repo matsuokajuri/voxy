@@ -4421,422 +4421,6 @@ public final class ForgeVoxyCommands {
                 && !rendererStatus.actualDrawEnabled() ? 1 : 0;
     }
 
-    static int formalTerrainRendererOwnerEnable(CommandSourceStack source) {
-        ForgeFormalTerrainRendererStats status = ForgeVoxyInstance.INSTANCE.getFormalTerrainRendererOwner().enable("command-enable");
-        ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("k1-formal-terrain-renderer-owner-enable");
-        String message = "Voxy K1 formal terrain renderer owner enable: "
-                + formatFormalTerrainRendererOwnerStatus(status)
-                + " "
-                + formatFormalRendererStatus(rendererStatus)
-                + " No live terrain draw, MDICSectionRenderer call, VoxyRenderSystem call, or formal MDIC draw was started.";
-        source.sendSuccess(() -> Component.literal(message), false);
-        return status.formalTerrainRendererOwnerReady()
-                && status.noDraw()
-                && !status.formalTerrainRendererReady()
-                && !status.actualRendererDrawEnabled()
-                && !rendererStatus.formalRendererReady()
-                && !rendererStatus.actualDrawEnabled() ? 1 : 0;
-    }
-
-    static int formalTerrainRendererOwnerStatus(CommandSourceStack source) {
-        ForgeFormalTerrainRendererStats status = ForgeVoxyInstance.INSTANCE.getFormalTerrainRendererOwner().createStatusSnapshot();
-        source.sendSuccess(() -> Component.literal("Voxy K1 formal terrain renderer owner status: " + formatFormalTerrainRendererOwnerStatus(status)), false);
-        return status.formalTerrainRendererOwnerReady() || status.stale() ? 1 : 0;
-    }
-
-    static int formalTerrainRendererOwnerCheck(CommandSourceStack source) {
-        ForgeFormalTerrainRendererStats status = ForgeVoxyInstance.INSTANCE.getFormalTerrainRendererOwner().check("command-check");
-        ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("k1-formal-terrain-renderer-owner-check");
-        source.sendSuccess(() -> Component.literal("Voxy K1 formal terrain renderer owner check: "
-                + formatFormalTerrainRendererOwnerStatus(status)
-                + " "
-                + formatFormalRendererStatus(rendererStatus)), false);
-        return status.formalTerrainRendererOwnerReady() && status.noDraw() ? 1 : 0;
-    }
-
-    static int formalTerrainRendererOwnerAudit(CommandSourceStack source) {
-        ForgeFormalTerrainRendererAuditResult audit = ForgeVoxyInstance.INSTANCE.getFormalTerrainRendererOwner().audit();
-        ForgeFormalTerrainRendererStats status = ForgeVoxyInstance.INSTANCE.getFormalTerrainRendererOwner().createStatusSnapshot();
-        ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("k1-formal-terrain-renderer-owner-audit");
-        source.sendSuccess(() -> Component.literal("Voxy K1 formal terrain renderer owner audit: "
-                + formatFormalTerrainRendererOwnerAudit(audit)
-                + " "
-                + formatFormalTerrainRendererOwnerStatus(status)
-                + " "
-                + formatFormalRendererStatus(rendererStatus)), false);
-        return audit.success() ? 1 : 0;
-    }
-
-    static int formalTerrainRendererOwnerDump(CommandSourceStack source) {
-        ForgeFormalTerrainRendererStats status = ForgeVoxyInstance.INSTANCE.getFormalTerrainRendererOwner().check("command-dump");
-        String blockers = ForgeVoxyInstance.INSTANCE.getFormalTerrainRendererOwner().dumpBlockers();
-        source.sendSuccess(() -> Component.literal("Voxy K1 formal terrain renderer owner dump: blockers=" + blockers + " " + formatFormalTerrainRendererOwnerStatus(status)), false);
-        return status.blockerCount() > 0 ? 1 : 0;
-    }
-
-    static int formalTerrainRendererOwnerClear(CommandSourceStack source) {
-        ForgeFormalTerrainRendererStats status = ForgeVoxyInstance.INSTANCE.getFormalTerrainRendererOwner().clear("command-clear");
-        source.sendSuccess(() -> Component.literal("Voxy K1 formal terrain renderer owner clear: "
-                + formatFormalTerrainRendererOwnerStatus(status)
-                + " Only K1 owner lifecycle/status was cleared; GL geometry heap, MDIC command buffers, debug renderers, J-stage previews, and formal ModelStore resources were left unchanged."), false);
-        return 1;
-    }
-
-    static int qaK1FormalTerrainRendererOwner(CommandSourceStack source) {
-        ForgeFormalTerrainRendererStats enableStatus = ForgeVoxyInstance.INSTANCE.getFormalTerrainRendererOwner().enable("qa-k1-formal-terrain-renderer-owner");
-        ForgeFormalTerrainRendererStats checkStatus = ForgeVoxyInstance.INSTANCE.getFormalTerrainRendererOwner().check("qa-k1-formal-terrain-renderer-owner");
-        ForgeFormalTerrainRendererAuditResult audit = ForgeVoxyInstance.INSTANCE.getFormalTerrainRendererOwner().audit();
-        ForgeFormalTerrainRendererStats status = ForgeVoxyInstance.INSTANCE.getFormalTerrainRendererOwner().createStatusSnapshot();
-        ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("qa-k1-formal-terrain-renderer-owner");
-        String message = "Voxy QA K1 formal terrain renderer owner no-draw skeleton: "
-                + formatFormalTerrainRendererOwnerStatus(status)
-                + " "
-                + formatFormalTerrainRendererOwnerAudit(audit)
-                + " "
-                + formatFormalRendererStatus(rendererStatus)
-                + " K1 references formal model/shader/J5 readiness, defines viewport/command/visibility/draw placeholders as missing, keeps J-stage previews separated, and starts no live terrain draw.";
-        VoxyForge.LOGGER.info(message);
-        source.sendSuccess(() -> Component.literal(message), false);
-        return enableStatus.formalTerrainRendererOwnerReady()
-                && checkStatus.k0VerdictReadyForK1()
-                && audit.success()
-                && status.formalTerrainRendererOwnerReady()
-                && status.formalTerrainRendererLifecycleReady()
-                && !status.formalTerrainRendererReady()
-                && !status.actualRendererDrawEnabled()
-                && status.noDraw()
-                && status.k0VerdictReadyForK1()
-                && status.originalVoxyAlignmentPreserved()
-                && status.debugRendererIsolationOk()
-                && status.previewSystemsSeparated()
-                && !status.sampleSetUsedAsFormalSource()
-                && status.p0BlockerCount() >= 1
-                && !rendererStatus.formalRendererReady()
-                && !rendererStatus.actualDrawEnabled() ? 1 : 0;
-    }
-
-    static int formalMdicViewportOwnerEnable(CommandSourceStack source) {
-        ForgeVoxyInstance.INSTANCE.getFormalTerrainRendererOwner().enable("k2-formal-mdic-viewport-owner-enable");
-        ForgeFormalMdicViewportStats status = ForgeVoxyInstance.INSTANCE.getFormalMdicViewportOwner().enable("command-enable");
-        ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("k2-formal-mdic-viewport-owner-enable");
-        source.sendSuccess(() -> Component.literal("Voxy K2 formal MDIC viewport owner enable: "
-                + formatFormalMdicViewportOwnerStatus(status)
-                + " "
-                + formatFormalRendererStatus(rendererStatus)
-                + " No formal draw, cmdgen, glMultiDrawElementsIndirectCountARB, MDICSectionRenderer, or VoxyRenderSystem call was started."), false);
-        return status.formalViewportOwnerReady()
-                && status.formalCommandBufferOwnerReady()
-                && status.formalVisibilityOwnerReady()
-                && status.noDraw()
-                && !status.actualRendererDrawEnabled()
-                && !rendererStatus.formalRendererReady()
-                && !rendererStatus.actualDrawEnabled() ? 1 : 0;
-    }
-
-    static int formalMdicViewportOwnerStatus(CommandSourceStack source) {
-        ForgeFormalMdicViewportStats status = ForgeVoxyInstance.INSTANCE.getFormalMdicViewportOwner().createStatusSnapshot();
-        source.sendSuccess(() -> Component.literal("Voxy K2 formal MDIC viewport owner status: " + formatFormalMdicViewportOwnerStatus(status)), false);
-        return status.formalViewportOwnerReady() || status.stale() ? 1 : 0;
-    }
-
-    static int formalMdicViewportOwnerCheck(CommandSourceStack source) {
-        ForgeFormalMdicViewportStats status = ForgeVoxyInstance.INSTANCE.getFormalMdicViewportOwner().check("command-check");
-        ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("k2-formal-mdic-viewport-owner-check");
-        source.sendSuccess(() -> Component.literal("Voxy K2 formal MDIC viewport owner check: "
-                + formatFormalMdicViewportOwnerStatus(status)
-                + " "
-                + formatFormalRendererStatus(rendererStatus)), false);
-        return status.formalViewportOwnerReady()
-                && status.formalCommandBufferOwnerReady()
-                && status.formalVisibilityOwnerReady()
-                && status.noDraw() ? 1 : 0;
-    }
-
-    static int formalMdicViewportOwnerAudit(CommandSourceStack source) {
-        ForgeFormalMdicViewportAuditResult audit = ForgeVoxyInstance.INSTANCE.getFormalMdicViewportOwner().audit();
-        ForgeFormalMdicViewportStats status = ForgeVoxyInstance.INSTANCE.getFormalMdicViewportOwner().createStatusSnapshot();
-        ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("k2-formal-mdic-viewport-owner-audit");
-        source.sendSuccess(() -> Component.literal("Voxy K2 formal MDIC viewport owner audit: "
-                + formatFormalMdicViewportOwnerAudit(audit)
-                + " "
-                + formatFormalMdicViewportOwnerStatus(status)
-                + " "
-                + formatFormalRendererStatus(rendererStatus)), false);
-        return audit.success() ? 1 : 0;
-    }
-
-    static int formalMdicViewportOwnerDump(CommandSourceStack source) {
-        ForgeFormalMdicViewportStats status = ForgeVoxyInstance.INSTANCE.getFormalMdicViewportOwner().check("command-dump");
-        String blockers = ForgeVoxyInstance.INSTANCE.getFormalMdicViewportOwner().dumpBlockers();
-        source.sendSuccess(() -> Component.literal("Voxy K2 formal MDIC viewport owner dump: blockers=" + blockers + " " + formatFormalMdicViewportOwnerStatus(status)), false);
-        return status.blockerCount() > 0 ? 1 : 0;
-    }
-
-    static int formalMdicViewportOwnerClear(CommandSourceStack source) {
-        ForgeFormalMdicViewportStats status = ForgeVoxyInstance.INSTANCE.getFormalMdicViewportOwner().clear("command-clear");
-        source.sendSuccess(() -> Component.literal("Voxy K2 formal MDIC viewport owner clear: "
-                + formatFormalMdicViewportOwnerStatus(status)
-                + " Only K2 owner lifecycle/status was cleared; debug MDIC command buffers, GL geometry heap, J-stage previews, and formal ModelStore resources were left unchanged."), false);
-        return 1;
-    }
-
-    static int qaK2FormalMdicViewportOwner(CommandSourceStack source) {
-        ForgeFormalTerrainRendererStats terrainStatus = ForgeVoxyInstance.INSTANCE.getFormalTerrainRendererOwner().enable("qa-k2-formal-mdic-viewport-owner");
-        ForgeFormalMdicViewportStats enableStatus = ForgeVoxyInstance.INSTANCE.getFormalMdicViewportOwner().enable("qa-k2-formal-mdic-viewport-owner");
-        ForgeFormalMdicViewportStats checkStatus = ForgeVoxyInstance.INSTANCE.getFormalMdicViewportOwner().check("qa-k2-formal-mdic-viewport-owner");
-        ForgeFormalMdicViewportAuditResult audit = ForgeVoxyInstance.INSTANCE.getFormalMdicViewportOwner().audit();
-        ForgeFormalMdicViewportStats status = ForgeVoxyInstance.INSTANCE.getFormalMdicViewportOwner().createStatusSnapshot();
-        ForgeFormalTerrainRendererStats terrainOwnerStatus = ForgeVoxyInstance.INSTANCE.getFormalTerrainRendererOwner().check("qa-k2-formal-mdic-viewport-owner");
-        ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("qa-k2-formal-mdic-viewport-owner");
-        String message = "Voxy QA K2 formal MDIC viewport / command / visibility owner no-draw skeleton: "
-                + formatFormalMdicViewportOwnerStatus(status)
-                + " "
-                + formatFormalMdicViewportOwnerAudit(audit)
-                + " "
-                + formatFormalTerrainRendererOwnerStatus(terrainOwnerStatus)
-                + " "
-                + formatFormalRendererStatus(rendererStatus)
-                + " K2 creates formal logical owners for viewport, draw command, draw count, visibility, render-list/indirect lookup, and position scratch resources; debug MDIC command buffers are not used as formal resources and no draw/cmdgen call is issued.";
-        VoxyForge.LOGGER.info(message);
-        source.sendSuccess(() -> Component.literal(message), false);
-        return terrainStatus.formalTerrainRendererOwnerReady()
-                && enableStatus.formalViewportOwnerReady()
-                && checkStatus.formalCommandBufferOwnerReady()
-                && status.formalDrawCommandBufferOwnerReady()
-                && status.formalDrawCountBufferOwnerReady()
-                && status.formalVisibilityOwnerReady()
-                && status.formalRenderListOwnerReady()
-                && status.formalPositionScratchOwnerReady()
-                && !status.debugMdicCommandBuffersUsedAsFormal()
-                && status.debugRendererIsolationOk()
-                && !status.formalDrawPipelineReady()
-                && !status.formalRendererReady()
-                && !status.actualRendererDrawEnabled()
-                && status.noDraw()
-                && status.p0BlockerCount() >= 1
-                && audit.success()
-                && !rendererStatus.formalRendererReady()
-                && !rendererStatus.actualDrawEnabled() ? 1 : 0;
-    }
-
-    static int formalCommandGenerationOwnerEnable(CommandSourceStack source) {
-        ForgeFormalCommandGenerationStats status = ForgeVoxyInstance.INSTANCE.getFormalCommandGenerationOwner().enable("command-enable");
-        ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("k3-formal-command-generation-owner-enable");
-        source.sendSuccess(() -> Component.literal("Voxy K3 formal command generation owner enable: "
-                + formatFormalCommandGenerationOwnerStatus(status)
-                + " "
-                + formatFormalRendererStatus(rendererStatus)
-                + " No cmdgen dispatch, draw call, MDICSectionRenderer, or VoxyRenderSystem call was started."), false);
-        return status.formalCommandGenerationOwnerReady()
-                && status.formalCommandGenerationContractReady()
-                && !status.formalDrawPipelineReady()
-                && !status.formalRendererReady()
-                && !status.actualRendererDrawEnabled() ? 1 : 0;
-    }
-
-    static int formalCommandGenerationOwnerStatus(CommandSourceStack source) {
-        ForgeFormalCommandGenerationStats status = ForgeVoxyInstance.INSTANCE.getFormalCommandGenerationOwner().createStatusSnapshot();
-        source.sendSuccess(() -> Component.literal("Voxy K3 formal command generation owner status: " + formatFormalCommandGenerationOwnerStatus(status)), false);
-        return status.formalCommandGenerationOwnerReady() || status.stale() ? 1 : 0;
-    }
-
-    static int formalCommandGenerationOwnerCheck(CommandSourceStack source) {
-        ForgeFormalCommandGenerationStats status = ForgeVoxyInstance.INSTANCE.getFormalCommandGenerationOwner().check("command-check");
-        ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("k3-formal-command-generation-owner-check");
-        source.sendSuccess(() -> Component.literal("Voxy K3 formal command generation owner check: "
-                + formatFormalCommandGenerationOwnerStatus(status)
-                + " "
-                + formatFormalRendererStatus(rendererStatus)), false);
-        return status.formalCommandGenerationOwnerReady()
-                && status.formalCommandGenerationContractReady()
-                && status.formalDrawCommandLayoutReady()
-                && status.formalDrawCountLayoutReady()
-                && !status.formalDrawPipelineReady()
-                && !status.actualRendererDrawEnabled() ? 1 : 0;
-    }
-
-    static int formalCommandGenerationOwnerAudit(CommandSourceStack source) {
-        ForgeFormalCommandGenerationAuditResult audit = ForgeVoxyInstance.INSTANCE.getFormalCommandGenerationOwner().audit();
-        ForgeFormalCommandGenerationStats status = ForgeVoxyInstance.INSTANCE.getFormalCommandGenerationOwner().createStatusSnapshot();
-        ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("k3-formal-command-generation-owner-audit");
-        source.sendSuccess(() -> Component.literal("Voxy K3 formal command generation owner audit: "
-                + formatFormalCommandGenerationOwnerAudit(audit)
-                + " "
-                + formatFormalCommandGenerationOwnerStatus(status)
-                + " "
-                + formatFormalRendererStatus(rendererStatus)), false);
-        return audit.success() ? 1 : 0;
-    }
-
-    static int formalCommandGenerationOwnerDump(CommandSourceStack source) {
-        ForgeFormalCommandGenerationStats status = ForgeVoxyInstance.INSTANCE.getFormalCommandGenerationOwner().check("command-dump");
-        String blockers = ForgeVoxyInstance.INSTANCE.getFormalCommandGenerationOwner().dumpBlockers();
-        source.sendSuccess(() -> Component.literal("Voxy K3 formal command generation owner dump: blockers=" + blockers + " " + formatFormalCommandGenerationOwnerStatus(status)), false);
-        return status.blockerCount() > 0 ? 1 : 0;
-    }
-
-    static int formalCommandGenerationOwnerClear(CommandSourceStack source) {
-        ForgeFormalCommandGenerationStats status = ForgeVoxyInstance.INSTANCE.getFormalCommandGenerationOwner().clear("command-clear");
-        source.sendSuccess(() -> Component.literal("Voxy K3 formal command generation owner clear: "
-                + formatFormalCommandGenerationOwnerStatus(status)
-                + " Only K3 owner lifecycle/status was cleared; K2 viewport resources, debug command buffers, GL geometry heap, previews, and formal model resources were left unchanged."), false);
-        return 1;
-    }
-
-    static int qaK3FormalCommandGenerationOwner(CommandSourceStack source) {
-        ForgeFormalTerrainRendererStats terrainStatus = ForgeVoxyInstance.INSTANCE.getFormalTerrainRendererOwner().enable("qa-k3-formal-command-generation-owner");
-        ForgeFormalMdicViewportStats viewportEnableStatus = ForgeVoxyInstance.INSTANCE.getFormalMdicViewportOwner().enable("qa-k3-formal-command-generation-owner");
-        ForgeFormalCommandGenerationStats enableStatus = ForgeVoxyInstance.INSTANCE.getFormalCommandGenerationOwner().enable("qa-k3-formal-command-generation-owner");
-        ForgeFormalCommandGenerationStats checkStatus = ForgeVoxyInstance.INSTANCE.getFormalCommandGenerationOwner().check("qa-k3-formal-command-generation-owner");
-        ForgeFormalCommandGenerationAuditResult audit = ForgeVoxyInstance.INSTANCE.getFormalCommandGenerationOwner().audit();
-        ForgeFormalCommandGenerationStats status = ForgeVoxyInstance.INSTANCE.getFormalCommandGenerationOwner().createStatusSnapshot();
-        ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("qa-k3-formal-command-generation-owner");
-        String message = "Voxy QA K3 formal command generation ownership skeleton: "
-                + formatFormalCommandGenerationOwnerStatus(status)
-                + " "
-                + formatFormalCommandGenerationOwnerAudit(audit)
-                + " "
-                + formatFormalMdicViewportOwnerStatus(viewportEnableStatus)
-                + " "
-                + formatFormalTerrainRendererOwnerStatus(terrainStatus)
-                + " "
-                + formatFormalRendererStatus(rendererStatus)
-                + " No cmdgen compute dispatch, glMultiDrawElementsIndirectCountARB, MDICSectionRenderer, VoxyRenderSystem, terrain draw, visible LoD draw, or debug renderer replacement was performed.";
-        VoxyForge.LOGGER.info(message);
-        source.sendSuccess(() -> Component.literal(message), false);
-        return terrainStatus.formalTerrainRendererOwnerReady()
-                && viewportEnableStatus.formalViewportOwnerReady()
-                && enableStatus.formalCommandGenerationOwnerReady()
-                && checkStatus.formalCommandGenerationContractReady()
-                && status.formalDrawCommandLayoutReady()
-                && status.formalDrawCountLayoutReady()
-                && status.debugRendererIsolationOk()
-                && !status.debugMdicCommandBuffersUsedAsFormal()
-                && !status.cmdgenComputeShaderRun()
-                && !status.glMultiDrawElementsIndirectCountCalled()
-                && !status.formalDrawPipelineReady()
-                && !status.formalRendererReady()
-                && !status.actualRendererDrawEnabled()
-                && status.noDraw()
-                && status.p0BlockerCount() >= 1
-                && audit.success()
-                && !rendererStatus.formalRendererReady()
-                && !rendererStatus.actualDrawEnabled() ? 1 : 0;
-    }
-
-    static int formalVisibilityOwnerEnable(CommandSourceStack source) {
-        ForgeVoxyInstance.INSTANCE.getFormalTerrainRendererOwner().enable("k4-formal-visibility-owner-enable");
-        ForgeVoxyInstance.INSTANCE.getFormalMdicViewportOwner().enable("k4-formal-visibility-owner-enable");
-        ForgeVoxyInstance.INSTANCE.getFormalCommandGenerationOwner().enable("k4-formal-visibility-owner-enable");
-        ForgeFormalVisibilityStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibilityOwner().enable("command-enable");
-        ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("k4-formal-visibility-owner-enable");
-        source.sendSuccess(() -> Component.literal("Voxy K4 formal visibility owner enable: "
-                + formatFormalVisibilityOwnerStatus(status)
-                + " "
-                + formatFormalRendererStatus(rendererStatus)
-                + " No traversal implementation, cmdgen dispatch, draw call, MDICSectionRenderer, or VoxyRenderSystem call was started."), false);
-        return status.formalVisibilityOwnerReady()
-                && status.formalRenderListOwnerReady()
-                && status.formalIndirectLookupOwnerReady()
-                && !status.formalDrawPipelineReady()
-                && !status.formalRendererReady()
-                && !status.actualRendererDrawEnabled() ? 1 : 0;
-    }
-
-    static int formalVisibilityOwnerStatus(CommandSourceStack source) {
-        ForgeFormalVisibilityStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibilityOwner().createStatusSnapshot();
-        source.sendSuccess(() -> Component.literal("Voxy K4 formal visibility owner status: " + formatFormalVisibilityOwnerStatus(status)), false);
-        return status.formalVisibilityOwnerReady() || status.stale() ? 1 : 0;
-    }
-
-    static int formalVisibilityOwnerCheck(CommandSourceStack source) {
-        ForgeFormalVisibilityStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibilityOwner().check("command-check");
-        ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("k4-formal-visibility-owner-check");
-        source.sendSuccess(() -> Component.literal("Voxy K4 formal visibility owner check: "
-                + formatFormalVisibilityOwnerStatus(status)
-                + " "
-                + formatFormalRendererStatus(rendererStatus)), false);
-        return status.formalVisibilityOwnerReady()
-                && status.formalVisibilityContractReady()
-                && status.formalRenderListContractReady()
-                && !status.formalVisibilityTraversalImplemented()
-                && !status.cmdgenComputeShaderRun()
-                && !status.glMultiDrawElementsIndirectCountCalled()
-                && !status.actualRendererDrawEnabled() ? 1 : 0;
-    }
-
-    static int formalVisibilityOwnerAudit(CommandSourceStack source) {
-        ForgeFormalVisibilityAuditResult audit = ForgeVoxyInstance.INSTANCE.getFormalVisibilityOwner().audit();
-        ForgeFormalVisibilityStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibilityOwner().createStatusSnapshot();
-        ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("k4-formal-visibility-owner-audit");
-        source.sendSuccess(() -> Component.literal("Voxy K4 formal visibility owner audit: "
-                + formatFormalVisibilityOwnerAudit(audit)
-                + " "
-                + formatFormalVisibilityOwnerStatus(status)
-                + " "
-                + formatFormalRendererStatus(rendererStatus)), false);
-        return audit.success() ? 1 : 0;
-    }
-
-    static int formalVisibilityOwnerDump(CommandSourceStack source) {
-        ForgeFormalVisibilityStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibilityOwner().check("command-dump");
-        String blockers = ForgeVoxyInstance.INSTANCE.getFormalVisibilityOwner().dumpBlockers();
-        source.sendSuccess(() -> Component.literal("Voxy K4 formal visibility owner dump: blockers=" + blockers + " " + formatFormalVisibilityOwnerStatus(status)), false);
-        return status.blockerCount() > 0 ? 1 : 0;
-    }
-
-    static int formalVisibilityOwnerClear(CommandSourceStack source) {
-        ForgeFormalVisibilityStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibilityOwner().clear("command-clear");
-        source.sendSuccess(() -> Component.literal("Voxy K4 formal visibility owner clear: "
-                + formatFormalVisibilityOwnerStatus(status)
-                + " Only K4 owner lifecycle/status was cleared; K1/K2/K3 owners, debug planners, debug renderers, GL geometry heap, previews, and formal model resources were left unchanged."), false);
-        return 1;
-    }
-
-    static int qaK4FormalVisibilityOwner(CommandSourceStack source) {
-        ForgeFormalTerrainRendererStats terrainStatus = ForgeVoxyInstance.INSTANCE.getFormalTerrainRendererOwner().enable("qa-k4-formal-visibility-owner");
-        ForgeFormalMdicViewportStats viewportStatus = ForgeVoxyInstance.INSTANCE.getFormalMdicViewportOwner().enable("qa-k4-formal-visibility-owner");
-        ForgeFormalCommandGenerationStats commandStatus = ForgeVoxyInstance.INSTANCE.getFormalCommandGenerationOwner().enable("qa-k4-formal-visibility-owner");
-        ForgeFormalVisibilityStats enableStatus = ForgeVoxyInstance.INSTANCE.getFormalVisibilityOwner().enable("qa-k4-formal-visibility-owner");
-        ForgeFormalVisibilityStats checkStatus = ForgeVoxyInstance.INSTANCE.getFormalVisibilityOwner().check("qa-k4-formal-visibility-owner");
-        ForgeFormalVisibilityAuditResult audit = ForgeVoxyInstance.INSTANCE.getFormalVisibilityOwner().audit();
-        ForgeFormalVisibilityStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibilityOwner().createStatusSnapshot();
-        ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("qa-k4-formal-visibility-owner");
-        String message = "Voxy QA K4 formal visibility/render-list ownership skeleton: "
-                + formatFormalVisibilityOwnerStatus(status)
-                + " "
-                + formatFormalVisibilityOwnerAudit(audit)
-                + " "
-                + formatFormalCommandGenerationOwnerStatus(commandStatus)
-                + " "
-                + formatFormalMdicViewportOwnerStatus(viewportStatus)
-                + " "
-                + formatFormalTerrainRendererOwnerStatus(terrainStatus)
-                + " "
-                + formatFormalRendererStatus(rendererStatus)
-                + " No formal traversal implementation, cmdgen compute dispatch, glMultiDrawElementsIndirectCountARB, MDICSectionRenderer, VoxyRenderSystem, terrain draw, visible LoD draw, or debug planner promotion was performed.";
-        VoxyForge.LOGGER.info(message);
-        source.sendSuccess(() -> Component.literal(message), false);
-        return terrainStatus.formalTerrainRendererOwnerReady()
-                && viewportStatus.formalViewportOwnerReady()
-                && commandStatus.formalCommandGenerationOwnerReady()
-                && enableStatus.formalVisibilityOwnerReady()
-                && checkStatus.formalVisibilityContractReady()
-                && status.formalRenderListContractReady()
-                && status.formalIndirectLookupOwnerReady()
-                && !status.debugPlannerUsedAsFormal()
-                && !status.formalVisibilityTraversalImplemented()
-                && !status.cmdgenComputeShaderRun()
-                && !status.glMultiDrawElementsIndirectCountCalled()
-                && !status.formalDrawPipelineReady()
-                && !status.formalRendererReady()
-                && !status.actualRendererDrawEnabled()
-                && status.noDraw()
-                && status.p0BlockerCount() >= 1
-                && audit.success()
-                && !rendererStatus.formalRendererReady()
-                && !rendererStatus.actualDrawEnabled() ? 1 : 0;
-    }
 
     static int formalCmdgenGpuValidateBuild(CommandSourceStack source) {
         ForgeFormalCmdgenGpuValidationStats status = ForgeVoxyInstance.INSTANCE.getFormalCmdgenGpuValidator().build();
@@ -7322,7 +6906,7 @@ public final class ForgeVoxyCommands {
         );
     }
 
-    private static String formatFormalTerrainRendererOwnerStatus(ForgeFormalTerrainRendererStats status) {
+    static String formatFormalTerrainRendererOwnerStatus(ForgeFormalTerrainRendererStats status) {
         return String.format(
                 "stage=%s formalTerrainRendererOwnerReady=%s formalTerrainRendererLifecycleReady=%s formalTerrainRendererReady=%s actualRendererDrawEnabled=%s noDraw=%s enabled=%s k0AlignmentAuditReady=%s k0VerdictReadyForK1=%s originalVoxyAlignmentPreserved=%s formalModelStoreOwnerReady=%s formalModelBakeryLifecycleSkeletonReady=%s realTerrainPackedRecordBridgeReady=%s formalShaderProgramValidationReady=%s formalTexturedShaderPrototypeReady=%s formalPackedQuadPreviewReady=%s geometryHeapReady=%s sectionGeometryManagerReady=%s formalViewportOwnerReady=%s formalCommandBufferOwnerReady=%s formalCommandGenerationOwnerReady=%s formalCommandGenerationContractReady=%s formalDrawCommandLayoutReady=%s formalDrawCountLayoutReady=%s formalVisibilityOwnerReady=%s formalRenderListOwnerReady=%s formalIndirectLookupOwnerReady=%s formalVisibilityContractReady=%s formalRenderListContractReady=%s formalVisibilityTraversalImplemented=%s formalHierarchicalOcclusionReady=%s formalRenderDistanceTrackerReady=%s cpuCandidateSnapshotReady=%s debugPlannerUsedAsFormal=%s formalDrawPipelineReady=%s globalFormalModelIdGeometryReady=%s formalTerrainShaderReady=%s debugRendererIsolationOk=%s previewSystemsSeparated=%s sampleSetUsedAsFormalSource=%s lifecycleState=%s lastLifecycleEvent=%s stale=%s requiresRebuild=%s blockerCount=%d p0BlockerCount=%d p1BlockerCount=%d p2BlockerCount=%d blockers=%s resourceReloadSeen=%s worldUnloadSeen=%s dimensionSwitchSeen=%s debugPipelineClearSeen=%s presetOffSeen=%s presetClearSeen=%s mdicSectionRendererCalled=%s voxyRenderSystemCalled=%s liveTerrainDrawStarted=%s formalMdicDrawStarted=%s lastFailureReason=%s lastAuditOk=%s lastAuditError=%s renderer=formal-terrain-renderer-owner formalRenderer=false draw=false",
                 status.stage(),
@@ -7390,7 +6974,7 @@ public final class ForgeVoxyCommands {
         );
     }
 
-    private static String formatFormalTerrainRendererOwnerAudit(ForgeFormalTerrainRendererAuditResult audit) {
+    static String formatFormalTerrainRendererOwnerAudit(ForgeFormalTerrainRendererAuditResult audit) {
         return String.format(
                 "k1AuditOk=%s k1AuditError=%s k0AuditDocExists=%s k0VerdictReadyForK1=%s ownerExists=%s originalVoxyAlignmentPreserved=%s previewSystemsSeparated=%s debugRenderersIsolated=%s sampleSetUsedAsFormalSource=%s terrainDrawStarted=%s formalRendererDrawStarted=%s mdicSectionRendererCalled=%s voxyRenderSystemCalled=%s formalTerrainRendererReady=%s actualRendererDrawEnabled=%s",
                 audit.success(),
@@ -7411,7 +6995,7 @@ public final class ForgeVoxyCommands {
         );
     }
 
-    private static String formatFormalMdicViewportOwnerStatus(ForgeFormalMdicViewportStats status) {
+    static String formatFormalMdicViewportOwnerStatus(ForgeFormalMdicViewportStats status) {
         return String.format(
                 "stage=%s formalTerrainRendererOwnerReady=%s formalViewportOwnerReady=%s formalCommandBufferOwnerReady=%s formalDrawCommandBufferOwnerReady=%s formalDrawCountBufferOwnerReady=%s formalVisibilityOwnerReady=%s formalRenderListOwnerReady=%s formalIndirectLookupOwnerReady=%s formalPositionScratchOwnerReady=%s formalCommandGenerationOwnerReady=%s formalDrawPipelineReady=%s formalRendererReady=%s actualRendererDrawEnabled=%s noDraw=%s enabled=%s originalVoxyMdicViewportAlignmentChecked=%s originalVoxyMdicSectionRendererAlignmentChecked=%s debugMdicCommandBuffersUsedAsFormal=%s debugRendererIsolationOk=%s drawCommandBufferCreated=%s drawCommandBufferAllocated=%s drawCommandBufferId=%d drawCommandBufferBytes=%d drawCommandCapacity=%d drawCommandLogicalOnly=%s drawCountBufferCreated=%s drawCountBufferAllocated=%s drawCountBufferId=%d drawCountBufferBytes=%d drawCountCapacity=%d drawCountLogicalOnly=%s visibilityBufferCreated=%s visibilityBufferAllocated=%s visibilityBufferId=%d visibilityBufferBytes=%d visibilityCapacity=%d visibilityLogicalOnly=%s renderListOrIndirectLookupCreated=%s renderListOrIndirectLookupAllocated=%s renderListOrIndirectLookupBufferId=%d renderListOrIndirectLookupBytes=%d renderListCapacity=%d renderListLogicalOnly=%s positionScratchCreated=%s positionScratchAllocated=%s positionScratchBufferId=%d positionScratchBytes=%d positionScratchCapacity=%d positionScratchLogicalOnly=%s allocationDeferredReason=%s lifecycleState=%s lastLifecycleEvent=%s lifecycleGeneration=%d stale=%s requiresRebuild=%s blockerCount=%d p0BlockerCount=%d p1BlockerCount=%d p2BlockerCount=%d blockers=%s resourceReloadSeen=%s worldUnloadSeen=%s dimensionSwitchSeen=%s debugPipelineClearSeen=%s presetOffSeen=%s presetClearSeen=%s drawCommandExecuted=%s multiDrawIndirectCountCalled=%s formalCmdgenExecuted=%s mdicSectionRendererCalled=%s voxyRenderSystemCalled=%s lastFailureReason=%s lastAuditOk=%s lastAuditError=%s renderer=formal-mdic-viewport-owner formalRenderer=false draw=false",
                 status.stage(),
@@ -7492,7 +7076,7 @@ public final class ForgeVoxyCommands {
         );
     }
 
-    private static String formatFormalMdicViewportOwnerAudit(ForgeFormalMdicViewportAuditResult audit) {
+    static String formatFormalMdicViewportOwnerAudit(ForgeFormalMdicViewportAuditResult audit) {
         return String.format(
                 "k2AuditOk=%s k2AuditError=%s k1OwnerExists=%s formalViewportOwnerExists=%s formalCommandOwnershipExplicit=%s formalVisibilityOwnershipExplicit=%s originalVoxyMdicViewportInspected=%s originalVoxyMdicSectionRendererInspected=%s debugMdicCommandBuffersUsedAsFormal=%s debugRendererStartedOrReplaced=%s drawCommandExecuted=%s multiDrawIndirectCountCalled=%s formalCmdgenExecuted=%s mdicSectionRendererCalled=%s voxyRenderSystemCalled=%s formalRendererReady=%s actualRendererDrawEnabled=%s",
                 audit.success(),
@@ -7515,7 +7099,7 @@ public final class ForgeVoxyCommands {
         );
     }
 
-    private static String formatFormalCommandGenerationOwnerStatus(ForgeFormalCommandGenerationStats status) {
+    static String formatFormalCommandGenerationOwnerStatus(ForgeFormalCommandGenerationStats status) {
         return String.format(
                 "stage=%s formalTerrainRendererOwnerReady=%s formalViewportOwnerReady=%s formalCommandBufferOwnerReady=%s formalCommandGenerationOwnerReady=%s formalCommandGenerationContractReady=%s formalDrawCommandLayoutReady=%s formalDrawCountLayoutReady=%s formalDrawPipelineReady=%s formalRendererReady=%s actualRendererDrawEnabled=%s noDraw=%s enabled=%s originalVoxyCmdgenAlignmentChecked=%s originalVoxyBindingsAlignmentChecked=%s originalVoxyMdicViewportAlignmentChecked=%s originalVoxyMdicSectionRendererAlignmentChecked=%s debugMdicCommandBuffersUsedAsFormal=%s debugRendererIsolationOk=%s drawCommandStructKnown=%s drawCommandStrideBytes=%d drawCommandFieldCount=%d drawCommandIndexedIndirectCompatible=%s drawCountBufferLayoutKnown=%s drawCountBufferStrideBytes=%d drawCountBufferHeaderWords=%d drawCountBufferLayoutBytes=%d layoutCompatibility=%s layoutMismatchReason=%s visibilityInputRequired=%s renderListInputRequired=%s indirectLookupInputRequired=%s sectionMetadataInputRequired=%s positionScratchInputRequired=%s geometryBufferInputRequired=%s modelStoreInputRequired=%s commandGenerationInputsKnown=%s commandGenerationOutputsKnown=%s commandGenerationGpuProgramReady=%s cmdgenComputeShaderRun=%s glDispatchComputeIndirectCalled=%s glMultiDrawElementsIndirectCountCalled=%s mdicSectionRendererCalled=%s voxyRenderSystemCalled=%s visibilityTraversalReady=%s globalFormalModelIdGeometryReady=%s formalTerrainShaderReady=%s drawBufferBinding=%d drawCountBufferBinding=%d sectionMetadataBufferBinding=%d visibilityBufferBinding=%d indirectLookupBufferBinding=%d positionScratchBufferBinding=%d translucentDistanceBufferBinding=%d logicalOnly=%s allocated=%s allocationDeferredReason=%s lifecycleState=%s lastLifecycleEvent=%s lifecycleGeneration=%d stale=%s requiresRebuild=%s blockerCount=%d p0BlockerCount=%d p1BlockerCount=%d p2BlockerCount=%d blockers=%s resourceReloadSeen=%s worldUnloadSeen=%s dimensionSwitchSeen=%s debugPipelineClearSeen=%s presetOffSeen=%s presetClearSeen=%s lastFailureReason=%s lastAuditOk=%s lastAuditError=%s renderer=formal-command-generation-owner formalRenderer=false draw=false",
                 status.stage(),
@@ -7597,7 +7181,7 @@ public final class ForgeVoxyCommands {
         );
     }
 
-    private static String formatFormalCommandGenerationOwnerAudit(ForgeFormalCommandGenerationAuditResult audit) {
+    static String formatFormalCommandGenerationOwnerAudit(ForgeFormalCommandGenerationAuditResult audit) {
         return String.format(
                 "k3AuditOk=%s k3AuditError=%s k1OwnerExists=%s k2ViewportOwnerExists=%s formalCommandGenerationOwnerExists=%s cmdgenCompInspected=%s bindingsGlslInspected=%s mdicViewportInspected=%s mdicSectionRendererInspected=%s debugMdicCommandBuffersUsedAsFormal=%s commandInputContractExplicit=%s commandOutputContractExplicit=%s drawCommandLayoutReady=%s drawCountLayoutReady=%s cmdgenComputeShaderRun=%s multiDrawIndirectCountCalled=%s mdicSectionRendererCalled=%s voxyRenderSystemCalled=%s formalDrawPipelineReady=%s formalRendererReady=%s actualRendererDrawEnabled=%s",
                 audit.success(),
@@ -7624,7 +7208,7 @@ public final class ForgeVoxyCommands {
         );
     }
 
-    private static String formatFormalVisibilityOwnerStatus(ForgeFormalVisibilityStats status) {
+    static String formatFormalVisibilityOwnerStatus(ForgeFormalVisibilityStats status) {
         return String.format(
                 "stage=%s formalTerrainRendererOwnerReady=%s formalViewportOwnerReady=%s formalCommandGenerationOwnerReady=%s formalVisibilityOwnerReady=%s formalRenderListOwnerReady=%s formalIndirectLookupOwnerReady=%s formalVisibilityContractReady=%s formalRenderListContractReady=%s formalDrawPipelineReady=%s formalRendererReady=%s actualRendererDrawEnabled=%s noDraw=%s enabled=%s originalVoxyHierarchicalOcclusionAlignmentChecked=%s originalVoxyRenderDistanceTrackerAlignmentChecked=%s originalVoxyViewportAlignmentChecked=%s originalVoxyMdicViewportAlignmentChecked=%s originalVoxyCmdgenVisibilityAlignmentChecked=%s formalVisibilityTraversalImplemented=%s formalHierarchicalOcclusionReady=%s formalRenderDistanceTrackerReady=%s cpuCandidateSnapshotReady=%s cpuCandidateSnapshotUsed=%s candidateSectionCount=%d candidateSectionSource=%s candidateSectionIdsKnown=%s candidateSectionPositionsKnown=%s visibilityBufferContractKnown=%s renderListContractKnown=%s indirectLookupContractKnown=%s formalVisibilityBufferContractReady=%s formalRenderListOrIndirectLookupContractReady=%s debugPlannerUsedAsFormal=%s debugPlannerComparedOnly=%s cmdgenComputeShaderRun=%s glMultiDrawElementsIndirectCountCalled=%s mdicSectionRendererCalled=%s voxyRenderSystemCalled=%s logicalOnly=%s allocated=%s allocationDeferredReason=%s lifecycleState=%s lastLifecycleEvent=%s lifecycleGeneration=%d stale=%s requiresRebuild=%s blockerCount=%d p0BlockerCount=%d p1BlockerCount=%d p2BlockerCount=%d blockers=%s resourceReloadSeen=%s worldUnloadSeen=%s dimensionSwitchSeen=%s debugPipelineClearSeen=%s presetOffSeen=%s presetClearSeen=%s lastFailureReason=%s lastAuditOk=%s lastAuditError=%s renderer=formal-visibility-owner formalRenderer=false draw=false",
                 status.stage(),
@@ -7691,7 +7275,7 @@ public final class ForgeVoxyCommands {
         );
     }
 
-    private static String formatFormalVisibilityOwnerAudit(ForgeFormalVisibilityAuditResult audit) {
+    static String formatFormalVisibilityOwnerAudit(ForgeFormalVisibilityAuditResult audit) {
         return String.format(
                 "k4AuditOk=%s k4AuditError=%s k1OwnerExists=%s k2ViewportOwnerExists=%s k3CommandGenerationOwnerExists=%s formalVisibilityOwnerExists=%s hierarchicalOcclusionInspected=%s renderDistanceTrackerInspected=%s viewportInspected=%s mdicViewportInspected=%s cmdgenVisibilityContractInspected=%s visibilityContractExplicit=%s renderListContractExplicit=%s debugPlannerUsedAsFormal=%s cpuCandidateSnapshotProvisional=%s cmdgenComputeShaderRun=%s multiDrawIndirectCountCalled=%s mdicSectionRendererCalled=%s voxyRenderSystemCalled=%s formalDrawPipelineReady=%s formalRendererReady=%s actualRendererDrawEnabled=%s",
                 audit.success(),
@@ -8967,7 +8551,7 @@ public final class ForgeVoxyCommands {
         return formatFormalRendererStatus(status);
     }
 
-    private static String formatFormalRendererStatus(ForgeFormalRendererStats status) {
+    static String formatFormalRendererStatus(ForgeFormalRendererStats status) {
         return String.format(
                 "stage=%s formalRendererSkeletonReady=%s formalRendererReady=%s actualDrawEnabled=%s noDraw=%s enabled=%s lifecycleState=%s formalRendererOwnershipReady=%s lastEnableReason=%s lastDisableReason=%s lastClearReason=%s lastLifecycleEvent=%s lastCheckAt=%s lastCheckReason=%s lastStaleReason=%s requiresRecheck=%s readinessGeneration=%d lifecycleGeneration=%d geometryHeapReady=%s metadataReady=%s sectionGeometryManagerReady=%s mdicCommandReady=%s mdicDrawCountReady=%s modelBridgeReady=%s formalShaderInputBridgeReady=%s atlasReady=%s resourceReloadReady=%s worldEngineReady=%s dimensionReady=%s infrastructureReady=%s debugProofReady=%s sampleBridgeReady=%s oneBlockBakePrototypeReady=%s oneBlockFormalUploadReady=%s oneBlockFormalUploadAuditReady=%s multiBlockBakePrototypeReady=%s multiBlockFormalUploadReady=%s multiBlockFormalUploadAuditReady=%s formalModelBakeryLifecycleSkeletonReady=%s reloadRebuildPrototypeReady=%s aliasSafeDedupeReady=%s formalModelFactorySkeletonReady=%s formalModelFactoryLifecycleReady=%s formalModelStoreSkeletonReady=%s formalModelStoreOwnerReady=%s formalShaderInputConsumerReady=%s formalShaderInputBindingLayoutKnown=%s formalShaderInputBindingLayoutCompatible=%s formalShaderProgramValidatorReady=%s formalShaderProgramValidationReady=%s validationShaderCompileOk=%s validationProgramLinkOk=%s gpuValidationOk=%s formalTexturedShaderPrototypeReady=%s formalTexturedShaderPreviewReady=%s formalPackedQuadPreviewReady=%s packedQuadShaderPreviewReady=%s packedQuadModelIdBridgeReady=%s formalTerrainPackedRecordBridgeReady=%s realTerrainPackedRecordBridgeReady=%s temporaryFormalQuadBufferCreated=%s originalGeometryUntouched=%s originalGeometryHeapUntouched=%s realTerrainRecordsUsed=%s syntheticFallbackUsed=%s formalTerrainRendererOwnerReady=%s formalTerrainRendererLifecycleReady=%s k0AlignmentAuditReady=%s k0VerdictReadyForK1=%s originalVoxyAlignmentPreserved=%s formalViewportOwnerReady=%s formalCommandBufferOwnerReady=%s formalCommandGenerationOwnerReady=%s formalCommandGenerationContractReady=%s formalDrawCommandLayoutReady=%s formalDrawCountLayoutReady=%s formalVisibilityOwnerReady=%s formalRenderListOwnerReady=%s formalIndirectLookupOwnerReady=%s formalVisibilityContractReady=%s formalRenderListContractReady=%s formalVisibilityTraversalImplemented=%s formalHierarchicalOcclusionReady=%s formalRenderDistanceTrackerReady=%s cpuCandidateSnapshotReady=%s debugPlannerUsedAsFormal=%s cmdgenValidationProgramReady=%s cmdgenValidationProgramCompileOk=%s cmdgenValidationProgramLinkOk=%s cmdgenValidationDispatchRun=%s cmdgenValidationReadbackOk=%s cmdgenValidationAuditOk=%s productionCmdgenReady=%s formalCmdgenRealSectionDryRunReady=%s realSectionInputSnapshotReady=%s realSectionMetadataUsed=%s realSectionCandidateSnapshotUsed=%s cmdgenRealSectionDryRunAuditOk=%s formalIsolatedMdicDrawSmokeTestReady=%s offscreenValidationDrawReady=%s offscreenValidationDrawExecuted=%s offscreenValidationReadbackOk=%s offscreenValidationOnly=%s offscreenOnly=%s realSectionCommandUsedForOffscreenDraw=%s syntheticDrawFixtureUsed=%s formalDrawPipelineReady=%s globalFormalModelIdGeometryReady=%s formalModelIdGeometryPathReady=%s globalFormalModelIdGeometryPathReady=%s globalFormalModelIdGeometryEnabledForLiveRenderer=%s formalGeometrySnapshotCreated=%s formalGeometrySnapshotRecordCount=%d formalPackedRecordsAuditOk=%s formalGeometryReadbackOk=%s originalGeometryHeapMutated=%s formalTerrainShaderIntegrationReady=%s productionTerrainShaderReady=%s terrainShaderAdapterUsed=%s terrainShaderProgramCompileOk=%s terrainShaderProgramLinkOk=%s k8FormalGeometryUsedByTerrainShader=%s k6RealSectionCommandUsedByTerrainShader=%s terrainShaderOffscreenDrawExecuted=%s terrainShaderOffscreenReadbackOk=%s terrainShaderValidationOnly=%s terrainShaderOffscreenOnly=%s formalVisibleLodPreviewReady=%s visiblePreviewDefaultDisabled=%s visiblePreviewEnabled=%s visiblePreviewDrawExecuted=%s minecraftMainFramebufferDrawn=%s visibleTerrainPreviewOnly=%s productionLiveRendererDrawExecuted=%s visiblePreviewUsesFormalInputs=%s formalTerrainShaderReady=%s previewSystemsSeparated=%s sampleSetUsedAsFormalSource=%s terrainDrawStarted=%s formalRendererDrawStarted=%s actualRendererDrawEnabled=%s formalShaderInputContractReady=%s formalPrerequisitesReady=%s realModelFactoryReady=%s realModelBakeryReady=%s realModelStoreReady=%s formalShaderReady=%s formalTextureAtlasReady=%s formalTexturedShaderReady=%s formalTraversalReady=%s formalVisibilityTraversalReady=%s formalVoxyRenderSystemReady=%s shaderpackIntegrationReady=%s blockerCount=%d p0BlockerCount=%d p1BlockerCount=%d p2BlockerCount=%d formalDrawBlockingBlockerCount=%d blockers=%s worldUnloadSeen=%s dimensionSwitchSeen=%s resourceReloadSeen=%s debugPipelineClearSeen=%s presetOffSeen=%s presetClearSeen=%s formalRendererStale=%s debugRenderersIsolated=%s existingMdicDebugTouched=%s texturedMdicDebugTouched=%s actualDrawStartedByFormalRenderer=%s renderer=formal-renderer-skeleton formalRenderer=false draw=false",
                 status.stage(),

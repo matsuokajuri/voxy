@@ -41,8 +41,9 @@ Retirement sequence:
 8. split geometry/ingest command registration into ForgeVoxyGeometryPipelineCommands - done
 9. split model pipeline command registration into ForgeVoxyModelPipelineCommands - done
 10. split remaining K1-K4 owner command registration into ForgeVoxyFormalOwnerCommands - done
-11. delete handlers once backing prototype objects are removed from ForgeVoxyInstance
-12. delete ForgeVoxyCommands when no longer needed
+11. move K1-K4 owner command handler bodies into ForgeVoxyFormalOwnerCommands - done
+12. delete handlers once backing prototype objects are removed from ForgeVoxyInstance
+13. delete ForgeVoxyCommands when no longer needed
 ```
 
 ### Debug/proof renderers
@@ -86,8 +87,9 @@ stays useful after each cleanup batch.
 
 ## Next cleanup batch
 
-The command registration split is complete. The next cleanup should start
-retiring handler bodies and backing prototype owner fields by owner group.
+The command registration split is complete, and the K1-K4 formal owner handler
+bodies have left the monolithic command file. The next cleanup should start
+retiring backing prototype owner fields by owner group.
 
 `ForgeVoxyLegacyDebugCommands` already owns the first migrated legacy debug
 registration group. `ForgeVoxyLegacyPreviewCommands` owns the first migrated
@@ -95,7 +97,7 @@ preview/sample group: J3-J5 preview commands and textured debug/readback
 commands. `ForgeVoxyLegacyKPreviewCommands` owns K5-K54 preview/update
 commands, `ForgeVoxyFormalRendererCommands` owns formal renderer status
 commands, `ForgeVoxyPresetCommands` owns the preset subtree,
-`ForgeVoxyGeometryPipelineCommands` owns ingest/geometry commands, and
+`ForgeVoxyGeometryPipelineCommands` owns ingest/geometry commands,
 `ForgeVoxyModelPipelineCommands` owns model pipeline commands, and
 `ForgeVoxyFormalOwnerCommands` owns the K1-K4 formal owner skeleton command
 set.
