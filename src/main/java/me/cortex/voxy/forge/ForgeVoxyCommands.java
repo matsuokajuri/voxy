@@ -63,6 +63,9 @@ public final class ForgeVoxyCommands {
 
         ForgeVoxyLegacyDebugCommands.register(root);
         ForgeVoxyLegacyPreviewCommands.register(root);
+        ForgeVoxyLegacyKPreviewCommands.register(root);
+        ForgeVoxyFormalRendererCommands.register(root);
+        ForgeVoxyPresetCommands.register(root);
 
         root
                 .then(Commands.literal("model_bridge_check")
@@ -320,182 +323,6 @@ public final class ForgeVoxyCommands {
                         .executes(ctx -> formalVisibilityOwnerClear(ctx.getSource())))
                 .then(Commands.literal("qa_k4_formal_visibility_owner")
                         .executes(ctx -> qaK4FormalVisibilityOwner(ctx.getSource())))
-                .then(Commands.literal("formal_cmdgen_gpu_validate_build")
-                        .executes(ctx -> formalCmdgenGpuValidateBuild(ctx.getSource())))
-                .then(Commands.literal("formal_cmdgen_gpu_validate_status")
-                        .executes(ctx -> formalCmdgenGpuValidateStatus(ctx.getSource())))
-                .then(Commands.literal("formal_cmdgen_gpu_validate_audit")
-                        .executes(ctx -> formalCmdgenGpuValidateAudit(ctx.getSource())))
-                .then(Commands.literal("formal_cmdgen_gpu_validate_dump")
-                        .executes(ctx -> formalCmdgenGpuValidateDump(ctx.getSource())))
-                .then(Commands.literal("formal_cmdgen_gpu_validate_clear")
-                        .executes(ctx -> formalCmdgenGpuValidateClear(ctx.getSource())))
-                .then(Commands.literal("qa_k5_formal_cmdgen_gpu_validation")
-                        .executes(ctx -> qaK5FormalCmdgenGpuValidation(ctx.getSource())))
-                .then(Commands.literal("formal_cmdgen_real_section_dry_run_build")
-                        .executes(ctx -> formalCmdgenRealSectionDryRunBuild(ctx.getSource())))
-                .then(Commands.literal("formal_cmdgen_real_section_dry_run_status")
-                        .executes(ctx -> formalCmdgenRealSectionDryRunStatus(ctx.getSource())))
-                .then(Commands.literal("formal_cmdgen_real_section_dry_run_audit")
-                        .executes(ctx -> formalCmdgenRealSectionDryRunAudit(ctx.getSource())))
-                .then(Commands.literal("formal_cmdgen_real_section_dry_run_dump")
-                        .executes(ctx -> formalCmdgenRealSectionDryRunDump(ctx.getSource())))
-                .then(Commands.literal("formal_cmdgen_real_section_dry_run_clear")
-                        .executes(ctx -> formalCmdgenRealSectionDryRunClear(ctx.getSource())))
-                .then(Commands.literal("qa_k6_formal_cmdgen_real_section_dry_run")
-                        .executes(ctx -> qaK6FormalCmdgenRealSectionDryRun(ctx.getSource())))
-                .then(Commands.literal("formal_isolated_mdic_draw_build")
-                        .executes(ctx -> formalIsolatedMdicDrawBuild(ctx.getSource())))
-                .then(Commands.literal("formal_isolated_mdic_draw_status")
-                        .executes(ctx -> formalIsolatedMdicDrawStatus(ctx.getSource())))
-                .then(Commands.literal("formal_isolated_mdic_draw_audit")
-                        .executes(ctx -> formalIsolatedMdicDrawAudit(ctx.getSource())))
-                .then(Commands.literal("formal_isolated_mdic_draw_dump")
-                        .executes(ctx -> formalIsolatedMdicDrawDump(ctx.getSource())))
-                .then(Commands.literal("formal_isolated_mdic_draw_clear")
-                        .executes(ctx -> formalIsolatedMdicDrawClear(ctx.getSource())))
-                .then(Commands.literal("qa_k7_formal_isolated_mdic_draw")
-                        .executes(ctx -> qaK7FormalIsolatedMdicDraw(ctx.getSource())))
-                .then(Commands.literal("formal_model_id_geometry_path_build")
-                        .executes(ctx -> formalModelIdGeometryPathBuild(ctx.getSource())))
-                .then(Commands.literal("formal_model_id_geometry_path_status")
-                        .executes(ctx -> formalModelIdGeometryPathStatus(ctx.getSource())))
-                .then(Commands.literal("formal_model_id_geometry_path_audit")
-                        .executes(ctx -> formalModelIdGeometryPathAudit(ctx.getSource())))
-                .then(Commands.literal("formal_model_id_geometry_path_dump")
-                        .executes(ctx -> formalModelIdGeometryPathDump(ctx.getSource())))
-                .then(Commands.literal("formal_model_id_geometry_path_clear")
-                        .executes(ctx -> formalModelIdGeometryPathClear(ctx.getSource())))
-                .then(Commands.literal("qa_k8_formal_model_id_geometry_path")
-                        .executes(ctx -> qaK8FormalModelIdGeometryPath(ctx.getSource())))
-                .then(Commands.literal("formal_terrain_shader_integration_build")
-                        .executes(ctx -> formalTerrainShaderIntegrationBuild(ctx.getSource())))
-                .then(Commands.literal("formal_terrain_shader_integration_status")
-                        .executes(ctx -> formalTerrainShaderIntegrationStatus(ctx.getSource())))
-                .then(Commands.literal("formal_terrain_shader_integration_audit")
-                        .executes(ctx -> formalTerrainShaderIntegrationAudit(ctx.getSource())))
-                .then(Commands.literal("formal_terrain_shader_integration_dump")
-                        .executes(ctx -> formalTerrainShaderIntegrationDump(ctx.getSource())))
-                .then(Commands.literal("formal_terrain_shader_integration_clear")
-                        .executes(ctx -> formalTerrainShaderIntegrationClear(ctx.getSource())))
-                .then(Commands.literal("qa_k9_formal_terrain_shader_integration")
-                        .executes(ctx -> qaK9FormalTerrainShaderIntegration(ctx.getSource())))
-                .then(Commands.literal("formal_visible_lod_preview_enable")
-                        .executes(ctx -> formalVisibleLodPreviewEnable(ctx.getSource())))
-                .then(Commands.literal("formal_visible_lod_preview_disable")
-                        .executes(ctx -> formalVisibleLodPreviewDisable(ctx.getSource())))
-                .then(Commands.literal("formal_visible_lod_preview_prepare")
-                        .executes(ctx -> formalVisibleLodPreviewPrepare(ctx.getSource())))
-                .then(Commands.literal("formal_visible_lod_preview_prepare_status")
-                        .executes(ctx -> formalVisibleLodPreviewPrepareStatus(ctx.getSource())))
-                .then(Commands.literal("formal_visible_lod_preview_observe_enable")
-                        .executes(ctx -> formalVisibleLodPreviewObserveEnable(ctx.getSource())))
-                .then(Commands.literal("formal_visible_lod_preview_observe_disable")
-                        .executes(ctx -> formalVisibleLodPreviewObserveDisable(ctx.getSource())))
-                .then(Commands.literal("formal_visible_lod_preview_observe_status")
-                        .executes(ctx -> formalVisibleLodPreviewObserveStatus(ctx.getSource())))
-                .then(Commands.literal("formal_visible_lod_preview_observe_draw_pause")
-                        .executes(ctx -> formalVisibleLodPreviewObserveDrawPause(ctx.getSource())))
-                .then(Commands.literal("formal_visible_lod_preview_observe_draw_resume")
-                        .executes(ctx -> formalVisibleLodPreviewObserveDrawResume(ctx.getSource())))
-                .then(Commands.literal("formal_visible_lod_preview_status")
-                        .executes(ctx -> formalVisibleLodPreviewStatus(ctx.getSource())))
-                .then(Commands.literal("formal_visible_lod_preview_audit")
-                        .executes(ctx -> formalVisibleLodPreviewAudit(ctx.getSource())))
-                .then(Commands.literal("formal_visible_lod_preview_dump")
-                        .executes(ctx -> formalVisibleLodPreviewDump(ctx.getSource())))
-                .then(Commands.literal("formal_visible_lod_preview_clear")
-                        .executes(ctx -> formalVisibleLodPreviewClear(ctx.getSource())))
-                .then(Commands.literal("qa_k10_formal_visible_lod_preview")
-                        .executes(ctx -> qaK10FormalVisibleLodPreview(ctx.getSource())))
-                .then(Commands.literal("qa_k10_visible_preview_observe_performance")
-                        .executes(ctx -> qaK10VisiblePreviewObservePerformance(ctx.getSource())))
-                .then(Commands.literal("qa_k10_visible_preview_observe_timeout")
-                        .executes(ctx -> qaK10VisiblePreviewObserveTimeout(ctx.getSource())))
-                .then(Commands.literal("qa_k10_visible_preview_observe_prepare")
-                        .executes(ctx -> qaK10VisiblePreviewObservePrepare(ctx.getSource())))
-                .then(Commands.literal("qa_k11_formal_visible_lod_preview_prewarm")
-                        .executes(ctx -> qaK11FormalVisibleLodPreviewPrewarm(ctx.getSource())))
-                .then(Commands.literal("qa_k12_k13_visible_preview_prepare_reuse")
-                        .executes(ctx -> qaK12K13VisiblePreviewPrepareReuse(ctx.getSource())))
-                .then(Commands.literal("formal_visible_lod_preview_multi_section_status")
-                        .executes(ctx -> formalVisibleLodPreviewMultiSectionStatus(ctx.getSource())))
-                .then(Commands.literal("qa_k14_k16_multi_section_visible_preview")
-                        .executes(ctx -> qaK14K16MultiSectionVisiblePreview(ctx.getSource())))
-                .then(Commands.literal("formal_visible_lod_preview_world_placed_status")
-                        .executes(ctx -> formalVisibleLodPreviewWorldPlacedStatus(ctx.getSource())))
-                .then(Commands.literal("qa_k17_k18_world_placed_visible_preview")
-                        .executes(ctx -> qaK17K18WorldPlacedVisiblePreview(ctx.getSource())))
-                .then(Commands.literal("formal_visible_lod_preview_section_metadata_status")
-                        .executes(ctx -> formalVisibleLodPreviewSectionMetadataStatus(ctx.getSource())))
-                .then(Commands.literal("qa_k19_k20_section_metadata_visible_preview")
-                        .executes(ctx -> qaK19K20SectionMetadataVisiblePreview(ctx.getSource())))
-                .then(Commands.literal("formal_visible_lod_preview_command_bucket_status")
-                        .executes(ctx -> formalVisibleLodPreviewCommandBucketStatus(ctx.getSource())))
-                .then(Commands.literal("qa_k21_k22_command_bucket_visible_preview")
-                        .executes(ctx -> qaK21K22CommandBucketVisiblePreview(ctx.getSource())))
-                .then(Commands.literal("formal_minimal_lod_renderer_prepare")
-                        .executes(ctx -> formalMinimalLodRendererPrepare(ctx.getSource())))
-                .then(Commands.literal("formal_minimal_lod_renderer_enable")
-                        .executes(ctx -> formalVisibleLodPreviewObserveEnable(ctx.getSource())))
-                .then(Commands.literal("formal_minimal_lod_renderer_disable")
-                        .executes(ctx -> formalVisibleLodPreviewObserveDisable(ctx.getSource())))
-                .then(Commands.literal("formal_minimal_lod_renderer_status")
-                        .executes(ctx -> formalMinimalLodRendererStatus(ctx.getSource())))
-                .then(Commands.literal("qa_k23_k30_minimal_formal_lod_renderer")
-                        .executes(ctx -> qaK23K30MinimalFormalLodRenderer(ctx.getSource())))
-                .then(Commands.literal("formal_lod_preview_moving_prepare")
-                        .executes(ctx -> formalLodPreviewMovingPrepare(ctx.getSource())))
-                .then(Commands.literal("formal_lod_preview_moving_enable")
-                        .executes(ctx -> formalLodPreviewMovingEnable(ctx.getSource())))
-                .then(Commands.literal("formal_lod_preview_moving_disable")
-                        .executes(ctx -> formalVisibleLodPreviewObserveDisable(ctx.getSource())))
-                .then(Commands.literal("formal_lod_preview_moving_status")
-                        .executes(ctx -> formalLodPreviewMovingStatus(ctx.getSource())))
-                .then(Commands.literal("qa_k31_k36_formal_lod_preview_moving_patch")
-                        .executes(ctx -> qaK31K36FormalLodPreviewMovingPatch(ctx.getSource())))
-                .then(Commands.literal("formal_lod_preview_expanded_prepare")
-                        .executes(ctx -> formalLodPreviewExpandedPrepare(ctx.getSource())))
-                .then(Commands.literal("formal_lod_preview_expanded_enable")
-                        .executes(ctx -> formalLodPreviewExpandedEnable(ctx.getSource())))
-                .then(Commands.literal("formal_lod_preview_expanded_disable")
-                        .executes(ctx -> formalVisibleLodPreviewObserveDisable(ctx.getSource())))
-                .then(Commands.literal("formal_lod_preview_expanded_status")
-                        .executes(ctx -> formalLodPreviewExpandedStatus(ctx.getSource())))
-                .then(Commands.literal("qa_k37_k42_expanded_formal_lod_patch")
-                        .executes(ctx -> qaK37K42ExpandedFormalLodPatch(ctx.getSource())))
-                .then(Commands.literal("formal_lod_preview_update_prepare")
-                        .executes(ctx -> formalLodPreviewUpdatePrepare(ctx.getSource())))
-                .then(Commands.literal("formal_lod_preview_update_status")
-                        .executes(ctx -> formalLodPreviewUpdateStatus(ctx.getSource())))
-                .then(Commands.literal("formal_lod_preview_update_rebuild_if_needed")
-                        .executes(ctx -> formalLodPreviewUpdateRebuildIfNeeded(ctx.getSource())))
-                .then(Commands.literal("formal_lod_preview_update_enable")
-                        .executes(ctx -> formalLodPreviewUpdateEnable(ctx.getSource())))
-                .then(Commands.literal("formal_lod_preview_update_disable")
-                        .executes(ctx -> formalVisibleLodPreviewObserveDisable(ctx.getSource())))
-                .then(Commands.literal("qa_k43_k48_formal_lod_preview_update_lifecycle")
-                        .executes(ctx -> qaK43K48FormalLodPreviewUpdateLifecycle(ctx.getSource())))
-                .then(Commands.literal("formal_lod_preview_auto_update_enable")
-                        .executes(ctx -> formalLodPreviewAutoUpdateEnable(ctx.getSource())))
-                .then(Commands.literal("formal_lod_preview_auto_update_status")
-                        .executes(ctx -> formalLodPreviewAutoUpdateStatus(ctx.getSource())))
-                .then(Commands.literal("formal_lod_preview_auto_update_disable")
-                        .executes(ctx -> formalLodPreviewAutoUpdateDisable(ctx.getSource())))
-                .then(Commands.literal("qa_k49_k54_formal_lod_preview_auto_update")
-                        .executes(ctx -> qaK49K54FormalLodPreviewAutoUpdate(ctx.getSource())))
-                .then(Commands.literal("formal_renderer_check")
-                        .executes(ctx -> formalRendererCheck(ctx.getSource())))
-                .then(Commands.literal("formal_renderer_status")
-                        .executes(ctx -> formalRendererStatus(ctx.getSource())))
-                .then(Commands.literal("formal_renderer_enable")
-                        .executes(ctx -> formalRendererEnable(ctx.getSource())))
-                .then(Commands.literal("formal_renderer_disable")
-                        .executes(ctx -> formalRendererDisable(ctx.getSource())))
-                .then(Commands.literal("formal_renderer_clear")
-                        .executes(ctx -> formalRendererClear(ctx.getSource())))
-                .then(Commands.literal("formal_renderer_dump_blockers")
-                        .executes(ctx -> formalRendererDumpBlockers(ctx.getSource())))
                 .then(Commands.literal("mesh_cache_status")
                         .executes(ctx -> meshCacheStatus(ctx.getSource())))
                 .then(Commands.literal("mesh_cache_clear")
@@ -515,73 +342,6 @@ public final class ForgeVoxyCommands {
                         .executes(ctx -> lodOverlayDebug(ctx.getSource())))
                 .then(Commands.literal("lod_mode_advice")
                         .executes(ctx -> lodModeAdvice(ctx.getSource())))
-                .then(Commands.literal("preset")
-                        .then(Commands.literal("off")
-                                .executes(ctx -> applyPresetOff(ctx.getSource())))
-                        .then(Commands.literal("overlay")
-                                .executes(ctx -> applyPresetOverlay(ctx.getSource())))
-                        .then(Commands.literal("lod")
-                                .executes(ctx -> applyPresetLod(ctx.getSource())))
-                        .then(Commands.literal("lod_built_section")
-                                .executes(ctx -> applyPresetLodBuiltSection(ctx.getSource())))
-                        .then(Commands.literal("geometry_manager")
-                                .executes(ctx -> applyPresetGeometryManager(ctx.getSource())))
-                        .then(Commands.literal("gl_heap_visualize")
-                                .executes(ctx -> applyPresetGlHeapVisualize(ctx.getSource())))
-                        .then(Commands.literal("gl_heap_readback")
-                                .executes(ctx -> applyPresetGlHeapReadback(ctx.getSource())))
-                        .then(Commands.literal("direct_gl_debug")
-                                .executes(ctx -> applyPresetDirectGlDebug(ctx.getSource())))
-                        .then(Commands.literal("mdic_skeleton")
-                                .executes(ctx -> applyPresetMdicSkeleton(ctx.getSource())))
-                        .then(Commands.literal("mdic_debug")
-                                .executes(ctx -> applyPresetMdicDebug(ctx.getSource())))
-                        .then(Commands.literal("formal_renderer_skeleton")
-                                .executes(ctx -> applyPresetFormalRendererSkeleton(ctx.getSource())))
-                        .then(Commands.literal("formal_model_store_skeleton")
-                                .executes(ctx -> applyPresetFormalModelStoreSkeleton(ctx.getSource())))
-                        .then(Commands.literal("formal_model_factory_skeleton")
-                                .executes(ctx -> applyPresetFormalModelFactorySkeleton(ctx.getSource())))
-                        .then(Commands.literal("formal_one_block_bake_upload")
-                                .executes(ctx -> applyPresetFormalOneBlockBakeUpload(ctx.getSource())))
-                        .then(Commands.literal("formal_multi_block_bake_upload")
-                                .executes(ctx -> applyPresetFormalMultiBlockBakeUpload(ctx.getSource())))
-                        .then(Commands.literal("formal_model_lifecycle_rebuild")
-                                .executes(ctx -> applyPresetFormalModelLifecycleRebuild(ctx.getSource())))
-                        .then(Commands.literal("formal_shader_input_skeleton")
-                                .executes(ctx -> applyPresetFormalShaderInputSkeleton(ctx.getSource())))
-                        .then(Commands.literal("formal_shader_program_validation")
-                                .executes(ctx -> applyPresetFormalShaderProgramValidation(ctx.getSource())))
-                        .then(Commands.literal("formal_textured_shader_preview")
-                                .executes(ctx -> applyPresetFormalTexturedShaderPreview(ctx.getSource())))
-                        .then(Commands.literal("formal_packed_quad_preview")
-                                .executes(ctx -> applyPresetFormalPackedQuadPreview(ctx.getSource())))
-                        .then(Commands.literal("formal_terrain_record_bridge")
-                                .executes(ctx -> applyPresetFormalTerrainRecordBridge(ctx.getSource())))
-                        .then(Commands.literal("formal_terrain_renderer_owner_no_draw")
-                                .executes(ctx -> applyPresetFormalTerrainRendererOwnerNoDraw(ctx.getSource())))
-                        .then(Commands.literal("formal_mdic_viewport_owner_no_draw")
-                                .executes(ctx -> applyPresetFormalMdicViewportOwnerNoDraw(ctx.getSource())))
-                        .then(Commands.literal("formal_command_generation_owner_no_draw")
-                                .executes(ctx -> applyPresetFormalCommandGenerationOwnerNoDraw(ctx.getSource())))
-                        .then(Commands.literal("formal_visibility_owner_no_draw")
-                                .executes(ctx -> applyPresetFormalVisibilityOwnerNoDraw(ctx.getSource())))
-                        .then(Commands.literal("formal_cmdgen_gpu_validation_no_draw")
-                                .executes(ctx -> applyPresetFormalCmdgenGpuValidationNoDraw(ctx.getSource())))
-                        .then(Commands.literal("formal_cmdgen_real_section_dry_run_no_draw")
-                                .executes(ctx -> applyPresetFormalCmdgenRealSectionDryRunNoDraw(ctx.getSource())))
-                        .then(Commands.literal("formal_isolated_mdic_draw_offscreen")
-                                .executes(ctx -> applyPresetFormalIsolatedMdicDrawOffscreen(ctx.getSource())))
-                        .then(Commands.literal("formal_model_id_geometry_path_no_live_draw")
-                                .executes(ctx -> applyPresetFormalModelIdGeometryPathNoLiveDraw(ctx.getSource())))
-                        .then(Commands.literal("formal_terrain_shader_integration_offscreen")
-                                .executes(ctx -> applyPresetFormalTerrainShaderIntegrationOffscreen(ctx.getSource())))
-                        .then(Commands.literal("formal_visible_lod_preview_debug")
-                                .executes(ctx -> applyPresetFormalVisibleLodPreviewDebug(ctx.getSource())))
-                        .then(Commands.literal("clear")
-                                .executes(ctx -> clearPreset(ctx.getSource())))
-                        .then(Commands.literal("status")
-                                .executes(ctx -> presetStatus(ctx.getSource()))))
                 .then(Commands.literal("gpu_mesh_clear")
                         .executes(ctx -> clearGpuMeshCache(ctx.getSource())))
                 .then(Commands.literal("mesh_build_clear")
@@ -5390,7 +5150,7 @@ public final class ForgeVoxyCommands {
                 && !rendererStatus.actualDrawEnabled() ? 1 : 0;
     }
 
-    private static int formalCmdgenGpuValidateBuild(CommandSourceStack source) {
+    static int formalCmdgenGpuValidateBuild(CommandSourceStack source) {
         ForgeFormalCmdgenGpuValidationStats status = ForgeVoxyInstance.INSTANCE.getFormalCmdgenGpuValidator().build();
         ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("k5-formal-cmdgen-gpu-validate-build");
         source.sendSuccess(() -> Component.literal("Voxy K5 formal cmdgen GPU validation build: "
@@ -5406,13 +5166,13 @@ public final class ForgeVoxyCommands {
                 && !status.actualRendererDrawEnabled() ? 1 : 0;
     }
 
-    private static int formalCmdgenGpuValidateStatus(CommandSourceStack source) {
+    static int formalCmdgenGpuValidateStatus(CommandSourceStack source) {
         ForgeFormalCmdgenGpuValidationStats status = ForgeVoxyInstance.INSTANCE.getFormalCmdgenGpuValidator().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy K5 formal cmdgen GPU validation status: " + formatFormalCmdgenGpuValidationStatus(status)), false);
         return status.cmdgenValidationProgramReady() || status.stale() ? 1 : 0;
     }
 
-    private static int formalCmdgenGpuValidateAudit(CommandSourceStack source) {
+    static int formalCmdgenGpuValidateAudit(CommandSourceStack source) {
         ForgeFormalCmdgenGpuValidationAuditResult audit = ForgeVoxyInstance.INSTANCE.getFormalCmdgenGpuValidator().audit();
         ForgeFormalCmdgenGpuValidationStats status = ForgeVoxyInstance.INSTANCE.getFormalCmdgenGpuValidator().createStatusSnapshot();
         ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("k5-formal-cmdgen-gpu-validate-audit");
@@ -5425,14 +5185,14 @@ public final class ForgeVoxyCommands {
         return audit.success() ? 1 : 0;
     }
 
-    private static int formalCmdgenGpuValidateDump(CommandSourceStack source) {
+    static int formalCmdgenGpuValidateDump(CommandSourceStack source) {
         ForgeFormalCmdgenGpuValidationStats status = ForgeVoxyInstance.INSTANCE.getFormalCmdgenGpuValidator().createStatusSnapshot();
         String dump = ForgeVoxyInstance.INSTANCE.getFormalCmdgenGpuValidator().dump();
         source.sendSuccess(() -> Component.literal("Voxy K5 formal cmdgen GPU validation dump: " + dump + " " + formatFormalCmdgenGpuValidationStatus(status)), false);
         return status.blockerCount() > 0 || status.cmdgenValidationProgramReady() ? 1 : 0;
     }
 
-    private static int formalCmdgenGpuValidateClear(CommandSourceStack source) {
+    static int formalCmdgenGpuValidateClear(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getFormalCmdgenGpuValidator().clear();
         ForgeFormalCmdgenGpuValidationStats status = ForgeVoxyInstance.INSTANCE.getFormalCmdgenGpuValidator().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy K5 formal cmdgen GPU validation clear: "
@@ -5441,7 +5201,7 @@ public final class ForgeVoxyCommands {
         return 1;
     }
 
-    private static int qaK5FormalCmdgenGpuValidation(CommandSourceStack source) {
+    static int qaK5FormalCmdgenGpuValidation(CommandSourceStack source) {
         ForgeFormalCmdgenGpuValidationStats status = ForgeVoxyInstance.INSTANCE.getFormalCmdgenGpuValidator().build();
         ForgeFormalCmdgenGpuValidationAuditResult audit = ForgeVoxyInstance.INSTANCE.getFormalCmdgenGpuValidator().createAuditStatusSnapshot();
         ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("qa-k5-formal-cmdgen-gpu-validation");
@@ -5480,7 +5240,7 @@ public final class ForgeVoxyCommands {
                 && !rendererStatus.actualDrawEnabled() ? 1 : 0;
     }
 
-    private static int formalCmdgenRealSectionDryRunBuild(CommandSourceStack source) {
+    static int formalCmdgenRealSectionDryRunBuild(CommandSourceStack source) {
         ForgeFormalCmdgenRealSectionDryRunStats status = ForgeVoxyInstance.INSTANCE.getFormalCmdgenRealSectionDryRun().build();
         ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("k6-formal-cmdgen-real-section-dry-run-build");
         source.sendSuccess(() -> Component.literal("Voxy K6 formal cmdgen real-section dry-run build: "
@@ -5500,13 +5260,13 @@ public final class ForgeVoxyCommands {
                 && !status.actualRendererDrawEnabled() ? 1 : 0;
     }
 
-    private static int formalCmdgenRealSectionDryRunStatus(CommandSourceStack source) {
+    static int formalCmdgenRealSectionDryRunStatus(CommandSourceStack source) {
         ForgeFormalCmdgenRealSectionDryRunStats status = ForgeVoxyInstance.INSTANCE.getFormalCmdgenRealSectionDryRun().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy K6 formal cmdgen real-section dry-run status: " + formatFormalCmdgenRealSectionDryRunStatus(status)), false);
         return status.realSectionDryRunReady() || status.stale() ? 1 : 0;
     }
 
-    private static int formalCmdgenRealSectionDryRunAudit(CommandSourceStack source) {
+    static int formalCmdgenRealSectionDryRunAudit(CommandSourceStack source) {
         ForgeFormalCmdgenRealSectionDryRunAuditResult audit = ForgeVoxyInstance.INSTANCE.getFormalCmdgenRealSectionDryRun().audit();
         ForgeFormalCmdgenRealSectionDryRunStats status = ForgeVoxyInstance.INSTANCE.getFormalCmdgenRealSectionDryRun().createStatusSnapshot();
         ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("k6-formal-cmdgen-real-section-dry-run-audit");
@@ -5519,14 +5279,14 @@ public final class ForgeVoxyCommands {
         return audit.success() ? 1 : 0;
     }
 
-    private static int formalCmdgenRealSectionDryRunDump(CommandSourceStack source) {
+    static int formalCmdgenRealSectionDryRunDump(CommandSourceStack source) {
         ForgeFormalCmdgenRealSectionDryRunStats status = ForgeVoxyInstance.INSTANCE.getFormalCmdgenRealSectionDryRun().createStatusSnapshot();
         String dump = ForgeVoxyInstance.INSTANCE.getFormalCmdgenRealSectionDryRun().dump();
         source.sendSuccess(() -> Component.literal("Voxy K6 formal cmdgen real-section dry-run dump: " + dump + " " + formatFormalCmdgenRealSectionDryRunStatus(status)), false);
         return status.blockerCount() > 0 || status.realSectionDryRunReady() ? 1 : 0;
     }
 
-    private static int formalCmdgenRealSectionDryRunClear(CommandSourceStack source) {
+    static int formalCmdgenRealSectionDryRunClear(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getFormalCmdgenRealSectionDryRun().clear();
         ForgeFormalCmdgenRealSectionDryRunStats status = ForgeVoxyInstance.INSTANCE.getFormalCmdgenRealSectionDryRun().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy K6 formal cmdgen real-section dry-run clear: "
@@ -5535,7 +5295,7 @@ public final class ForgeVoxyCommands {
         return 1;
     }
 
-    private static int qaK6FormalCmdgenRealSectionDryRun(CommandSourceStack source) {
+    static int qaK6FormalCmdgenRealSectionDryRun(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.applyFormalCmdgenRealSectionDryRunNoDrawPreset();
         ForgeFormalCmdgenRealSectionDryRunStats status = ForgeVoxyInstance.INSTANCE.getFormalCmdgenRealSectionDryRun().build();
         ForgeFormalCmdgenRealSectionDryRunAuditResult audit = ForgeVoxyInstance.INSTANCE.getFormalCmdgenRealSectionDryRun().createAuditStatusSnapshot();
@@ -5586,7 +5346,7 @@ public final class ForgeVoxyCommands {
                 && !rendererStatus.actualDrawEnabled() ? 1 : 0;
     }
 
-    private static int formalIsolatedMdicDrawBuild(CommandSourceStack source) {
+    static int formalIsolatedMdicDrawBuild(CommandSourceStack source) {
         ForgeFormalIsolatedMdicDrawSmokeTestStats status = ForgeVoxyInstance.INSTANCE.getFormalIsolatedMdicDrawSmokeTest().build();
         ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("k7-formal-isolated-mdic-draw-build");
         source.sendSuccess(() -> Component.literal("Voxy K7 formal isolated MDIC draw build: "
@@ -5604,13 +5364,13 @@ public final class ForgeVoxyCommands {
                 && !status.actualRendererDrawEnabled() ? 1 : 0;
     }
 
-    private static int formalIsolatedMdicDrawStatus(CommandSourceStack source) {
+    static int formalIsolatedMdicDrawStatus(CommandSourceStack source) {
         ForgeFormalIsolatedMdicDrawSmokeTestStats status = ForgeVoxyInstance.INSTANCE.getFormalIsolatedMdicDrawSmokeTest().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy K7 formal isolated MDIC draw status: " + formatFormalIsolatedMdicDrawStatus(status)), false);
         return status.isolatedMdicDrawSmokeTestReady() || status.stale() ? 1 : 0;
     }
 
-    private static int formalIsolatedMdicDrawAudit(CommandSourceStack source) {
+    static int formalIsolatedMdicDrawAudit(CommandSourceStack source) {
         ForgeFormalIsolatedMdicDrawSmokeTestAuditResult audit = ForgeVoxyInstance.INSTANCE.getFormalIsolatedMdicDrawSmokeTest().audit();
         ForgeFormalIsolatedMdicDrawSmokeTestStats status = ForgeVoxyInstance.INSTANCE.getFormalIsolatedMdicDrawSmokeTest().createStatusSnapshot();
         ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("k7-formal-isolated-mdic-draw-audit");
@@ -5623,14 +5383,14 @@ public final class ForgeVoxyCommands {
         return audit.success() ? 1 : 0;
     }
 
-    private static int formalIsolatedMdicDrawDump(CommandSourceStack source) {
+    static int formalIsolatedMdicDrawDump(CommandSourceStack source) {
         ForgeFormalIsolatedMdicDrawSmokeTestStats status = ForgeVoxyInstance.INSTANCE.getFormalIsolatedMdicDrawSmokeTest().createStatusSnapshot();
         String dump = ForgeVoxyInstance.INSTANCE.getFormalIsolatedMdicDrawSmokeTest().dump();
         source.sendSuccess(() -> Component.literal("Voxy K7 formal isolated MDIC draw dump: " + dump + " " + formatFormalIsolatedMdicDrawStatus(status)), false);
         return status.blockerCount() > 0 || status.isolatedMdicDrawSmokeTestReady() ? 1 : 0;
     }
 
-    private static int formalIsolatedMdicDrawClear(CommandSourceStack source) {
+    static int formalIsolatedMdicDrawClear(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getFormalIsolatedMdicDrawSmokeTest().clear();
         ForgeFormalIsolatedMdicDrawSmokeTestStats status = ForgeVoxyInstance.INSTANCE.getFormalIsolatedMdicDrawSmokeTest().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy K7 formal isolated MDIC draw clear: "
@@ -5639,7 +5399,7 @@ public final class ForgeVoxyCommands {
         return 1;
     }
 
-    private static int qaK7FormalIsolatedMdicDraw(CommandSourceStack source) {
+    static int qaK7FormalIsolatedMdicDraw(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.applyFormalIsolatedMdicDrawOffscreenPreset();
         boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
         ForgeFormalIsolatedMdicDrawSmokeTestStats status = ForgeVoxyInstance.INSTANCE.getFormalIsolatedMdicDrawSmokeTest().build();
@@ -5687,7 +5447,7 @@ public final class ForgeVoxyCommands {
                 && !rendererStatus.actualDrawEnabled() ? 1 : 0;
     }
 
-    private static int formalModelIdGeometryPathBuild(CommandSourceStack source) {
+    static int formalModelIdGeometryPathBuild(CommandSourceStack source) {
         ForgeFormalModelIdSectionGeometryStats status = ForgeVoxyInstance.INSTANCE.getFormalModelIdSectionGeometryPath().build();
         ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("k8-formal-model-id-geometry-path-build");
         source.sendSuccess(() -> Component.literal("Voxy K8 formal model-id section geometry path build: "
@@ -5708,13 +5468,13 @@ public final class ForgeVoxyCommands {
                 && !status.actualRendererDrawEnabled() ? 1 : 0;
     }
 
-    private static int formalModelIdGeometryPathStatus(CommandSourceStack source) {
+    static int formalModelIdGeometryPathStatus(CommandSourceStack source) {
         ForgeFormalModelIdSectionGeometryStats status = ForgeVoxyInstance.INSTANCE.getFormalModelIdSectionGeometryPath().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy K8 formal model-id section geometry path status: " + formatFormalModelIdGeometryPathStatus(status)), false);
         return status.formalModelIdGeometryPathReady() || status.stale() ? 1 : 0;
     }
 
-    private static int formalModelIdGeometryPathAudit(CommandSourceStack source) {
+    static int formalModelIdGeometryPathAudit(CommandSourceStack source) {
         ForgeFormalModelIdSectionGeometryAuditResult audit = ForgeVoxyInstance.INSTANCE.getFormalModelIdSectionGeometryPath().audit();
         ForgeFormalModelIdSectionGeometryStats status = ForgeVoxyInstance.INSTANCE.getFormalModelIdSectionGeometryPath().createStatusSnapshot();
         ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("k8-formal-model-id-geometry-path-audit");
@@ -5727,14 +5487,14 @@ public final class ForgeVoxyCommands {
         return audit.success() ? 1 : 0;
     }
 
-    private static int formalModelIdGeometryPathDump(CommandSourceStack source) {
+    static int formalModelIdGeometryPathDump(CommandSourceStack source) {
         ForgeFormalModelIdSectionGeometryStats status = ForgeVoxyInstance.INSTANCE.getFormalModelIdSectionGeometryPath().createStatusSnapshot();
         String dump = ForgeVoxyInstance.INSTANCE.getFormalModelIdSectionGeometryPath().dump();
         source.sendSuccess(() -> Component.literal("Voxy K8 formal model-id section geometry path dump: " + dump + " " + formatFormalModelIdGeometryPathStatus(status)), false);
         return status.blockerCount() > 0 || status.formalModelIdGeometryPathReady() ? 1 : 0;
     }
 
-    private static int formalModelIdGeometryPathClear(CommandSourceStack source) {
+    static int formalModelIdGeometryPathClear(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getFormalModelIdSectionGeometryPath().clear();
         ForgeFormalModelIdSectionGeometryStats status = ForgeVoxyInstance.INSTANCE.getFormalModelIdSectionGeometryPath().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy K8 formal model-id section geometry path clear: "
@@ -5743,7 +5503,7 @@ public final class ForgeVoxyCommands {
         return 1;
     }
 
-    private static int qaK8FormalModelIdGeometryPath(CommandSourceStack source) {
+    static int qaK8FormalModelIdGeometryPath(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.applyFormalModelIdGeometryPathNoLiveDrawPreset();
         boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
         ForgeFormalModelIdSectionGeometryStats status = ForgeVoxyInstance.INSTANCE.getFormalModelIdSectionGeometryPath().build();
@@ -5796,7 +5556,7 @@ public final class ForgeVoxyCommands {
                 && !rendererStatus.actualDrawEnabled() ? 1 : 0;
     }
 
-    private static int formalTerrainShaderIntegrationBuild(CommandSourceStack source) {
+    static int formalTerrainShaderIntegrationBuild(CommandSourceStack source) {
         ForgeFormalTerrainShaderIntegrationStats status = ForgeVoxyInstance.INSTANCE.getFormalTerrainShaderIntegration().build();
         ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("k9-formal-terrain-shader-integration-build");
         source.sendSuccess(() -> Component.literal("Voxy K9 formal terrain shader integration build: "
@@ -5813,13 +5573,13 @@ public final class ForgeVoxyCommands {
                 && !status.actualRendererDrawEnabled() ? 1 : 0;
     }
 
-    private static int formalTerrainShaderIntegrationStatus(CommandSourceStack source) {
+    static int formalTerrainShaderIntegrationStatus(CommandSourceStack source) {
         ForgeFormalTerrainShaderIntegrationStats status = ForgeVoxyInstance.INSTANCE.getFormalTerrainShaderIntegration().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy K9 formal terrain shader integration status: " + formatFormalTerrainShaderIntegrationStatus(status)), false);
         return status.formalTerrainShaderIntegrationReady() || status.stale() ? 1 : 0;
     }
 
-    private static int formalTerrainShaderIntegrationAudit(CommandSourceStack source) {
+    static int formalTerrainShaderIntegrationAudit(CommandSourceStack source) {
         ForgeFormalTerrainShaderIntegrationAuditResult audit = ForgeVoxyInstance.INSTANCE.getFormalTerrainShaderIntegration().audit();
         ForgeFormalTerrainShaderIntegrationStats status = ForgeVoxyInstance.INSTANCE.getFormalTerrainShaderIntegration().createStatusSnapshot();
         ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("k9-formal-terrain-shader-integration-audit");
@@ -5832,14 +5592,14 @@ public final class ForgeVoxyCommands {
         return audit.success() ? 1 : 0;
     }
 
-    private static int formalTerrainShaderIntegrationDump(CommandSourceStack source) {
+    static int formalTerrainShaderIntegrationDump(CommandSourceStack source) {
         ForgeFormalTerrainShaderIntegrationStats status = ForgeVoxyInstance.INSTANCE.getFormalTerrainShaderIntegration().createStatusSnapshot();
         String dump = ForgeVoxyInstance.INSTANCE.getFormalTerrainShaderIntegration().dump();
         source.sendSuccess(() -> Component.literal("Voxy K9 formal terrain shader integration dump: " + dump + " " + formatFormalTerrainShaderIntegrationStatus(status)), false);
         return status.blockerCount() > 0 || status.formalTerrainShaderIntegrationReady() ? 1 : 0;
     }
 
-    private static int formalTerrainShaderIntegrationClear(CommandSourceStack source) {
+    static int formalTerrainShaderIntegrationClear(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getFormalTerrainShaderIntegration().clear();
         ForgeFormalTerrainShaderIntegrationStats status = ForgeVoxyInstance.INSTANCE.getFormalTerrainShaderIntegration().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy K9 formal terrain shader integration clear: "
@@ -5848,7 +5608,7 @@ public final class ForgeVoxyCommands {
         return 1;
     }
 
-    private static int qaK9FormalTerrainShaderIntegration(CommandSourceStack source) {
+    static int qaK9FormalTerrainShaderIntegration(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.applyFormalTerrainShaderIntegrationOffscreenPreset();
         boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
         ForgeFormalTerrainShaderIntegrationStats status = ForgeVoxyInstance.INSTANCE.getFormalTerrainShaderIntegration().build();
@@ -5906,7 +5666,7 @@ public final class ForgeVoxyCommands {
                 && !rendererStatus.actualDrawEnabled() ? 1 : 0;
     }
 
-    private static int formalVisibleLodPreviewEnable(CommandSourceStack source) {
+    static int formalVisibleLodPreviewEnable(CommandSourceStack source) {
         ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview().enable("command-enable");
         ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("k10-visible-lod-preview-enable");
         source.sendSuccess(() -> Component.literal("Voxy K10 formal visible LoD preview enable: "
@@ -5922,7 +5682,7 @@ public final class ForgeVoxyCommands {
                 && !status.actualRendererDrawEnabled() ? 1 : 0;
     }
 
-    private static int formalVisibleLodPreviewDisable(CommandSourceStack source) {
+    static int formalVisibleLodPreviewDisable(CommandSourceStack source) {
         ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview().disable("command-disable");
         ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("k10-visible-lod-preview-disable");
         source.sendSuccess(() -> Component.literal("Voxy K10 formal visible LoD preview disable: "
@@ -5933,7 +5693,7 @@ public final class ForgeVoxyCommands {
         return !status.visiblePreviewEnabled() && !status.actualRendererDrawEnabled() ? 1 : 0;
     }
 
-    private static int formalVisibleLodPreviewPrepare(CommandSourceStack source) {
+    static int formalVisibleLodPreviewPrepare(CommandSourceStack source) {
         ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview().requestPreviewPrepare("k11-visible-preview-prepare");
         boolean previewPrepared = status.visibleLodPreviewOwnerReady() && !status.stale();
         source.sendSuccess(() -> Component.literal("Voxy K11 visible LoD preview prepare: "
@@ -5955,7 +5715,7 @@ public final class ForgeVoxyCommands {
                 && !status.actualRendererDrawEnabled() ? 1 : 0;
     }
 
-    private static int formalVisibleLodPreviewPrepareStatus(CommandSourceStack source) {
+    static int formalVisibleLodPreviewPrepareStatus(CommandSourceStack source) {
         ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview().createStatusSnapshot();
         boolean previewPrepared = status.visibleLodPreviewOwnerReady() && !status.stale();
         source.sendSuccess(() -> Component.literal("Voxy K11 visible LoD preview prepare status: "
@@ -5966,7 +5726,7 @@ public final class ForgeVoxyCommands {
         return previewPrepared || status.observePrepareRequested() || status.observePrepareInProgress() ? 1 : 0;
     }
 
-    private static int formalVisibleLodPreviewObserveEnable(CommandSourceStack source) {
+    static int formalVisibleLodPreviewObserveEnable(CommandSourceStack source) {
         ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview().requestObserveEnable("observe-enable");
         boolean previewPrepared = status.visibleLodPreviewOwnerReady() && !status.stale();
         source.sendSuccess(() -> Component.literal("Voxy K10.3 observe enable requested: "
@@ -5990,7 +5750,7 @@ public final class ForgeVoxyCommands {
                 && !status.actualRendererDrawEnabled() ? 1 : 0;
     }
 
-    private static int formalVisibleLodPreviewObserveDisable(CommandSourceStack source) {
+    static int formalVisibleLodPreviewObserveDisable(CommandSourceStack source) {
         ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview().disable("observe-disable");
         source.sendSuccess(() -> Component.literal("Voxy K10.3 observe disable: "
                 + "visiblePreviewEnabled=" + status.visiblePreviewEnabled()
@@ -6003,13 +5763,13 @@ public final class ForgeVoxyCommands {
                 && !status.actualRendererDrawEnabled() ? 1 : 0;
     }
 
-    private static int formalVisibleLodPreviewObserveStatus(CommandSourceStack source) {
+    static int formalVisibleLodPreviewObserveStatus(CommandSourceStack source) {
         ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy K10.3 formal visible LoD preview observe status: " + formatFormalVisibleLodPreviewStatus(status)), false);
         return status.visibleLodPreviewOwnerReady() || status.visiblePreviewEnabled() || status.stale() ? 1 : 0;
     }
 
-    private static int formalVisibleLodPreviewObserveDrawPause(CommandSourceStack source) {
+    static int formalVisibleLodPreviewObserveDrawPause(CommandSourceStack source) {
         ForgeFormalVisibleLodPreview preview = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview();
         ForgeFormalVisibleLodPreviewStats status = preview.pauseObserveDraw("observe-draw-pause");
         source.sendSuccess(() -> Component.literal("Voxy K10 visible preview observe draw pause: observeDrawPaused="
@@ -6022,7 +5782,7 @@ public final class ForgeVoxyCommands {
         return preview.isObserveDrawPaused() && !status.formalRendererReady() && !status.actualRendererDrawEnabled() ? 1 : 0;
     }
 
-    private static int formalVisibleLodPreviewObserveDrawResume(CommandSourceStack source) {
+    static int formalVisibleLodPreviewObserveDrawResume(CommandSourceStack source) {
         ForgeFormalVisibleLodPreview preview = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview();
         ForgeFormalVisibleLodPreviewStats status = preview.resumeObserveDraw("observe-draw-resume");
         source.sendSuccess(() -> Component.literal("Voxy K10 visible preview observe draw resume: observeDrawPaused="
@@ -6034,13 +5794,13 @@ public final class ForgeVoxyCommands {
         return !preview.isObserveDrawPaused() && !status.formalRendererReady() && !status.actualRendererDrawEnabled() ? 1 : 0;
     }
 
-    private static int formalVisibleLodPreviewStatus(CommandSourceStack source) {
+    static int formalVisibleLodPreviewStatus(CommandSourceStack source) {
         ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy K10 formal visible LoD preview status: " + formatFormalVisibleLodPreviewStatus(status)), false);
         return status.visibleLodPreviewOwnerReady() || status.stale() ? 1 : 0;
     }
 
-    private static int formalVisibleLodPreviewAudit(CommandSourceStack source) {
+    static int formalVisibleLodPreviewAudit(CommandSourceStack source) {
         ForgeFormalVisibleLodPreviewAuditResult audit = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview().audit();
         ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview().createStatusSnapshot();
         ForgeFormalRendererStats rendererStatus = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("k10-visible-lod-preview-audit");
@@ -6053,14 +5813,14 @@ public final class ForgeVoxyCommands {
         return audit.success() ? 1 : 0;
     }
 
-    private static int formalVisibleLodPreviewDump(CommandSourceStack source) {
+    static int formalVisibleLodPreviewDump(CommandSourceStack source) {
         ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview().createStatusSnapshot();
         String dump = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview().dump();
         source.sendSuccess(() -> Component.literal("Voxy K10 formal visible LoD preview dump: " + dump + " " + formatFormalVisibleLodPreviewStatus(status)), false);
         return status.blockerCount() > 0 || status.visibleLodPreviewOwnerReady() ? 1 : 0;
     }
 
-    private static int formalVisibleLodPreviewClear(CommandSourceStack source) {
+    static int formalVisibleLodPreviewClear(CommandSourceStack source) {
         ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview().clear();
         ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy K10 formal visible LoD preview clear: "
@@ -6069,7 +5829,7 @@ public final class ForgeVoxyCommands {
         return 1;
     }
 
-    private static int qaK10FormalVisibleLodPreview(CommandSourceStack source) {
+    static int qaK10FormalVisibleLodPreview(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.applyFormalVisibleLodPreviewDebugPreset();
         boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
         ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview().runQa();
@@ -6114,7 +5874,7 @@ public final class ForgeVoxyCommands {
                 && !rendererStatus.actualDrawEnabled() ? 1 : 0;
     }
 
-    private static int qaK10VisiblePreviewObservePerformance(CommandSourceStack source) {
+    static int qaK10VisiblePreviewObservePerformance(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.applyFormalVisibleLodPreviewDebugPreset();
         boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
         ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview().runObservePerformanceQa();
@@ -6145,7 +5905,7 @@ public final class ForgeVoxyCommands {
                 && !rendererStatus.actualDrawEnabled() ? 1 : 0;
     }
 
-    private static int qaK10VisiblePreviewObserveTimeout(CommandSourceStack source) {
+    static int qaK10VisiblePreviewObserveTimeout(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.applyFormalVisibleLodPreviewDebugPreset();
         boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
         ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview().requestObserveEnable("qa-k10-visible-preview-observe-timeout");
@@ -6171,7 +5931,7 @@ public final class ForgeVoxyCommands {
                 && !rendererStatus.actualDrawEnabled() ? 1 : 0;
     }
 
-    private static int qaK10VisiblePreviewObservePrepare(CommandSourceStack source) {
+    static int qaK10VisiblePreviewObservePrepare(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.applyFormalVisibleLodPreviewDebugPreset();
         boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
         ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview().requestPreviewPrepare("qa-k10-visible-preview-observe-prepare");
@@ -6197,7 +5957,7 @@ public final class ForgeVoxyCommands {
                 && !rendererStatus.actualDrawEnabled() ? 1 : 0;
     }
 
-    private static int qaK11FormalVisibleLodPreviewPrewarm(CommandSourceStack source) {
+    static int qaK11FormalVisibleLodPreviewPrewarm(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.applyFormalVisibleLodPreviewDebugPreset();
         boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
         ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview().requestPreviewPrepare("qa-k11-formal-visible-lod-preview-prewarm");
@@ -6222,7 +5982,7 @@ public final class ForgeVoxyCommands {
                 && !status.actualRendererDrawEnabled() ? 1 : 0;
     }
 
-    private static int qaK12K13VisiblePreviewPrepareReuse(CommandSourceStack source) {
+    static int qaK12K13VisiblePreviewPrepareReuse(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.applyFormalVisibleLodPreviewDebugPreset();
         boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
         ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview().requestPreviewPrepare("qa-k12-k13-visible-preview-prepare-reuse");
@@ -6252,7 +6012,7 @@ public final class ForgeVoxyCommands {
                 && !status.actualRendererDrawEnabled() ? 1 : 0;
     }
 
-    private static int formalVisibleLodPreviewMultiSectionStatus(CommandSourceStack source) {
+    static int formalVisibleLodPreviewMultiSectionStatus(CommandSourceStack source) {
         ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy K14/K16 multi-section visible preview status: "
                 + formatFormalVisibleLodPreviewMultiSectionStatus(status)), false);
@@ -6261,7 +6021,7 @@ public final class ForgeVoxyCommands {
                 && !status.actualRendererDrawEnabled() ? 1 : 0;
     }
 
-    private static int qaK14K16MultiSectionVisiblePreview(CommandSourceStack source) {
+    static int qaK14K16MultiSectionVisiblePreview(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.applyFormalVisibleLodPreviewDebugPreset();
         boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
         ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview()
@@ -6281,7 +6041,7 @@ public final class ForgeVoxyCommands {
                 && !status.actualRendererDrawEnabled() ? 1 : 0;
     }
 
-    private static int formalVisibleLodPreviewWorldPlacedStatus(CommandSourceStack source) {
+    static int formalVisibleLodPreviewWorldPlacedStatus(CommandSourceStack source) {
         ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy K17/K18 world-placed visible preview status: "
                 + formatFormalVisibleLodPreviewWorldPlacedStatus(status)), false);
@@ -6290,7 +6050,7 @@ public final class ForgeVoxyCommands {
                 && !status.actualRendererDrawEnabled() ? 1 : 0;
     }
 
-    private static int qaK17K18WorldPlacedVisiblePreview(CommandSourceStack source) {
+    static int qaK17K18WorldPlacedVisiblePreview(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.applyFormalVisibleLodPreviewDebugPreset();
         boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
         ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview()
@@ -6310,7 +6070,7 @@ public final class ForgeVoxyCommands {
                 && !status.actualRendererDrawEnabled() ? 1 : 0;
     }
 
-    private static int formalVisibleLodPreviewSectionMetadataStatus(CommandSourceStack source) {
+    static int formalVisibleLodPreviewSectionMetadataStatus(CommandSourceStack source) {
         ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy K19/K20 section metadata visible preview status: "
                 + formatFormalVisibleLodPreviewSectionMetadataStatus(status)), false);
@@ -6320,7 +6080,7 @@ public final class ForgeVoxyCommands {
                 && !status.actualRendererDrawEnabled() ? 1 : 0;
     }
 
-    private static int qaK19K20SectionMetadataVisiblePreview(CommandSourceStack source) {
+    static int qaK19K20SectionMetadataVisiblePreview(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.applyFormalVisibleLodPreviewDebugPreset();
         boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
         ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview()
@@ -6340,7 +6100,7 @@ public final class ForgeVoxyCommands {
                 && !status.actualRendererDrawEnabled() ? 1 : 0;
     }
 
-    private static int formalVisibleLodPreviewCommandBucketStatus(CommandSourceStack source) {
+    static int formalVisibleLodPreviewCommandBucketStatus(CommandSourceStack source) {
         ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy K21/K22 command/bucket visible preview status: "
                 + formatFormalVisibleLodPreviewCommandBucketStatus(status)), false);
@@ -6351,7 +6111,7 @@ public final class ForgeVoxyCommands {
                 && !status.actualRendererDrawEnabled() ? 1 : 0;
     }
 
-    private static int qaK21K22CommandBucketVisiblePreview(CommandSourceStack source) {
+    static int qaK21K22CommandBucketVisiblePreview(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.applyFormalVisibleLodPreviewDebugPreset();
         boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
         ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview()
@@ -6371,7 +6131,7 @@ public final class ForgeVoxyCommands {
                 && !status.actualRendererDrawEnabled() ? 1 : 0;
     }
 
-    private static int formalMinimalLodRendererPrepare(CommandSourceStack source) {
+    static int formalMinimalLodRendererPrepare(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.applyFormalVisibleLodPreviewDebugPreset();
         boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
         ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview()
@@ -6387,7 +6147,7 @@ public final class ForgeVoxyCommands {
                 && !status.actualRendererDrawEnabled() ? 1 : 0;
     }
 
-    private static int formalMinimalLodRendererStatus(CommandSourceStack source) {
+    static int formalMinimalLodRendererStatus(CommandSourceStack source) {
         ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy K23-K30 minimal formal LoD renderer status: "
                 + formatMinimalFormalLodRendererStatus(status)), false);
@@ -6398,7 +6158,7 @@ public final class ForgeVoxyCommands {
                 && !status.actualRendererDrawEnabled() ? 1 : 0;
     }
 
-    private static int qaK23K30MinimalFormalLodRenderer(CommandSourceStack source) {
+    static int qaK23K30MinimalFormalLodRenderer(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.applyFormalVisibleLodPreviewDebugPreset();
         boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
         ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview()
@@ -6414,7 +6174,7 @@ public final class ForgeVoxyCommands {
                 && !status.actualRendererDrawEnabled() ? 1 : 0;
     }
 
-    private static int formalLodPreviewMovingPrepare(CommandSourceStack source) {
+    static int formalLodPreviewMovingPrepare(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.applyFormalVisibleLodPreviewDebugPreset();
         boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
         ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview()
@@ -6430,7 +6190,7 @@ public final class ForgeVoxyCommands {
                 && !status.actualRendererDrawEnabled() ? 1 : 0;
     }
 
-    private static int formalLodPreviewMovingEnable(CommandSourceStack source) {
+    static int formalLodPreviewMovingEnable(CommandSourceStack source) {
         ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview()
                 .requestObserveEnable("k31-k36-formal-lod-preview-moving-enable");
         boolean previewPrepared = status.visibleLodPreviewOwnerReady() && !status.stale();
@@ -6449,7 +6209,7 @@ public final class ForgeVoxyCommands {
                 && !status.actualRendererDrawEnabled() ? 1 : 0;
     }
 
-    private static int formalLodPreviewMovingStatus(CommandSourceStack source) {
+    static int formalLodPreviewMovingStatus(CommandSourceStack source) {
         ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy K31-K36 formal LoD moving preview status: "
                 + formatFormalLodPreviewMovingStatus(status)), false);
@@ -6458,7 +6218,7 @@ public final class ForgeVoxyCommands {
                 && !status.actualRendererDrawEnabled() ? 1 : 0;
     }
 
-    private static int qaK31K36FormalLodPreviewMovingPatch(CommandSourceStack source) {
+    static int qaK31K36FormalLodPreviewMovingPatch(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.applyFormalVisibleLodPreviewDebugPreset();
         boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
         ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview()
@@ -6486,7 +6246,7 @@ public final class ForgeVoxyCommands {
                 && !rendererStatus.actualDrawEnabled() ? 1 : 0;
     }
 
-    private static int formalLodPreviewExpandedPrepare(CommandSourceStack source) {
+    static int formalLodPreviewExpandedPrepare(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.applyFormalVisibleLodPreviewDebugPreset();
         boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
         ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview()
@@ -6502,7 +6262,7 @@ public final class ForgeVoxyCommands {
                 && !status.actualRendererDrawEnabled() ? 1 : 0;
     }
 
-    private static int formalLodPreviewExpandedEnable(CommandSourceStack source) {
+    static int formalLodPreviewExpandedEnable(CommandSourceStack source) {
         ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview()
                 .requestObserveEnable("k37-k42-expanded-formal-lod-preview-enable");
         boolean previewPrepared = status.visibleLodPreviewOwnerReady() && !status.stale();
@@ -6521,7 +6281,7 @@ public final class ForgeVoxyCommands {
                 && !status.actualRendererDrawEnabled() ? 1 : 0;
     }
 
-    private static int formalLodPreviewExpandedStatus(CommandSourceStack source) {
+    static int formalLodPreviewExpandedStatus(CommandSourceStack source) {
         ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy K37-K42 expanded formal LoD patch status: "
                 + formatFormalLodPreviewExpandedStatus(status)), false);
@@ -6530,7 +6290,7 @@ public final class ForgeVoxyCommands {
                 && !status.actualRendererDrawEnabled() ? 1 : 0;
     }
 
-    private static int qaK37K42ExpandedFormalLodPatch(CommandSourceStack source) {
+    static int qaK37K42ExpandedFormalLodPatch(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.applyFormalVisibleLodPreviewDebugPreset();
         boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
         ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview()
@@ -6558,7 +6318,7 @@ public final class ForgeVoxyCommands {
                 && !rendererStatus.actualDrawEnabled() ? 1 : 0;
     }
 
-    private static int formalLodPreviewUpdatePrepare(CommandSourceStack source) {
+    static int formalLodPreviewUpdatePrepare(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.applyFormalVisibleLodPreviewDebugPreset();
         boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
         ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview()
@@ -6574,7 +6334,7 @@ public final class ForgeVoxyCommands {
                 && !status.actualRendererDrawEnabled() ? 1 : 0;
     }
 
-    private static int formalLodPreviewUpdateStatus(CommandSourceStack source) {
+    static int formalLodPreviewUpdateStatus(CommandSourceStack source) {
         ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview()
                 .refreshMovingUpdateLifecycleStatus("k43-k48-formal-lod-preview-update-status");
         source.sendSuccess(() -> Component.literal("Voxy K43-K48 formal LoD preview update status: "
@@ -6584,7 +6344,7 @@ public final class ForgeVoxyCommands {
                 && !status.actualRendererDrawEnabled() ? 1 : 0;
     }
 
-    private static int formalLodPreviewUpdateRebuildIfNeeded(CommandSourceStack source) {
+    static int formalLodPreviewUpdateRebuildIfNeeded(CommandSourceStack source) {
         ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview()
                 .requestMovingUpdateRebuildIfNeeded("k43-k48-formal-lod-preview-update-rebuild-if-needed");
         source.sendSuccess(() -> Component.literal("Voxy K43-K48 formal LoD preview update rebuild-if-needed: "
@@ -6598,7 +6358,7 @@ public final class ForgeVoxyCommands {
                 && !status.actualRendererDrawEnabled() ? 1 : 0;
     }
 
-    private static int formalLodPreviewUpdateEnable(CommandSourceStack source) {
+    static int formalLodPreviewUpdateEnable(CommandSourceStack source) {
         ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview()
                 .refreshMovingUpdateLifecycleStatus("k43-k48-formal-lod-preview-update-enable-check");
         if (movingUpdateRebuildNeeded(status)) {
@@ -6624,7 +6384,7 @@ public final class ForgeVoxyCommands {
                 && !enabledStatus.actualRendererDrawEnabled() ? 1 : 0;
     }
 
-    private static int qaK43K48FormalLodPreviewUpdateLifecycle(CommandSourceStack source) {
+    static int qaK43K48FormalLodPreviewUpdateLifecycle(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.applyFormalVisibleLodPreviewDebugPreset();
         boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
         ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview()
@@ -6653,7 +6413,7 @@ public final class ForgeVoxyCommands {
                 && !rendererStatus.actualDrawEnabled() ? 1 : 0;
     }
 
-    private static int formalLodPreviewAutoUpdateEnable(CommandSourceStack source) {
+    static int formalLodPreviewAutoUpdateEnable(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.applyFormalVisibleLodPreviewDebugPreset();
         boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
         ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview()
@@ -6667,7 +6427,7 @@ public final class ForgeVoxyCommands {
                 && !status.actualRendererDrawEnabled() ? 1 : 0;
     }
 
-    private static int formalLodPreviewAutoUpdateStatus(CommandSourceStack source) {
+    static int formalLodPreviewAutoUpdateStatus(CommandSourceStack source) {
         ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview()
                 .refreshAutoUpdateStatus("k49-k54-formal-lod-preview-auto-update-status");
         source.sendSuccess(() -> Component.literal("Voxy K49-K54 formal LoD preview auto update status: "
@@ -6677,7 +6437,7 @@ public final class ForgeVoxyCommands {
                 && status.previewDrawCommandBucketSummary().contains("autoUpdateSummary=") ? 1 : 0;
     }
 
-    private static int formalLodPreviewAutoUpdateDisable(CommandSourceStack source) {
+    static int formalLodPreviewAutoUpdateDisable(CommandSourceStack source) {
         ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview()
                 .requestAutoUpdateDisable("k49-k54-formal-lod-preview-auto-update-disable");
         source.sendSuccess(() -> Component.literal("Voxy K49-K54 formal LoD preview auto update disable: "
@@ -6687,7 +6447,7 @@ public final class ForgeVoxyCommands {
                 && !status.actualRendererDrawEnabled() ? 1 : 0;
     }
 
-    private static int qaK49K54FormalLodPreviewAutoUpdate(CommandSourceStack source) {
+    static int qaK49K54FormalLodPreviewAutoUpdate(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.applyFormalVisibleLodPreviewDebugPreset();
         boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
         ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview()
@@ -6710,37 +6470,37 @@ public final class ForgeVoxyCommands {
                 && !rendererStatus.actualDrawEnabled() ? 1 : 0;
     }
 
-    private static int formalRendererCheck(CommandSourceStack source) {
+    static int formalRendererCheck(CommandSourceStack source) {
         ForgeFormalRendererStats status = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("command-check");
         source.sendSuccess(() -> Component.literal("Voxy formal renderer check: " + formatFormalRendererStatus(status)), false);
         return status.formalRendererSkeletonReady() ? 1 : 0;
     }
 
-    private static int formalRendererStatus(CommandSourceStack source) {
+    static int formalRendererStatus(CommandSourceStack source) {
         ForgeFormalRendererStats status = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().createStatusSnapshot();
         source.sendSuccess(() -> Component.literal("Voxy formal renderer status: " + formatFormalRendererStatus(status)), false);
         return status.formalRendererSkeletonReady() || status.formalRendererStale() ? 1 : 0;
     }
 
-    private static int formalRendererEnable(CommandSourceStack source) {
+    static int formalRendererEnable(CommandSourceStack source) {
         ForgeFormalRendererStats status = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().enable("command-enable");
         source.sendSuccess(() -> Component.literal("Voxy formal renderer enable: " + formatFormalRendererStatus(status) + " No formal draw was started."), false);
         return status.enabled() && status.noDraw() && !status.actualDrawEnabled() ? 1 : 0;
     }
 
-    private static int formalRendererDisable(CommandSourceStack source) {
+    static int formalRendererDisable(CommandSourceStack source) {
         ForgeFormalRendererStats status = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().disable("command-disable");
         source.sendSuccess(() -> Component.literal("Voxy formal renderer disable: " + formatFormalRendererStatus(status)), false);
         return 1;
     }
 
-    private static int formalRendererClear(CommandSourceStack source) {
+    static int formalRendererClear(CommandSourceStack source) {
         ForgeFormalRendererStats status = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().clear("command-clear");
         source.sendSuccess(() -> Component.literal("Voxy formal renderer clear: " + formatFormalRendererStatus(status) + " Only the H2 formal renderer skeleton status/lifecycle state was cleared; GL heap, MDIC command buffer, existing MDIC debug renderer, textured MDIC debug renderer, simple renderer, model bridge samples, and atlas samples were left unchanged."), false);
         return 1;
     }
 
-    private static int formalRendererDumpBlockers(CommandSourceStack source) {
+    static int formalRendererDumpBlockers(CommandSourceStack source) {
         ForgeFormalRendererStats status = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().checkReadiness("command-dump-blockers");
         String blockers = ForgeVoxyInstance.INSTANCE.getFormalRendererManager().dumpBlockers();
         source.sendSuccess(() -> Component.literal("Voxy formal renderer blockers: " + blockers + " " + formatFormalRendererStatus(status)), false);
@@ -10608,7 +10368,7 @@ public final class ForgeVoxyCommands {
         return visibility.renderableChunks();
     }
 
-    private static int applyPresetOff(CommandSourceStack source) {
+    static int applyPresetOff(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.applyOffPreset();
         clearRuntimePipeline();
         ForgeVoxyInstance.INSTANCE.getFormalRendererManager().markPresetOff();
@@ -10637,7 +10397,7 @@ public final class ForgeVoxyCommands {
         return 1;
     }
 
-    private static int applyPresetOverlay(CommandSourceStack source) {
+    static int applyPresetOverlay(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.applyOverlayPreset();
         boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
         String message = "Voxy preset overlay: runtime-only overlay debug applied, not written to toml. "
@@ -10649,7 +10409,7 @@ public final class ForgeVoxyCommands {
         return 1;
     }
 
-    private static int applyPresetLod(CommandSourceStack source) {
+    static int applyPresetLod(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.applyLodPreset();
         boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
         String message = "Voxy preset lod: runtime-only cached LoD mode applied, not written to toml. "
@@ -10662,7 +10422,7 @@ public final class ForgeVoxyCommands {
         return 1;
     }
 
-    private static int applyPresetLodBuiltSection(CommandSourceStack source) {
+    static int applyPresetLodBuiltSection(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.applyLodBuiltSectionPreset();
         ForgeVoxyInstance.INSTANCE.getGpuMeshUploadManager().clear();
         boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
@@ -10676,7 +10436,7 @@ public final class ForgeVoxyCommands {
         return 1;
     }
 
-    private static int applyPresetGeometryManager(CommandSourceStack source) {
+    static int applyPresetGeometryManager(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.applyGeometryManagerPreset();
         boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
         String message = "Voxy preset geometry_manager: runtime-only CPU geometry manager consume mode applied, not written to toml. "
@@ -10690,7 +10450,7 @@ public final class ForgeVoxyCommands {
         return 1;
     }
 
-    private static int applyPresetGlHeapVisualize(CommandSourceStack source) {
+    static int applyPresetGlHeapVisualize(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.applyGlHeapVisualizePreset();
         ForgeVoxyInstance.INSTANCE.getGpuMeshUploadManager().clear();
         ForgeVoxyInstance.INSTANCE.getGpuMeshCache().clear();
@@ -10706,7 +10466,7 @@ public final class ForgeVoxyCommands {
         return 1;
     }
 
-    private static int applyPresetGlHeapReadback(CommandSourceStack source) {
+    static int applyPresetGlHeapReadback(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.applyGlHeapReadbackPreset();
         ForgeVoxyInstance.INSTANCE.getGpuMeshUploadManager().clear();
         ForgeVoxyInstance.INSTANCE.getGpuMeshCache().clear();
@@ -10727,7 +10487,7 @@ public final class ForgeVoxyCommands {
         return 1;
     }
 
-    private static int applyPresetDirectGlDebug(CommandSourceStack source) {
+    static int applyPresetDirectGlDebug(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.applyDirectGlDebugPreset();
         ForgeVoxyInstance.INSTANCE.getGpuMeshUploadManager().clear();
         ForgeVoxyInstance.INSTANCE.getGpuGeometryVisualizationCache().clear();
@@ -10748,7 +10508,7 @@ public final class ForgeVoxyCommands {
         return 1;
     }
 
-    private static int applyPresetMdicSkeleton(CommandSourceStack source) {
+    static int applyPresetMdicSkeleton(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.applyMdicSkeletonPreset();
         ForgeVoxyInstance.INSTANCE.getGpuMeshUploadManager().clear();
         ForgeVoxyInstance.INSTANCE.getGpuMeshCache().clear();
@@ -10769,7 +10529,7 @@ public final class ForgeVoxyCommands {
         return 1;
     }
 
-    private static int applyPresetMdicDebug(CommandSourceStack source) {
+    static int applyPresetMdicDebug(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.applyMdicDebugPreset();
         ForgeVoxyInstance.INSTANCE.getGpuMeshUploadManager().clear();
         ForgeVoxyInstance.INSTANCE.getGpuMeshCache().clear();
@@ -10791,7 +10551,7 @@ public final class ForgeVoxyCommands {
         return 1;
     }
 
-    private static int applyPresetFormalRendererSkeleton(CommandSourceStack source) {
+    static int applyPresetFormalRendererSkeleton(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.applyFormalRendererSkeletonPreset();
         boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
         ForgeVoxyInstance.INSTANCE.getFormalRendererManager().enable("preset-formal-renderer-skeleton");
@@ -10804,7 +10564,7 @@ public final class ForgeVoxyCommands {
         return status.formalRendererSkeletonReady() && status.noDraw() && !status.actualDrawEnabled() ? 1 : 0;
     }
 
-    private static int applyPresetFormalModelStoreSkeleton(CommandSourceStack source) {
+    static int applyPresetFormalModelStoreSkeleton(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.applyFormalModelStoreSkeletonPreset();
         boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
         ForgeFormalModelStoreStats storeStatus = ForgeVoxyInstance.INSTANCE.getFormalModelStore().build();
@@ -10823,7 +10583,7 @@ public final class ForgeVoxyCommands {
         return storeStatus.formalModelStoreSkeletonReady() && audit.success() && rendererStatus.noDraw() && !rendererStatus.actualDrawEnabled() ? 1 : 0;
     }
 
-    private static int applyPresetFormalModelFactorySkeleton(CommandSourceStack source) {
+    static int applyPresetFormalModelFactorySkeleton(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.applyFormalModelFactorySkeletonPreset();
         boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
         ForgeFormalModelFactoryStats requestStatus = ForgeVoxyInstance.INSTANCE.getFormalModelFactory().requestCurrent();
@@ -10845,7 +10605,7 @@ public final class ForgeVoxyCommands {
         return processStatus.formalModelFactorySkeletonReady() && audit.success() && rendererStatus.noDraw() && !rendererStatus.actualDrawEnabled() ? 1 : 0;
     }
 
-    private static int applyPresetFormalOneBlockBakeUpload(CommandSourceStack source) {
+    static int applyPresetFormalOneBlockBakeUpload(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.applyFormalModelFactorySkeletonPreset();
         boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
         ForgeOneBlockFormalBakeUploadStats buildStatus = ForgeVoxyInstance.INSTANCE.getOneBlockFormalBakeUpload().bakeOneCurrent();
@@ -10868,7 +10628,7 @@ public final class ForgeVoxyCommands {
                 && !rendererStatus.formalRendererReady() ? 1 : 0;
     }
 
-    private static int applyPresetFormalMultiBlockBakeUpload(CommandSourceStack source) {
+    static int applyPresetFormalMultiBlockBakeUpload(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.applyFormalModelFactorySkeletonPreset();
         boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
         ForgeMultiBlockFormalBakeUploadStats buildStatus = ForgeVoxyInstance.INSTANCE.getMultiBlockFormalBakeUpload().bakeMultiSafe();
@@ -10891,7 +10651,7 @@ public final class ForgeVoxyCommands {
                 && !rendererStatus.formalRendererReady() ? 1 : 0;
     }
 
-    private static int applyPresetFormalModelLifecycleRebuild(CommandSourceStack source) {
+    static int applyPresetFormalModelLifecycleRebuild(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.applyFormalModelLifecycleRebuildPreset();
         boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
         ForgeFormalModelBakeryLifecycleStats status = ForgeVoxyInstance.INSTANCE.getFormalModelBakeryLifecycle().runQaLifecycleRebuild();
@@ -10914,7 +10674,7 @@ public final class ForgeVoxyCommands {
                 && !rendererStatus.formalRendererReady() ? 1 : 0;
     }
 
-    private static int applyPresetFormalShaderInputSkeleton(CommandSourceStack source) {
+    static int applyPresetFormalShaderInputSkeleton(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.applyFormalShaderInputSkeletonPreset();
         boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
         ForgeFormalShaderInputConsumerStats status = ForgeVoxyInstance.INSTANCE.getFormalShaderInputConsumer().build();
@@ -10936,7 +10696,7 @@ public final class ForgeVoxyCommands {
                 && !rendererStatus.formalRendererReady() ? 1 : 0;
     }
 
-    private static int applyPresetFormalShaderProgramValidation(CommandSourceStack source) {
+    static int applyPresetFormalShaderProgramValidation(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.applyFormalShaderProgramValidationPreset();
         boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
         ForgeFormalShaderProgramStats status = ForgeVoxyInstance.INSTANCE.getFormalShaderProgramValidator().build();
@@ -10961,7 +10721,7 @@ public final class ForgeVoxyCommands {
                 && !rendererStatus.formalRendererReady() ? 1 : 0;
     }
 
-    private static int applyPresetFormalTexturedShaderPreview(CommandSourceStack source) {
+    static int applyPresetFormalTexturedShaderPreview(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.applyFormalTexturedShaderPreviewPreset();
         boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
         ForgeFormalTexturedShaderPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalTexturedShaderPreview().build();
@@ -10988,7 +10748,7 @@ public final class ForgeVoxyCommands {
                 && !rendererStatus.formalRendererReady() ? 1 : 0;
     }
 
-    private static int applyPresetFormalPackedQuadPreview(CommandSourceStack source) {
+    static int applyPresetFormalPackedQuadPreview(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.applyFormalPackedQuadPreviewPreset();
         boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
         ForgeFormalPackedQuadPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalPackedQuadPreview().build();
@@ -11023,7 +10783,7 @@ public final class ForgeVoxyCommands {
                 && !rendererStatus.formalRendererReady() ? 1 : 0;
     }
 
-    private static int applyPresetFormalTerrainRecordBridge(CommandSourceStack source) {
+    static int applyPresetFormalTerrainRecordBridge(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.applyFormalTerrainRecordBridgePreset();
         boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
         ForgeFormalTerrainPackedRecordBridgeStats status = ForgeVoxyInstance.INSTANCE.getFormalTerrainPackedRecordBridge().build();
@@ -11055,7 +10815,7 @@ public final class ForgeVoxyCommands {
                 && !rendererStatus.formalRendererReady() ? 1 : 0;
     }
 
-    private static int applyPresetFormalTerrainRendererOwnerNoDraw(CommandSourceStack source) {
+    static int applyPresetFormalTerrainRendererOwnerNoDraw(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.applyFormalTerrainRendererOwnerNoDrawPreset();
         boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
         ForgeFormalTerrainRendererStats enableStatus = ForgeVoxyInstance.INSTANCE.getFormalTerrainRendererOwner().enable("preset-formal-terrain-renderer-owner-no-draw");
@@ -11082,7 +10842,7 @@ public final class ForgeVoxyCommands {
                 && !rendererStatus.formalRendererReady() ? 1 : 0;
     }
 
-    private static int applyPresetFormalMdicViewportOwnerNoDraw(CommandSourceStack source) {
+    static int applyPresetFormalMdicViewportOwnerNoDraw(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.applyFormalMdicViewportOwnerNoDrawPreset();
         boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
         ForgeFormalTerrainRendererStats terrainStatus = ForgeVoxyInstance.INSTANCE.getFormalTerrainRendererOwner().enable("preset-formal-mdic-viewport-owner-no-draw");
@@ -11114,7 +10874,7 @@ public final class ForgeVoxyCommands {
                 && !rendererStatus.formalRendererReady() ? 1 : 0;
     }
 
-    private static int applyPresetFormalCommandGenerationOwnerNoDraw(CommandSourceStack source) {
+    static int applyPresetFormalCommandGenerationOwnerNoDraw(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.applyFormalCommandGenerationOwnerNoDrawPreset();
         boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
         ForgeFormalTerrainRendererStats terrainStatus = ForgeVoxyInstance.INSTANCE.getFormalTerrainRendererOwner().enable("preset-formal-command-generation-owner-no-draw");
@@ -11151,7 +10911,7 @@ public final class ForgeVoxyCommands {
                 && !rendererStatus.formalRendererReady() ? 1 : 0;
     }
 
-    private static int applyPresetFormalVisibilityOwnerNoDraw(CommandSourceStack source) {
+    static int applyPresetFormalVisibilityOwnerNoDraw(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.applyFormalVisibilityOwnerNoDrawPreset();
         boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
         ForgeFormalTerrainRendererStats terrainStatus = ForgeVoxyInstance.INSTANCE.getFormalTerrainRendererOwner().enable("preset-formal-visibility-owner-no-draw");
@@ -11195,7 +10955,7 @@ public final class ForgeVoxyCommands {
                 && !rendererStatus.formalRendererReady() ? 1 : 0;
     }
 
-    private static int applyPresetFormalCmdgenGpuValidationNoDraw(CommandSourceStack source) {
+    static int applyPresetFormalCmdgenGpuValidationNoDraw(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.applyFormalCmdgenGpuValidationNoDrawPreset();
         boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
         ForgeFormalCmdgenGpuValidationStats status = ForgeVoxyInstance.INSTANCE.getFormalCmdgenGpuValidator().build();
@@ -11224,7 +10984,7 @@ public final class ForgeVoxyCommands {
                 && !rendererStatus.formalRendererReady() ? 1 : 0;
     }
 
-    private static int applyPresetFormalCmdgenRealSectionDryRunNoDraw(CommandSourceStack source) {
+    static int applyPresetFormalCmdgenRealSectionDryRunNoDraw(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.applyFormalCmdgenRealSectionDryRunNoDrawPreset();
         boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
         ForgeFormalCmdgenRealSectionDryRunStats status = ForgeVoxyInstance.INSTANCE.getFormalCmdgenRealSectionDryRun().build();
@@ -11253,7 +11013,7 @@ public final class ForgeVoxyCommands {
                 && !rendererStatus.formalRendererReady() ? 1 : 0;
     }
 
-    private static int applyPresetFormalIsolatedMdicDrawOffscreen(CommandSourceStack source) {
+    static int applyPresetFormalIsolatedMdicDrawOffscreen(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.applyFormalIsolatedMdicDrawOffscreenPreset();
         boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
         ForgeFormalIsolatedMdicDrawSmokeTestStats status = ForgeVoxyInstance.INSTANCE.getFormalIsolatedMdicDrawSmokeTest().build();
@@ -11283,7 +11043,7 @@ public final class ForgeVoxyCommands {
                 && !rendererStatus.formalRendererReady() ? 1 : 0;
     }
 
-    private static int applyPresetFormalModelIdGeometryPathNoLiveDraw(CommandSourceStack source) {
+    static int applyPresetFormalModelIdGeometryPathNoLiveDraw(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.applyFormalModelIdGeometryPathNoLiveDrawPreset();
         boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
         ForgeFormalModelIdSectionGeometryStats status = ForgeVoxyInstance.INSTANCE.getFormalModelIdSectionGeometryPath().build();
@@ -11313,7 +11073,7 @@ public final class ForgeVoxyCommands {
                 && !rendererStatus.formalRendererReady() ? 1 : 0;
     }
 
-    private static int applyPresetFormalTerrainShaderIntegrationOffscreen(CommandSourceStack source) {
+    static int applyPresetFormalTerrainShaderIntegrationOffscreen(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.applyFormalTerrainShaderIntegrationOffscreenPreset();
         boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
         ForgeFormalTerrainShaderIntegrationStats status = ForgeVoxyInstance.INSTANCE.getFormalTerrainShaderIntegration().build();
@@ -11345,7 +11105,7 @@ public final class ForgeVoxyCommands {
                 && !rendererStatus.formalRendererReady() ? 1 : 0;
     }
 
-    private static int applyPresetFormalVisibleLodPreviewDebug(CommandSourceStack source) {
+    static int applyPresetFormalVisibleLodPreviewDebug(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.applyFormalVisibleLodPreviewDebugPreset();
         boolean engineReady = ForgeVoxyInstance.INSTANCE.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
         ForgeFormalVisibleLodPreviewStats status = ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview().runQa();
@@ -11376,7 +11136,7 @@ public final class ForgeVoxyCommands {
                 && !rendererStatus.formalRendererReady() ? 1 : 0;
     }
 
-    private static int clearPreset(CommandSourceStack source) {
+    static int clearPreset(CommandSourceStack source) {
         ForgeVoxyRuntimeOverrides.clear();
         ForgeVoxyInstance.INSTANCE.getGpuGeometryReadbackMeshCache().clear();
         ForgeVoxyInstance.INSTANCE.getGpuGeometryReadbackMeshRefreshManager().clear();
@@ -11447,7 +11207,7 @@ public final class ForgeVoxyCommands {
         return 1;
     }
 
-    private static int presetStatus(CommandSourceStack source) {
+    static int presetStatus(CommandSourceStack source) {
         var status = ForgeVoxyRuntimeOverrides.createStatusSnapshot();
         String message = String.format(
                 "Voxy preset status: active=%s overrides=%s engine=%s(%s) autoIngest=%s(%s) autoCpuMesh=%s(%s) autoBuiltSection=%s(%s) autoGeometryConsume=%s(%s) geometryGpuUpload=%s(%s) geometryGpuVisualization=%s(%s) readbackAutoRefresh=%s(%s) directGlRenderer=%s(%s) directAutoPlan=%s(%s) directActualDraw=%s(%s) visualizationAlpha=%.2f(%s) visualizationIgnoreDepth=%s(%s) visualizationDoubleSided=%s(%s) simpleGpu=%s(%s) debugRenderer=%s(%s) source=%s(%s) sourceRole=%s recommendedSource=%s fallbackSource=%s minDistance=%d(%s) maxDistance=%d(%s) renderLoadedChunks=%s(%s) skipMode=%s(%s) loadedMargin=%d(%s) keepCached=%s(%s) colors=%s(%s) simpleIgnoreDepth=%s(%s) simpleVerticalOffset=%.3f(%s) simpleAlpha=%.2f(%s) debugAlpha=%.2f(%s)",

@@ -34,11 +34,13 @@ Retirement sequence:
 1. keep /voxy parity_route_status as the visible boundary - done
 2. add no new commands to ForgeVoxyCommands - active rule
 3. split legacy debug/GPU/MDIC command registration into ForgeVoxyLegacyDebugCommands - done
-4. move original-Voxy-parity commands into focused registrar classes
+4. split formal renderer status commands into ForgeVoxyFormalRendererCommands - done
 5. split first preview/sample command group into ForgeVoxyLegacyPreviewCommands - done
-6. move remaining K-stage preview/update commands behind explicit legacy surfaces
-7. delete handlers once backing prototype objects are removed from ForgeVoxyInstance
-8. delete ForgeVoxyCommands when no longer needed
+6. split K-stage preview/update commands into ForgeVoxyLegacyKPreviewCommands - done
+7. split preset subtree into ForgeVoxyPresetCommands - done
+8. move original-Voxy-parity commands into focused registrar classes
+9. delete handlers once backing prototype objects are removed from ForgeVoxyInstance
+10. delete ForgeVoxyCommands when no longer needed
 ```
 
 ### Debug/proof renderers
@@ -86,12 +88,15 @@ The next cleanup should split the command registration surface:
 
 ```text
 ForgeVoxyParityCommands
-ForgeVoxyLegacyPreviewCommands
+ForgeVoxyModelPipelineCommands
+ForgeVoxyGeometryPipelineCommands
 ```
 
 `ForgeVoxyLegacyDebugCommands` already owns the first migrated legacy debug
 registration group. `ForgeVoxyLegacyPreviewCommands` owns the first migrated
 preview/sample group: J3-J5 preview commands and textured debug/readback
-commands. The remaining split should preserve command behavior first, then
-allow entire legacy registrars to be disabled or deleted as prototype owners
-disappear.
+commands. `ForgeVoxyLegacyKPreviewCommands` owns K5-K54 preview/update
+commands, `ForgeVoxyFormalRendererCommands` owns formal renderer status
+commands, and `ForgeVoxyPresetCommands` owns the preset subtree. The remaining
+split should move the actual original-Voxy-parity model and geometry command
+surfaces out of the old monolithic file before owner deletion begins.
