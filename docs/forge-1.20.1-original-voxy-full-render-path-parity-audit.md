@@ -1,285 +1,113 @@
 # Forge 1.20.1 original Voxy full render-path parity audit
 
-Stage: `K55_ORIGINAL_VOXY_RENDER_PATH_PARITY_REMEDIATION`
+This is the current route-control ledger. It supersedes old K-stage and preview
+audit language.
 
-This is the route-control ledger for comparing the current Forge formal LoD
-path against the original Voxy renderer. The purpose is to find and remove
-architectural drift, not to justify the preview path.
-
-## Current route rule
-
-Strict original Voxy parity is now the controlling rule. Old preview,
-synthetic, sample-set, fallback, bridge, and QA-only paths are deprecated as
-implementation direction. They may remain only as historical evidence until
-their references can be safely removed.
-
-Future remediation must proceed by locating the corresponding original Voxy
-owner/algorithm/shader/data structure first, then porting or adapting it to
-Forge 1.20.1. If that cannot be done, the blocker must be documented before any
-alternative is introduced.
-
-## Summary verdict
+## Current rule
 
 ```text
-K55_VERDICT_MAJOR_PARITY_WORK_REMAINS_DIRECT_GEOMETRY_AND_SOFTWARE_BAKERY_FIX_APPLIED
+strict bottom-up original Voxy parity
 ```
 
-The Forge path can visibly render real formal LoD records, but several core
-mechanisms are still not the original Voxy mechanisms:
+Every subsystem must be traced to original Voxy source before implementation.
+Deprecated preview, sample, synthetic, fallback, and QA-only paths must not be
+extended.
 
-- section mesh generation is still too synchronous in parts of the Forge path;
-- the visible path is still preview-owned instead of `MDICSectionRenderer` owned;
-- formal visibility is not hierarchical occlusion traversal;
-- production `cmdgen.comp` is not the live command generator;
-- the model lifecycle is safe-set oriented, not fully on-demand.
-
-K55 applies two bottom-path corrections:
-
-- K8 now prefers direct formal packed-record generation from `WorldSection` raw
-  data instead of starting from Forge `BakedQuad` mesh conversion and temporary
-  model-id rewrite.
-- the formal model upload path now uses a Forge-adapted software model texture
-  bakery instead of first-quad/sprite extraction, so cutout, translucent, tint,
-  and fluid candidates are no longer rejected up front.
-
-## Files inspected
-
-Original Voxy:
-
-- `src/main/java/me/cortex/voxy/client/core/VoxyRenderSystem.java`
-- `src/main/java/me/cortex/voxy/client/core/rendering/building/RenderGenerationService.java`
-- `src/main/java/me/cortex/voxy/client/core/rendering/building/RenderDataFactory.java`
-- `src/main/java/me/cortex/voxy/client/core/model/ModelBakerySubsystem.java`
-- `src/main/java/me/cortex/voxy/client/core/model/ModelFactory.java`
-- `src/main/java/me/cortex/voxy/client/core/model/ModelStore.java`
-- `src/main/java/me/cortex/voxy/client/core/model/ModelQueries.java`
-- `src/main/java/me/cortex/voxy/client/core/model/TextureUtils.java`
-- `src/main/java/me/cortex/voxy/client/core/model/bakery/SoftwareModelTextureBakery.java`
-- `src/main/java/me/cortex/voxy/client/core/model/bakery/SoftwareRasterizer.java`
-- `src/main/java/me/cortex/voxy/client/core/model/bakery/ReuseVertexConsumer.java`
-- `src/main/java/me/cortex/voxy/client/core/rendering/RenderDistanceTracker.java`
-- `src/main/java/me/cortex/voxy/client/core/rendering/ViewportSelector.java`
-- `src/main/java/me/cortex/voxy/client/core/rendering/section/backend/mdic/MDICViewport.java`
-- `src/main/java/me/cortex/voxy/client/core/rendering/section/backend/mdic/MDICSectionRenderer.java`
-- `src/main/java/me/cortex/voxy/client/core/rendering/section/geometry/BasicAsyncGeometryManager.java`
-- `src/main/java/me/cortex/voxy/client/core/rendering/section/geometry/BasicSectionGeometryData.java`
-- `src/main/resources/assets/voxy/shaders/lod/gl46/bindings.glsl`
-- `src/main/resources/assets/voxy/shaders/lod/gl46/cmdgen.comp`
-- `src/main/resources/assets/voxy/shaders/lod/gl46/quads3.vert`
-- `src/main/resources/assets/voxy/shaders/lod/quad_format.glsl`
-- `src/main/resources/assets/voxy/shaders/lod/quad_util.glsl`
-- `src/main/resources/assets/voxy/shaders/lod/block_model.glsl`
-- `src/main/resources/assets/voxy/shaders/lod/section.glsl`
-
-Current Forge:
-
-- `src/main/java/me/cortex/voxy/forge/ForgeFormalModelIdSectionGeometryPath.java`
-- `src/main/java/me/cortex/voxy/forge/ForgeFormalDirectSectionGeometryBuilder.java`
-- `src/main/java/me/cortex/voxy/forge/ForgeMultiBlockFormalBakeUpload.java`
-- `src/main/java/me/cortex/voxy/forge/ForgeSoftwareModelTextureBakery.java`
-- `src/main/java/me/cortex/voxy/forge/ForgeModelQueries.java`
-- `src/main/java/me/cortex/voxy/forge/ForgeFormalUploadedModelSummary.java`
-- `src/main/java/me/cortex/voxy/forge/ForgeVoxyGeometryBuffer.java`
-- `src/main/java/me/cortex/voxy/forge/ForgeCpuMeshBuilder.java`
-- `src/main/java/me/cortex/voxy/forge/ForgeCpuMeshBuildManager.java`
-- `src/main/java/me/cortex/voxy/forge/ForgeVoxyBuiltSectionBuilder.java`
-- `src/main/java/me/cortex/voxy/forge/ForgeVoxyBuiltSectionBuildManager.java`
-- `src/main/java/me/cortex/voxy/forge/ForgeVoxyQuadEncoder.java`
-- `src/main/java/me/cortex/voxy/forge/ForgeSectionGeometryManager.java`
-- `src/main/java/me/cortex/voxy/forge/ForgeGpuGeometryHeap.java`
-- `src/main/java/me/cortex/voxy/forge/ForgeFormalCmdgenRealSectionDryRun.java`
-- `src/main/java/me/cortex/voxy/forge/ForgeFormalTerrainShaderIntegration.java`
-- `src/main/java/me/cortex/voxy/forge/ForgeFormalVisibleLodPreview.java`
-
-## Original mechanism map
-
-Original Voxy production chain:
+## Current verdict
 
 ```text
-WorldEngine / WorldSection
- -> RenderDistanceTracker top-level node queue
- -> AsyncNodeManager / HierarchicalOcclusionTraverser
- -> RenderGenerationService worker queue
- -> RenderDataFactory direct packed quad generation
+VOXY_PARITY_INCOMPLETE
+FORMAL_RENDERER_READY=false
+ACTUAL_RENDERER_DRAW_ENABLED=false
+```
+
+The project has visible historical proof paths, but those are deprecated. The
+renderer is not parity-complete until the original Voxy chain is ported.
+
+## Authoritative original chain
+
+```text
+VoxyRenderSystem
+ -> WorldEngine / WorldSection / Mapper
+ -> ModelBakerySubsystem
+ -> ModelFactory
+ -> SoftwareModelTextureBakery / SoftwareRasterizer / ReuseVertexConsumer
+ -> TextureUtils / ModelQueries
+ -> ModelStore
+ -> RenderGenerationService
+ -> RenderDataFactory
  -> BuiltSection
- -> BasicAsyncGeometryManager section id + 128-record aligned geometry heap
- -> BasicSectionGeometryData GL buffers
- -> MDICViewport draw/visibility/position-scratch buffers
- -> MDICSectionRenderer buildDrawCalls()
- -> cmdgen.comp writes DrawCommand + draw count
- -> quads3.vert/quads.frag read quadData, positionScratch, modelData, modelColour, atlas
- -> glMultiDrawElementsIndirectCountARB
+ -> BasicAsyncGeometryManager
+ -> BasicSectionGeometryData
+ -> RenderDistanceTracker
+ -> HierarchicalOcclusionTraverser
+ -> ViewportSelector / Viewport
+ -> MDICViewport
+ -> cmdgen.comp
+ -> MDICSectionRenderer
+ -> quads3.vert / quads.frag / block_model.glsl / quad_util.glsl
 ```
 
-The key performance point is that section mesh generation is not a per-frame or
-per-command synchronous Forge mesh operation. It works from Voxy world sections,
-model metadata, and packed records, then uploads/replaces sections through a
-geometry manager.
+## Confirmed drift
 
-## Confirmed drift items
+| Area | Drift | Required correction |
+| --- | --- | --- |
+| Model texture bake | first-quad/sprite extraction and safe-set rejection replaced original software bake semantics | Port/adapt `SoftwareModelTextureBakery`, `SoftwareRasterizer`, `TextureUtils` |
+| Model lifecycle | safe-set upload does not match original on-demand model request/requeue | Port `ModelBakerySubsystem` and `ModelFactory` lifecycle |
+| Geometry generation | temporary rewrites / CPU mesh conversion are not original `RenderDataFactory` | Complete `RenderDataFactory` parity from `WorldSection` raw data |
+| Geometry ownership | Forge debug/simple heap paths are not original `BasicAsyncGeometryManager` | Port allocation, 128-record alignment, section id reuse, upload/free lifecycle |
+| Visibility | radius/frustum/preview snapshots are not original traversal | Port `RenderDistanceTracker` and `HierarchicalOcclusionTraverser` |
+| Command generation | validation compute shaders are not production `cmdgen.comp` | Wire original `cmdgen.comp` inputs/outputs |
+| Draw owner | visible preview owner is not `MDICSectionRenderer` | Port `MDICViewport` and `MDICSectionRenderer` ownership |
+| Shader semantics | adapter/subset shader is not full original terrain shader contract | Port original shader inputs and semantics |
 
-| Area | Original Voxy | Forge path before K55 | Drift | Severity | Required direction |
-| --- | --- | --- | --- | --- | --- |
-| Section generation ownership | `RenderGenerationService` worker queue | client tick/render prepare paths can build synchronously | Synchronous hitches | P0 | Formal async generation service |
-| Geometry generation | `RenderDataFactory` emits packed records from raw section data | `BakedQuad` CPU mesh could be converted back to packed records | Wrong hot path | P0 | Direct formal packed-record generation |
-| Model texture bake | `SoftwareModelTextureBakery.renderToOutput` rasterizes `BlockStateModelPart`/fluid into 6 colour-depth faces | formal safe-set path used first-quad/sprite extraction and rejected fluid/cutout/translucent/tint | Wrong model input data | P0 | Forge-adapt original software bakery |
-| Model metadata queries | `ModelQueries` drives face existence, occlusion, translucency, double-sidedness, light, and cull-same behavior | direct Forge geometry initially used air-neighbor checks | Wrong culling/bucketing source | P0 | Port query semantics and consume formal metadata |
-| Model lifecycle | Missing model id requests bake and requeues task | safe-set upload covers selected blocks | Limited coverage | P0 | On-demand formal bake/upload lifecycle |
-| Visibility | render-distance tracker + hierarchical occlusion | chunk-radius snapshots and preview patches | Not original traversal | P0 | Formal tracker/traverser ownership |
-| Command generation | production `cmdgen.comp` over render list/visibility buffers | audit compute and preview-owned commands | Not live cmdgen | P0 | Production cmdgen after inputs align |
-| Draw submission | `MDICSectionRenderer` indirect-count draw | K10 preview hook direct draw | Preview only | P0 | Formal MDIC owner later |
-| Shader semantics | original terrain shaders with light/tint/material paths | adapter/subset | Partial semantics | P1 | Full shader contract |
-| Geometry heap | `BasicAsyncGeometryManager` overlay + aligned heap upload/remove | Forge manager partially mirrors it | Partial production ownership | P1 | Promote only after async generation/traversal |
+## Corrections already started
 
-## K55 fix applied
+These are directionally correct but not complete readiness:
 
-K55 adds `ForgeFormalDirectSectionGeometryBuilder` and makes K8 try it before
-legacy built-section bridge sources.
+- Forge-adapted `ForgeSoftwareModelTextureBakery` exists.
+- Forge-local `ForgeModelQueries` exists.
+- formal direct section geometry is moving toward `RenderDataFactory`-style
+  `WorldSection` raw-data generation.
+- sample/preview/synthetic routes are explicitly deprecated.
 
-New preferred K8 chain:
+## Remaining bottom-up parity work
+
+1. Complete `SoftwareModelTextureBakery` runtime parity for solid, leaves,
+   cutout, translucent, fluid, tint, and atlas sampling.
+2. Complete `ModelFactory` metadata, fluid LUT, dedupe, biome colour, and
+   on-demand model request/requeue behavior.
+3. Complete `RenderDataFactory` parity, including neighbor-section logic,
+   opaque/non-opaque buckets, fluid model lookup, light/biome packing, and
+   greedy merge behavior.
+4. Port `RenderGenerationService` task queue and result-consumer behavior.
+5. Port `BasicAsyncGeometryManager` and `BasicSectionGeometryData`.
+6. Port `RenderDistanceTracker` and `HierarchicalOcclusionTraverser`.
+7. Port `MDICViewport` and production `cmdgen.comp`.
+8. Port `MDICSectionRenderer` and original terrain shader binding order.
+9. Port `VoxyRenderSystem` lifecycle only after the lower owners match.
+
+## Do not do
+
+Do not use:
 
 ```text
-loaded chunk ingest
- -> WorldEngine / WorldSection raw data
- -> blockStateId lookup
- -> formal model id lookup from I6 uploaded formal models
- -> direct Voxy packed quad record
- -> greedy merge
- -> isolated formal geometry snapshot / validation buffer
+sample-set data as formal model source
+synthetic fixtures as success conditions
+temporary model-id rewrites as geometry path
+visible preview owner as renderer owner
+debug command buffers as formal command buffers
+manual refresh commands as lifecycle substitute
+adapter shader as production terrain shader
 ```
 
-This removes the previous first-choice dependence on:
+## Current next work
+
+Continue with bottom-up parity:
 
 ```text
-BakedQuad CPU mesh -> legacy placeholder model id -> temporary formal id rewrite
+complete RenderDataFactory parity
+ -> restore model-miss request/requeue
+ -> introduce RenderGenerationService-style async generation
+ -> feed BasicAsyncGeometryManager-style section upload/swap
 ```
-
-The direct path remains an isolated K8 snapshot. It does not mutate the live
-geometry heap, does not submit renderer commands, and does not change renderer
-readiness.
-
-## Software model texture bakery parity update
-
-The formal model upload path now ports the original Voxy software-bake idea
-instead of treating one Forge `BakedQuad` sprite as the model texture.
-
-New Forge-adapted chain:
-
-```text
-Forge BakedModel / LiquidBlockRenderer
- -> ForgeSoftwareModelTextureBakery software rasterizer
- -> six 16x16 colour-depth face textures
- -> TextureUtils-style bounds/depth/tint/layer decisions
- -> Voxy metadata + 64-byte formal model record
- -> formal ModelStore modelData/modelColour/atlas upload
-```
-
-This is the intended replacement for the previous shortcut:
-
-```text
-first BakedQuad sprite
- -> copied sprite pixels
- -> guessed faceData
- -> reject fluid/cutout/translucent/tint
-```
-
-Intentional Forge adaptation:
-
-- original `SoftwareModelTextureBakery` uses newer Voxy/Fabric-side APIs such as
-  `BlockStateModelPart`, `FluidRenderer`, and `ChunkSectionLayer`;
-- Forge 1.20.1 uses `BakedModel`, `BakedQuad`, Forge render types, and
-  `LiquidBlockRenderer`;
-- the adapted class keeps the original mechanism: software atlas sampling,
-  per-face software rasterization, colour/depth output, fluid face rendering,
-  alpha/discard/tint metadata, and post-raster layer selection.
-
-The safe-set now includes solid, cutout/tinted, translucent, and fluid
-candidates. It no longer rejects those categories up front. If the software
-bakery cannot obtain the block atlas or fluid quads safely, the candidate is
-rejected honestly instead of being marked supported.
-
-## RenderDataFactory parity update
-
-The direct formal section path now consumes Voxy-style model metadata through a
-Forge-local port of `ModelQueries`:
-
-```text
-faceExists
-faceCanBeOccluded
-faceOccludes
-faceUsesSelfLighting
-isDoubleSided
-isTranslucent
-cullsSame
-lightEmission
-```
-
-This fixes the first direct-geometry shortcut where a face was emitted mainly
-from air-neighbor checks. The direct builder now uses formal model metadata for
-face emission, same-model culling, occlusion, layer bucket choice, and light
-selection. It still must be checked against the full original
-`RenderDataFactory` loop before claiming complete parity.
-
-## Remaining blockers before claiming Voxy parity
-
-1. Formal async render generation service:
-   priority queue, in-flight task map, model-miss requeue, bounded section
-   holding, result consumer, and shutdown semantics equivalent to
-   `RenderGenerationService`.
-
-2. Full formal direct `RenderDataFactory` parity:
-   neighbor aux faces across section boundaries, every opaque/non-opaque bucket
-   emission case, fluid-state model lookup parity, translucency/double-sided
-   edge cases, and broad biome tint behavior.
-
-3. Full `SoftwareModelTextureBakery` parity validation:
-   Forge adaptation compiles and follows the original mechanism, but runtime
-   validation still needs to prove water, leaves/cutout, glass/translucent,
-   tint, and atlas readback paths match the original behaviour closely enough.
-
-4. On-demand formal model lifecycle:
-   generation must request missing formal models and requeue sections, rather
-   than accepting only the prebuilt safe set.
-
-5. Formal visibility/traversal:
-   chunk-radius snapshots must be replaced by original-style top-level
-   render-distance tracking and hierarchical occlusion traversal.
-
-6. Production command generation:
-   validation compute shaders must be replaced by production `cmdgen.comp` once
-   render list, visibility buffer, metadata buffer, and geometry buffer are
-   formally owned.
-
-7. Formal MDIC draw owner:
-   K10 preview must remain separate until viewport buffers, command buffers,
-   model/geometry/shader binding, and indirect-count draw submission are all
-   owned by the formal renderer.
-
-## Do-not-do list
-
-- Do not treat K10 visible preview success as Voxy parity.
-- Do not hide route drift behind manual refresh commands.
-- Do not keep `BakedQuad -> packed record` as the long-term formal geometry path.
-- Do not promote debug MDIC buffers to formal command buffers.
-- Do not use sample-set or placeholder model ids as formal ids.
-- Do not call `MDICSectionRenderer` or `VoxyRenderSystem` until all formal
-  owners and inputs match the original contract.
-- Do not mark `formalRendererReady`, `formalDrawPipelineReady`, or
-  `actualRendererDrawEnabled` true from preview evidence.
-
-## Next implementation batch
-
-The next coherent parity batch should implement a Forge formal render
-generation service:
-
-```text
-WorldSection task queue
- -> direct formal RenderDataFactory path
- -> model-miss request/requeue semantics
- -> BuiltSection result consumer
- -> incremental geometry-manager upload/swap
-```
-
-That is the point where the visible preview can stop doing heavy prepare work
-and start consuming continuously produced formal section geometry, which is the
-shape of the original Voxy renderer.
