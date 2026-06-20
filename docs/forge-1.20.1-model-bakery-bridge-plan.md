@@ -68,9 +68,14 @@ Recent parity remediation added:
   from the active `WorldEngine`, queues existing mapper biomes, attaches the
   mapper biome callback, and queues future block bake requests without using
   safe-set or preview sources.
+- `ForgeOriginalVoxyModelFactory`, a Forge-port of the original `ModelFactory`
+  mapping and upload core. It owns `idMappings`, `metadataCache`,
+  `fluidStateLUT`, `modelTexture2id`, fluid pre-bake ordering, in-flight
+  tracking, software colour/depth bake, and formal ModelStore uploads.
 
-Remaining work must remove safe-set assumptions and restore original
-on-demand model request/requeue behavior.
+Remaining work must restore the original `ModelBakerySubsystem` worker/upload
+split and connect the on-demand missing-model request/requeue behavior from
+`RenderGenerationService`.
 
 ## Compile-source-set constraint
 
@@ -88,6 +93,22 @@ ModelFactory idMappings / metadataCache / fluidStateLUT / modelTexture2id
 SoftwareModelTextureBakery colour/depth output
 ModelStore modelData/modelColour/atlas upload contract
 RenderGenerationService missing-model request/requeue behavior
+```
+
+## Current incomplete parity items
+
+The Forge-port model factory is real route code, not a sample route, but these
+items are still incomplete and must not be treated as readiness:
+
+```text
+dedicated ModelBakerySubsystem processing thread
+upload-result queue separated from bake processing
+full TextureUtils byte-for-byte helper parity
+biome colour LUT upload
+custom block-state id mapping
+packed 3x2 mip-chain atlas upload
+readback audit for the new original route
+RenderGenerationService retry after IdNotYetComputedException
 ```
 
 ## Required behavior

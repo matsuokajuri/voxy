@@ -8,16 +8,15 @@ import net.minecraft.client.Minecraft;
 
 import java.util.Arrays;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentLinkedDeque;
 
 final class ForgeOriginalVoxyModelPipeline {
     static final String STAGE = "L0_L4_ORIGINAL_VOXY_MODEL_PIPELINE_PARITY";
+    private static final int MAX_MODEL_UPLOADS_PER_TICK = 2;
 
     private final ForgeVoxyInstance instance;
-    private final ConcurrentLinkedDeque<Integer> blockBakeQueue = new ConcurrentLinkedDeque<>();
-    private final ConcurrentLinkedDeque<Mapper.BiomeEntry> biomeQueue = new ConcurrentLinkedDeque<>();
     private final IntOpenHashSet seenBlockBakeRequests = new IntOpenHashSet(6000);
     private WorldEngine world;
+    private ForgeOriginalVoxyModelFactory modelFactory;
     private boolean startRequested;
     private boolean startQueuedOnRenderThread;
     private boolean ownerReady;
@@ -54,12 +53,17 @@ final class ForgeOriginalVoxyModelPipeline {
         if (this.shouldScheduleStart()) {
             this.runOnRenderThread(this::startOnRenderThread);
         }
+        ForgeOriginalVoxyModelFactory factory;
         synchronized (this) {
             if (this.ownerReady && !this.stale) {
                 this.tickRuns++;
                 this.lifecycleState = "RUNNING";
                 this.lastLifecycleEvent = "tick";
             }
+            factory = this.modelFactory;
+        }
+        if (factory != null && factory.hasPendingWork()) {
+            this.runOnRenderThread(() -> this.processFactoryUploads(factory));
         }
     }
 
@@ -74,9 +78,9 @@ final class ForgeOriginalVoxyModelPipeline {
             return this.createStatusSnapshot();
         }
         if (this.seenBlockBakeRequests.add(blockStateId)) {
-            this.blockBakeQueue.add(blockStateId);
+            this.modelFactory.addEntry(blockStateId);
         }
-        this.lastFailureReason = "model-factory-port-pending";
+        this.lastFailureReason = this.modelFactory.createStatusSnapshot().lastFailureReason();
         this.lastLifecycleEvent = "request-block-bake-queued";
         return this.createStatusSnapshot();
     }
@@ -85,6 +89,9 @@ final class ForgeOriginalVoxyModelPipeline {
         Mapper mapper = this.world == null ? null : this.world.getMapper();
         int mapperBlockStateCount = mapper == null ? 0 : mapper.getBlockStateCount();
         int mapperBiomeCount = mapper == null ? 0 : mapper.getBiomeEntries().length;
+        ForgeOriginalVoxyModelFactoryStats factory = this.modelFactory == null
+                ? ForgeOriginalVoxyModelFactoryStats.unavailable("model-factory-not-started")
+                : this.modelFactory.createStatusSnapshot();
         return new ForgeOriginalVoxyModelPipelineStats(
                 STAGE,
                 this.startRequests,
@@ -96,10 +103,10 @@ final class ForgeOriginalVoxyModelPipeline {
                 this.startRequested,
                 this.startQueuedOnRenderThread,
                 this.ownerReady && !this.stale,
-                false,
-                false,
-                false,
-                false,
+                factory.factoryReady(),
+                factory.originalModelFactoryUsed(),
+                factory.originalSoftwareModelTextureBakeryUsed(),
+                factory.originalModelStoreUsed(),
                 this.mapperBiomeCallbackAttached && this.ownerReady && !this.stale,
                 false,
                 this.existingBiomeEntriesQueued && this.ownerReady && !this.stale,
@@ -113,12 +120,34 @@ final class ForgeOriginalVoxyModelPipeline {
                 this.requiresRebuild,
                 mapperBlockStateCount,
                 mapperBiomeCount,
-                this.blockBakeQueue.size() + this.biomeQueue.size(),
-                0,
-                this.blockBakeQueue.isEmpty() && this.biomeQueue.isEmpty(),
+                factory.queuedBlockBakeCount() + factory.inFlightBlockBakeCount(),
+                factory.completedModelCount(),
+                factory.asyncProcessorThreadReady(),
+                factory.renderThreadUploadPathUsed(),
+                factory.idMappingsReady(),
+                factory.metadataCacheReady(),
+                factory.fluidStateLutReady(),
+                factory.modelTextureDedupeReady(),
+                factory.queuedBlockBakeCount(),
+                factory.inFlightBlockBakeCount(),
+                factory.completedModelCount(),
+                factory.uploadedModelRecordCount(),
+                factory.uploadedModelColourCount(),
+                factory.uploadedAtlasFaceCount(),
+                factory.dedupeHitCount(),
+                factory.dedupeMissCount(),
+                factory.failedBakeCount(),
+                factory.modelTexture2idSize(),
+                factory.nextModelId(),
+                factory.lastRequestedBlockStateId(),
+                factory.lastUploadedBlockStateId(),
+                factory.lastUploadedModelId(),
+                factory.lastDuplicateBlockStateId(),
+                factory.lastDuplicateModelId(),
+                factory.queuedBlockBakeCount() == 0 && factory.inFlightBlockBakeCount() == 0,
                 this.lifecycleState,
                 this.lastLifecycleEvent,
-                this.lastFailureReason
+                "none".equals(this.lastFailureReason) ? factory.lastFailureReason() : this.lastFailureReason
         );
     }
 
@@ -183,10 +212,10 @@ final class ForgeOriginalVoxyModelPipeline {
 
         WorldEngine targetWorld = engine.get();
         Mapper mapper = targetWorld.getMapper();
-        this.queueExistingBiomes(mapper);
-        mapper.setBiomeCallback(this::queueBiome);
+        ForgeOriginalVoxyModelFactory factory = new ForgeOriginalVoxyModelFactory(this.instance, mapper, this.instance.getFormalModelStore());
         synchronized (this) {
             this.world = targetWorld;
+            this.modelFactory = factory;
             this.ownerReady = true;
             this.mapperBiomeCallbackAttached = true;
             this.existingBiomeEntriesQueued = true;
@@ -194,19 +223,21 @@ final class ForgeOriginalVoxyModelPipeline {
             this.stale = false;
             this.requiresRebuild = false;
             this.startRuns++;
-            this.lifecycleState = "OWNER_STARTED_MODEL_FACTORY_PENDING";
+            this.lifecycleState = "OWNER_STARTED_MODEL_FACTORY_READY";
             this.lastLifecycleEvent = "start-on-render-thread";
-            this.lastFailureReason = "model-factory-port-pending";
+            this.lastFailureReason = "none";
         }
-    }
-
-    private void queueExistingBiomes(Mapper mapper) {
-        Arrays.stream(mapper.getBiomeEntries()).forEach(this::queueBiome);
+        mapper.setBiomeCallback(this::queueBiome);
+        Arrays.stream(mapper.getBiomeEntries()).forEach(factory::addBiome);
     }
 
     private void queueBiome(Mapper.BiomeEntry biomeEntry) {
-        if (biomeEntry != null) {
-            this.biomeQueue.add(biomeEntry);
+        ForgeOriginalVoxyModelFactory factory;
+        synchronized (this) {
+            factory = this.modelFactory;
+        }
+        if (biomeEntry != null && factory != null) {
+            factory.addBiome(biomeEntry);
         }
     }
 
@@ -224,11 +255,10 @@ final class ForgeOriginalVoxyModelPipeline {
             this.lifecycleState = "STALE";
             this.lastLifecycleEvent = safeReason(event);
             this.lastFailureReason = "none";
-            this.blockBakeQueue.clear();
-            this.biomeQueue.clear();
             this.seenBlockBakeRequests.clear();
             callbackWorld = this.world;
             this.world = null;
+            this.modelFactory = null;
         }
         if (callbackWorld != null) {
             this.runOnRenderThread(() -> {
@@ -243,6 +273,26 @@ final class ForgeOriginalVoxyModelPipeline {
             task.run();
         } else {
             RenderSystem.recordRenderCall(task::run);
+        }
+    }
+
+    private void processFactoryUploads(ForgeOriginalVoxyModelFactory factory) {
+        if (!RenderSystem.isOnRenderThread()) {
+            this.recordFailure("model-factory-upload-not-render-thread");
+            return;
+        }
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft.level == null || minecraft.player == null) {
+            return;
+        }
+        int processed = factory.processUploadsOnRenderThread(minecraft, MAX_MODEL_UPLOADS_PER_TICK);
+        if (processed > 0) {
+            synchronized (this) {
+                this.uploadTickRuns++;
+                this.lifecycleState = "RUNNING_MODEL_UPLOADS";
+                this.lastLifecycleEvent = "model-factory-upload-tick";
+                this.lastFailureReason = factory.createStatusSnapshot().lastFailureReason();
+            }
         }
     }
 

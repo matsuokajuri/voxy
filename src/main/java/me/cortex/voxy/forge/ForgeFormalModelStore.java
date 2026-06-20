@@ -209,6 +209,22 @@ final class ForgeFormalModelStore {
                 && this.actualAtlasHeight == ForgeModelAtlasLayout.ATLAS_HEIGHT;
     }
 
+    boolean canUploadOriginalVoxyModel() {
+        return this.canUploadOneBlockPrototype();
+    }
+
+    String uploadOriginalVoxyModelRecord(int formalModelId, int[] words) {
+        return this.uploadPrototypeModelRecord(formalModelId, words);
+    }
+
+    String uploadOriginalVoxyModelColour(int formalModelId, int colour) {
+        return this.uploadPrototypeModelColour(formalModelId, colour);
+    }
+
+    String uploadOriginalVoxyAtlasFace(int formalModelId, int faceIndex, byte[] pixels) {
+        return this.uploadPrototypeAtlasFace(formalModelId, faceIndex, pixels);
+    }
+
     String uploadPrototypeModelRecord(int formalModelId, int[] words) {
         if (!this.canUploadOneBlockPrototype()) {
             return "formal-model-store-not-upload-ready";

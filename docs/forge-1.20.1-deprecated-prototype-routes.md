@@ -104,10 +104,12 @@ The new parity command registrar is:
 ForgeVoxyParityCommands
 ```
 
-It currently exposes `original_voxy_model_pipeline_*` commands for the L0/L1
-model-pipeline owner boundary. This is not a preview route. It is also not full
-model readiness yet: `ModelFactory`, `SoftwareModelTextureBakery`, and
-`ModelStore` parity still need to be ported into the Forge package.
+It currently exposes `original_voxy_model_pipeline_*` commands for the active
+model-pipeline owner. This is not a preview route. The command surface now
+reports the Forge-port original `ModelFactory` mapping/upload state, but full
+model readiness is still blocked by the original `ModelBakerySubsystem`
+thread/upload split, biome LUT upload, exact `TextureUtils` parity, mip-chain
+atlas upload, and `RenderGenerationService` model-miss retry behavior.
 
 ## Replacement direction
 

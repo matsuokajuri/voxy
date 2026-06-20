@@ -63,6 +63,7 @@ The Forge route now has a focused original-Voxy model-pipeline owner boundary:
 
 ```text
 ForgeOriginalVoxyModelPipeline
+ForgeOriginalVoxyModelFactory
 ```
 
 It follows the original `VoxyRenderSystem` ordering at the boundary level:
@@ -71,14 +72,30 @@ It follows the original `VoxyRenderSystem` ordering at the boundary level:
 WorldEngine / Mapper
  -> existing biome entries queued
  -> mapper biome callback attached
- -> block model requests are queued for the future RenderGenerationService path
+ -> block model requests enter a Forge-port ModelFactory
+ -> SoftwareModelTextureBakery writes colour/depth faces
+ -> idMappings / metadataCache / fluidStateLUT / modelTexture2id are updated
+ -> formal ModelStore receives modelData/modelColour/atlas uploads
 ```
 
-It does not yet claim `ModelFactory` or `SoftwareModelTextureBakery` parity.
+It now owns a partial original `ModelFactory` port, but it does not yet claim
+full `ModelBakerySubsystem` parity.
 The original `me.cortex.voxy.client.core.*` files are authoritative source
 references but are not included in the current Forge compile source set, so the
 mechanisms must be ported/adapted under `me.cortex.voxy.forge` rather than
 directly imported.
+
+Missing before L2/L3 can be considered complete:
+
+```text
+original worker thread / upload queue split
+biome colour LUT upload
+custom block-state id mapping
+exact TextureUtils helper parity
+mip-chain atlas upload
+readback audit for original route uploads
+RenderGenerationService model-miss request/requeue
+```
 
 ## Required source trace
 
@@ -124,7 +141,7 @@ The next work should continue bottom-up parity, not preview hardening:
 ```text
 complete Forge-port ModelBakerySubsystem / ModelFactory parity
  -> restore original model-miss request/requeue semantics
- -> port SoftwareModelTextureBakery output into the formal ModelStore owner
+ -> complete SoftwareModelTextureBakery / TextureUtils parity
  -> introduce RenderGenerationService-style async ownership
  -> replace direct unit-quad section geometry with RenderDataFactory parity
 ```

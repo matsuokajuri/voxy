@@ -74,6 +74,23 @@ These are directionally correct but not complete readiness:
   it starts from the active `WorldEngine`, queues existing mapper biomes,
   attaches the mapper biome callback, and queues block bake requests for the
   future `RenderGenerationService` path.
+- `ForgeOriginalVoxyModelFactory` now ports the original `ModelFactory`
+  mapping core into the Forge source set:
+
+```text
+idMappings[1<<20]
+metadataCache[1<<16]
+fluidStateLUT[1<<16]
+modelTexture2id dedupe
+fluid pre-bake ordering
+stair base-state normalization
+SoftwareModelTextureBakery colour/depth bake
+formal ModelStore modelData/modelColour/atlas upload
+```
+
+This is not full `ModelBakerySubsystem` parity yet. The original background
+processor thread, upload queue separation, biome LUT uploads, and mip-chain
+atlas upload still need to be ported.
 
 ## Source-set reality
 
@@ -93,22 +110,35 @@ semantics.
 
 ## Remaining bottom-up parity work
 
-1. Complete Forge-port `ModelBakerySubsystem` and `ModelFactory` parity,
-   including bake queue, in-flight map, upload queue, fluid pre-bake ordering,
-   dedupe, metadata cache, and model id mapping.
-2. Complete `SoftwareModelTextureBakery` runtime parity for solid, leaves,
+1. Complete Forge-port `ModelBakerySubsystem` parity, including the original
+   processing thread, `LockSupport.unpark` lifecycle, upload-result queue, and
+   render-thread `processUploads()` behavior.
+2. Harden the Forge-port `ModelFactory` against original semantics: readback
+   audit, exact `TextureUtils` parity, biome colour LUT uploads, custom
+   block-state id mapping, mip-chain atlas upload, and documented Forge-only
+   stair base-state reflection.
+3. Complete `SoftwareModelTextureBakery` runtime parity for solid, leaves,
    cutout, translucent, fluid, tint, and atlas sampling.
-3. Complete `ModelStore` upload parity against the formal owner, including
+4. Complete `ModelStore` upload parity against the formal owner, including
    modelData/modelColour/atlas layout and upload thread rules.
-4. Complete `RenderDataFactory` parity, including neighbor-section logic,
+5. Complete `RenderDataFactory` parity, including neighbor-section logic,
    opaque/non-opaque buckets, fluid model lookup, light/biome packing, and
    greedy merge behavior.
-5. Port `RenderGenerationService` task queue and result-consumer behavior.
-6. Port `BasicAsyncGeometryManager` and `BasicSectionGeometryData`.
-7. Port `RenderDistanceTracker` and `HierarchicalOcclusionTraverser`.
-8. Port `MDICViewport` and production `cmdgen.comp`.
-9. Port `MDICSectionRenderer` and original terrain shader binding order.
-10. Port `VoxyRenderSystem` lifecycle only after the lower owners match.
+6. Port `RenderGenerationService` task queue and result-consumer behavior.
+7. Port `BasicAsyncGeometryManager` and `BasicSectionGeometryData`.
+8. Port `RenderDistanceTracker` and `HierarchicalOcclusionTraverser`.
+9. Port `MDICViewport` and production `cmdgen.comp`.
+10. Port `MDICSectionRenderer` and original terrain shader binding order.
+11. Port `VoxyRenderSystem` lifecycle only after the lower owners match.
+
+## Current documented Forge deviations
+
+| Area | Reason | Status |
+| --- | --- | --- |
+| `StairBlock.baseState` access | original source accesses the field directly; Forge 1.20.1 exposes it as private at compile time | Forge port uses a cached reflective field read to preserve original normalization semantics |
+| `ModelBakerySubsystem` worker | original uses a dedicated `"Model factory processor"` thread; current Forge port processes a bounded number of model uploads on the render thread | temporary incomplete parity, not renderer readiness |
+| Atlas mip upload | original `ModelBakeResultUpload` uploads the packed 3x2 model tile for every mip level | formal Forge store currently uploads base face tiles only |
+| Biome/model colour LUT | original uploads per-biome colour data for biome-dependent tinted models | owner hook exists, upload parity pending |
 
 ## Do not do
 
