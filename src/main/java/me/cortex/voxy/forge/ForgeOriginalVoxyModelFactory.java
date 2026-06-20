@@ -12,6 +12,7 @@ import net.minecraft.core.Direction;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.BlockAndTintGetter;
+import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.ColorResolver;
 import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.level.biome.Biome;
@@ -62,7 +63,7 @@ final class ForgeOriginalVoxyModelFactory {
     private final int[] idMappings = new int[MAX_BLOCK_STATE_IDS];
     private Object2IntMap<BlockState> customBlockStateIdMapping;
 
-    private int nextModelId = 1;
+    private int nextModelId;
     private int requestedBlockStateCount;
     private int completedModelCount;
     private int uploadedModelRecordCount;
@@ -95,8 +96,7 @@ final class ForgeOriginalVoxyModelFactory {
         this.store = store;
         Arrays.fill(this.idMappings, -1);
         Arrays.fill(this.fluidStateLUT, -1);
-        this.idMappings[0] = 0;
-        this.fluidStateLUT[0] = 0;
+        this.addEntry(0);
     }
 
     void prepareOnRenderThread(Minecraft minecraft) {
@@ -388,7 +388,7 @@ final class ForgeOriginalVoxyModelFactory {
         }
 
         int modelId = this.nextModelId++;
-        if (!ForgeModelAtlasLayout.isValidModelId(modelId) || modelId == 0 || modelId >= this.metadataCache.length) {
+        if (!ForgeModelAtlasLayout.isValidModelId(modelId) || modelId >= this.metadataCache.length) {
             this.removeInFlight(bake.blockId());
             this.failedBakeCount++;
             this.fail("formal-model-id-capacity-exhausted");
@@ -464,8 +464,10 @@ final class ForgeOriginalVoxyModelFactory {
                 continue;
             }
             byte[] pixels = ForgeSoftwareModelTextureBakery.rgbaBytes(texture);
-            int faceData = encodeSoftwareFaceData(texture, layer);
-            faces[faceIndex] = new FaceUpload(faceIndex, direction.getName(), pixels, ForgeModelAtlasPixelSample.checksum(pixels), faceData, writtenPixels);
+            float depth = computeSoftwareDepth(texture, layer);
+            int[] bounds = ForgeOriginalVoxyTextureUtils.computeBounds(texture, checkMode);
+            int faceData = encodeSoftwareFaceData(texture, layer, depth, bounds, writtenPixels);
+            faces[faceIndex] = new FaceUpload(faceIndex, direction.getName(), pixels, ForgeModelAtlasPixelSample.checksum(pixels), faceData, writtenPixels, depth, coversFullBlock(bounds));
             words[faceIndex] = faceData;
             if (faceData >= 0) {
                 writtenFaces++;
@@ -825,19 +827,19 @@ final class ForgeOriginalVoxyModelFactory {
         }
     }
 
-    private static int encodeSoftwareFaceData(ForgeOriginalVoxyColourDepthTextureData texture, ForgeCpuMeshLayer layer) {
+    private static int encodeSoftwareFaceData(
+            ForgeOriginalVoxyColourDepthTextureData texture,
+            ForgeCpuMeshLayer layer,
+            float depth,
+            int[] bounds,
+            int written
+    ) {
         int checkMode = layer == ForgeCpuMeshLayer.SOLID
                 ? ForgeOriginalVoxyTextureUtils.WRITE_CHECK_STENCIL
                 : ForgeOriginalVoxyTextureUtils.WRITE_CHECK_ALPHA;
-        int[] bounds = ForgeOriginalVoxyTextureUtils.computeBounds(texture, checkMode);
         if (bounds[1] < bounds[0] || bounds[3] < bounds[2]) {
             return -1;
         }
-        float depth = ForgeOriginalVoxyTextureUtils.computeDepth(
-                texture,
-                layer != ForgeCpuMeshLayer.SOLID ? ForgeOriginalVoxyTextureUtils.DEPTH_MODE_MIN : ForgeOriginalVoxyTextureUtils.DEPTH_MODE_AVG,
-                checkMode
-        );
         if (depth < -0.1F) {
             return -1;
         }
@@ -852,7 +854,6 @@ final class ForgeOriginalVoxyModelFactory {
                 | (maxV << 12)
                 | (depthEncoded << 16);
         int area = Math.max(1, (maxU - minU + 1) * (maxV - minV + 1));
-        int written = ForgeOriginalVoxyTextureUtils.getWrittenPixelCount(texture, checkMode);
         boolean faceCoversFullBlock = minU == 0 && maxU == 15 && minV == 0 && maxV == 15;
         boolean needsAlphaDiscard = ((float) written / (float) area) < 0.9F;
         needsAlphaDiscard |= layer != ForgeCpuMeshLayer.SOLID;
@@ -866,6 +867,23 @@ final class ForgeOriginalVoxyModelFactory {
             faceData |= 2 << 24;
         }
         return faceData;
+    }
+
+    private static float computeSoftwareDepth(ForgeOriginalVoxyColourDepthTextureData texture, ForgeCpuMeshLayer layer) {
+        int checkMode = layer == ForgeCpuMeshLayer.SOLID
+                ? ForgeOriginalVoxyTextureUtils.WRITE_CHECK_STENCIL
+                : ForgeOriginalVoxyTextureUtils.WRITE_CHECK_ALPHA;
+        return ForgeOriginalVoxyTextureUtils.computeDepth(
+                texture,
+                layer != ForgeCpuMeshLayer.SOLID ? ForgeOriginalVoxyTextureUtils.DEPTH_MODE_MIN : ForgeOriginalVoxyTextureUtils.DEPTH_MODE_AVG,
+                checkMode
+        );
+    }
+
+    private static boolean coversFullBlock(int[] bounds) {
+        return bounds[0] == 0 && bounds[2] == 0
+                && bounds[1] == ForgeModelAtlasLayout.MODEL_TEXTURE_SIZE - 1
+                && bounds[3] == ForgeModelAtlasLayout.MODEL_TEXTURE_SIZE - 1;
     }
 
     private static long buildVoxyMetadata(
@@ -891,26 +909,20 @@ final class ForgeOriginalVoxyModelFactory {
                 fullyOpaque = false;
                 continue;
             }
-            int faceData = upload.faceDataWord();
-            int minU = faceData & 0xF;
-            int maxU = (faceData >>> 4) & 0xF;
-            int minV = (faceData >>> 8) & 0xF;
-            int maxV = (faceData >>> 12) & 0xF;
-            int depth = (faceData >>> 16) & 0x3F;
-            int area = Math.max(1, (maxU - minU + 1) * (maxV - minV + 1));
-            boolean faceCoversFullBlock = minU == 0 && maxU == 15 && minV == 0 && maxV == 15;
+            float depth = upload.depth();
+            boolean faceCoversFullBlock = upload.faceCoversFullBlock();
             boolean occludesFace = layer != ForgeCpuMeshLayer.TRANSLUCENT
-                    && depth < 7
+                    && depth < 0.1F
                     && ((float) upload.writtenPixels() / (float) (ForgeModelAtlasLayout.MODEL_TEXTURE_SIZE * ForgeModelAtlasLayout.MODEL_TEXTURE_SIZE)) > 0.9F;
-            boolean canBeOccluded = depth < 20;
-            boolean selfLighting = depth > 1 || translucent;
+            boolean canBeOccluded = depth < 0.3F;
+            boolean selfLighting = depth > 0.01F || translucent;
             long faceMetadata = 0L;
             faceMetadata |= occludesFace ? 1L : 0L;
             faceMetadata |= faceCoversFullBlock ? 2L : 0L;
             faceMetadata |= canBeOccluded ? 4L : 0L;
             faceMetadata |= selfLighting ? 8L : 0L;
             metadata |= faceMetadata;
-            fullyOpaque &= occludesFace && area == 256;
+            fullyOpaque &= occludesFace;
         }
         long global = 0L;
         global |= biomeColourDependent || hasTint ? 1L : 0L;
@@ -920,9 +932,42 @@ final class ForgeOriginalVoxyModelFactory {
         global |= isFluid ? 16L : 0L;
         global |= cullsSame ? 32L : 0L;
         global |= fullyOpaque ? 64L : 0L;
-        global |= ((long) clampInt(state.getLightEmission(), 0, 15)) << 7;
+        global |= ((long) getBlockLightEmission(state)) << 7;
         metadata |= global << (8 * ForgeModelAtlasLayout.FACE_COUNT);
         return metadata;
+    }
+
+    private static int getBlockLightEmission(BlockState state) {
+        boolean isEmissive = state.emissiveRendering(new BlockGetter() {
+            @Override
+            public @Nullable BlockEntity getBlockEntity(BlockPos pos) {
+                return null;
+            }
+
+            @Override
+            public BlockState getBlockState(BlockPos pos) {
+                return state;
+            }
+
+            @Override
+            public FluidState getFluidState(BlockPos pos) {
+                return state.getFluidState();
+            }
+
+            @Override
+            public int getHeight() {
+                return 0;
+            }
+
+            @Override
+            public int getMinBuildHeight() {
+                return 0;
+            }
+        }, BlockPos.ZERO);
+        if (isEmissive) {
+            return 15;
+        }
+        return clampInt(state.getLightEmission(), 0, 15);
     }
 
     private static boolean needsDoubleSidedQuads(FaceUpload[] faces) {
@@ -969,9 +1014,9 @@ final class ForgeOriginalVoxyModelFactory {
     private record BiomeModel(int modelId, BlockState state, int tintIndex) {
     }
 
-    private record FaceUpload(int faceIndex, String direction, byte[] pixels, String checksum, int faceDataWord, int writtenPixels) {
+    private record FaceUpload(int faceIndex, String direction, byte[] pixels, String checksum, int faceDataWord, int writtenPixels, float depth, boolean faceCoversFullBlock) {
         static FaceUpload empty(int faceIndex, String direction) {
-            return new FaceUpload(faceIndex, direction, EMPTY_FACE_PIXELS.clone(), ForgeModelAtlasPixelSample.checksum(EMPTY_FACE_PIXELS), -1, 0);
+            return new FaceUpload(faceIndex, direction, EMPTY_FACE_PIXELS.clone(), ForgeModelAtlasPixelSample.checksum(EMPTY_FACE_PIXELS), -1, 0, -1.0F, false);
         }
     }
 

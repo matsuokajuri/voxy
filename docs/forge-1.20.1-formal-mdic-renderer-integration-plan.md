@@ -91,25 +91,24 @@ implementation scaffolding for formal MDIC.
 4. Use the Forge-port async geometry sync to apply geometry upload and metadata
    event sets into `BasicSectionGeometryData` through original-style
    `UploadStream`, `memcpy.comp`, and `scatter.comp`.
-5. Port full `NodeManager` ownership around generated sections, replacing the
-   temporary section-id side map with original active-section/request state.
-6. Port `MDICViewport` buffers and lifecycle.
-7. Port production `cmdgen.comp` inputs and dispatch contract.
-8. Port `MDICSectionRenderer` draw setup and binding order.
-9. Bind the original `ModelStore` exactly as original Voxy expects.
-10. Only then enable controlled renderer draw.
+5. Use the Forge-port `NodeManager` / `NodeStore` / `SectionUpdateRouter` /
+   `NodeCleaner` / `GeometryCache` / `RenderDistanceTracker` ownership layer.
+6. Port original `Viewport` / `MDICViewport` / HiZ / render-list ownership.
+7. Port `HierarchicalOcclusionTraverser` request-batch production.
+8. Port production `cmdgen.comp` inputs and dispatch contract.
+9. Port `MDICSectionRenderer` draw setup and binding order.
+10. Bind the original `ModelStore` exactly as original Voxy expects.
+11. Only then enable controlled renderer draw.
 
 ## Non-negotiable blockers
 
 Do not enable formal MDIC draw while any of these are true:
 
 ```text
-AsyncNodeManager / NodeManager parity incomplete
-RenderDistanceTracker / HierarchicalOcclusionTraverser parity incomplete
-MDICViewport parity incomplete
+HierarchicalOcclusionTraverser parity incomplete
+Viewport / MDICViewport / HiZ parity incomplete
 production cmdgen.comp not wired
 original shader binding contract incomplete
-original common ServiceManager parity incomplete
 ```
 
 ## Validation

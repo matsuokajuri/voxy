@@ -142,11 +142,12 @@ vanilla vertices, so the Forge/Embeddium route reports
 The original persistent-mapped `UploadStream`, `RenderGenerationService`
 missing-model request/requeue, `RenderDataFactory`, `BuiltSection`,
 `ScanMesher2D`, `OccupancySet`, and `ModelQueries` parity pieces are now present
-in the Forge source set. `RenderGenerationService` reports
-`originalServiceManagerParityReady=false` because the original common
-`ServiceManager` pulls Fabric `commonImpl` dependencies; the Forge-local worker
-keeps the original BuildTask/requeue semantics until that thread stack is
-cleanly Forge-adapted.
+in the Forge source set. `RenderGenerationService` now reports
+`originalServiceManagerParityReady=true`: the Forge parity route includes the
+original `ServiceManager` / `Service` / `UnifiedServiceThreadPool` execution
+stack, the original service-thread target config, Embeddium builder-thread
+subtraction, and the original `SemaphoreBlockImpersonator` builder-thread
+sharing mechanism mapped onto Embeddium `ChunkJobQueue`.
 
 The original model upload route now also audits committed uploads by reading
 back the original `ModelStore` modelData, optional modelColour range, and
@@ -163,8 +164,11 @@ store with the original capacity policy, sparse-buffer behavior, and free
 lifecycle. `ForgeOriginalVoxyAsyncNodeGeometrySync` now removes the old direct
 generated-section drain path and applies geometry uploads/metadata updates
 through original-style `SyncResults`, `UploadStream`, `memcpy.comp`, and
-`scatter.comp` into `BasicSectionGeometryData`. It does not yet make the full
-`NodeManager` tree/request state machine ready.
+`scatter.comp` into `BasicSectionGeometryData`. The Forge route now has
+original-shaped `NodeManager`, `NodeStore`, `SectionUpdateRouter`,
+`NodeCleaner`, `GeometryCache`, and `RenderDistanceTracker` ownership. The
+remaining visibility producer is the original `HierarchicalOcclusionTraverser`
+with `Viewport` / `MDICViewport` / HiZ / render-list ownership.
 
 ## Required source trace
 

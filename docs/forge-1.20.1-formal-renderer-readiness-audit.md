@@ -105,6 +105,12 @@ Some bottom-path corrections are now aligned in direction:
   `BasicAsyncGeometryManager` event sets to `BasicSectionGeometryData` through
   original-style `SyncResults`, persistent `UploadStream`, `memcpy.comp`, and
   `scatter.comp` instead of immediately draining them.
+- Forge-local original-parity `NodeManager`, `NodeStore`,
+  `SectionUpdateRouter`, `NodeCleaner`, `GeometryCache`, and
+  `RenderDistanceTracker` are now wired into the active parity pipeline.
+- `RenderGenerationService` now uses original `ServiceManager` / `Service` /
+  `UnifiedServiceThreadPool` execution, including service-thread config and
+  Embeddium builder-thread semaphore sharing.
 - substitute preview/sample routes are marked deprecated.
 
 These are progress toward parity, not renderer readiness.
@@ -114,14 +120,12 @@ These are progress toward parity, not renderer readiness.
 P0 gaps:
 
 ```text
-AsyncNodeManager / NodeManager parity incomplete
-RenderDistanceTracker parity incomplete
 HierarchicalOcclusionTraverser parity incomplete
+Viewport / HiZ ownership incomplete
 MDICViewport parity incomplete
 production cmdgen.comp integration incomplete
 MDICSectionRenderer parity incomplete
 VoxyRenderSystem lifecycle parity incomplete
-original common ServiceManager parity incomplete
 ```
 
 P1 gaps:

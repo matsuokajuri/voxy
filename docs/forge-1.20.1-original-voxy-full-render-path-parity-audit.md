@@ -89,7 +89,7 @@ VoxyRenderSystem
 | Model lifecycle | safe-set upload does not match original on-demand model request/requeue | Port `ModelBakerySubsystem` and `ModelFactory` lifecycle |
 | Geometry generation | temporary rewrites / CPU mesh conversion are not original `RenderDataFactory` | Complete `RenderDataFactory` parity from `WorldSection` raw data |
 | Geometry ownership | Forge debug/simple heap paths are not original `BasicAsyncGeometryManager` | Port allocation, 128-record alignment, section id reuse, upload/free lifecycle |
-| Visibility | radius/frustum/preview snapshots are not original traversal | Port `RenderDistanceTracker` and `HierarchicalOcclusionTraverser` |
+| Visibility | radius/frustum/preview snapshots are not original traversal | `RenderDistanceTracker` is now Forge-ported; next correction is the original `HierarchicalOcclusionTraverser` with its `Viewport` / HiZ / render-list dependencies |
 | Command generation | validation compute shaders are not production `cmdgen.comp` | Wire original `cmdgen.comp` inputs/outputs |
 | Draw owner | visible preview owner is not `MDICSectionRenderer` | Port `MDICViewport` and `MDICSectionRenderer` ownership |
 | Shader semantics | adapter/subset shader is not full original terrain shader contract | Port original shader inputs and semantics |
@@ -102,6 +102,9 @@ These are directionally correct but not complete readiness:
 - Forge-local `ForgeModelQueries` exists.
 - formal direct section geometry is moving toward `RenderDataFactory`-style
   `WorldSection` raw-data generation.
+- Forge-local original-shaped `NodeManager`, `NodeStore`,
+  `SectionUpdateRouter`, `GeometryCache`, `NodeCleaner`, and
+  `RenderDistanceTracker` are now wired into the parity pipeline.
 - sample/preview/synthetic routes are explicitly deprecated.
 - `ForgeOriginalVoxyModelPipeline` now owns the first L0/L1 parity boundary:
   it starts from the active `WorldEngine`, queues existing mapper biomes,
@@ -156,6 +159,26 @@ ForgeOriginalVoxyRenderGenerationService
  -> task requeue
 ```
 
+The service execution owner now also follows the original Voxy threading
+boundary instead of a Forge-local executor substitute:
+
+```text
+ForgeOriginalVoxyModelPipeline
+ -> instance-lifetime UnifiedServiceThreadPool
+ -> original ServiceManager / Service execution
+ -> original serviceThreads config target
+ -> Embeddium builder thread subtraction
+ -> Embeddium ChunkJobQueue semaphore block sharing
+```
+
+Original Voxy performs the builder-thread sharing in
+`MixinChunkJobQueue` by replacing Sodium's `ChunkJobQueue` semaphore with
+`SemaphoreBlockImpersonator(instance.getThreadPool().groupSemaphore.createBlock())`.
+The Forge port mirrors that mechanism against Embeddium's equivalent
+`me.jellysquid.mods.sodium.client.render.chunk.compile.executor.ChunkJobQueue`.
+This is a frontend package mapping from Sodium to Embeddium, not a new
+scheduler.
+
 `ForgeOriginalVoxyRenderDataFactory` is a Forge-local port of original
 `RenderDataFactory`, including its raw `WorldSection` scan, opaque/non-opaque
 bucket emission, fluid lookup path, neighbor face acquisition, greedy
@@ -189,24 +212,143 @@ driver memory-release wait during free
 ```
 
 `ForgeOriginalVoxyAsyncNodeGeometrySync` now ports the original
-`AsyncNodeManager` geometry result sync shape for the active parity route:
+`AsyncNodeManager` geometry result sync shape for the active parity route and
+routes generated sections through a Forge-package port of the original
+`NodeManager` / `NodeStore` / `SectionUpdateRouter` ownership path:
 
 ```text
-RenderGenerationService result consumer
+top-level node request
+ -> original-shaped NodeManager active section ownership
+ -> SectionUpdateRouter watch / forwardEvent / triggerRemesh
+ -> SingleNodeRequest / NodeChildRequest
+ -> leaf-to-inner node transition
+ -> inner-node child compaction and child pointer remap
+ -> RenderGenerationService initial mesh task
+ -> RenderGenerationService result consumer
+ -> child existence update queue
+ -> request batch / remove batch entry points
  -> async geometry result queue
  -> BasicAsyncGeometryManager event sets
+ -> NodeStore node update writes
+ -> top-level node id callback deltas
+ -> cleaner reset/clear operation deltas
  -> SyncResults / ComputeMemoryCopy
  -> UploadStream staging
  -> util/memcpy.comp geometry copy
- -> util/scatter.comp metadata writes
+ -> util/scatter.comp nodeBuffer + metadataBuffer writes
  -> BasicSectionGeometryData
 ```
 
 This removes the previous direct generated-section bridge that immediately
-drained pending event sets. The remaining missing part is the full original
-`NodeManager` tree/request/child-update state machine around those geometry
-events, so this is still not draw readiness:
-`originalNodeManagerParityReady=false` remains reported.
+drained pending event sets and removes the temporary section-id side map that
+bypassed `NodeManager` ownership. The scatter path now uses separate node-data
+and section-metadata outputs like original Voxy instead of aliasing both
+scatter outputs to the metadata buffer.
+
+The remaining missing part is no longer the `NodeManager` ownership state
+machine itself, and the render-side cleaner owner is now present. The Forge
+route ports original `NodeCleaner` ownership and wires cleaner reset/free
+deltas through:
+
+```text
+NodeManager cleaner operations
+ -> NodeCleaner batch visibility-set compute
+ -> visibility buffer
+ -> sort_visibility.comp parity shader
+ -> result_transformer.comp parity shader
+ -> DownloadStream readback
+ -> AsyncNodeManager remove batch
+ -> NodeManager.removeNodeGeometry()
+```
+
+The Forge route now includes a package-local port of original `GeometryCache`,
+original `RingTracker`, and original `RenderDistanceTracker`:
+
+```text
+Minecraft camera position
+ -> RenderDistanceTracker.setCenterAndProcess()
+ -> RingTracker top-level section add/remove ring
+ -> AsyncNodeManager.addTopLevel/removeTopLevel
+ -> NodeManager.insertTopLevelNode/removeTopLevelNode
+```
+
+`GeometryCache` is also wired like original Voxy:
+
+```text
+SectionUpdateRouter initial render callback
+ -> geometryCache.remove(pos)
+ -> cached geometry goes directly to submitGeometryResult()
+ -> missing cached geometry queues RenderGenerationService.enqueueTask(pos)
+
+world dirty callback
+ -> geometryCache.clear(section.key)
+ -> SectionUpdateRouter.forwardEvent(...)
+ -> neighbor triggerRemesh(...)
+```
+
+`originalNodeManagerParityReady=true` is limited to the Forge-local
+`NodeManager` / `NodeStore` / `SectionUpdateRouter` / `NodeCleaner` /
+`GeometryCache` / `RenderDistanceTracker` ownership layers and does not imply
+formal renderer readiness.
+
+Forge mapping differences are limited to source-set and platform names: the
+original `RingTracker` lives under excluded `client/core` source, so it is
+copied into the Forge package with the same algorithm; Forge official mappings
+use `getMinBuildHeight()` / `getMaxBuildHeight()` instead of the original
+`getMinSectionY()` / `getMaxSectionY()` calls; the original
+`VoxyConfig.CONFIG.sectionRenderDistance` / `subDivisionSize` values are now
+represented by Forge config entries `originalVoxySectionRenderDistance` and
+`originalVoxySubDivisionSize`. This preserves the original owner semantics
+inside the Forge config system instead of hard-coding the default values.
+
+Follow-up review found and corrected two local divergences in this layer:
+
+```text
+workCounter negative handling
+ -> reverted from a Forge-local clamp-to-zero back to original wait/log behavior
+
+pipeline cleanup order
+ -> detach world/mapper callbacks
+ -> stop AsyncNodeManager
+ -> shutdown render generation / model factory
+ -> free NodeCleaner / geometry / store
+```
+
+The remaining node producer gap is now narrowed to HiZ-backed execution of the
+original `HierarchicalOcclusionTraverser`. It is not a CPU candidate snapshot
+and must not be replaced by the historical K-stage `ForgeFormalVisibilityOwner`.
+Forge now has a Forge-package port of the original HOC owner, shader import
+loader, top-level node mapping, request queue buffer, node buffer ownership,
+and request-batch download path. Original Voxy's HOC consumes and owns:
+
+```text
+MDICViewport / Viewport
+ -> HiZBuffer depth pyramid
+ -> indirectLookup render-list buffer
+ -> NodeCleaner visibility buffer
+ -> AsyncNodeManager node buffer
+ -> traversal_dev.comp with queue/node/screenspace/frustum imports
+ -> request buffer download
+ -> AsyncNodeManager.submitRequestBatch()
+```
+
+The current Forge parity route now owns the original MDIC viewport-side buffers
+(`drawCountCallBuffer`, `drawCallBuffer`, `positionScratchBuffer`,
+`indirectLookupBuffer`, and `visibilityBuffer`) and includes the original
+shader resources in the Forge build path. The status deliberately separates:
+
+```text
+originalHierarchicalOcclusionTraverserOwnerReady
+originalMdicViewportOwnerReady
+originalHizOwnerReady
+originalHizTraversalExecutableReady
+```
+
+`originalHierarchicalOcclusionTraverserReady` must remain false until the
+Forge path also ports the original `HiZBuffer` / depth framebuffer update and
+can execute `traversal_dev.comp` with a real depth pyramid. A CPU
+radius/frustum list or debug planner would be a route deviation and is not
+accepted as HOC parity.
 
 The model bake data path has been corrected away from the K-era `FaceTexture`
 formal-preview shape and back toward the original Voxy model texture contract:
@@ -227,6 +369,23 @@ operate on that record instead of the historical `FaceTexture` substitute.
 `ForgeOriginalVoxyModelFactory` now dedupes, computes metadata, builds
 `faceData`, computes tint, and generates the mip-chain from
 `ForgeOriginalVoxyColourDepthTextureData[]`.
+
+Follow-up parity review corrected three low-level model metadata divergences:
+
+```text
+modelId=0
+ -> now enters through addEntry(0), matching original ModelFactory startup
+ -> no hand-reserved Forge-only model-zero shortcut
+
+block emission metadata
+ -> now checks BlockState.emissiveRendering(...) before vanilla light emission
+ -> matches original emissive flag semantics instead of getLightEmission-only
+
+face depth metadata
+ -> now uses the software-bakery float depth value for original thresholds
+ -> occludes depth < 0.1, canBeOccluded depth < 0.3, selfLighting depth > 0.01
+ -> no longer reconstructs thresholds from encoded faceData depth
+```
 
 `ForgeOriginalVoxyTextureUtils.mipColours()` now uses a Forge-local port of
 Embeddium/Sodium's fast-srgb8 `ColorSRGB` table implementation, matching the
@@ -357,8 +516,10 @@ world/storage utilities.
 
 That means the Forge route must port/adapt original mechanisms under
 `me.cortex.voxy.forge` instead of directly importing the original client-core
-classes. Direct import of `ModelBakerySubsystem` was tested and rejected by
-`compileJava` because the package is outside the active source set.
+classes. Direct imports of original client-core classes such as
+`ModelBakerySubsystem` and `NodeManager` were tested and rejected by
+`compileJava` because those packages are outside the active source set and pull
+Fabric-side/frontend dependencies when compiled directly.
 
 This is not a license to substitute behavior. The Forge implementation must
 still match original ownership, data layout, lifecycle, and performance
@@ -368,15 +529,12 @@ semantics.
 
 1. Keep removing historical `ForgeFormalModelStore` references from preview
    code; the original model pipeline now uses `ForgeOriginalVoxyModelStore`.
-2. Port full `NodeManager` ownership around the current async geometry sync:
-   `NodeStore`, single/child requests, watcher routing, mesh replacement, and
-   top-level node id callbacks.
-3. Replace the temporary section-id side map inside the async geometry sync
-   with original `NodeManager` active-section ownership.
-4. Port `RenderDistanceTracker` and `HierarchicalOcclusionTraverser`.
-5. Port `MDICViewport` and production `cmdgen.comp`.
-6. Port `MDICSectionRenderer` and original terrain shader binding order.
-7. Port `VoxyRenderSystem` lifecycle only after the lower owners match.
+2. Port original `Viewport` / `MDICViewport` / HiZ / render-list ownership
+   required by `HierarchicalOcclusionTraverser`.
+3. Port `HierarchicalOcclusionTraverser`, including original
+   `traversal_dev.comp` request batch production into `AsyncNodeManager`.
+4. Port production `cmdgen.comp` and `MDICSectionRenderer`.
+5. Port `VoxyRenderSystem` lifecycle only after the lower owners match.
 
 ## Current documented Forge deviations
 
@@ -385,9 +543,16 @@ semantics.
 | `StairBlock.baseState` access | original source accesses the field directly; Forge 1.20.1 exposes it as private at compile time | Forge port uses a cached reflective field read to preserve original normalization semantics |
 | `UploadStream` persistent staging | original upload path depends on `GlPersistentMappedBuffer`, `GlFence`, `GlBuffer`, and `AllocationArena` from the original client-core GL stack | Forge now ports this as `ForgeOriginalVoxyUploadStream`: persistent mapped staging buffer, `AllocationArena`, frame fences, explicit flush/copy/commit. The singleton is lazy-created on the render thread to respect Forge GL-context timing. |
 | `TextureUtils` ColorSRGB path | original Voxy imports Sodium `ColorSRGB`; Forge runtime prerequisite is Embeddium, whose reference source keeps the same fast-srgb8 table under a moved package | Forge now ports that fast-srgb8 table locally and `textureUtilsByteForByteAuditReady=true` is reported when the table/mip sample audit passes. The 1.20.1 `ARGB` class name is unavailable, so alpha uses the same table helper as a documented mapping adaptation. |
-| `RenderGenerationService` request/requeue | original request/requeue depends on `RenderDataFactory.generateMesh()` throwing `IdNotYetComputedException` from real section generation | Forge now ports BuildTask priority, held-section retention, inner/outer missing-model scans, `requestBlockBake`, and requeue. Direct Fabric `ServiceManager` import is blocked by Fabric `commonImpl` dependencies, so a Forge-local worker carries the same task semantics; `originalServiceManagerParityReady=false` remains reported until the common thread stack is cleanly Forge-adapted. |
+| `RenderGenerationService` request/requeue | original request/requeue depends on `RenderDataFactory.generateMesh()` throwing `IdNotYetComputedException` from real section generation and on `ServiceManager.createService(...)` for worker execution | Fixed for the Forge parity route: `ForgeOriginalVoxyRenderGenerationService` now registers with original `ServiceManager` / `Service` / `UnifiedServiceThreadPool`, creates per-thread `RenderDataFactory` and missed-model sets through the service context supplier, uses `service.execute()` for enqueue/requeue, and drains/shuts down service permits in the original order. `originalServiceManagerParityReady=true` is now reported for this service stack. |
+| Service thread count / builder-thread sharing | original `VoxyClientInstance.updateDedicatedThreads()` subtracts Sodium chunk-builder threads, and original `MixinChunkJobQueue` lets Sodium builder workers share Voxy service jobs through `SemaphoreBlockImpersonator` | Fixed for the Forge/Embeddium route: `originalVoxyServiceThreads` mirrors the original `serviceThreads` target default, `originalVoxyUseEmbeddiumBuilderThreads` mirrors the original "Use sodium threads" option, `ForgeOriginalVoxyServiceThreadPolicy` subtracts Embeddium `ChunkBuilder.getTotalThreadCount()`, and `ForgeOriginalVoxyEmbeddiumChunkJobQueueMixin` replaces Embeddium `ChunkJobQueue`'s semaphore with the original `SemaphoreBlockImpersonator` / `groupSemaphore.createBlock()` mechanism. |
+| Service thread frontend access | original Voxy compiles against Sodium and uses a Sodium accessor mixin for `SodiumWorldRenderer.renderSectionManager`; Forge must target Embeddium without compiling its internals into this source set | Forge queries Embeddium's equivalent `SodiumWorldRenderer.instanceNullable()`, private `renderSectionManager`, `RenderSectionManager.getBuilder()`, and `ChunkBuilder.getTotalThreadCount()` reflectively. This preserves the original ownership/data source while avoiding a hard compile-time dependency on Embeddium internals inside the Forge source set. |
+| `CpuLayout` default thread count | original Voxy's `CpuLayout` uses platform affinity helpers from the original LWJGL/JNA stack; the Forge 1.20.1 classpath lacks the same `org.lwjgl.system.windows.Kernel32` API | Forge uses OSHI physical core count and the same fallback-to-available-processors behavior to preserve the original `serviceThreads = max(coreCount / 1.5, 1)` default. This is a platform adapter, not a scheduler fallback. |
+| `common.Logger` client HUD branch | original common logger checks Fabric `VoxyCommon.IS_IN_MINECRAFT` / `IS_DEDICATED_SERVER`; pulling Fabric `commonImpl` into the Forge source set would reintroduce platform code that cannot compile here | Forge keeps the original logger API for the imported thread stack and adapts only the platform guard to `Minecraft.getInstance() != null` before posting client HUD messages. |
 | `RenderDataFactory` Java version helpers | original source uses `Integer.expand` / `Long.expand`, unavailable in Java 17 | Forge uses local equivalent bit-expansion helpers with the same mask/value semantics. |
-| `BasicAsyncGeometryManager` result consumption before full `NodeManager` parity | original Voxy routes render-generation results through `AsyncNodeManager` / `NodeManager`, which owns request state and mesh id replacement | Forge now ports the geometry-result queue, `SyncResults`, `ComputeMemoryCopy`, `UploadStream`, `memcpy.comp`, and `scatter.comp` path into `BasicSectionGeometryData`, but still uses a temporary section-id side map until the full original `NodeManager` state machine is ported. `originalNodeManagerParityReady=false` remains reported. |
+| `AsyncNodeManager` render-side traversal producers | original Voxy receives top-level node adds/removes from `RenderDistanceTracker`, and request batches from `HierarchicalOcclusionTraverser` | Forge now ports the geometry-result queue, `SyncResults`, `ComputeMemoryCopy`, `UploadStream`, `DownloadStream`, `memcpy.comp`, `scatter.comp`, `SectionUpdateRouter`, `SingleNodeRequest`, `NodeChildRequest`, leaf-to-inner transitions, inner-node compaction, top-level node id deltas, cleaner reset/clear deltas, request batch entry points, remove batch entry points, render-side `NodeCleaner`, `GeometryCache`, `RenderDistanceTracker`, and the HOC owner/request-buffer path. `originalNodeManagerParityReady=true` is limited to this ownership layer. `originalHierarchicalOcclusionTraverserOwnerReady=true` does not imply HiZ traversal execution until `originalHizTraversalExecutableReady=true`. |
+| `AsyncNodeManager` GeometryCache | original Voxy has a CPU-side `GeometryCache` inside `AsyncNodeManager`; initial render generation first tries `geometryCache.remove(pos)`, and dirty world events clear cached geometry for the changed section | Fixed for the Forge parity route: `ForgeOriginalVoxyGeometryCache` mirrors original cache semantics, initial render callbacks consume cached geometry before queueing render generation, and world dirty callbacks clear stale cached geometry before forwarding router/remesh events. |
+| `RenderDistanceTracker` | original Voxy uses `RingTracker` to feed top-level LoD node add/remove events into `AsyncNodeManager` | Fixed for the Forge parity route: `ForgeOriginalVoxyRingTracker` and `ForgeOriginalVoxyRenderDistanceTracker` mirror the original algorithm and feed `AsyncNodeManager.addTopLevel/removeTopLevel`; render distance is now sourced from `originalVoxySectionRenderDistance`, the Forge config equivalent of original `VoxyConfig.CONFIG.sectionRenderDistance`. |
+| `HierarchicalOcclusionTraverser` | original Voxy uses GPU HiZ traversal to produce render-list entries and node request batches | Partially fixed for the Forge parity route: `ForgeOriginalVoxyHierarchicalOcclusionTraverser` ports the original request buffer, node buffer ownership, top-node GPU list, queue metadata, scratch queues, shader import loading, `traversal_dev.comp` compile path, render-list binding contract, and request download into `AsyncNodeManager.submitRequestBatch()`. `ForgeOriginalVoxyMdicViewport` ports the original MDIC viewport buffer ownership. Remaining blocker: original `HiZBuffer` / depth framebuffer update is not yet ported into the Forge route, so `originalHizOwnerReady=false` and `originalHierarchicalOcclusionTraverserReady=false` remain honest until real HiZ-backed traversal can execute. Historical CPU candidate snapshots/debug planners remain explicitly unacceptable as parity. |
 | `SoftwareModelTextureBakery` model collection and dark-cutout metadata | Forge 1.20.1 lacks the newer original `BlockStateModelPart` and public `BakedQuad.materialInfo()` API, but Embeddium injects the equivalent `BakedQuadView` and sprite transparency data used by its own chunk mesher | fixed for the active Forge/Embeddium route: `originalSoftwareModelTextureBakeryUsed=true`; the adaptation is constrained to Embeddium source-equivalent material and transparency signals |
 | `ModelStore` ownership and audit | fixed: the original model pipeline now owns `ForgeOriginalVoxyModelStore` instead of historical `ForgeFormalModelStore`; uploads use original-style `MemoryBuffer` results, persistent `UploadStream`, DSA texture mip uploads, and post-commit readback audit for modelData/modelColour/atlas mip-chain regions | `originalModelStoreUsed=true` is reported when the owner is built; `originalModelStoreReadbackAuditReady=true` is reported after a committed upload readback matches the CPU payload |
 | Iris/Oculus custom block-state ids | original Voxy receives `WorldRenderingSettings.INSTANCE.getBlockStateIds()` from the Iris pipeline; Forge cannot compile against Oculus source directly in this source set | Forge reads the same Oculus singleton through `ForgeOculusWorldRenderingSettingsBridge`; null maps write custom id zero, matching original behavior |
@@ -411,7 +576,9 @@ adapter shader as production terrain shader
 Continue with bottom-up parity:
 
 ```text
-port NodeStore / SingleNodeRequest / NodeChildRequest / NodeManager ownership
- -> replace temporary section-id map in async geometry sync
- -> replace remaining direct/debug geometry ownership with original Voxy geometry owners
+port original HiZBuffer / DepthFramebuffer update into Forge route
+ -> execute HierarchicalOcclusionTraverser traversal_dev.comp with real HiZ
+ -> verify request batches enter ForgeOriginalVoxyAsyncNodeGeometrySync
+ -> port production cmdgen.comp and MDICSectionRenderer
+ -> then restore VoxyRenderSystem lifecycle around the completed owners
 ```

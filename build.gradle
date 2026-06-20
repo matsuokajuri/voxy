@@ -31,6 +31,9 @@ sourceSets {
             include 'me/cortex/voxy/common/util/UnsafeUtil.java'
             include 'me/cortex/voxy/common/util/MemoryBuffer.java'
             include 'me/cortex/voxy/common/util/ThreadLocalMemoryBuffer.java'
+            include 'me/cortex/voxy/common/Logger.java'
+            include 'me/cortex/voxy/common/thread/**'
+            include 'me/cortex/voxy/client/compat/SemaphoreBlockImpersonator.java'
             include 'me/cortex/voxy/common/voxelization/VoxelizedSection.java'
             include 'me/cortex/voxy/common/voxelization/ILightingSupplier.java'
             include 'me/cortex/voxy/common/voxelization/WorldConversionFactory.java'
@@ -53,7 +56,9 @@ sourceSets {
         }
         resources {
             include 'META-INF/mods.toml'
+            include 'voxy.forge.mixins.json'
             include 'pack.mcmeta'
+            include 'assets/voxy/shaders/**'
         }
     }
 }

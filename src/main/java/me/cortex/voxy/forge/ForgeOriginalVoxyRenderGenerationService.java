@@ -2,13 +2,15 @@ package me.cortex.voxy.forge;
 
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
+import me.cortex.voxy.common.thread.Service;
+import me.cortex.voxy.common.thread.ServiceManager;
+import me.cortex.voxy.common.util.Pair;
 import me.cortex.voxy.common.world.WorldEngine;
 import me.cortex.voxy.common.world.WorldSection;
 import me.cortex.voxy.common.world.other.Mapper;
 
 import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.locks.LockSupport;
 import java.util.concurrent.locks.StampedLock;
 import java.util.function.Consumer;
 
@@ -49,10 +51,8 @@ final class ForgeOriginalVoxyRenderGenerationService {
     private final ForgeOriginalVoxyModelPipeline modelPipeline;
     private final ForgeOriginalVoxyModelFactory modelFactory;
     private final boolean emitMeshlets;
+    private final Service service;
     private Consumer<ForgeOriginalVoxyBuiltSection> resultConsumer;
-    private volatile boolean running = true;
-    private volatile Throwable workerException;
-    private Thread workerThread;
     private long enqueuedTaskCount;
     private long processedTaskCount;
     private long completedMeshCount;
@@ -71,12 +71,20 @@ final class ForgeOriginalVoxyRenderGenerationService {
             WorldEngine world,
             ForgeOriginalVoxyModelPipeline modelPipeline,
             ForgeOriginalVoxyModelFactory modelFactory,
+            ServiceManager serviceManager,
             boolean emitMeshlets) {
         this.world = world;
         this.modelPipeline = modelPipeline;
         this.modelFactory = modelFactory;
         this.emitMeshlets = emitMeshlets;
-        this.startWorker();
+        this.service = serviceManager.createService(() -> {
+            ForgeOriginalVoxyRenderDataFactory factory = new ForgeOriginalVoxyRenderDataFactory(
+                    this.world,
+                    this.modelFactory,
+                    this.emitMeshlets);
+            IntOpenHashSet seenMissedIds = new IntOpenHashSet(128);
+            return new Pair<>(() -> this.processJob(factory, seenMissedIds), factory::free);
+        }, 10, "Section mesh generation service");
     }
 
     void setResultConsumer(Consumer<ForgeOriginalVoxyBuiltSection> consumer) {
@@ -84,7 +92,7 @@ final class ForgeOriginalVoxyRenderGenerationService {
     }
 
     void enqueueTask(long pos) {
-        if (!this.running) {
+        if (!this.service.isLive()) {
             return;
         }
         boolean[] isOurs = new boolean[1];
@@ -106,22 +114,18 @@ final class ForgeOriginalVoxyRenderGenerationService {
             this.enqueuedTaskCount++;
             this.lastTaskPosition = pos;
             this.lastLifecycleEvent = "enqueue-task";
-            this.unparkWorker();
+            this.service.execute();
         }
     }
 
     ForgeOriginalVoxyRenderGenerationStats createStatusSnapshot() {
-        Throwable exception = this.workerException;
-        String failure = exception == null
-                ? this.lastFailureReason
-                : "render-generation-worker-" + exception.getClass().getSimpleName() + ":" + exception.getMessage();
         return new ForgeOriginalVoxyRenderGenerationStats(
-                this.running && this.workerThread != null && this.workerThread.isAlive() && exception == null,
+                this.service.isLive(),
                 true,
                 true,
                 true,
                 true,
-                false,
+                true,
                 this.taskQueueCount.get(),
                 this.taskMapSize(),
                 this.holdingSectionCount.get(),
@@ -137,56 +141,43 @@ final class ForgeOriginalVoxyRenderGenerationService {
                 this.failedMeshCount,
                 this.lastTaskPosition,
                 this.lastLifecycleEvent,
-                failure
+                this.lastFailureReason
         );
     }
 
+    int taskQueueCount() {
+        return this.taskQueueCount.get();
+    }
+
     void shutdown() {
-        this.running = false;
-        this.unparkWorker();
-        Thread thread = this.workerThread;
-        this.workerThread = null;
-        if (thread != null) {
+        while (this.service.numJobs() != 0) {
+            int taskCount = this.service.drain();
+            if (taskCount == 0) {
+                break;
+            }
+            long stamp = this.taskMapLock.writeLock();
             try {
-                thread.join();
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                this.recordFailure("render-generation-worker-join-interrupted");
-            }
-        }
-        this.drainQueuedTasks();
-        this.lastLifecycleEvent = "shutdown";
-    }
-
-    private void startWorker() {
-        Thread thread = new Thread(this::workerMain, "Section mesh generation service");
-        thread.setUncaughtExceptionHandler((t, e) -> {
-            this.workerException = e == null ? new RuntimeException("unhandled-render-generation-exception") : e;
-            this.running = false;
-        });
-        this.workerThread = thread;
-        thread.start();
-    }
-
-    private void workerMain() {
-        ForgeOriginalVoxyRenderDataFactory factory = new ForgeOriginalVoxyRenderDataFactory(
-                this.world,
-                this.modelFactory,
-                this.emitMeshlets);
-        IntOpenHashSet seenMissedIds = new IntOpenHashSet(128);
-        try {
-            while (this.running) {
-                BuildTask task = this.taskQueue.poll();
-                if (task == null) {
-                    LockSupport.park();
-                    continue;
+                for (int i = 0; i < taskCount; i++) {
+                    BuildTask task = this.taskQueue.remove();
+                    if (task.section != null) {
+                        task.section.release();
+                        this.holdingSectionCount.decrementAndGet();
+                    }
+                    if (this.taskMap.remove(task.position) != task) {
+                        throw new IllegalStateException("render-generation-task-map-mismatch");
+                    }
                 }
-                this.taskQueueCount.decrementAndGet();
-                this.processJob(factory, seenMissedIds, task);
+                this.taskQueueCount.addAndGet(-taskCount);
+            } finally {
+                this.taskMapLock.unlockWrite(stamp);
             }
-        } finally {
-            factory.free();
         }
+        this.service.shutdown();
+        this.drainQueuedTasks();
+        if (this.taskQueueCount.get() != 0) {
+            throw new IllegalStateException("render-generation-task-queue-count-mismatch");
+        }
+        this.lastLifecycleEvent = "shutdown";
     }
 
     private void computeAndRequestRequiredModels(IntOpenHashSet seenMissedIds, int bitMsk, long[] auxData) {
@@ -222,8 +213,9 @@ final class ForgeOriginalVoxyRenderGenerationService {
 
     private void processJob(
             ForgeOriginalVoxyRenderDataFactory factory,
-            IntOpenHashSet seenMissedIds,
-            BuildTask task) {
+            IntOpenHashSet seenMissedIds) {
+        BuildTask task = this.taskQueue.poll();
+        this.taskQueueCount.decrementAndGet();
         this.processedTaskCount++;
         this.lastTaskPosition = task.position;
         boolean shouldFreeSection = true;
@@ -333,7 +325,9 @@ final class ForgeOriginalVoxyRenderGenerationService {
         this.taskQueueCount.incrementAndGet();
         this.requeueCount++;
         this.lastLifecycleEvent = "model-miss-requeue";
-        this.unparkWorker();
+        if (this.service.isLive()) {
+            this.service.execute();
+        }
         return currentTask;
     }
 
@@ -367,10 +361,7 @@ final class ForgeOriginalVoxyRenderGenerationService {
 
     private void drainQueuedTasks() {
         while (!this.taskQueue.isEmpty()) {
-            BuildTask task = this.taskQueue.poll();
-            if (task == null) {
-                break;
-            }
+            BuildTask task = this.taskQueue.remove();
             this.taskQueueCount.decrementAndGet();
             if (task.section != null) {
                 task.section.release();
@@ -379,7 +370,9 @@ final class ForgeOriginalVoxyRenderGenerationService {
             }
             long stamp = this.taskMapLock.writeLock();
             try {
-                this.taskMap.remove(task.position);
+                if (this.taskMap.remove(task.position) != task) {
+                    throw new IllegalStateException("render-generation-task-map-mismatch");
+                }
             } finally {
                 this.taskMapLock.unlockWrite(stamp);
             }
@@ -392,13 +385,6 @@ final class ForgeOriginalVoxyRenderGenerationService {
             return this.taskMap.size();
         } finally {
             this.taskMapLock.unlockRead(stamp);
-        }
-    }
-
-    private void unparkWorker() {
-        Thread thread = this.workerThread;
-        if (thread != null) {
-            LockSupport.unpark(thread);
         }
     }
 

@@ -1,12 +1,15 @@
 package me.cortex.voxy.forge;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import it.unimi.dsi.fastutil.ints.IntConsumer;
 import it.unimi.dsi.fastutil.ints.Int2IntOpenHashMap;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
-import it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap;
+import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import me.cortex.voxy.common.util.AllocationArena;
 import me.cortex.voxy.common.util.MemoryBuffer;
+import me.cortex.voxy.common.world.WorldEngine;
+import me.cortex.voxy.common.world.WorldSection;
 import org.lwjgl.system.MemoryUtil;
 
 import java.util.concurrent.ConcurrentLinkedDeque;
@@ -15,6 +18,8 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.LockSupport;
 
 import static org.lwjgl.opengl.GL11C.GL_FALSE;
+import static org.lwjgl.opengl.GL11C.GL_UNSIGNED_INT;
+import static org.lwjgl.opengl.GL15C.glDeleteBuffers;
 import static org.lwjgl.opengl.GL20C.GL_COMPILE_STATUS;
 import static org.lwjgl.opengl.GL20C.GL_LINK_STATUS;
 import static org.lwjgl.opengl.GL20C.glAttachShader;
@@ -33,22 +38,40 @@ import static org.lwjgl.opengl.GL20C.glUseProgram;
 import static org.lwjgl.opengl.GL30C.glBindBufferBase;
 import static org.lwjgl.opengl.GL30C.glBindBufferRange;
 import static org.lwjgl.opengl.GL30C.glUniform1ui;
+import static org.lwjgl.opengl.GL30C.GL_R32UI;
+import static org.lwjgl.opengl.GL30C.GL_RED_INTEGER;
 import static org.lwjgl.opengl.GL42C.GL_UNIFORM_BARRIER_BIT;
 import static org.lwjgl.opengl.GL42C.glMemoryBarrier;
 import static org.lwjgl.opengl.GL43C.GL_COMPUTE_SHADER;
 import static org.lwjgl.opengl.GL43C.GL_SHADER_STORAGE_BARRIER_BIT;
 import static org.lwjgl.opengl.GL43C.GL_SHADER_STORAGE_BUFFER;
 import static org.lwjgl.opengl.GL43C.glDispatchCompute;
+import static org.lwjgl.opengl.GL45C.glCreateBuffers;
+import static org.lwjgl.opengl.GL45C.nglClearNamedBufferData;
+import static org.lwjgl.opengl.GL45C.nglNamedBufferStorage;
 
 final class ForgeOriginalVoxyAsyncNodeGeometrySync {
     private static final int GEOMETRY_UPLOAD_LIMIT_PER_RUN = 300;
     private static final long GEOMETRY_UPLOAD_BATCH_LIMIT_BYTES = 1_000L << 10;
     private static final long GEOMETRY_UPLOAD_HEADROOM_BYTES = 50_000_000L;
+    private static final int ORIGINAL_MAX_NODE_COUNT = 1 << 21;
+    private static final int NODE_CLEANER_OUTPUT_COUNT = 256;
 
     private final ForgeOriginalVoxyBasicAsyncGeometryManager geometryManager;
     private final ForgeOriginalVoxyBasicSectionGeometryData geometryData;
+    private final ForgeOriginalVoxyRenderGenerationService renderGenerationService;
+    private final ForgeOriginalVoxySectionUpdateRouter router;
+    private final ForgeOriginalVoxyNodeManager nodeManager;
+    private final ForgeOriginalVoxyGeometryCache geometryCache = new ForgeOriginalVoxyGeometryCache(1L << 32);
+    private final ConcurrentLinkedDeque<MemoryBuffer> requestBatchQueue = new ConcurrentLinkedDeque<>();
+    private final ConcurrentLinkedDeque<WorldSection> childUpdateQueue = new ConcurrentLinkedDeque<>();
     private final ConcurrentLinkedDeque<ForgeOriginalVoxyBuiltSection> geometryUpdateQueue = new ConcurrentLinkedDeque<>();
-    private final Long2IntOpenHashMap sectionIdsByPosition = new Long2IntOpenHashMap(4096);
+    private final ConcurrentLinkedDeque<MemoryBuffer> removeBatchQueue = new ConcurrentLinkedDeque<>();
+    private final LongOpenHashSet topLevelNodeAdds = new LongOpenHashSet();
+    private final LongOpenHashSet topLevelNodeRemoves = new LongOpenHashSet();
+    private final Object topLevelNodeLock = new Object();
+    private final IntOpenHashSet topLevelNodeIdChanges = new IntOpenHashSet();
+    private final IntOpenHashSet cleanerIdResetClear = new IntOpenHashSet();
     private final AtomicInteger workCounter = new AtomicInteger();
     private final AtomicReference<SyncResults> results = new AtomicReference<>();
     private final AtomicReference<SyncResults> resultCache1 = new AtomicReference<>(new SyncResults());
@@ -68,17 +91,65 @@ final class ForgeOriginalVoxyAsyncNodeGeometrySync {
     private long uploadedGeometryCopyCount;
     private long uploadedGeometryBytes;
     private long metadataScatterWriteCount;
+    private long cleanerOperationSyncCount;
+    private long topLevelNodeCallbackSyncCount;
     private int currentMaxNodeId;
+    private int nodeBufferId;
+    private boolean nodeBufferExternallyOwned;
     private long usedGeometryBytes;
+    private IntConsumer topLevelNodeAddCallback;
+    private IntConsumer topLevelNodeRemoveCallback;
     private String lastLifecycleEvent = "created";
     private String lastFailureReason = "none";
 
     ForgeOriginalVoxyAsyncNodeGeometrySync(
             ForgeOriginalVoxyBasicAsyncGeometryManager geometryManager,
-            ForgeOriginalVoxyBasicSectionGeometryData geometryData) {
+            ForgeOriginalVoxyBasicSectionGeometryData geometryData,
+            ForgeOriginalVoxyRenderGenerationService renderGenerationService) {
         this.geometryManager = geometryManager;
         this.geometryData = geometryData;
-        this.sectionIdsByPosition.defaultReturnValue(-1);
+        this.renderGenerationService = renderGenerationService;
+        this.router = new ForgeOriginalVoxySectionUpdateRouter();
+        this.router.setCallbacks(pos -> {
+            ForgeOriginalVoxyBuiltSection cachedGeometry = this.geometryCache.remove(pos);
+            if (cachedGeometry != null) {
+                this.submitGeometryResult(cachedGeometry);
+            } else {
+                renderGenerationService.enqueueTask(pos);
+            }
+        }, renderGenerationService::enqueueTask, this::submitChildChange);
+        this.nodeManager = new ForgeOriginalVoxyNodeManager(ORIGINAL_MAX_NODE_COUNT, geometryManager, this.router);
+        this.nodeManager.setClear(new ForgeOriginalVoxyNodeManager.Cleaner() {
+            @Override
+            public void alloc(int id) {
+                ForgeOriginalVoxyAsyncNodeGeometrySync.this.cleanerIdResetClear.remove(id);
+                ForgeOriginalVoxyAsyncNodeGeometrySync.this.cleanerIdResetClear.add(id | (1 << 31));
+            }
+
+            @Override
+            public void move(int from, int to) {
+                // Original Voxy intentionally leaves cleaner move as a no-op in AsyncNodeManager.
+            }
+
+            @Override
+            public void free(int id) {
+                ForgeOriginalVoxyAsyncNodeGeometrySync.this.cleanerIdResetClear.remove(id | (1 << 31));
+                ForgeOriginalVoxyAsyncNodeGeometrySync.this.cleanerIdResetClear.add(id);
+            }
+        });
+        this.nodeManager.setTLNCallbacks(id -> {
+            if (!this.topLevelNodeIdChanges.remove(id)) {
+                if (!this.topLevelNodeIdChanges.add(id | (1 << 31))) {
+                    throw new IllegalStateException();
+                }
+            }
+        }, id -> {
+            if (!this.topLevelNodeIdChanges.remove(id | (1 << 31))) {
+                if (!this.topLevelNodeIdChanges.add(id)) {
+                    throw new IllegalStateException();
+                }
+            }
+        });
         this.workerThread = new Thread(this::workerMain, "Original Voxy Async Node Geometry Sync");
         this.workerThread.setUncaughtExceptionHandler((thread, throwable) -> {
             this.uncaughtException = throwable == null ? new RuntimeException("async-node-geometry-sync-null-exception") : throwable;
@@ -91,6 +162,20 @@ final class ForgeOriginalVoxyAsyncNodeGeometrySync {
         this.lastLifecycleEvent = "start";
     }
 
+    void setTopLevelNodeCallbacks(IntConsumer add, IntConsumer remove) {
+        this.topLevelNodeAddCallback = add;
+        this.topLevelNodeRemoveCallback = remove;
+    }
+
+    void setExternalNodeBuffer(int nodeBufferId) {
+        requireRenderThread("set original async node external node buffer");
+        if (this.nodeBufferId != 0 && !this.nodeBufferExternallyOwned && this.nodeBufferId != nodeBufferId) {
+            glDeleteBuffers(this.nodeBufferId);
+        }
+        this.nodeBufferId = nodeBufferId;
+        this.nodeBufferExternallyOwned = nodeBufferId != 0;
+    }
+
     void submitGeometryResult(ForgeOriginalVoxyBuiltSection section) {
         if (!this.running) {
             section.free();
@@ -101,7 +186,93 @@ final class ForgeOriginalVoxyAsyncNodeGeometrySync {
         this.addWork();
     }
 
+    void submitRequestBatch(MemoryBuffer batch) {
+        if (!this.running) {
+            batch.free();
+            return;
+        }
+        this.requestBatchQueue.add(batch);
+        this.addWork();
+    }
+
+    void submitRemoveBatch(MemoryBuffer batch) {
+        if (!this.running) {
+            batch.free();
+            return;
+        }
+        this.removeBatchQueue.add(batch);
+        this.addWork();
+    }
+
+    private void submitChildChange(WorldSection section) {
+        if (!this.running) {
+            return;
+        }
+        section.acquire();
+        this.childUpdateQueue.add(section);
+        this.addWork();
+    }
+
+    void addTopLevel(long sectionPosition) {
+        if (!this.running) {
+            return;
+        }
+        int state = 0;
+        synchronized (this.topLevelNodeLock) {
+            if (!this.topLevelNodeRemoves.remove(sectionPosition)) {
+                state += this.topLevelNodeAdds.add(sectionPosition) ? 1 : 0;
+            } else {
+                state -= 1;
+            }
+        }
+        this.addTopLevelWork(state);
+    }
+
+    void removeTopLevel(long sectionPosition) {
+        if (!this.running) {
+            return;
+        }
+        int state = 0;
+        synchronized (this.topLevelNodeLock) {
+            if (!this.topLevelNodeAdds.remove(sectionPosition)) {
+                state += this.topLevelNodeRemoves.add(sectionPosition) ? 1 : 0;
+            } else {
+                state -= 1;
+            }
+        }
+        this.addTopLevelWork(state);
+    }
+
+    void worldEvent(WorldSection section, int flags, int neighborMask) {
+        this.geometryCache.clear(section.key);
+        this.router.forwardEvent(section, flags);
+        if (neighborMask != 0) {
+            if ((neighborMask & 0b000001) != 0) {
+                this.router.triggerRemesh(WorldEngine.getWorldSectionId(section.lvl, section.x, section.y - 1, section.z));
+            }
+            if ((neighborMask & 0b000010) != 0) {
+                this.router.triggerRemesh(WorldEngine.getWorldSectionId(section.lvl, section.x, section.y + 1, section.z));
+            }
+            if ((neighborMask & 0b000100) != 0) {
+                this.router.triggerRemesh(WorldEngine.getWorldSectionId(section.lvl, section.x - 1, section.y, section.z));
+            }
+            if ((neighborMask & 0b001000) != 0) {
+                this.router.triggerRemesh(WorldEngine.getWorldSectionId(section.lvl, section.x + 1, section.y, section.z));
+            }
+            if ((neighborMask & 0b010000) != 0) {
+                this.router.triggerRemesh(WorldEngine.getWorldSectionId(section.lvl, section.x, section.y, section.z - 1));
+            }
+            if ((neighborMask & 0b100000) != 0) {
+                this.router.triggerRemesh(WorldEngine.getWorldSectionId(section.lvl, section.x, section.y, section.z + 1));
+            }
+        }
+    }
+
     void tickOnRenderThread() {
+        this.tickOnRenderThread(null);
+    }
+
+    void tickOnRenderThread(ForgeOriginalVoxyNodeCleaner nodeCleaner) {
         requireRenderThread("tick original async node geometry sync");
         if (this.uncaughtException != null) {
             Throwable throwable = this.uncaughtException;
@@ -109,14 +280,20 @@ final class ForgeOriginalVoxyAsyncNodeGeometrySync {
             return;
         }
         this.ensurePrograms();
+        this.ensureNodeBuffer();
         SyncResults sync = this.results.getAndSet(null);
         if (sync == null) {
             return;
         }
         this.renderThreadTickCount++;
+        this.applyTopLevelNodeDeltas(sync);
         this.geometryData.setSectionCount(sync.geometrySectionCount);
         this.uploadGeometryCopies(sync);
         this.scatterMetadataWrites(sync);
+        if (nodeCleaner != null) {
+            nodeCleaner.updateIds(sync.cleanerOperations);
+        }
+        this.cleanerOperationSyncCount += sync.cleanerOperations.size();
         this.currentMaxNodeId = sync.currentMaxNodeId;
         this.usedGeometryBytes = sync.usedGeometry;
         this.returnResultObject(sync);
@@ -124,10 +301,29 @@ final class ForgeOriginalVoxyAsyncNodeGeometrySync {
         this.lastFailureReason = "none";
     }
 
+    private void applyTopLevelNodeDeltas(SyncResults sync) {
+        if (sync.topLevelNodeIdChanges.isEmpty()) {
+            return;
+        }
+        var iter = sync.topLevelNodeIdChanges.intIterator();
+        while (iter.hasNext()) {
+            int value = iter.nextInt();
+            if ((value & (1 << 31)) != 0) {
+                if (this.topLevelNodeAddCallback != null) {
+                    this.topLevelNodeAddCallback.accept(value & (-1 >>> 1));
+                }
+            } else if (this.topLevelNodeRemoveCallback != null) {
+                this.topLevelNodeRemoveCallback.accept(value);
+            }
+            this.topLevelNodeCallbackSyncCount++;
+        }
+    }
+
     ForgeOriginalVoxyAsyncNodeGeometrySyncStats createStatusSnapshot() {
         return new ForgeOriginalVoxyAsyncNodeGeometrySyncStats(
                 this.running && this.workerThread.isAlive() && this.uncaughtException == null,
-                false,
+                true,
+                true,
                 true,
                 this.multiMemcpyProgramId != 0 && this.scatterProgramId != 0,
                 this.multiMemcpyProgramId != 0,
@@ -135,7 +331,7 @@ final class ForgeOriginalVoxyAsyncNodeGeometrySync {
                 this.results.get() != null,
                 true,
                 this.geometryUpdateQueue.size(),
-                this.sectionIdsByPosition.size(),
+                this.nodeManager.getActiveSectionCount(),
                 this.submittedGeometryResultCount,
                 this.processedGeometryResultCount,
                 this.publishedSyncResultCount,
@@ -150,6 +346,30 @@ final class ForgeOriginalVoxyAsyncNodeGeometrySync {
                 this.lastLifecycleEvent,
                 this.lastFailureReason
         );
+    }
+
+    boolean nodeBufferReady() {
+        return this.nodeBufferId != 0;
+    }
+
+    int nodeBufferId() {
+        return this.nodeBufferId;
+    }
+
+    int currentMaxNodeId() {
+        return this.currentMaxNodeId;
+    }
+
+    long usedGeometryBytes() {
+        return this.usedGeometryBytes;
+    }
+
+    long geometryCapacityBytes() {
+        return this.geometryData.geometryCapacityBytes();
+    }
+
+    int maxNodeCount() {
+        return ORIGINAL_MAX_NODE_COUNT;
     }
 
     void stopOnRenderThread() {
@@ -172,6 +392,27 @@ final class ForgeOriginalVoxyAsyncNodeGeometrySync {
             }
             section.free();
         }
+        while (true) {
+            WorldSection section = this.childUpdateQueue.poll();
+            if (section == null) {
+                break;
+            }
+            section.release();
+        }
+        while (true) {
+            MemoryBuffer batch = this.requestBatchQueue.poll();
+            if (batch == null) {
+                break;
+            }
+            batch.free();
+        }
+        while (true) {
+            MemoryBuffer batch = this.removeBatchQueue.poll();
+            if (batch == null) {
+                break;
+            }
+            batch.free();
+        }
         this.freeSyncResult(this.results.getAndSet(null));
         this.freeSyncResult(this.resultCache1.getAndSet(null));
         this.freeSyncResult(this.resultCache2.getAndSet(null));
@@ -183,7 +424,16 @@ final class ForgeOriginalVoxyAsyncNodeGeometrySync {
             glDeleteProgram(this.scatterProgramId);
             this.scatterProgramId = 0;
         }
-        this.sectionIdsByPosition.clear();
+        if (this.nodeBufferId != 0 && !this.nodeBufferExternallyOwned) {
+            glDeleteBuffers(this.nodeBufferId);
+        }
+        this.nodeBufferId = 0;
+        this.nodeBufferExternallyOwned = false;
+        this.geometryCache.free();
+        synchronized (this.topLevelNodeLock) {
+            this.topLevelNodeAdds.clear();
+            this.topLevelNodeRemoves.clear();
+        }
         this.lastLifecycleEvent = "stop";
     }
 
@@ -212,6 +462,42 @@ final class ForgeOriginalVoxyAsyncNodeGeometrySync {
             }
         }
         int workDone = 0;
+        LongOpenHashSet adds = null;
+        LongOpenHashSet removes = null;
+        synchronized (this.topLevelNodeLock) {
+            if (!this.topLevelNodeAdds.isEmpty()) {
+                adds = new LongOpenHashSet(this.topLevelNodeAdds);
+                this.topLevelNodeAdds.clear();
+            }
+            if (!this.topLevelNodeRemoves.isEmpty()) {
+                removes = new LongOpenHashSet(this.topLevelNodeRemoves);
+                this.topLevelNodeRemoves.clear();
+            }
+        }
+        if (removes != null) {
+            var iter = removes.longIterator();
+            while (iter.hasNext()) {
+                this.nodeManager.removeTopLevelNode(iter.nextLong());
+                workDone++;
+            }
+        }
+        if (adds != null) {
+            var iter = adds.longIterator();
+            while (iter.hasNext()) {
+                long position = iter.nextLong();
+                this.nodeManager.insertTopLevelNode(position);
+                workDone++;
+            }
+        }
+        while (true) {
+            WorldSection section = this.childUpdateQueue.poll();
+            if (section == null) {
+                break;
+            }
+            workDone++;
+            this.nodeManager.processChildChange(section.key, section.getNonEmptyChildren());
+            section.release();
+        }
         long estimatedGeometryUploadAmount = 0L;
         for (int limit = 0;
              limit < GEOMETRY_UPLOAD_LIMIT_PER_RUN
@@ -228,12 +514,65 @@ final class ForgeOriginalVoxyAsyncNodeGeometrySync {
             }
             this.processGeometryResult(section);
         }
+        while (true) {
+            MemoryBuffer batch = this.requestBatchQueue.poll();
+            if (batch == null) {
+                break;
+            }
+            workDone++;
+            long ptr = batch.address;
+            int count = MemoryUtil.memGetInt(ptr);
+            ptr += 8L;
+            if (batch.size < count * 8L + 8L) {
+                batch.free();
+                throw new IllegalStateException("async-node-geometry-sync-request-batch-too-small");
+            }
+            for (int i = 0; i < count; i++) {
+                long pos = ((long) MemoryUtil.memGetInt(ptr)) << 32;
+                ptr += Integer.BYTES;
+                pos |= Integer.toUnsignedLong(MemoryUtil.memGetInt(ptr));
+                ptr += Integer.BYTES;
+                this.nodeManager.processRequest(pos);
+            }
+            batch.free();
+        }
+        while (true) {
+            MemoryBuffer batch = this.removeBatchQueue.poll();
+            if (batch == null) {
+                break;
+            }
+            workDone++;
+            long ptr = batch.address;
+            int zeroCount = 0;
+            for (int i = 0; i < NODE_CLEANER_OUTPUT_COUNT; i++) {
+                long pos = ((long) MemoryUtil.memGetInt(ptr)) << 32;
+                ptr += Integer.BYTES;
+                pos |= Integer.toUnsignedLong(MemoryUtil.memGetInt(ptr));
+                ptr += Integer.BYTES;
+                if (pos == -1L) {
+                    continue;
+                }
+                if (pos == 0L && zeroCount++ > 0) {
+                    VoxyForge.LOGGER.error("Remove node pos is 0 {} times, this is really bad", zeroCount);
+                    continue;
+                }
+                this.nodeManager.removeNodeGeometry(pos);
+            }
+            batch.free();
+        }
+        if (this.workCounter.addAndGet(-workDone) < 0) {
+            try {
+                Thread.sleep(1000L);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException("async-node-geometry-sync-negative-work-counter-interrupted", e);
+            }
+            if (this.workCounter.get() < 0) {
+                VoxyForge.LOGGER.error("Work counter less than zero, hope it fixes itself...");
+            }
+        }
         if (workDone == 0) {
             return;
-        }
-        int remaining = this.workCounter.addAndGet(-workDone);
-        if (remaining < 0) {
-            this.workCounter.compareAndSet(remaining, 0);
         }
         this.publishSyncResults();
     }
@@ -244,20 +583,8 @@ final class ForgeOriginalVoxyAsyncNodeGeometrySync {
     }
 
     private void processGeometryResult(ForgeOriginalVoxyBuiltSection section) {
-        int oldSectionId = this.sectionIdsByPosition.get(section.position);
         try {
-            if (section.isEmpty()) {
-                if (oldSectionId != -1) {
-                    this.geometryManager.removeSection(oldSectionId);
-                    this.sectionIdsByPosition.remove(section.position);
-                }
-                this.geometryManager.discardEmptySection(section);
-            } else {
-                int newSectionId = oldSectionId == -1
-                        ? this.geometryManager.uploadSection(section)
-                        : this.geometryManager.uploadReplaceSection(oldSectionId, section);
-                this.sectionIdsByPosition.put(section.position, newSectionId);
-            }
+            this.nodeManager.processGeometryResult(section);
             this.processedGeometryResultCount++;
             this.lastLifecycleEvent = "worker-process-geometry-result";
             this.lastFailureReason = "none";
@@ -285,9 +612,11 @@ final class ForgeOriginalVoxyAsyncNodeGeometrySync {
         this.mergeGeometryEvents(sync);
         sync.geometrySectionCount = this.geometryManager.getSectionCount();
         sync.usedGeometry = this.geometryManager.getGeometryUsedBytes();
-        sync.currentMaxNodeId = 0;
+        sync.currentMaxNodeId = this.nodeManager.getCurrentMaxNodeId();
         this.needsWaitForSync |= sync.geometryUpload.currentElemCopyAmount * Long.BYTES > 2L << 20;
+        this.needsWaitForSync |= sync.cleanerOperations.size() > 1024;
         this.needsWaitForSync |= sync.scatterWriteLocationMap.size() > 4096;
+        this.needsWaitForSync |= sync.topLevelNodeIdChanges.size() > 10;
         if (!this.results.compareAndSet(null, sync)) {
             throw new IllegalStateException("async-node-geometry-sync-result-publish-race");
         }
@@ -308,6 +637,25 @@ final class ForgeOriginalVoxyAsyncNodeGeometrySync {
     }
 
     private void mergeGeometryEvents(SyncResults sync) {
+        if (!this.topLevelNodeIdChanges.isEmpty()) {
+            var iter = this.topLevelNodeIdChanges.intIterator();
+            while (iter.hasNext()) {
+                int value = iter.nextInt();
+                if (!sync.topLevelNodeIdChanges.remove(value ^ (1 << 31))) {
+                    sync.topLevelNodeIdChanges.add(value);
+                }
+            }
+            this.topLevelNodeIdChanges.clear();
+        }
+        if (!this.cleanerIdResetClear.isEmpty()) {
+            var iter = this.cleanerIdResetClear.intIterator();
+            while (iter.hasNext()) {
+                int value = iter.nextInt();
+                sync.cleanerOperations.remove(value ^ (1 << 31));
+                sync.cleanerOperations.add(value);
+            }
+            this.cleanerIdResetClear.clear();
+        }
         IntOpenHashSet removals = this.geometryManager.getHeapRemovals();
         if (!removals.isEmpty()) {
             var iter = removals.intIterator();
@@ -337,6 +685,16 @@ final class ForgeOriginalVoxyAsyncNodeGeometrySync {
                 this.geometryManager.writeMetadataSplit(sectionId, ptrA, ptrB);
             }
             updates.clear();
+        }
+        IntOpenHashSet nodeUpdates = this.nodeManager.getNodeUpdates();
+        if (!nodeUpdates.isEmpty()) {
+            var iter = nodeUpdates.intIterator();
+            while (iter.hasNext()) {
+                int nodeId = iter.nextInt();
+                long ptr = sync.getScatterWritePtr(nodeId, 0);
+                this.nodeManager.writeNode(nodeId, ptr);
+            }
+            nodeUpdates.clear();
         }
     }
 
@@ -396,7 +754,7 @@ final class ForgeOriginalVoxyAsyncNodeGeometrySync {
                 ForgeOriginalVoxyUploadStream.instance().getRawBufferId(),
                 ptr,
                 ForgeOriginalVoxyUploadStream.alignUpAlloc(streamSize));
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, this.geometryData.metadataBufferId());
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, this.nodeBufferId);
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, this.geometryData.metadataBufferId());
         glUniform1ui(0, count);
         glMemoryBarrier(GL_UNIFORM_BARRIER_BIT | GL_SHADER_STORAGE_BARRIER_BIT);
@@ -430,8 +788,29 @@ final class ForgeOriginalVoxyAsyncNodeGeometrySync {
         }
     }
 
+    private void ensureNodeBuffer() {
+        if (this.nodeBufferId == 0) {
+            this.nodeBufferId = glCreateBuffers();
+            this.nodeBufferExternallyOwned = false;
+            nglNamedBufferStorage(this.nodeBufferId, ORIGINAL_MAX_NODE_COUNT * 16L, 0L, 0);
+            long scratch = MemoryUtil.nmemAlloc(Integer.BYTES);
+            try {
+                MemoryUtil.memPutInt(scratch, -1);
+                nglClearNamedBufferData(this.nodeBufferId, GL_R32UI, GL_RED_INTEGER, GL_UNSIGNED_INT, scratch);
+            } finally {
+                MemoryUtil.nmemFree(scratch);
+            }
+        }
+    }
+
     private void addWork() {
         if (this.workCounter.getAndIncrement() == 0) {
+            LockSupport.unpark(this.workerThread);
+        }
+    }
+
+    private void addTopLevelWork(int delta) {
+        if (delta != 0 && this.workCounter.getAndAdd(delta) == 0) {
             LockSupport.unpark(this.workerThread);
         }
     }
@@ -488,6 +867,8 @@ final class ForgeOriginalVoxyAsyncNodeGeometrySync {
         private int currentMaxNodeId;
         private int geometrySectionCount;
         private long usedGeometry;
+        private final IntOpenHashSet topLevelNodeIdChanges = new IntOpenHashSet();
+        private final IntOpenHashSet cleanerOperations = new IntOpenHashSet();
         private final ComputeMemoryCopy geometryUpload = new ComputeMemoryCopy();
         private MemoryBuffer scatterWriteBuffer = new MemoryBuffer(8192 * 2L);
         private final Int2IntOpenHashMap scatterWriteLocationMap = new Int2IntOpenHashMap(1024);
@@ -497,6 +878,8 @@ final class ForgeOriginalVoxyAsyncNodeGeometrySync {
         }
 
         void reset() {
+            this.topLevelNodeIdChanges.clear();
+            this.cleanerOperations.clear();
             this.scatterWriteLocationMap.clear();
             this.currentMaxNodeId = 0;
             this.geometrySectionCount = 0;

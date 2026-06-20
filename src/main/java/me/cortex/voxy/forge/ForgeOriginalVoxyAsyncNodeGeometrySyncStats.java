@@ -3,6 +3,7 @@ package me.cortex.voxy.forge;
 record ForgeOriginalVoxyAsyncNodeGeometrySyncStats(
         boolean originalAsyncNodeManagerSyncShapeReady,
         boolean originalNodeManagerParityReady,
+        boolean originalGeometryCacheReady,
         boolean geometryResultQueueReady,
         boolean renderThreadTickReady,
         boolean multiMemcpyProgramReady,
@@ -27,6 +28,7 @@ record ForgeOriginalVoxyAsyncNodeGeometrySyncStats(
 ) {
     static ForgeOriginalVoxyAsyncNodeGeometrySyncStats unavailable(String reason) {
         return new ForgeOriginalVoxyAsyncNodeGeometrySyncStats(
+                false,
                 false,
                 false,
                 false,

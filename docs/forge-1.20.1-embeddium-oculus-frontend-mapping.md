@@ -193,6 +193,21 @@ Iris mixin target -> Oculus class under net.irisshaders.iris...
 
 Do not apply these mixins without a Forge-side compatibility gate.
 
+The first Forge/Embeddium frontend mixin has now been ported for the original
+service-thread sharing path:
+
+```text
+original MixinChunkJobQueue
+ -> Embeddium ChunkJobQueue target
+ -> SemaphoreBlockImpersonator
+ -> UnifiedServiceThreadPool.groupSemaphore block
+```
+
+The gate is the hard `embeddium` client dependency declared in `mods.toml`.
+This mixin does not register a renderer hook and does not instantiate
+`VoxyRenderSystem`; it only mirrors the original Sodium builder-thread sharing
+mechanism against Embeddium's equivalent `ChunkJobQueue`.
+
 ## Implementation order
 
 1. Add local Embeddium/Oculus jars through `dev-mods/` or Gradle properties.
@@ -224,6 +239,6 @@ semantics.
 frontend jars are optional local dev inputs, not repository artifacts
 Sodium config API does not map directly to checked Embeddium sources
 FogParameters/FogStorage require a dedicated Forge/Embeddium/Oculus audit
-no Embeddium/Oculus mixins have been ported yet
+Embeddium ChunkJobQueue semaphore sharing is ported, but renderer frontend hooks are not
 no original VoxyRenderSystem frontend hook has been enabled yet
 ```

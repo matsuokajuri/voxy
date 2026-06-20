@@ -215,6 +215,11 @@ final class ForgeOriginalVoxyBasicAsyncGeometryManager {
         for (MemoryBuffer upload : this.heapUploads.values()) {
             upload.free();
         }
+        for (int id = 0; id < this.sectionMetadata.size(); id++) {
+            if (this.sectionMetadata.get(id) != null && this.allocationSet.isSet(id)) {
+                this.allocationSet.free(id);
+            }
+        }
         this.heapUploads.clear();
         this.heapRemoveUploads.clear();
         this.invalidatedIds.clear();

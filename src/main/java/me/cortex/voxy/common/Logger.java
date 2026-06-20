@@ -1,6 +1,5 @@
 package me.cortex.voxy.common;
 
-import me.cortex.voxy.commonImpl.VoxyCommon;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 import org.slf4j.LoggerFactory;
@@ -52,7 +51,7 @@ public class Logger {
 
         String error = (INSERT_CLASS?("["+callClsName()+"]: "):"") + Stream.of(args).map(Logger::objToString).collect(Collectors.joining(" "));
         LOGGER.error(error, throwable);
-        if (VoxyCommon.IS_IN_MINECRAFT && !VoxyCommon.IS_DEDICATED_SERVER) {
+        if (Minecraft.getInstance() != null) {
             showInHUD(error);//This is done so that on dedicated server, the Minecraft client class isnt loaded
         }
     }

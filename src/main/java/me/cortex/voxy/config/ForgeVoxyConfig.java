@@ -5,6 +5,10 @@ import net.minecraftforge.common.ForgeConfigSpec;
 public final class ForgeVoxyConfig {
     public static final ForgeConfigSpec CLIENT_SPEC;
     public static final ForgeConfigSpec.BooleanValue ENABLED;
+    public static final ForgeConfigSpec.IntValue ORIGINAL_VOXY_SERVICE_THREADS;
+    public static final ForgeConfigSpec.BooleanValue ORIGINAL_VOXY_USE_EMBEDDIUM_BUILDER_THREADS;
+    public static final ForgeConfigSpec.DoubleValue ORIGINAL_VOXY_SECTION_RENDER_DISTANCE;
+    public static final ForgeConfigSpec.DoubleValue ORIGINAL_VOXY_SUBDIVISION_SIZE;
     public static final ForgeConfigSpec.BooleanValue ENABLE_WORLD_ENGINE_SKELETON;
     public static final ForgeConfigSpec.BooleanValue ENABLE_AUTO_CHUNK_INGEST;
     public static final ForgeConfigSpec.IntValue AUTO_INGEST_RADIUS;
@@ -125,6 +129,18 @@ public final class ForgeVoxyConfig {
         ENABLED = builder
                 .comment("Placeholder toggle for the Forge 1.20.1 skeleton. It does not enable LoD rendering yet.")
                 .define("enabled", true);
+        ORIGINAL_VOXY_SERVICE_THREADS = builder
+                .comment("Original Voxy serviceThreads target. The effective dedicated Voxy pool subtracts Embeddium builder threads when originalVoxyUseEmbeddiumBuilderThreads is true, matching original Sodium behavior.")
+                .defineInRange("originalVoxyServiceThreads", defaultServiceThreads(), 1, maxServiceThreads());
+        ORIGINAL_VOXY_USE_EMBEDDIUM_BUILDER_THREADS = builder
+                .comment("Forge equivalent of original Voxy's 'Use sodium threads' option. When enabled, Embeddium chunk builder workers share Voxy service jobs through the original pooled semaphore mechanism.")
+                .define("originalVoxyUseEmbeddiumBuilderThreads", true);
+        ORIGINAL_VOXY_SECTION_RENDER_DISTANCE = builder
+                .comment("Forge equivalent of original VoxyConfig.CONFIG.sectionRenderDistance. Used by RenderDistanceTracker and hierarchical traversal, not by deprecated debug renderers.")
+                .defineInRange("originalVoxySectionRenderDistance", 16.0D, 1.0D, 512.0D);
+        ORIGINAL_VOXY_SUBDIVISION_SIZE = builder
+                .comment("Forge equivalent of original VoxyConfig.CONFIG.subDivisionSize. Used by hierarchical traversal screen-space descent threshold.")
+                .defineInRange("originalVoxySubDivisionSize", 64.0D, 1.0D, 512.0D);
         ENABLE_WORLD_ENGINE_SKELETON = builder
                 .comment("Creates an empty in-memory WorldEngine on client world join for lifecycle testing only. It does not ingest chunks or render LoD.")
                 .define("enableWorldEngineSkeleton", false);
@@ -469,5 +485,13 @@ public final class ForgeVoxyConfig {
     }
 
     private ForgeVoxyConfig() {
+    }
+
+    private static int defaultServiceThreads() {
+        return Math.max((int) (ForgeOriginalVoxyCpuLayout.getCoreCount() / 1.5D), 1);
+    }
+
+    private static int maxServiceThreads() {
+        return Math.max(ForgeOriginalVoxyCpuLayout.getCoreCount(), 1);
     }
 }
