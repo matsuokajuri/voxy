@@ -52,6 +52,10 @@ final class ForgeSoftwareModelTextureBakery {
     private int atlasWidth;
     private int atlasHeight;
 
+    void prepareOnRenderThread(Minecraft minecraft) {
+        this.setupTexture(minecraft);
+    }
+
     BakeResult renderToOutput(Minecraft minecraft, BlockState state, int blockStateId) {
         this.setupTexture(minecraft);
         var faces = new FaceTexture[ForgeModelAtlasLayout.FACE_COUNT];

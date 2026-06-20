@@ -72,10 +72,18 @@ Recent parity remediation added:
   mapping and upload core. It owns `idMappings`, `metadataCache`,
   `fluidStateLUT`, `modelTexture2id`, fluid pre-bake ordering, in-flight
   tracking, software colour/depth bake, and formal ModelStore uploads.
+- The Forge-port owner now mirrors the first original `ModelBakerySubsystem`
+  split: a `"Model factory processor"` worker thread drains block/biome bake
+  work, `LockSupport.unpark` wakes it on requests, and render ticks consume an
+  upload-result queue on the GL thread.
+- The model upload result now carries the packed 3x2 mip-chain atlas tile and
+  biome colour LUT updates, matching the original `ModelBakeResultUpload` /
+  `BiomeUploadResult` responsibilities at the semantic level.
 
-Remaining work must restore the original `ModelBakerySubsystem` worker/upload
-split and connect the on-demand missing-model request/requeue behavior from
-`RenderGenerationService`.
+Remaining work must connect the on-demand missing-model request/requeue
+behavior from `RenderGenerationService` and replace the current direct GL
+subdata upload implementation with original `UploadStream`-equivalent
+persistent mapped staging.
 
 ## Compile-source-set constraint
 
@@ -95,18 +103,26 @@ ModelStore modelData/modelColour/atlas upload contract
 RenderGenerationService missing-model request/requeue behavior
 ```
 
-## Current incomplete parity items
+## Current parity status
 
-The Forge-port model factory is real route code, not a sample route, but these
-items are still incomplete and must not be treated as readiness:
+Implemented in the current Forge-port model route:
 
 ```text
 dedicated ModelBakerySubsystem processing thread
 upload-result queue separated from bake processing
-full TextureUtils byte-for-byte helper parity
 biome colour LUT upload
-custom block-state id mapping
 packed 3x2 mip-chain atlas upload
+TextureUtils helper logic port
+fluid pre-bake ordering
+idMappings / metadataCache / fluidStateLUT / modelTexture2id ownership
+```
+
+Still incomplete and must not be treated as readiness:
+
+```text
+TextureUtils byte-for-byte output audit
+custom block-state id mapping
+original UploadStream persistent mapped staging
 readback audit for the new original route
 RenderGenerationService retry after IdNotYetComputedException
 ```

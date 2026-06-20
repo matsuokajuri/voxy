@@ -79,7 +79,18 @@ WorldEngine / Mapper
 ```
 
 It now owns a partial original `ModelFactory` port, but it does not yet claim
-full `ModelBakerySubsystem` parity.
+full renderer or draw-pipeline parity. The model owner now includes the first
+original `ModelBakerySubsystem` worker/upload split:
+
+```text
+"Model factory processor" worker thread
+LockSupport.unpark request wakeups
+worker-side processAllThings()
+render-thread upload-result queue
+packed 3x2 mip-chain atlas upload
+biome colour LUT upload
+```
+
 The original `me.cortex.voxy.client.core.*` files are authoritative source
 references but are not included in the current Forge compile source set, so the
 mechanisms must be ported/adapted under `me.cortex.voxy.forge` rather than
@@ -88,11 +99,9 @@ directly imported.
 Missing before L2/L3 can be considered complete:
 
 ```text
-original worker thread / upload queue split
-biome colour LUT upload
 custom block-state id mapping
-exact TextureUtils helper parity
-mip-chain atlas upload
+TextureUtils byte-for-byte audit against original output
+original UploadStream persistent mapped staging
 readback audit for original route uploads
 RenderGenerationService model-miss request/requeue
 ```
@@ -139,9 +148,9 @@ A subsystem is considered aligned only when:
 The next work should continue bottom-up parity, not preview hardening:
 
 ```text
-complete Forge-port ModelBakerySubsystem / ModelFactory parity
+complete UploadStream / TextureUtils byte-for-byte parity proof
  -> restore original model-miss request/requeue semantics
- -> complete SoftwareModelTextureBakery / TextureUtils parity
+ -> complete SoftwareModelTextureBakery parity
  -> introduce RenderGenerationService-style async ownership
  -> replace direct unit-quad section geometry with RenderDataFactory parity
 ```

@@ -221,8 +221,113 @@ final class ForgeFormalModelStore {
         return this.uploadPrototypeModelColour(formalModelId, colour);
     }
 
+    String uploadOriginalVoxyModelRecordWord(int formalModelId, int wordIndex, int value) {
+        if (!this.canUploadOneBlockPrototype()) {
+            return "formal-model-store-not-upload-ready";
+        }
+        if (!ForgeModelAtlasLayout.isValidModelId(formalModelId) || formalModelId == 0) {
+            return "invalid-formal-model-id-" + formalModelId;
+        }
+        if (wordIndex < 0 || wordIndex >= ForgeModelStoreFormalLayout.MODEL_RECORD_WORDS) {
+            return "invalid-model-record-word-index-" + wordIndex;
+        }
+        long ptr = MemoryUtil.nmemAlloc(Integer.BYTES);
+        try {
+            MemoryUtil.memPutInt(ptr, value);
+            GL45C.nglNamedBufferSubData(
+                    this.modelDataBufferId,
+                    modelDataOffset(formalModelId) + ((long) wordIndex * Integer.BYTES),
+                    Integer.BYTES,
+                    ptr
+            );
+            int error = GL11C.glGetError();
+            return error == GL11C.GL_NO_ERROR ? "none" : "model-record-word-upload-" + glErrorName(error);
+        } finally {
+            MemoryUtil.nmemFree(ptr);
+        }
+    }
+
     String uploadOriginalVoxyAtlasFace(int formalModelId, int faceIndex, byte[] pixels) {
         return this.uploadPrototypeAtlasFace(formalModelId, faceIndex, pixels);
+    }
+
+    String uploadOriginalVoxyModelTextureMipChain(int formalModelId, byte[][] mipLevels) {
+        if (!this.canUploadOneBlockPrototype()) {
+            return "formal-model-store-not-upload-ready";
+        }
+        if (!ForgeModelAtlasLayout.isValidModelId(formalModelId) || formalModelId == 0) {
+            return "invalid-formal-model-id-" + formalModelId;
+        }
+        if (mipLevels == null || mipLevels.length != ForgeOriginalVoxyMipGen.LAYERS) {
+            return "invalid-mip-level-count";
+        }
+
+        ForgeModelAtlasLayout.Tile base = ForgeModelAtlasLayout.modelBaseTile(formalModelId);
+        PixelStoreState pixelStore = PixelStoreState.captureUnpack();
+        int unpackBufferBinding = GL11C.glGetInteger(GL21C.GL_PIXEL_UNPACK_BUFFER_BINDING);
+        int oldTextureBinding = GL11C.glGetInteger(GL11C.GL_TEXTURE_BINDING_2D);
+        try {
+            GL15C.glBindBuffer(GL21C.GL_PIXEL_UNPACK_BUFFER, 0);
+            GL11C.glBindTexture(GL11C.GL_TEXTURE_2D, this.atlasTextureId);
+            PixelStoreState.applyTightUnpack();
+            for (int level = 0; level < ForgeOriginalVoxyMipGen.LAYERS; level++) {
+                int width = (ForgeModelAtlasLayout.MODEL_TEXTURE_SIZE * ForgeModelAtlasLayout.FACES_PER_MODEL_X) >> level;
+                int height = (ForgeModelAtlasLayout.MODEL_TEXTURE_SIZE * ForgeModelAtlasLayout.FACES_PER_MODEL_Y) >> level;
+                int expectedBytes = width * height * ForgeModelAtlasPixelSample.BYTES_PER_PIXEL;
+                byte[] pixels = mipLevels[level];
+                if (pixels == null || pixels.length != expectedBytes) {
+                    return "invalid-mip-" + level + "-pixel-count";
+                }
+                ByteBuffer buffer = MemoryUtil.memAlloc(expectedBytes);
+                try {
+                    buffer.put(pixels);
+                    buffer.flip();
+                    clearGlErrors();
+                    GL11C.glTexSubImage2D(
+                            GL11C.GL_TEXTURE_2D,
+                            level,
+                            base.x() >> level,
+                            base.y() >> level,
+                            width,
+                            height,
+                            GL11C.GL_RGBA,
+                            GL11C.GL_UNSIGNED_BYTE,
+                            buffer
+                    );
+                    int error = GL11C.glGetError();
+                    if (error != GL11C.GL_NO_ERROR) {
+                        return "atlas-mip-upload-" + level + "-" + glErrorName(error);
+                    }
+                } finally {
+                    MemoryUtil.memFree(buffer);
+                }
+            }
+            return "none";
+        } finally {
+            GL11C.glBindTexture(GL11C.GL_TEXTURE_2D, oldTextureBinding);
+            GL15C.glBindBuffer(GL21C.GL_PIXEL_UNPACK_BUFFER, unpackBufferBinding);
+            pixelStore.restoreUnpack();
+        }
+    }
+
+    String uploadOriginalVoxyModelColourRange(int baseIndex, int[] colours) {
+        if (!this.canUploadOneBlockPrototype()) {
+            return "formal-model-store-not-upload-ready";
+        }
+        if (baseIndex < 0 || colours == null || (long) (baseIndex + colours.length) * Integer.BYTES > MODEL_COLOUR_BYTES) {
+            return "invalid-model-colour-range";
+        }
+        long ptr = MemoryUtil.nmemAlloc((long) colours.length * Integer.BYTES);
+        try {
+            for (int i = 0; i < colours.length; i++) {
+                MemoryUtil.memPutInt(ptr + ((long) i * Integer.BYTES), colours[i]);
+            }
+            GL45C.nglNamedBufferSubData(this.modelColourBufferId, modelColourOffset(baseIndex), (long) colours.length * Integer.BYTES, ptr);
+            int error = GL11C.glGetError();
+            return error == GL11C.GL_NO_ERROR ? "none" : "model-colour-range-upload-" + glErrorName(error);
+        } finally {
+            MemoryUtil.nmemFree(ptr);
+        }
     }
 
     String uploadPrototypeModelRecord(int formalModelId, int[] words) {
@@ -559,7 +664,20 @@ final class ForgeFormalModelStore {
             GL11C.glTexParameteri(GL11C.GL_TEXTURE_2D, GL11C.GL_TEXTURE_MAG_FILTER, GL11C.GL_NEAREST);
             GL11C.glTexParameteri(GL11C.GL_TEXTURE_2D, GL11C.GL_TEXTURE_WRAP_S, GL12C.GL_CLAMP_TO_EDGE);
             GL11C.glTexParameteri(GL11C.GL_TEXTURE_2D, GL11C.GL_TEXTURE_WRAP_T, GL12C.GL_CLAMP_TO_EDGE);
-            GL11C.glTexImage2D(GL11C.GL_TEXTURE_2D, 0, GL30C.GL_RGBA8, width, height, 0, GL11C.GL_RGBA, GL11C.GL_UNSIGNED_BYTE, (ByteBuffer) null);
+            for (int level = 0; level < ForgeOriginalVoxyMipGen.LAYERS; level++) {
+                GL11C.glTexImage2D(
+                        GL11C.GL_TEXTURE_2D,
+                        level,
+                        GL30C.GL_RGBA8,
+                        Math.max(1, width >> level),
+                        Math.max(1, height >> level),
+                        0,
+                        GL11C.GL_RGBA,
+                        GL11C.GL_UNSIGNED_BYTE,
+                        (ByteBuffer) null
+                );
+            }
+            GL11C.glTexParameteri(GL11C.GL_TEXTURE_2D, GL12C.GL_TEXTURE_MAX_LEVEL, ForgeOriginalVoxyMipGen.LAYERS - 1);
             error = GL11C.glGetError();
         } finally {
             GL11C.glBindTexture(GL11C.GL_TEXTURE_2D, oldTextureBinding);

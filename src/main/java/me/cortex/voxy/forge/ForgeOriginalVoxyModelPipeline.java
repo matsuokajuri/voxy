@@ -8,6 +8,7 @@ import net.minecraft.client.Minecraft;
 
 import java.util.Arrays;
 import java.util.Optional;
+import java.util.concurrent.locks.LockSupport;
 
 final class ForgeOriginalVoxyModelPipeline {
     static final String STAGE = "L0_L4_ORIGINAL_VOXY_MODEL_PIPELINE_PARITY";
@@ -17,6 +18,9 @@ final class ForgeOriginalVoxyModelPipeline {
     private final IntOpenHashSet seenBlockBakeRequests = new IntOpenHashSet(6000);
     private WorldEngine world;
     private ForgeOriginalVoxyModelFactory modelFactory;
+    private Thread processingThread;
+    private volatile boolean processingThreadRunning;
+    private volatile Throwable processingThreadException;
     private boolean startRequested;
     private boolean startQueuedOnRenderThread;
     private boolean ownerReady;
@@ -30,6 +34,7 @@ final class ForgeOriginalVoxyModelPipeline {
     private long uploadTickRuns;
     private long blockBakeRequests;
     private long clearRuns;
+    private long workerUnparkRuns;
     private String lifecycleState = "UNINITIALIZED";
     private String lastLifecycleEvent = "initialized";
     private String lastFailureReason = "none";
@@ -53,6 +58,12 @@ final class ForgeOriginalVoxyModelPipeline {
         if (this.shouldScheduleStart()) {
             this.runOnRenderThread(this::startOnRenderThread);
         }
+        if (this.processingThreadException != null) {
+            Throwable exception = this.processingThreadException;
+            this.processingThreadException = null;
+            this.recordFailure("model-factory-processor-" + exception.getClass().getSimpleName() + ":" + exception.getMessage());
+            return;
+        }
         ForgeOriginalVoxyModelFactory factory;
         synchronized (this) {
             if (this.ownerReady && !this.stale) {
@@ -62,7 +73,7 @@ final class ForgeOriginalVoxyModelPipeline {
             }
             factory = this.modelFactory;
         }
-        if (factory != null && factory.hasPendingWork()) {
+        if (factory != null && factory.hasPendingUploads()) {
             this.runOnRenderThread(() -> this.processFactoryUploads(factory));
         }
     }
@@ -79,6 +90,7 @@ final class ForgeOriginalVoxyModelPipeline {
         }
         if (this.seenBlockBakeRequests.add(blockStateId)) {
             this.modelFactory.addEntry(blockStateId);
+            this.unparkProcessingThread();
         }
         this.lastFailureReason = this.modelFactory.createStatusSnapshot().lastFailureReason();
         this.lastLifecycleEvent = "request-block-bake-queued";
@@ -92,6 +104,10 @@ final class ForgeOriginalVoxyModelPipeline {
         ForgeOriginalVoxyModelFactoryStats factory = this.modelFactory == null
                 ? ForgeOriginalVoxyModelFactoryStats.unavailable("model-factory-not-started")
                 : this.modelFactory.createStatusSnapshot();
+        boolean workerReady = this.processingThreadRunning
+                && this.processingThread != null
+                && this.processingThread.isAlive()
+                && this.processingThreadException == null;
         return new ForgeOriginalVoxyModelPipelineStats(
                 STAGE,
                 this.startRequests,
@@ -122,13 +138,23 @@ final class ForgeOriginalVoxyModelPipeline {
                 mapperBiomeCount,
                 factory.queuedBlockBakeCount() + factory.inFlightBlockBakeCount(),
                 factory.completedModelCount(),
-                factory.asyncProcessorThreadReady(),
+                workerReady,
                 factory.renderThreadUploadPathUsed(),
                 factory.idMappingsReady(),
                 factory.metadataCacheReady(),
                 factory.fluidStateLutReady(),
                 factory.modelTextureDedupeReady(),
+                factory.uploadResultQueueReady(),
+                factory.mipChainAtlasUploadReady(),
+                factory.textureUtilsOriginalHelpersPorted(),
+                factory.textureUtilsByteForByteAuditReady(),
+                factory.biomeColourLutUploadReady(),
+                factory.uploadStreamPersistentMappedReady(),
+                factory.renderGenerationModelMissRequestRequeueReady(),
                 factory.queuedBlockBakeCount(),
+                factory.queuedBiomeCount(),
+                factory.queuedUploadResultCount(),
+                factory.biomeUploadResultCount(),
                 factory.inFlightBlockBakeCount(),
                 factory.completedModelCount(),
                 factory.uploadedModelRecordCount(),
@@ -212,7 +238,9 @@ final class ForgeOriginalVoxyModelPipeline {
 
         WorldEngine targetWorld = engine.get();
         Mapper mapper = targetWorld.getMapper();
-        ForgeOriginalVoxyModelFactory factory = new ForgeOriginalVoxyModelFactory(this.instance, mapper, this.instance.getFormalModelStore());
+        this.stopProcessingThread();
+        ForgeOriginalVoxyModelFactory factory = new ForgeOriginalVoxyModelFactory(mapper, this.instance.getFormalModelStore());
+        factory.prepareOnRenderThread(minecraft);
         synchronized (this) {
             this.world = targetWorld;
             this.modelFactory = factory;
@@ -229,6 +257,8 @@ final class ForgeOriginalVoxyModelPipeline {
         }
         mapper.setBiomeCallback(this::queueBiome);
         Arrays.stream(mapper.getBiomeEntries()).forEach(factory::addBiome);
+        this.startProcessingThread(factory);
+        this.unparkProcessingThread();
     }
 
     private void queueBiome(Mapper.BiomeEntry biomeEntry) {
@@ -238,11 +268,13 @@ final class ForgeOriginalVoxyModelPipeline {
         }
         if (biomeEntry != null && factory != null) {
             factory.addBiome(biomeEntry);
+            this.unparkProcessingThread();
         }
     }
 
     private void markStaleAndClear(String event) {
         WorldEngine callbackWorld;
+        ForgeOriginalVoxyModelFactory factory;
         synchronized (this) {
             this.clearRuns++;
             this.startRequested = false;
@@ -257,14 +289,68 @@ final class ForgeOriginalVoxyModelPipeline {
             this.lastFailureReason = "none";
             this.seenBlockBakeRequests.clear();
             callbackWorld = this.world;
+            factory = this.modelFactory;
             this.world = null;
             this.modelFactory = null;
+        }
+        this.stopProcessingThread();
+        if (factory != null) {
+            factory.shutdown();
         }
         if (callbackWorld != null) {
             this.runOnRenderThread(() -> {
                 callbackWorld.getMapper().setBiomeCallback(null);
                 callbackWorld.getMapper().setStateCallback(null);
             });
+        }
+    }
+
+    private void startProcessingThread(ForgeOriginalVoxyModelFactory factory) {
+        this.processingThreadException = null;
+        this.processingThreadRunning = true;
+        Thread thread = new Thread(() -> {
+            while (this.processingThreadRunning) {
+                while (this.processingThreadRunning && factory.processAllThings()) {
+                    // Drain model and biome work like original ModelBakerySubsystem.
+                }
+                if (this.processingThreadRunning) {
+                    LockSupport.park();
+                }
+            }
+        }, "Model factory processor");
+        thread.setUncaughtExceptionHandler((t, e) -> {
+            this.processingThreadRunning = false;
+            this.processingThreadException = e == null ? new RuntimeException("unhandled-model-factory-exception") : e;
+        });
+        thread.start();
+        synchronized (this) {
+            this.processingThread = thread;
+        }
+    }
+
+    private void stopProcessingThread() {
+        Thread thread;
+        synchronized (this) {
+            thread = this.processingThread;
+            this.processingThread = null;
+            this.processingThreadRunning = false;
+        }
+        if (thread != null) {
+            LockSupport.unpark(thread);
+            try {
+                thread.join();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                this.recordFailure("model-factory-processor-join-interrupted");
+            }
+        }
+    }
+
+    private void unparkProcessingThread() {
+        Thread thread = this.processingThread;
+        if (thread != null) {
+            this.workerUnparkRuns++;
+            LockSupport.unpark(thread);
         }
     }
 
@@ -285,7 +371,7 @@ final class ForgeOriginalVoxyModelPipeline {
         if (minecraft.level == null || minecraft.player == null) {
             return;
         }
-        int processed = factory.processUploadsOnRenderThread(minecraft, MAX_MODEL_UPLOADS_PER_TICK);
+        int processed = factory.processUploadsOnRenderThread(MAX_MODEL_UPLOADS_PER_TICK);
         if (processed > 0) {
             synchronized (this) {
                 this.uploadTickRuns++;

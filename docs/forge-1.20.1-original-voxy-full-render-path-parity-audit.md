@@ -88,9 +88,22 @@ SoftwareModelTextureBakery colour/depth bake
 formal ModelStore modelData/modelColour/atlas upload
 ```
 
-This is not full `ModelBakerySubsystem` parity yet. The original background
-processor thread, upload queue separation, biome LUT uploads, and mip-chain
-atlas upload still need to be ported.
+The Forge route now also ports the first `ModelBakerySubsystem` lifecycle
+mechanics:
+
+```text
+"Model factory processor" worker thread
+LockSupport.unpark on block/biome requests
+worker-side processAllThings()
+render-thread upload-result queue consumption
+3x2 model texture mip-chain generation/upload
+biome colour LUT result uploads and model record colourTint rewrites
+Forge-local TextureUtils helper port
+```
+
+This is still not full renderer readiness. The persistent-mapped
+`UploadStream` staging path and `RenderGenerationService` model-miss
+request/requeue integration are not complete parity yet.
 
 ## Source-set reality
 
@@ -110,13 +123,11 @@ semantics.
 
 ## Remaining bottom-up parity work
 
-1. Complete Forge-port `ModelBakerySubsystem` parity, including the original
-   processing thread, `LockSupport.unpark` lifecycle, upload-result queue, and
-   render-thread `processUploads()` behavior.
-2. Harden the Forge-port `ModelFactory` against original semantics: readback
-   audit, exact `TextureUtils` parity, biome colour LUT uploads, custom
-   block-state id mapping, mip-chain atlas upload, and documented Forge-only
-   stair base-state reflection.
+1. Harden the Forge-port `ModelFactory` against original semantics: readback
+   audit, byte-for-byte `TextureUtils` output comparison, custom block-state id
+   mapping, and documented Forge-only stair base-state reflection.
+2. Port the original persistent-mapped `UploadStream` stack or document the
+   exact Forge blocker after tracing its GL wrapper dependencies.
 3. Complete `SoftwareModelTextureBakery` runtime parity for solid, leaves,
    cutout, translucent, fluid, tint, and atlas sampling.
 4. Complete `ModelStore` upload parity against the formal owner, including
@@ -136,9 +147,9 @@ semantics.
 | Area | Reason | Status |
 | --- | --- | --- |
 | `StairBlock.baseState` access | original source accesses the field directly; Forge 1.20.1 exposes it as private at compile time | Forge port uses a cached reflective field read to preserve original normalization semantics |
-| `ModelBakerySubsystem` worker | original uses a dedicated `"Model factory processor"` thread; current Forge port processes a bounded number of model uploads on the render thread | temporary incomplete parity, not renderer readiness |
-| Atlas mip upload | original `ModelBakeResultUpload` uploads the packed 3x2 model tile for every mip level | formal Forge store currently uploads base face tiles only |
-| Biome/model colour LUT | original uploads per-biome colour data for biome-dependent tinted models | owner hook exists, upload parity pending |
+| `UploadStream` persistent staging | original upload path depends on `GlPersistentMappedBuffer`, `GlFence`, `GlBuffer`, and `AllocationArena` from the original client-core GL stack | current Forge port still uses direct GL buffer/texture subdata uploads; persistent mapped UploadStream parity remains open |
+| `TextureUtils` byte-for-byte proof | helper logic is ported, but output has not yet been compared against original Sodium `ColorSRGB`/ARGB behavior by tests | status reports helper port ready but byte-for-byte audit not ready |
+| `RenderGenerationService` request/requeue | original request/requeue depends on `RenderDataFactory.generateMesh()` throwing `IdNotYetComputedException` from real section generation | not wired until RenderDataFactory parity is ported |
 
 ## Do not do
 
@@ -159,9 +170,9 @@ adapter shader as production terrain shader
 Continue with bottom-up parity:
 
 ```text
-complete Forge-port ModelBakerySubsystem / ModelFactory parity
- -> finish SoftwareModelTextureBakery and TextureUtils parity
- -> restore model-miss request/requeue
+complete UploadStream and TextureUtils byte-for-byte parity proof
+ -> finish SoftwareModelTextureBakery parity
+ -> restore model-miss request/requeue through RenderGenerationService
  -> introduce RenderGenerationService-style async generation
  -> replace direct unit-quad geometry with RenderDataFactory parity
 ```
