@@ -17,6 +17,7 @@ final class ForgeOriginalVoxyModelPipeline {
     private final ForgeVoxyInstance instance;
     private final IntOpenHashSet seenBlockBakeRequests = new IntOpenHashSet(6000);
     private WorldEngine world;
+    private ForgeOriginalVoxyModelStore modelStore;
     private ForgeOriginalVoxyModelFactory modelFactory;
     private ForgeOriginalVoxyRenderGenerationService renderGenerationService;
     private Thread processingThread;
@@ -282,12 +283,20 @@ final class ForgeOriginalVoxyModelPipeline {
         WorldEngine targetWorld = engine.get();
         Mapper mapper = targetWorld.getMapper();
         this.stopProcessingThread();
-        ForgeOriginalVoxyModelFactory factory = new ForgeOriginalVoxyModelFactory(mapper, this.instance.getFormalModelStore());
+        ForgeOriginalVoxyModelStore store = new ForgeOriginalVoxyModelStore();
+        String storeError = store.build(minecraft);
+        if (!"none".equals(storeError)) {
+            store.free();
+            this.recordFailure(storeError);
+            return;
+        }
+        ForgeOriginalVoxyModelFactory factory = new ForgeOriginalVoxyModelFactory(mapper, store);
         factory.prepareOnRenderThread(minecraft);
         ForgeOriginalVoxyRenderGenerationService renderGeneration =
                 new ForgeOriginalVoxyRenderGenerationService(targetWorld, this, factory, false);
         synchronized (this) {
             this.world = targetWorld;
+            this.modelStore = store;
             this.modelFactory = factory;
             this.renderGenerationService = renderGeneration;
             this.ownerReady = true;
@@ -321,6 +330,7 @@ final class ForgeOriginalVoxyModelPipeline {
     private void markStaleAndClear(String event) {
         WorldEngine callbackWorld;
         ForgeOriginalVoxyModelFactory factory;
+        ForgeOriginalVoxyModelStore store;
         ForgeOriginalVoxyRenderGenerationService renderGeneration;
         synchronized (this) {
             this.clearRuns++;
@@ -336,9 +346,11 @@ final class ForgeOriginalVoxyModelPipeline {
             this.lastFailureReason = "none";
             this.seenBlockBakeRequests.clear();
             callbackWorld = this.world;
+            store = this.modelStore;
             factory = this.modelFactory;
             renderGeneration = this.renderGenerationService;
             this.world = null;
+            this.modelStore = null;
             this.modelFactory = null;
             this.renderGenerationService = null;
         }
@@ -348,6 +360,9 @@ final class ForgeOriginalVoxyModelPipeline {
         }
         if (factory != null) {
             factory.shutdown();
+        }
+        if (store != null) {
+            this.runOnRenderThread(store::free);
         }
         if (callbackWorld != null) {
             this.runOnRenderThread(() -> {

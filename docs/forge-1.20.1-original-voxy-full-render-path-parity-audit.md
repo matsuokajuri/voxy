@@ -118,7 +118,7 @@ modelTexture2id dedupe
 fluid pre-bake ordering
 stair base-state normalization
 SoftwareModelTextureBakery colour/depth bake
-formal ModelStore modelData/modelColour/atlas upload
+original ModelStore modelData/modelColour/atlas upload
 ```
 
 The Forge route now also ports the first `ModelBakerySubsystem` lifecycle
@@ -169,7 +169,7 @@ ForgeSoftwareModelTextureBakery
  -> ForgeOriginalVoxyTextureUtils
  -> ForgeOriginalVoxyMipGen
  -> ForgeOriginalVoxyModelFactory ModelEntry / metadata / model record
- -> ForgeFormalModelStore original-Voxy upload methods
+ -> ForgeOriginalVoxyModelStore
 ```
 
 `ForgeOriginalVoxyColourDepthTextureData` is a direct Forge-package port of the
@@ -204,10 +204,42 @@ ForgeOriginalVoxyReuseVertexConsumer
 This ports the original `ReuseVertexConsumer` / `SoftwareRasterizer` structure
 and removes the previous per-quad `TextureAtlasSprite.getPixelRGBA()` sampling
 path from the active bake. It is still not a full source-equivalent
-`SoftwareModelTextureBakery`: Forge 1.20.1 uses `BakedModel`/`BakedQuad`
-access and `LiquidBlockRenderer` signatures that differ from the newer
-original source's `BlockStateModelPart`, `FluidRenderer` layer callback, and
-`MipmapStrategy.DARK_CUTOUT` metadata.
+`SoftwareModelTextureBakery`: the atlas capture now uses the original-style DSA
+`glGetTextureImage` path and Forge fluid baking now selects the consumer from
+`ItemBlockRenderTypes.getRenderLayer(fluidState)` instead of forcing every
+fluid through the translucent consumer, but Forge 1.20.1 still lacks the newer
+original source's `BlockStateModelPart`/`BakedQuad.materialInfo()` model
+collection path and exposed `MipmapStrategy.DARK_CUTOUT` metadata. Those are
+version/API parity blockers; do not replace them with texture-name guesses.
+
+The original model upload owner has now been split away from the historical
+I/K-era formal store. `ForgeOriginalVoxyModelPipeline` creates a
+`ForgeOriginalVoxyModelStore` on the render thread and passes it into
+`ForgeOriginalVoxyModelFactory`, instead of passing
+`ForgeVoxyInstance.getFormalModelStore()`. The Forge port now mirrors original
+`ModelStore` ownership:
+
+```text
+modelBuffer: 64 * 65536 bytes
+modelColourBuffer: 4 * 65536 bytes
+model texture atlas: 16 * 3 * 256 by 16 * 2 * 256 RGBA8
+block sampler: nearest / nearest-mipmap-linear with terrain mip bound
+```
+
+The upload result shape has also been moved back to original Voxy semantics:
+
+```text
+ModelBakeResultUpload.model MemoryBuffer
+ModelBakeResultUpload.texture MemoryBuffer
+BiomeUploadResult biome colour MemoryBuffer
+BiomeUploadResult model/id pair MemoryBuffer
+UploadStream persistent mapped staging for buffers
+nglTextureSubImage2D for atlas mip-chain upload
+```
+
+The old `ForgeFormalModelStore.uploadOriginalVoxy*` methods remain only for
+historical preview/prototype command compatibility. They are no longer the
+owner used by the original Voxy model pipeline.
 
 The old `BakeResult.faces()` and `FaceTexture` view remains only as deprecated
 compile compatibility for historical preview/debug classes. It is not the
@@ -236,8 +268,8 @@ semantics.
    base-state reflection.
 2. Complete `SoftwareModelTextureBakery` runtime parity for solid, leaves,
    cutout, translucent, fluid, tint, and atlas sampling.
-3. Complete `ModelStore` upload parity against the formal owner, including
-   modelData/modelColour/atlas layout and upload thread rules.
+3. Keep removing historical `ForgeFormalModelStore` references from preview
+   code; the original model pipeline now uses `ForgeOriginalVoxyModelStore`.
 4. Connect `RenderGenerationService` output to original-equivalent
    `BasicAsyncGeometryManager` / `BasicSectionGeometryData`.
 5. Port `BasicAsyncGeometryManager` and `BasicSectionGeometryData`.
@@ -255,8 +287,8 @@ semantics.
 | `TextureUtils` ColorSRGB path | original Voxy imports Sodium `ColorSRGB`; Forge runtime prerequisite is Embeddium, whose reference source keeps the same fast-srgb8 table under a moved package | Forge now ports that fast-srgb8 table locally and `textureUtilsByteForByteAuditReady=true` is reported when the table/mip sample audit passes. The 1.20.1 `ARGB` class name is unavailable, so alpha uses the same table helper as a documented mapping adaptation. |
 | `RenderGenerationService` request/requeue | original request/requeue depends on `RenderDataFactory.generateMesh()` throwing `IdNotYetComputedException` from real section generation | Forge now ports BuildTask priority, held-section retention, inner/outer missing-model scans, `requestBlockBake`, and requeue. Direct Fabric `ServiceManager` import is blocked by Fabric `commonImpl` dependencies, so a Forge-local worker carries the same task semantics; `originalServiceManagerParityReady=false` remains reported until the common thread stack is cleanly Forge-adapted. |
 | `RenderDataFactory` Java version helpers | original source uses `Integer.expand` / `Long.expand`, unavailable in Java 17 | Forge uses local equivalent bit-expansion helpers with the same mask/value semantics. |
-| `SoftwareModelTextureBakery` model collection and fluid layer path | vertex storage and raster output now match the original `ReuseVertexConsumer` / `SoftwareRasterizer` shape, but Forge 1.20.1 still feeds them through Forge `BakedModel`/`BakedQuad` render-type access and `LiquidBlockRenderer` without the original layer callback | `originalSoftwareModelTextureBakeryUsed=false` remains reported until block model collection, fluid rendering, and dark-cutout metadata are fully mapped to original semantics |
-| `ModelStore` ownership | model record and atlas upload layout now uses original Voxy-shaped upload methods, but the owning class is still the historical `ForgeFormalModelStore` rather than a clean original `ModelStore` port | `originalModelStoreUsed=false` is reported until the owner and lifecycle match original Voxy |
+| `SoftwareModelTextureBakery` model collection and dark-cutout metadata | vertex storage, raster output, atlas capture, fluid layer selection, and mip-chain memory-buffer upload now match or map to original semantics; Forge 1.20.1 still lacks the newer `BlockStateModelPart`/`BakedQuad.materialInfo()` and `MipmapStrategy.DARK_CUTOUT` signals | `originalSoftwareModelTextureBakeryUsed=false` remains reported until these version/API differences are solved without guessing |
+| `ModelStore` ownership | fixed: the original model pipeline now owns `ForgeOriginalVoxyModelStore` instead of historical `ForgeFormalModelStore`; uploads use original-style `MemoryBuffer` results, persistent `UploadStream`, and DSA texture mip uploads | `originalModelStoreUsed=true` is reported when the new owner is built and connected |
 
 ## Do not do
 
@@ -277,8 +309,7 @@ adapter shader as production terrain shader
 Continue with bottom-up parity:
 
 ```text
-finish SoftwareModelTextureBakery model collection/fluid/dark-cutout parity
- -> finish original ModelStore owner/lifecycle parity
+finish SoftwareModelTextureBakery model collection/dark-cutout parity without guessed metadata
  -> connect RenderGenerationService BuiltSection output to BasicAsyncGeometryManager
  -> port BasicSectionGeometryData
  -> replace remaining direct/debug geometry ownership with original Voxy geometry owners

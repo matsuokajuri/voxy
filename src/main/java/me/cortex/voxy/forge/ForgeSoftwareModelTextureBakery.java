@@ -2,6 +2,7 @@ package me.cortex.voxy.forge;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.ItemBlockRenderTypes;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.block.LiquidBlockRenderer;
 import net.minecraft.client.renderer.block.model.BakedQuad;
@@ -28,6 +29,11 @@ import org.joml.Matrix4f;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
 import org.lwjgl.BufferUtils;
+import org.lwjgl.opengl.ARBDirectStateAccess;
+import org.lwjgl.opengl.GL12C;
+import org.lwjgl.opengl.GL15C;
+import org.lwjgl.opengl.GL21C;
+import org.lwjgl.opengl.GL30C;
 import org.lwjgl.opengl.GL11C;
 
 import javax.annotation.Nullable;
@@ -94,22 +100,25 @@ final class ForgeSoftwareModelTextureBakery {
         this.atlasWidth = Math.max(1, Math.round(sample.contents().width() / uRange));
         this.atlasHeight = Math.max(1, Math.round(sample.contents().height() / vRange));
         ByteBuffer pixels = BufferUtils.createByteBuffer(this.atlasWidth * this.atlasHeight * 4);
-        int oldTexture = GL11C.glGetInteger(GL11C.GL_TEXTURE_BINDING_2D);
-        try {
-            GL11C.glBindTexture(GL11C.GL_TEXTURE_2D, atlas.getId());
-            GL11C.glGetTexImage(GL11C.GL_TEXTURE_2D, 0, GL11C.GL_RGBA, GL11C.GL_UNSIGNED_BYTE, pixels);
-            this.atlasPixels = new int[this.atlasWidth * this.atlasHeight];
-            for (int i = 0; i < this.atlasPixels.length; i++) {
-                int r = pixels.get(i * 4) & 0xFF;
-                int g = pixels.get(i * 4 + 1) & 0xFF;
-                int b = pixels.get(i * 4 + 2) & 0xFF;
-                int a = pixels.get(i * 4 + 3) & 0xFF;
-                this.atlasPixels[i] = (a << 24) | (b << 16) | (g << 8) | r;
-            }
-            this.rasterizer.setSamplerTexture(this.atlasPixels, this.atlasWidth, this.atlasHeight);
-        } finally {
-            GL11C.glBindTexture(GL11C.GL_TEXTURE_2D, oldTexture);
+        GL11C.glFlush();
+        GL11C.glFinish();
+        GL30C.glBindFramebuffer(GL30C.GL_FRAMEBUFFER, 0);
+        GL15C.glBindBuffer(GL21C.GL_PIXEL_PACK_BUFFER, 0);
+        GL11C.glPixelStorei(GL11C.GL_PACK_ROW_LENGTH, this.atlasWidth);
+        GL11C.glPixelStorei(GL12C.GL_PACK_IMAGE_HEIGHT, 0);
+        GL11C.glPixelStorei(GL11C.GL_PACK_SKIP_ROWS, 0);
+        GL11C.glPixelStorei(GL11C.GL_PACK_SKIP_PIXELS, 0);
+        GL11C.glPixelStorei(GL11C.GL_PACK_ALIGNMENT, 4);
+        ARBDirectStateAccess.glGetTextureImage(atlas.getId(), 0, GL11C.GL_RGBA, GL11C.GL_UNSIGNED_BYTE, pixels);
+        this.atlasPixels = new int[this.atlasWidth * this.atlasHeight];
+        for (int i = 0; i < this.atlasPixels.length; i++) {
+            int r = pixels.get(i * 4) & 0xFF;
+            int g = pixels.get(i * 4 + 1) & 0xFF;
+            int b = pixels.get(i * 4 + 2) & 0xFF;
+            int a = pixels.get(i * 4 + 3) & 0xFF;
+            this.atlasPixels[i] = (a << 24) | (b << 16) | (g << 8) | r;
         }
+        this.rasterizer.setSamplerTexture(this.atlasPixels, this.atlasWidth, this.atlasHeight);
     }
 
     private BakeResult renderBlock(Minecraft minecraft, BlockState state, int blockStateId, ForgeOriginalVoxyColourDepthTextureData[] faces) {
@@ -195,7 +204,7 @@ final class ForgeSoftwareModelTextureBakery {
     }
 
     private BakeResult renderFluid(BlockState state, ForgeOriginalVoxyColourDepthTextureData[] faces) {
-        int flags = FLAG_TRANSLUCENT | FLAG_DISCARD | FLAG_SHADED;
+        int flags = 0;
         boolean anyFace = false;
         for (int face = 0; face < faces.length; face++) {
             this.opaqueVC.reset();
@@ -219,7 +228,7 @@ final class ForgeSoftwareModelTextureBakery {
         if (!anyFace) {
             return new BakeResult(faces, ForgeCpuMeshLayer.OTHER, flags, "no-fluid-quads");
         }
-        return new BakeResult(faces, ForgeCpuMeshLayer.TRANSLUCENT, flags, "none");
+        return new BakeResult(faces, chooseLayer(state, flags, faces), flags, "none");
     }
 
     private void bakeFluidFace(BlockState state, int face) {
@@ -272,7 +281,22 @@ final class ForgeSoftwareModelTextureBakery {
                 return 0;
             }
         };
-        this.fluidRenderer.tesselate(getter, BlockPos.ZERO, this.translucentVC, state, state.getFluidState());
+        this.fluidRenderer.tesselate(getter, BlockPos.ZERO, this.selectFluidConsumer(state.getFluidState()), state, state.getFluidState());
+        this.translucentVC.setDefaultMeta(0);
+        this.opaqueVC.setDefaultMeta(0);
+    }
+
+    private ForgeOriginalVoxyReuseVertexConsumer selectFluidConsumer(FluidState fluidState) {
+        RenderType renderType = ItemBlockRenderTypes.getRenderLayer(fluidState);
+        if (renderType == RenderType.translucent()) {
+            return this.translucentVC;
+        }
+        if (renderType == RenderType.cutout() || renderType == RenderType.cutoutMipped()) {
+            this.opaqueVC.setDefaultMeta(this.opaqueVC.getDefaultMeta() | 1);
+        } else {
+            this.opaqueVC.setDefaultMeta(this.opaqueVC.getDefaultMeta() & ~1);
+        }
+        return this.opaqueVC;
     }
 
     private static boolean shouldReturnAirForFluid(BlockPos pos, int face) {

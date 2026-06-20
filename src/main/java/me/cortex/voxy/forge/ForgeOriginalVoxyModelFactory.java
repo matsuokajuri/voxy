@@ -2,6 +2,7 @@ package me.cortex.voxy.forge;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
+import me.cortex.voxy.common.util.MemoryBuffer;
 import me.cortex.voxy.common.world.other.Mapper;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.color.block.BlockColors;
@@ -20,6 +21,7 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.lighting.LevelLightEngine;
 import net.minecraft.world.level.material.FluidState;
+import org.lwjgl.system.MemoryUtil;
 
 import javax.annotation.Nullable;
 import java.lang.invoke.VarHandle;
@@ -41,7 +43,7 @@ final class ForgeOriginalVoxyModelFactory {
     private static final Field STAIR_BASE_STATE_FIELD = findStairBaseStateField();
 
     private final Mapper mapper;
-    private final ForgeFormalModelStore store;
+    private final ForgeOriginalVoxyModelStore store;
     private final ForgeSoftwareModelTextureBakery softwareBakery = new ForgeSoftwareModelTextureBakery();
     private final ConcurrentLinkedDeque<BlockBake> bakeQueue = new ConcurrentLinkedDeque<>();
     private final ConcurrentLinkedDeque<Mapper.BiomeEntry> biomeQueue = new ConcurrentLinkedDeque<>();
@@ -73,7 +75,7 @@ final class ForgeOriginalVoxyModelFactory {
     private int lastDuplicateModelId;
     private String lastFailureReason = "none";
 
-    ForgeOriginalVoxyModelFactory(Mapper mapper, ForgeFormalModelStore store) {
+    ForgeOriginalVoxyModelFactory(Mapper mapper, ForgeOriginalVoxyModelStore store) {
         this.mapper = mapper;
         this.store = store;
         Arrays.fill(this.idMappings, -1);
@@ -187,7 +189,7 @@ final class ForgeOriginalVoxyModelFactory {
                 true,
                 true,
                 false,
-                false,
+                this.store.originalModelStoreOwnerReady(),
                 true,
                 true,
                 true,
@@ -269,7 +271,11 @@ final class ForgeOriginalVoxyModelFactory {
     void shutdown() {
         this.bakeQueue.clear();
         this.biomeQueue.clear();
-        this.uploadResults.clear();
+        ResultUploader upload = this.uploadResults.poll();
+        while (upload != null) {
+            upload.free();
+            upload = this.uploadResults.poll();
+        }
         this.blockStatesInFlight.clear();
         this.softwareBakery.free();
     }
@@ -278,9 +284,9 @@ final class ForgeOriginalVoxyModelFactory {
         if (this.store.canUploadOriginalVoxyModel()) {
             return true;
         }
-        this.store.build();
+        this.store.build(Minecraft.getInstance());
         if (!this.store.canUploadOriginalVoxyModel()) {
-            this.fail("formal-model-store-not-upload-ready");
+            this.fail(this.store.lastFailureReason());
             return false;
         }
         return true;
@@ -432,7 +438,7 @@ final class ForgeOriginalVoxyModelFactory {
         words[ForgeModelStoreFormalLayout.WORD_FLAGS_A] = flags;
         words[ForgeModelStoreFormalLayout.WORD_COLOUR_TINT] = tint.recordColourTint();
         words[ForgeModelStoreFormalLayout.WORD_CUSTOM_ID] = 0;
-        byte[][] mipChain = ForgeOriginalVoxyMipGen.putTextures((softwareBake.flags() & 2) != 0, softwareBake.textures());
+        MemoryBuffer mipChain = ForgeOriginalVoxyMipGen.putTexturesBuffer((softwareBake.flags() & 2) != 0, softwareBake.textures());
         return new RecordBuild(
                 words,
                 tint.recordColourTint(),
@@ -822,61 +828,118 @@ final class ForgeOriginalVoxyModelFactory {
             int writtenFaceCount,
             String primarySprite,
             long voxyMetadata,
-            byte[][] mipChain,
+            MemoryBuffer mipChain,
             int[] immediateBiomeColours,
             int immediateBiomeColourBaseIndex
     ) {
     }
 
     private interface ResultUploader {
-        String upload(ForgeFormalModelStore store, ForgeOriginalVoxyModelFactory factory);
+        String upload(ForgeOriginalVoxyModelStore store, ForgeOriginalVoxyModelFactory factory);
 
         default void free() {
         }
     }
 
-    private record ModelBakeUpload(int blockStateId, int modelId, RecordBuild build) implements ResultUploader {
+    private static final class ModelBakeUpload implements ResultUploader {
+        private final int blockStateId;
+        private final int modelId;
+        private final RecordBuild build;
+        private final MemoryBuffer model;
+        private final MemoryBuffer texture;
+        private final MemoryBuffer biomeUpload;
+
+        private ModelBakeUpload(int blockStateId, int modelId, RecordBuild build) {
+            this.blockStateId = blockStateId;
+            this.modelId = modelId;
+            this.build = build;
+            this.model = new MemoryBuffer(MODEL_SIZE).zero();
+            for (int i = 0; i < build.words().length; i++) {
+                MemoryUtil.memPutInt(this.model.address + (long) i * Integer.BYTES, build.words()[i]);
+            }
+            this.texture = build.mipChain();
+            if (build.immediateBiomeColours() == null) {
+                this.biomeUpload = null;
+            } else {
+                this.biomeUpload = new MemoryBuffer((long) build.immediateBiomeColours().length * Integer.BYTES);
+                long ptr = this.biomeUpload.address;
+                for (int colour : build.immediateBiomeColours()) {
+                    MemoryUtil.memPutInt(ptr, colour);
+                    ptr += Integer.BYTES;
+                }
+            }
+        }
+
         @Override
-        public String upload(ForgeFormalModelStore store, ForgeOriginalVoxyModelFactory factory) {
-            String error = store.uploadOriginalVoxyModelRecord(this.modelId, this.build.words());
+        public String upload(ForgeOriginalVoxyModelStore store, ForgeOriginalVoxyModelFactory factory) {
+            String error = store.uploadOriginalVoxyModelRecord(this.modelId, this.model);
             if (!"none".equals(error)) {
                 return error;
             }
             factory.uploadedModelRecordCount++;
-            if (this.build.immediateBiomeColours() != null) {
+            if (this.biomeUpload != null) {
                 error = store.uploadOriginalVoxyModelColourRange(
                         this.build.immediateBiomeColourBaseIndex(),
-                        this.build.immediateBiomeColours()
+                        this.biomeUpload
                 );
                 if (!"none".equals(error)) {
                     return error;
                 }
-                factory.uploadedModelColourCount += this.build.immediateBiomeColours().length;
+                factory.uploadedModelColourCount += (int) (this.biomeUpload.size / Integer.BYTES);
             }
-            error = store.uploadOriginalVoxyModelTextureMipChain(this.modelId, this.build.mipChain());
+            error = store.uploadOriginalVoxyModelTextureMipChain(this.modelId, this.texture);
             if (!"none".equals(error)) {
                 return error;
             }
             factory.uploadedAtlasFaceCount += ForgeModelAtlasLayout.FACE_COUNT;
             return "none";
         }
+
+        @Override
+        public void free() {
+            this.model.free();
+            this.texture.free();
+            if (this.biomeUpload != null) {
+                this.biomeUpload.free();
+            }
+        }
     }
 
-    private record BiomeUpload(int[] colours, int[] modelIds, int[] biomeIndexes) implements ResultUploader {
+    private static final class BiomeUpload implements ResultUploader {
+        private final MemoryBuffer biomeColourBuffer;
+        private final MemoryBuffer modelBiomeIndexPairs;
+        private final int colourCount;
+
+        private BiomeUpload(int[] colours, int[] modelIds, int[] biomeIndexes) {
+            this.biomeColourBuffer = new MemoryBuffer((long) colours.length * Integer.BYTES);
+            long colourPtr = this.biomeColourBuffer.address;
+            for (int colour : colours) {
+                MemoryUtil.memPutInt(colourPtr, colour);
+                colourPtr += Integer.BYTES;
+            }
+            this.modelBiomeIndexPairs = new MemoryBuffer((long) modelIds.length * Long.BYTES);
+            long pairPtr = this.modelBiomeIndexPairs.address;
+            for (int i = 0; i < modelIds.length; i++) {
+                MemoryUtil.memPutLong(pairPtr, Integer.toUnsignedLong(modelIds[i]) | (Integer.toUnsignedLong(biomeIndexes[i]) << 32));
+                pairPtr += Long.BYTES;
+            }
+            this.colourCount = colours.length;
+        }
+
         @Override
-        public String upload(ForgeFormalModelStore store, ForgeOriginalVoxyModelFactory factory) {
-            String error = store.uploadOriginalVoxyModelColourRange(0, this.colours);
+        public String upload(ForgeOriginalVoxyModelStore store, ForgeOriginalVoxyModelFactory factory) {
+            String error = store.uploadOriginalVoxyBiomeUpload(this.biomeColourBuffer, this.modelBiomeIndexPairs);
             if (!"none".equals(error)) {
                 return error;
             }
-            factory.uploadedModelColourCount += this.colours.length;
-            for (int i = 0; i < this.modelIds.length; i++) {
-                error = store.uploadOriginalVoxyModelRecordWord(this.modelIds[i], ForgeModelStoreFormalLayout.WORD_COLOUR_TINT, this.biomeIndexes[i]);
-                if (!"none".equals(error)) {
-                    return error;
-                }
-            }
+            factory.uploadedModelColourCount += this.colourCount;
             return "none";
+        }
+
+        @Override
+        public void free() {
+            this.biomeColourBuffer.free();
+            this.modelBiomeIndexPairs.free();
         }
     }
 
