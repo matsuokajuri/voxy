@@ -124,10 +124,21 @@ RenderDataFactory raw WorldSection mesh generation
 Still incomplete and must not be treated as readiness:
 
 ```text
-custom block-state id mapping
-readback audit for the new original route
 BasicAsyncGeometryManager / BasicSectionGeometryData output ownership
 ```
+
+The original model route now closes the `ModelFactory -> ModelStore` upload
+audit loop. After `UploadStream.commit()`, Forge reads back the original
+modelData record, any modelColour range written by the upload, and the 3x2
+atlas mip-chain region for each committed model upload. These checks are
+reported as original-route status fields and do not use historical formal-store
+or preview readback paths.
+
+The original Iris/Oculus custom block-state id hook is also present:
+`WorldRenderingSettings.INSTANCE.getBlockStateIds()` is read from Oculus and
+provided to `ForgeOriginalVoxyModelFactory`, which writes the custom id word in
+the 64-byte model record exactly where original Voxy does. If Oculus reports no
+active block-state id map, the custom id remains zero.
 
 `SoftwareModelTextureBakery` now uses the Forge/Embeddium source-equivalent
 quad material route: block quads are read through Embeddium's injected

@@ -87,6 +87,10 @@ Some bottom-path corrections are now aligned in direction:
 - Forge-local original-parity `ModelQueries` exists.
 - Forge-local original-parity `UploadStream` persistent mapped staging now
   backs the active original model upload route.
+- The active original model upload route now performs post-commit readback
+  audit for modelData, optional modelColour, and the atlas mip-chain region, and
+  receives Oculus `WorldRenderingSettings` custom block-state ids through the
+  original Voxy hook shape.
 - Forge-local original-parity `RenderGenerationService` and
   `RenderDataFactory` now generate `BuiltSection` output from raw
   `WorldSection` data and request/requeue missing models.

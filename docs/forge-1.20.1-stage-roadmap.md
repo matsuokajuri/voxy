@@ -123,8 +123,7 @@ directly imported.
 Missing before L2/L3 can be considered complete:
 
 ```text
-custom block-state id mapping
-readback audit for original route uploads
+none at the ModelFactory / ModelStore upload-contract level
 ```
 
 The `TextureUtils` / `ColorSRGB` conversion path is now aligned to original
@@ -148,6 +147,12 @@ in the Forge source set. `RenderGenerationService` reports
 `ServiceManager` pulls Fabric `commonImpl` dependencies; the Forge-local worker
 keeps the original BuildTask/requeue semantics until that thread stack is
 cleanly Forge-adapted.
+
+The original model upload route now also audits committed uploads by reading
+back the original `ModelStore` modelData, optional modelColour range, and
+3x2 atlas mip-chain region. The Iris/Oculus custom block-state id hook is
+connected through the same `WorldRenderingSettings.INSTANCE.getBlockStateIds()`
+source used by original Voxy.
 
 ## Required source trace
 

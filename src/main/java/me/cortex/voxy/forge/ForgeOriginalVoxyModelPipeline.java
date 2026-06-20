@@ -173,6 +173,17 @@ final class ForgeOriginalVoxyModelPipeline {
                 factory.textureUtilsByteForByteAuditReady(),
                 factory.biomeColourLutUploadReady(),
                 factory.uploadStreamPersistentMappedReady(),
+                factory.originalModelStoreReadbackAuditReady(),
+                factory.modelDataReadbackOk(),
+                factory.modelColourReadbackOk(),
+                factory.atlasMipChainReadbackOk(),
+                factory.modelStoreReadbackAuditRuns(),
+                factory.modelStoreReadbackAuditFailures(),
+                factory.lastAuditedModelId(),
+                factory.customBlockStateIdMappingReady(),
+                factory.customBlockStateIdMappingPresent(),
+                factory.customBlockStateIdMappingSource(),
+                factory.lastModelStoreReadbackAuditFailureReason(),
                 renderGeneration.originalModelMissRequestRequeueUsed(),
                 renderGeneration.renderGenerationServiceReady(),
                 renderGeneration.originalRenderDataFactoryUsed(),
@@ -292,6 +303,14 @@ final class ForgeOriginalVoxyModelPipeline {
         }
         ForgeOriginalVoxyModelFactory factory = new ForgeOriginalVoxyModelFactory(mapper, store);
         factory.prepareOnRenderThread(minecraft);
+        ForgeOculusWorldRenderingSettingsBridge.Result blockStateIds = ForgeOculusWorldRenderingSettingsBridge.getBlockStateIds();
+        if (!blockStateIds.ready()) {
+            factory.shutdown();
+            store.free();
+            this.recordFailure(blockStateIds.failureReason());
+            return;
+        }
+        factory.setCustomBlockStateMapping(blockStateIds.blockStateIds(), blockStateIds.source());
         ForgeOriginalVoxyRenderGenerationService renderGeneration =
                 new ForgeOriginalVoxyRenderGenerationService(targetWorld, this, factory, false);
         synchronized (this) {

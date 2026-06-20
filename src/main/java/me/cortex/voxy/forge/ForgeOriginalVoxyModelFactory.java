@@ -2,6 +2,7 @@ package me.cortex.voxy.forge;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
+import it.unimi.dsi.fastutil.objects.Object2IntMap;
 import me.cortex.voxy.common.util.MemoryBuffer;
 import me.cortex.voxy.common.world.other.Mapper;
 import net.minecraft.client.Minecraft;
@@ -49,6 +50,7 @@ final class ForgeOriginalVoxyModelFactory {
     private final ConcurrentLinkedDeque<BlockBake> bakeQueue = new ConcurrentLinkedDeque<>();
     private final ConcurrentLinkedDeque<Mapper.BiomeEntry> biomeQueue = new ConcurrentLinkedDeque<>();
     private final ConcurrentLinkedDeque<ResultUploader> uploadResults = new ConcurrentLinkedDeque<>();
+    private final ConcurrentLinkedDeque<PendingUploadAudit> pendingUploadAudits = new ConcurrentLinkedDeque<>();
     private final ReentrantLock blockStatesInFlightLock = new ReentrantLock();
     private final IntOpenHashSet blockStatesInFlight = new IntOpenHashSet(6000);
     private final Map<ModelEntry, Integer> modelTexture2id = new HashMap<>();
@@ -58,6 +60,7 @@ final class ForgeOriginalVoxyModelFactory {
     private final long[] metadataCache = new long[MAX_MODEL_IDS];
     private final int[] fluidStateLUT = new int[MAX_MODEL_IDS];
     private final int[] idMappings = new int[MAX_BLOCK_STATE_IDS];
+    private Object2IntMap<BlockState> customBlockStateIdMapping;
 
     private int nextModelId = 1;
     private int requestedBlockStateCount;
@@ -74,6 +77,17 @@ final class ForgeOriginalVoxyModelFactory {
     private int lastUploadedModelId;
     private int lastDuplicateBlockStateId;
     private int lastDuplicateModelId;
+    private int modelStoreReadbackAuditRuns;
+    private int modelStoreReadbackAuditFailures;
+    private int lastAuditedModelId;
+    private boolean customBlockStateIdMappingReady;
+    private boolean customBlockStateIdMappingPresent;
+    private String customBlockStateIdMappingSource = "none";
+    private boolean originalModelStoreReadbackAuditReady;
+    private boolean modelDataReadbackOk;
+    private boolean modelColourReadbackOk;
+    private boolean atlasMipChainReadbackOk;
+    private String lastModelStoreReadbackAuditFailureReason = "not-audited";
     private String lastFailureReason = "none";
 
     ForgeOriginalVoxyModelFactory(Mapper mapper, ForgeOriginalVoxyModelStore store) {
@@ -87,6 +101,13 @@ final class ForgeOriginalVoxyModelFactory {
 
     void prepareOnRenderThread(Minecraft minecraft) {
         this.softwareBakery.prepareOnRenderThread(minecraft);
+    }
+
+    void setCustomBlockStateMapping(@Nullable Object2IntMap<BlockState> mapping, String source) {
+        this.customBlockStateIdMapping = mapping;
+        this.customBlockStateIdMappingReady = true;
+        this.customBlockStateIdMappingPresent = mapping != null;
+        this.customBlockStateIdMappingSource = source == null || source.isBlank() ? "unknown" : source;
     }
 
     boolean addEntry(int blockId) {
@@ -181,6 +202,7 @@ final class ForgeOriginalVoxyModelFactory {
         }
         if (ForgeOriginalVoxyUploadStream.isReady()) {
             ForgeOriginalVoxyUploadStream.instance().commit();
+            this.auditPendingUploads(this.store);
         }
         return processed;
     }
@@ -204,6 +226,17 @@ final class ForgeOriginalVoxyModelFactory {
                 true,
                 true,
                 false,
+                this.originalModelStoreReadbackAuditReady,
+                this.modelDataReadbackOk,
+                this.modelColourReadbackOk,
+                this.atlasMipChainReadbackOk,
+                this.modelStoreReadbackAuditRuns,
+                this.modelStoreReadbackAuditFailures,
+                this.lastAuditedModelId,
+                this.customBlockStateIdMappingReady,
+                this.customBlockStateIdMappingPresent,
+                this.customBlockStateIdMappingSource,
+                this.lastModelStoreReadbackAuditFailureReason,
                 this.requestedBlockStateCount,
                 this.biomeQueue.size(),
                 this.uploadResults.size(),
@@ -277,6 +310,7 @@ final class ForgeOriginalVoxyModelFactory {
             upload.free();
             upload = this.uploadResults.poll();
         }
+        this.pendingUploadAudits.clear();
         this.blockStatesInFlight.clear();
         this.softwareBakery.free();
         this.bakeScratchBuffer.free();
@@ -449,7 +483,7 @@ final class ForgeOriginalVoxyModelFactory {
         flags |= (softwareBake.flags() & 1) != 0 ? 8 : 0;
         words[ForgeModelStoreFormalLayout.WORD_FLAGS_A] = flags;
         words[ForgeModelStoreFormalLayout.WORD_COLOUR_TINT] = tint.recordColourTint();
-        words[ForgeModelStoreFormalLayout.WORD_CUSTOM_ID] = 0;
+        words[ForgeModelStoreFormalLayout.WORD_CUSTOM_ID] = this.customBlockStateId(state);
         MemoryBuffer mipChain = ForgeOriginalVoxyMipGen.putTexturesBuffer((softwareBake.flags() & 2) != 0, softwareBake.textures());
         return new RecordBuild(
                 words,
@@ -546,6 +580,79 @@ final class ForgeOriginalVoxyModelFactory {
 
     private void fail(String reason) {
         this.lastFailureReason = reason == null || reason.isBlank() ? "failed" : reason.replace(' ', '-');
+    }
+
+    private void enqueueUploadAudit(PendingUploadAudit audit) {
+        if (audit != null) {
+            this.pendingUploadAudits.add(audit);
+        }
+    }
+
+    private void auditPendingUploads(ForgeOriginalVoxyModelStore store) {
+        PendingUploadAudit audit = this.pendingUploadAudits.poll();
+        while (audit != null) {
+            this.auditUpload(store, audit);
+            audit = this.pendingUploadAudits.poll();
+        }
+    }
+
+    private void auditUpload(ForgeOriginalVoxyModelStore store, PendingUploadAudit audit) {
+        this.modelStoreReadbackAuditRuns++;
+        this.lastAuditedModelId = audit.modelId();
+        byte[] modelReadback = new byte[MODEL_SIZE];
+        String error = store.readOriginalVoxyModelRecord(audit.modelId(), modelReadback);
+        if (!"none".equals(error)) {
+            this.recordUploadAuditFailure(error, false, false, false);
+            return;
+        }
+        boolean modelOk = Arrays.equals(audit.modelRecord(), modelReadback);
+
+        boolean colourOk = true;
+        if (audit.modelColourBytes() != null) {
+            byte[] colourReadback = new byte[audit.modelColourBytes().length];
+            error = store.readOriginalVoxyModelColourRange(audit.modelColourBaseIndex(), colourReadback.length, colourReadback);
+            if (!"none".equals(error)) {
+                this.recordUploadAuditFailure(error, modelOk, false, false);
+                return;
+            }
+            colourOk = Arrays.equals(audit.modelColourBytes(), colourReadback);
+        }
+
+        byte[] textureReadback = new byte[(int) ForgeOriginalVoxyMipGen.UPLOADED_MIP_CHAIN_BYTES];
+        error = store.readOriginalVoxyModelTextureMipChain(audit.modelId(), textureReadback);
+        if (!"none".equals(error)) {
+            this.recordUploadAuditFailure(error, modelOk, colourOk, false);
+            return;
+        }
+        boolean atlasOk = Arrays.equals(audit.mipChainBytes(), textureReadback);
+        this.modelDataReadbackOk = modelOk;
+        this.modelColourReadbackOk = colourOk;
+        this.atlasMipChainReadbackOk = atlasOk;
+        this.originalModelStoreReadbackAuditReady = modelOk && colourOk && atlasOk;
+        if (this.originalModelStoreReadbackAuditReady) {
+            this.lastModelStoreReadbackAuditFailureReason = "none";
+        } else {
+            this.modelStoreReadbackAuditFailures++;
+            this.lastModelStoreReadbackAuditFailureReason =
+                    "modelData=" + modelOk + ",modelColour=" + colourOk + ",atlasMipChain=" + atlasOk;
+        }
+    }
+
+    private void recordUploadAuditFailure(String reason, boolean modelOk, boolean colourOk, boolean atlasOk) {
+        this.modelStoreReadbackAuditFailures++;
+        this.modelDataReadbackOk = modelOk;
+        this.modelColourReadbackOk = colourOk;
+        this.atlasMipChainReadbackOk = atlasOk;
+        this.originalModelStoreReadbackAuditReady = false;
+        this.lastModelStoreReadbackAuditFailureReason =
+                reason == null || reason.isBlank() ? "original-model-store-readback-audit-failed" : reason.replace(' ', '-');
+    }
+
+    private int customBlockStateId(BlockState state) {
+        if (this.customBlockStateIdMapping == null || !this.customBlockStateIdMapping.containsKey(state)) {
+            return 0;
+        }
+        return this.customBlockStateIdMapping.getInt(state);
     }
 
     private static int firstTintIndex(ForgeSoftwareModelTextureBakery.BakeResult softwareBake) {
@@ -889,6 +996,15 @@ final class ForgeOriginalVoxyModelFactory {
         }
     }
 
+    private record PendingUploadAudit(
+            int modelId,
+            byte[] modelRecord,
+            int modelColourBaseIndex,
+            byte[] modelColourBytes,
+            byte[] mipChainBytes
+    ) {
+    }
+
     private static final class ModelBakeUpload implements ResultUploader {
         private final int blockStateId;
         private final int modelId;
@@ -940,6 +1056,13 @@ final class ForgeOriginalVoxyModelFactory {
                 return error;
             }
             factory.uploadedAtlasFaceCount += ForgeModelAtlasLayout.FACE_COUNT;
+            factory.enqueueUploadAudit(new PendingUploadAudit(
+                    this.modelId,
+                    bytes(this.model, MODEL_SIZE),
+                    this.build.immediateBiomeColourBaseIndex(),
+                    this.biomeUpload == null ? null : bytes(this.biomeUpload, (int) this.biomeUpload.size),
+                    bytes(this.texture, (int) ForgeOriginalVoxyMipGen.UPLOADED_MIP_CHAIN_BYTES)
+            ));
             return "none";
         }
 
@@ -951,6 +1074,14 @@ final class ForgeOriginalVoxyModelFactory {
                 this.biomeUpload.free();
             }
         }
+    }
+
+    private static byte[] bytes(MemoryBuffer buffer, int length) {
+        byte[] out = new byte[length];
+        for (int i = 0; i < out.length; i++) {
+            out[i] = MemoryUtil.memGetByte(buffer.address + i);
+        }
+        return out;
     }
 
     private static final class BiomeUpload implements ResultUploader {

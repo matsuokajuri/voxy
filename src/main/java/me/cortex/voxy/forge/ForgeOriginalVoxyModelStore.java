@@ -185,6 +185,85 @@ final class ForgeOriginalVoxyModelStore {
         return this.glErrorOrNone("original-model-texture-upload");
     }
 
+    String readOriginalVoxyModelRecord(int modelId, byte[] out) {
+        if (!this.canUploadOriginalVoxyModel()) {
+            return "original-model-store-not-upload-ready";
+        }
+        if (!isValidModelId(modelId) || modelId == 0) {
+            return "invalid-original-model-id-" + modelId;
+        }
+        if (out == null || out.length != MODEL_SIZE) {
+            return "invalid-original-model-readback-size";
+        }
+        MemoryBuffer readback = new MemoryBuffer(MODEL_SIZE);
+        try {
+            GL45C.nglGetNamedBufferSubData(this.modelBufferId, (long) modelId * MODEL_SIZE, MODEL_SIZE, readback.address);
+            copyBytes(readback.address, out);
+            return this.glErrorOrNone("original-model-record-readback");
+        } finally {
+            readback.free();
+        }
+    }
+
+    String readOriginalVoxyModelColourRange(int baseIndex, int byteCount, byte[] out) {
+        if (!this.canUploadOriginalVoxyModel()) {
+            return "original-model-store-not-upload-ready";
+        }
+        if (baseIndex < 0 || byteCount < 0 || out == null || out.length != byteCount
+                || (long) baseIndex * Integer.BYTES + byteCount > MODEL_COLOUR_BYTES) {
+            return "invalid-original-model-colour-readback-range";
+        }
+        MemoryBuffer readback = new MemoryBuffer(byteCount);
+        try {
+            GL45C.nglGetNamedBufferSubData(this.modelColourBufferId, (long) baseIndex * Integer.BYTES, byteCount, readback.address);
+            copyBytes(readback.address, out);
+            return this.glErrorOrNone("original-model-colour-readback");
+        } finally {
+            readback.free();
+        }
+    }
+
+    String readOriginalVoxyModelTextureMipChain(int modelId, byte[] out) {
+        if (!this.canUploadOriginalVoxyModel()) {
+            return "original-model-store-not-upload-ready";
+        }
+        if (!isValidModelId(modelId) || modelId == 0) {
+            return "invalid-original-model-id-" + modelId;
+        }
+        if (out == null || out.length < ForgeOriginalVoxyMipGen.UPLOADED_MIP_CHAIN_BYTES) {
+            return "invalid-original-model-texture-readback-size";
+        }
+        MemoryBuffer readback = new MemoryBuffer(ForgeOriginalVoxyMipGen.UPLOADED_MIP_CHAIN_BYTES);
+        try {
+            int x = (modelId & 0xFF) * ForgeModelAtlasLayout.MODEL_TEXTURE_SIZE * ForgeModelAtlasLayout.FACES_PER_MODEL_X;
+            int y = ((modelId >> 8) & 0xFF) * ForgeModelAtlasLayout.MODEL_TEXTURE_SIZE * ForgeModelAtlasLayout.FACES_PER_MODEL_Y;
+            long offset = 0L;
+            for (int level = 0; level < ForgeOriginalVoxyMipGen.LAYERS; level++) {
+                int width = (ForgeModelAtlasLayout.MODEL_TEXTURE_SIZE * ForgeModelAtlasLayout.FACES_PER_MODEL_X) >> level;
+                int height = (ForgeModelAtlasLayout.MODEL_TEXTURE_SIZE * ForgeModelAtlasLayout.FACES_PER_MODEL_Y) >> level;
+                int levelBytes = width * height * ForgeModelAtlasPixelSample.BYTES_PER_PIXEL;
+                GL45C.nglGetTextureSubImage(
+                        this.texturesId,
+                        level,
+                        x >> level,
+                        y >> level,
+                        0,
+                        width,
+                        height,
+                        1,
+                        GL11C.GL_RGBA,
+                        GL11C.GL_UNSIGNED_BYTE,
+                        levelBytes,
+                        readback.address + offset);
+                offset += levelBytes;
+            }
+            copyBytes(readback.address, out);
+            return this.glErrorOrNone("original-model-texture-readback");
+        } finally {
+            readback.free();
+        }
+    }
+
     void free() {
         if (!RenderSystem.isOnRenderThread()) {
             RenderSystem.recordRenderCall(this::free);
@@ -257,6 +336,12 @@ final class ForgeOriginalVoxyModelStore {
 
     private static boolean isValidModelId(int modelId) {
         return modelId >= 0 && modelId < MODEL_CAPACITY;
+    }
+
+    private static void copyBytes(long source, byte[] out) {
+        for (int i = 0; i < out.length; i++) {
+            out[i] = MemoryUtil.memGetByte(source + i);
+        }
     }
 
     private static String glErrorName(int error) {

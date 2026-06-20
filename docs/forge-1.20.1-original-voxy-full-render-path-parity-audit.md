@@ -267,6 +267,30 @@ UploadStream persistent mapped staging for buffers
 nglTextureSubImage2D for atlas mip-chain upload
 ```
 
+The Forge owner now also has an original-route upload audit after
+`UploadStream.commit()`: the last committed model records are read back from
+the original `modelBuffer`, optional `modelColourBuffer` ranges are read back
+when the upload wrote biome colours, and the 3x2 mip-chain atlas region is read
+back level by level. Status exposes:
+
+```text
+originalModelStoreReadbackAuditReady
+modelDataReadbackOk
+modelColourReadbackOk
+atlasMipChainReadbackOk
+modelStoreReadbackAuditRuns
+modelStoreReadbackAuditFailures
+lastAuditedModelId
+lastModelStoreReadbackAuditFailureReason
+```
+
+The original Iris/Oculus shaderpack material id hook is also connected. Original
+Voxy calls `ModelFactory.setCustomBlockStateMapping(WorldRenderingSettings.INSTANCE.getBlockStateIds())`
+from the Iris render pipeline. The Forge port reads the same Oculus singleton
+through a narrow reflection bridge and writes the original custom id word in the
+64-byte model record. A null map remains valid and writes zero, matching the
+original behavior when no shaderpack block-state ids are active.
+
 The old `ForgeFormalModelStore.uploadOriginalVoxy*` methods remain only for
 historical preview/prototype command compatibility. They are no longer the
 owner used by the original Voxy model pipeline.
@@ -294,18 +318,15 @@ semantics.
 
 ## Remaining bottom-up parity work
 
-1. Harden the Forge-port `ModelFactory` against original semantics: readback
-   audit, custom block-state id mapping, and documented Forge-only stair
-   base-state reflection.
-2. Keep removing historical `ForgeFormalModelStore` references from preview
+1. Keep removing historical `ForgeFormalModelStore` references from preview
    code; the original model pipeline now uses `ForgeOriginalVoxyModelStore`.
-3. Connect `RenderGenerationService` output to original-equivalent
+2. Connect `RenderGenerationService` output to original-equivalent
    `BasicAsyncGeometryManager` / `BasicSectionGeometryData`.
-4. Port `BasicAsyncGeometryManager` and `BasicSectionGeometryData`.
-5. Port `RenderDistanceTracker` and `HierarchicalOcclusionTraverser`.
-6. Port `MDICViewport` and production `cmdgen.comp`.
-7. Port `MDICSectionRenderer` and original terrain shader binding order.
-8. Port `VoxyRenderSystem` lifecycle only after the lower owners match.
+3. Port `BasicAsyncGeometryManager` and `BasicSectionGeometryData`.
+4. Port `RenderDistanceTracker` and `HierarchicalOcclusionTraverser`.
+5. Port `MDICViewport` and production `cmdgen.comp`.
+6. Port `MDICSectionRenderer` and original terrain shader binding order.
+7. Port `VoxyRenderSystem` lifecycle only after the lower owners match.
 
 ## Current documented Forge deviations
 
@@ -317,7 +338,8 @@ semantics.
 | `RenderGenerationService` request/requeue | original request/requeue depends on `RenderDataFactory.generateMesh()` throwing `IdNotYetComputedException` from real section generation | Forge now ports BuildTask priority, held-section retention, inner/outer missing-model scans, `requestBlockBake`, and requeue. Direct Fabric `ServiceManager` import is blocked by Fabric `commonImpl` dependencies, so a Forge-local worker carries the same task semantics; `originalServiceManagerParityReady=false` remains reported until the common thread stack is cleanly Forge-adapted. |
 | `RenderDataFactory` Java version helpers | original source uses `Integer.expand` / `Long.expand`, unavailable in Java 17 | Forge uses local equivalent bit-expansion helpers with the same mask/value semantics. |
 | `SoftwareModelTextureBakery` model collection and dark-cutout metadata | Forge 1.20.1 lacks the newer original `BlockStateModelPart` and public `BakedQuad.materialInfo()` API, but Embeddium injects the equivalent `BakedQuadView` and sprite transparency data used by its own chunk mesher | fixed for the active Forge/Embeddium route: `originalSoftwareModelTextureBakeryUsed=true`; the adaptation is constrained to Embeddium source-equivalent material and transparency signals |
-| `ModelStore` ownership | fixed: the original model pipeline now owns `ForgeOriginalVoxyModelStore` instead of historical `ForgeFormalModelStore`; uploads use original-style `MemoryBuffer` results, persistent `UploadStream`, and DSA texture mip uploads | `originalModelStoreUsed=true` is reported when the new owner is built and connected |
+| `ModelStore` ownership and audit | fixed: the original model pipeline now owns `ForgeOriginalVoxyModelStore` instead of historical `ForgeFormalModelStore`; uploads use original-style `MemoryBuffer` results, persistent `UploadStream`, DSA texture mip uploads, and post-commit readback audit for modelData/modelColour/atlas mip-chain regions | `originalModelStoreUsed=true` is reported when the owner is built; `originalModelStoreReadbackAuditReady=true` is reported after a committed upload readback matches the CPU payload |
+| Iris/Oculus custom block-state ids | original Voxy receives `WorldRenderingSettings.INSTANCE.getBlockStateIds()` from the Iris pipeline; Forge cannot compile against Oculus source directly in this source set | Forge reads the same Oculus singleton through `ForgeOculusWorldRenderingSettingsBridge`; null maps write custom id zero, matching original behavior |
 
 ## Do not do
 
