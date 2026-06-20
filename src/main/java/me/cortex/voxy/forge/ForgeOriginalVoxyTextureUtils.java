@@ -179,35 +179,42 @@ final class ForgeOriginalVoxyTextureUtils {
         float b = 0.0F;
         float a = 0.0F;
         if (darkened || (c00 >>> 24) != 0) {
-            r += srgbToLinear(c00 & 0xFF);
-            g += srgbToLinear((c00 >>> 8) & 0xFF);
-            b += srgbToLinear((c00 >>> 16) & 0xFF);
-            a += darkened ? (c00 >>> 24) : srgbToLinear(c00 >>> 24);
+            r += ForgeOriginalVoxyColorSRGB.srgbToLinear(c00 & 0xFF);
+            g += ForgeOriginalVoxyColorSRGB.srgbToLinear((c00 >>> 8) & 0xFF);
+            b += ForgeOriginalVoxyColorSRGB.srgbToLinear((c00 >>> 16) & 0xFF);
+            a += darkened ? (c00 >>> 24) : ForgeOriginalVoxyColorSRGB.srgbToLinear(c00 >>> 24);
         }
         if (darkened || (c01 >>> 24) != 0) {
-            r += srgbToLinear(c01 & 0xFF);
-            g += srgbToLinear((c01 >>> 8) & 0xFF);
-            b += srgbToLinear((c01 >>> 16) & 0xFF);
-            a += darkened ? (c01 >>> 24) : srgbToLinear(c01 >>> 24);
+            r += ForgeOriginalVoxyColorSRGB.srgbToLinear(c01 & 0xFF);
+            g += ForgeOriginalVoxyColorSRGB.srgbToLinear((c01 >>> 8) & 0xFF);
+            b += ForgeOriginalVoxyColorSRGB.srgbToLinear((c01 >>> 16) & 0xFF);
+            a += darkened ? (c01 >>> 24) : ForgeOriginalVoxyColorSRGB.srgbToLinear(c01 >>> 24);
         }
         if (darkened || (c10 >>> 24) != 0) {
-            r += srgbToLinear(c10 & 0xFF);
-            g += srgbToLinear((c10 >>> 8) & 0xFF);
-            b += srgbToLinear((c10 >>> 16) & 0xFF);
-            a += darkened ? (c10 >>> 24) : srgbToLinear(c10 >>> 24);
+            r += ForgeOriginalVoxyColorSRGB.srgbToLinear(c10 & 0xFF);
+            g += ForgeOriginalVoxyColorSRGB.srgbToLinear((c10 >>> 8) & 0xFF);
+            b += ForgeOriginalVoxyColorSRGB.srgbToLinear((c10 >>> 16) & 0xFF);
+            a += darkened ? (c10 >>> 24) : ForgeOriginalVoxyColorSRGB.srgbToLinear(c10 >>> 24);
         }
         if (darkened || (c11 >>> 24) != 0) {
-            r += srgbToLinear(c11 & 0xFF);
-            g += srgbToLinear((c11 >>> 8) & 0xFF);
-            b += srgbToLinear((c11 >>> 16) & 0xFF);
-            a += darkened ? (c11 >>> 24) : srgbToLinear(c11 >>> 24);
+            r += ForgeOriginalVoxyColorSRGB.srgbToLinear(c11 & 0xFF);
+            g += ForgeOriginalVoxyColorSRGB.srgbToLinear((c11 >>> 8) & 0xFF);
+            b += ForgeOriginalVoxyColorSRGB.srgbToLinear((c11 >>> 16) & 0xFF);
+            a += darkened ? (c11 >>> 24) : ForgeOriginalVoxyColorSRGB.srgbToLinear(c11 >>> 24);
         }
-        return linearToSrgb(
+        return ForgeOriginalVoxyColorSRGB.linearToSrgb(
                 r / 4.0F,
                 g / 4.0F,
                 b / 4.0F,
-                darkened ? ((int) a) / 4 : linearToSrgbChannel(a / 4.0F)
+                darkened ? ((int) a) / 4 : ForgeOriginalVoxyColorSRGB.linearToSrgb8(a / 4.0F)
         );
+    }
+
+    static boolean byteForByteAuditReady() {
+        return ForgeOriginalVoxyColorSRGB.byteForByteAuditReady()
+                && mipColours(false, 0xff000000, 0xff000000, 0xff000000, 0xff000000) == 0xff000000
+                && mipColours(false, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff) == 0xffffffff
+                && mipColours(true, 0x00000000, 0xffffffff, 0xff00ff00, 0xffff0000) == 0xe1bcbc89;
     }
 
     private static boolean wasPixelWritten(ForgeOriginalVoxyColourDepthTextureData data, int mode, int index) {
@@ -225,25 +232,4 @@ final class ForgeOriginalVoxyTextureUtils {
         return (float) ((double) depth / ((1 << 24) - 1));
     }
 
-    private static float srgbToLinear(int value) {
-        float c = value / 255.0F;
-        return c <= 0.04045F ? c / 12.92F : (float) Math.pow((c + 0.055F) / 1.055F, 2.4F);
-    }
-
-    private static int linearToSrgb(float r, float g, float b, int a) {
-        return (clamp(a, 0, 255) << 24)
-                | (linearToSrgbChannel(b) << 16)
-                | (linearToSrgbChannel(g) << 8)
-                | linearToSrgbChannel(r);
-    }
-
-    private static int linearToSrgbChannel(float value) {
-        float c = Math.max(0.0F, Math.min(1.0F, value));
-        float srgb = c <= 0.0031308F ? c * 12.92F : 1.055F * (float) Math.pow(c, 1.0F / 2.4F) - 0.055F;
-        return clamp(Math.round(srgb * 255.0F), 0, 255);
-    }
-
-    private static int clamp(int value, int min, int max) {
-        return Math.max(min, Math.min(max, value));
-    }
 }

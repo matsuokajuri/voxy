@@ -124,10 +124,14 @@ Missing before L2/L3 can be considered complete:
 
 ```text
 custom block-state id mapping
-TextureUtils byte-for-byte audit against original output
 readback audit for original route uploads
 full non-solid/fluid/tint software bake edge coverage
 ```
+
+The `TextureUtils` / `ColorSRGB` conversion path is now aligned to original
+Voxy's Sodium dependency through a Forge-local port of Embeddium's fast-srgb8
+`ColorSRGB` implementation. The remaining L3 work is the lower software bakery
+chain around it, not this color conversion helper.
 
 The original persistent-mapped `UploadStream`, `RenderGenerationService`
 missing-model request/requeue, `RenderDataFactory`, `BuiltSection`,
@@ -180,8 +184,7 @@ A subsystem is considered aligned only when:
 The next work should continue bottom-up parity, not preview hardening:
 
 ```text
-complete TextureUtils byte-for-byte parity proof
- -> complete SoftwareModelTextureBakery edge parity
+complete SoftwareModelTextureBakery edge parity
  -> connect RenderGenerationService BuiltSection output to BasicAsyncGeometryManager
  -> port BasicSectionGeometryData and original geometry ownership
  -> continue into visibility / MDIC parity

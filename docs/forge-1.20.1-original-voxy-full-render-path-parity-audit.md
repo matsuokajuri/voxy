@@ -180,6 +180,16 @@ operate on that record instead of the historical `FaceTexture` substitute.
 `faceData`, computes tint, and generates the mip-chain from
 `ForgeOriginalVoxyColourDepthTextureData[]`.
 
+`ForgeOriginalVoxyTextureUtils.mipColours()` now uses a Forge-local port of
+Embeddium/Sodium's fast-srgb8 `ColorSRGB` table implementation, matching the
+original Voxy `TextureUtils` RGB conversion path instead of the previous
+formula approximation. Forge 1.20.1 does not expose the original source's
+`net.minecraft.util.ARGB` helper class, so the alpha conversion is routed
+through the same table helper and documented as a version-mapping adaptation.
+`textureUtilsByteForByteAuditReady=true` now means this ColorSRGB-backed
+`TextureUtils`/mip sample audit passes; it does not imply that the whole
+software bakery or ModelStore owner is parity-complete.
+
 The old `BakeResult.faces()` and `FaceTexture` view remains only as deprecated
 compile compatibility for historical preview/debug classes. It is not the
 original Voxy route and must not be extended.
@@ -203,8 +213,8 @@ semantics.
 ## Remaining bottom-up parity work
 
 1. Harden the Forge-port `ModelFactory` against original semantics: readback
-   audit, byte-for-byte `TextureUtils` output comparison, custom block-state id
-   mapping, and documented Forge-only stair base-state reflection.
+   audit, custom block-state id mapping, and documented Forge-only stair
+   base-state reflection.
 2. Complete `SoftwareModelTextureBakery` runtime parity for solid, leaves,
    cutout, translucent, fluid, tint, and atlas sampling.
 3. Complete `ModelStore` upload parity against the formal owner, including
@@ -223,7 +233,7 @@ semantics.
 | --- | --- | --- |
 | `StairBlock.baseState` access | original source accesses the field directly; Forge 1.20.1 exposes it as private at compile time | Forge port uses a cached reflective field read to preserve original normalization semantics |
 | `UploadStream` persistent staging | original upload path depends on `GlPersistentMappedBuffer`, `GlFence`, `GlBuffer`, and `AllocationArena` from the original client-core GL stack | Forge now ports this as `ForgeOriginalVoxyUploadStream`: persistent mapped staging buffer, `AllocationArena`, frame fences, explicit flush/copy/commit. The singleton is lazy-created on the render thread to respect Forge GL-context timing. |
-| `TextureUtils` byte-for-byte proof | helper logic is ported, but output has not yet been compared against original Sodium/Embeddium API `ColorSRGB`/ARGB behavior by tests | status reports helper port ready but byte-for-byte audit not ready |
+| `TextureUtils` ColorSRGB path | original Voxy imports Sodium `ColorSRGB`; Forge runtime prerequisite is Embeddium, whose reference source keeps the same fast-srgb8 table under a moved package | Forge now ports that fast-srgb8 table locally and `textureUtilsByteForByteAuditReady=true` is reported when the table/mip sample audit passes. The 1.20.1 `ARGB` class name is unavailable, so alpha uses the same table helper as a documented mapping adaptation. |
 | `RenderGenerationService` request/requeue | original request/requeue depends on `RenderDataFactory.generateMesh()` throwing `IdNotYetComputedException` from real section generation | Forge now ports BuildTask priority, held-section retention, inner/outer missing-model scans, `requestBlockBake`, and requeue. Direct Fabric `ServiceManager` import is blocked by Fabric `commonImpl` dependencies, so a Forge-local worker carries the same task semantics; `originalServiceManagerParityReady=false` remains reported until the common thread stack is cleanly Forge-adapted. |
 | `RenderDataFactory` Java version helpers | original source uses `Integer.expand` / `Long.expand`, unavailable in Java 17 | Forge uses local equivalent bit-expansion helpers with the same mask/value semantics. |
 | `SoftwareModelTextureBakery` vertex/raster path | the Forge class now outputs original `ColourDepthTextureData`, but it still uses a Forge-adapted `BakedModel`/`BakedQuad` access path and local vertex-list/rasterizer implementation instead of a full source-level port of original `ReuseVertexConsumer` / `SoftwareRasterizer` / `FluidRenderer` usage | `originalSoftwareModelTextureBakeryUsed=false` is reported until this lower layer is fully ported |
@@ -249,7 +259,6 @@ Continue with bottom-up parity:
 
 ```text
 finish SoftwareModelTextureBakery vertex/raster path parity
- -> complete TextureUtils byte-for-byte parity proof
  -> finish original ModelStore owner/lifecycle parity
  -> connect RenderGenerationService BuiltSection output to BasicAsyncGeometryManager
  -> port BasicSectionGeometryData

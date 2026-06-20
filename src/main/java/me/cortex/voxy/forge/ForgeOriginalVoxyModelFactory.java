@@ -197,7 +197,7 @@ final class ForgeOriginalVoxyModelFactory {
                 true,
                 true,
                 true,
-                false,
+                ForgeOriginalVoxyTextureUtils.byteForByteAuditReady(),
                 true,
                 true,
                 false,

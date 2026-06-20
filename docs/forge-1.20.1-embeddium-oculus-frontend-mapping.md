@@ -209,6 +209,15 @@ Do not apply these mixins without a Forge-side compatibility gate.
 7. Only after the frontend hooks are exact, connect them to the original
    VoxyRenderSystem/MDIC route.
 
+## ColorSRGB parity note
+
+Original Voxy's `TextureUtils` depends on Sodium `ColorSRGB`. The Forge port
+now uses a local `ForgeOriginalVoxyColorSRGB` port copied from the checked
+Embeddium fast-srgb8 implementation so the active source set still compiles
+without committing local frontend jars. This is not a substitute algorithm; it
+is the Embeddium/Sodium table path used to preserve original Voxy mip color
+semantics.
+
 ## Current blockers
 
 ```text
