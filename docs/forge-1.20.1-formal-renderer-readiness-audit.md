@@ -3,7 +3,8 @@
 This document supersedes the old preview/debug readiness audit.
 
 Readiness is now measured only against original Voxy parity. New implementation
-work uses Roman-major stage names with dotted substages. Preview pixels,
+work uses Roman-major rounds with dotted Arabic steps inside each round.
+Preview pixels,
 sample-set uploads, synthetic GPU validation, offscreen smoke tests, and old
 K-era visible preview output do not count as formal renderer readiness.
 

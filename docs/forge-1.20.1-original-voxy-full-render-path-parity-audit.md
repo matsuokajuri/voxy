@@ -1,9 +1,12 @@
 # Forge 1.20.1 original Voxy full render-path parity audit
 
 This is the current route-control ledger. It supersedes old H/I/J/K/L-stage and
-preview audit language. New implementation work uses Roman-major stage names
-with dotted substages, for example
-`V.1_ORIGINAL_MDIC_VIEWPORT_CMDGEN_INPUT_PARITY`.
+preview audit language. New implementation work uses Roman-major rounds with
+dotted Arabic steps inside the same round, for example
+`V_ORIGINAL_MDIC_COMMAND_GENERATION_CHAIN` containing
+`V.1_ORIGINAL_MDIC_VIEWPORT_CMDGEN_INPUT_PARITY`,
+`V.2_ORIGINAL_CMDGEN_COMP_OUTPUT_PARITY`, and
+`V.3_ORIGINAL_CMDGEN_READBACK_AND_BARRIER_AUDIT`.
 
 ## Current rule
 

@@ -7,10 +7,13 @@ The formal Forge MDIC path must be a port/adaptation of original Voxy
 debug command buffers, synthetic cmdgen validators, and K10 visible preview
 resources are deprecated and must not be extended into the renderer.
 
-New MDIC renderer work uses the Roman-stage route. The active next stage is:
+New MDIC renderer work uses the Roman-round route. The active next round is:
 
 ```text
-V.1_ORIGINAL_MDIC_VIEWPORT_CMDGEN_INPUT_PARITY
+V_ORIGINAL_MDIC_COMMAND_GENERATION_CHAIN
+ -> V.1_ORIGINAL_MDIC_VIEWPORT_CMDGEN_INPUT_PARITY
+ -> V.2_ORIGINAL_CMDGEN_COMP_OUTPUT_PARITY
+ -> V.3_ORIGINAL_CMDGEN_READBACK_AND_BARRIER_AUDIT
 ```
 
 ## Forge frontend prerequisites
@@ -103,7 +106,8 @@ implementation scaffolding for formal MDIC.
    for the active Roman route, with real HiZ traversal runtime proof.
 7. Port `HierarchicalOcclusionTraverser` request-batch production. Done for the
    active Roman route at the owner/traversal level.
-8. Roman V: port production `cmdgen.comp` inputs and dispatch contract.
+8. Roman V: port production `cmdgen.comp` inputs, dispatch contract, output
+   readback, and barrier audit as one coherent multi-step round.
 9. Roman VI: port `MDICSectionRenderer` draw setup and binding order.
 10. Roman VII: bind the original `ModelStore` and terrain shader contract
     exactly as original Voxy expects.

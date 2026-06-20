@@ -66,14 +66,20 @@ The current route is:
 original Voxy parity remediation
 ```
 
-New implementation stages use Roman numerals only. Old alphanumeric labels such
-as H/I/J/K/L are historical labels and must not be used for new work. Use
-Roman-major and dotted-substage names, for example:
+New implementation rounds use Roman numerals only. Old alphanumeric labels such
+as H/I/J/K/L are historical labels and must not be used for new work. A large
+Roman numeral is one implementation round, and dotted Arabic suffixes are steps
+inside that same round, for example:
 
 ```text
 V_ORIGINAL_MDIC_COMMAND_GENERATION_CHAIN
 V.1_ORIGINAL_MDIC_VIEWPORT_CMDGEN_INPUT_PARITY
+V.2_ORIGINAL_CMDGEN_COMP_OUTPUT_PARITY
+V.3_ORIGINAL_CMDGEN_READBACK_AND_BARRIER_AUDIT
 ```
+
+Prefer coherent multi-step Roman rounds over one tiny commit per dotted step,
+while still compiling between risky steps and committing the completed round.
 
 ## 4. Original Voxy chain to port
 

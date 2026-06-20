@@ -1,4 +1,4 @@
-# Forge 1.20.1 Roman stage roadmap
+# Forge 1.20.1 Roman round roadmap
 
 This document supersedes the old H/I/J/K/L and K10-preview-era roadmap.
 
@@ -57,21 +57,25 @@ routes. New work must not continue those routes.
 
 ## Active naming convention
 
-New implementation stages use Roman numerals only:
+New implementation rounds use Roman numerals only:
 
 ```text
 I, II, III, IV, V, VI, VII, VIII, IX, X
 ```
 
-Substages use dotted Roman-major labels:
+A large Roman numeral is one coherent implementation round. Dotted Arabic
+suffixes are steps inside that same round:
 
 ```text
 V.1_ORIGINAL_MDIC_VIEWPORT_CMDGEN_INPUT_PARITY
 V.2_ORIGINAL_CMDGEN_COMP_OUTPUT_PARITY
+V.3_ORIGINAL_CMDGEN_READBACK_AND_BARRIER_AUDIT
 ```
 
 Old alphanumeric labels such as `H`, `I5`, `J2`, `K10`, `K23-K54`, and `L1`
 are historical labels only. They must not be used for new implementation work.
+Prefer one coherent Roman round with several compiled steps over splitting each
+dotted step into a separate mini-stage.
 
 ## Active roadmap: Roman original Voxy parity remediation
 
@@ -90,7 +94,7 @@ IX. Runtime lifecycle, reload, movement update, and performance parity
 X. Compatibility polish and deprecated-route retirement
 ```
 
-These Roman labels are parity-remediation stages, not feature demos.
+These Roman rounds are parity-remediation work units, not feature demos.
 
 ## Current Roman-route status
 
@@ -134,7 +138,7 @@ references but are not included in the current Forge compile source set, so the
 mechanisms must be ported/adapted under `me.cortex.voxy.forge` rather than
 directly imported.
 
-Missing before Roman stage II model/upload parity can be considered complete:
+Missing before Roman round II model/upload parity can be considered complete:
 
 ```text
 none at the ModelFactory / ModelStore upload-contract level
@@ -186,15 +190,19 @@ original-shaped `NodeManager`, `NodeStore`, `SectionUpdateRouter`,
 part of the active route and have runtime proof for real HiZ traversal against
 the Minecraft depth attachment.
 
-The next active stage is:
+The next active round is:
 
 ```text
-V.1_ORIGINAL_MDIC_VIEWPORT_CMDGEN_INPUT_PARITY
+V_ORIGINAL_MDIC_COMMAND_GENERATION_CHAIN
+ -> V.1_ORIGINAL_MDIC_VIEWPORT_CMDGEN_INPUT_PARITY
+ -> V.2_ORIGINAL_CMDGEN_COMP_OUTPUT_PARITY
+ -> V.3_ORIGINAL_CMDGEN_READBACK_AND_BARRIER_AUDIT
 ```
 
 It must close the contract from `MDICViewport` / HOC render-list output into
-the original production `cmdgen.comp` inputs. It must not reuse K-era synthetic
-cmdgen validation buffers or preview command buffers as formal inputs.
+the original production `cmdgen.comp` inputs, run original `cmdgen.comp`, and
+audit command output/barriers. It must not reuse K-era synthetic cmdgen
+validation buffers or preview command buffers as formal inputs.
 
 ## Required source trace
 
@@ -240,6 +248,7 @@ The next work should continue bottom-up parity, not preview hardening:
 ```text
 V.1_ORIGINAL_MDIC_VIEWPORT_CMDGEN_INPUT_PARITY
  -> V.2_ORIGINAL_CMDGEN_COMP_OUTPUT_PARITY
+ -> V.3_ORIGINAL_CMDGEN_READBACK_AND_BARRIER_AUDIT
  -> VI_ORIGINAL_MDIC_SECTION_RENDERER_CHAIN
  -> VII_ORIGINAL_TERRAIN_SHADER_CONTRACT_CHAIN
 ```
