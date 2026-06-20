@@ -493,14 +493,14 @@ final class ForgeMultiBlockFormalBakeUpload {
 
         for (Direction direction : DIRECTIONS) {
             int faceIndex = direction.get3DDataValue();
-            ForgeSoftwareModelTextureBakery.FaceTexture faceTexture = softwareBake.faces()[faceIndex];
-            int writtenPixels = faceTexture == null ? 0 : faceTexture.writtenPixelCount(layer);
+            ForgeOriginalVoxyColourDepthTextureData faceTexture = softwareBake.textures()[faceIndex];
+            int writtenPixels = faceTexture == null ? 0 : writtenPixelCount(faceTexture, layer);
             if (writtenPixels == 0) {
                 missingFaces++;
                 builtFaces.add(FaceBuild.missing(faceIndex, direction.getName()));
                 continue;
             }
-            int tintState = faceTexture.tintState(layer);
+            int tintState = tintState(faceTexture, layer);
             if (tintState == 2 || tintState == 3) {
                 tintedFaces++;
             }
@@ -886,12 +886,19 @@ final class ForgeMultiBlockFormalBakeUpload {
         return builder.toString();
     }
 
-    private static int encodeSoftwareFaceData(ForgeSoftwareModelTextureBakery.FaceTexture texture, ForgeCpuMeshLayer layer) {
-        int[] bounds = texture.bounds(layer);
+    private static int encodeSoftwareFaceData(ForgeOriginalVoxyColourDepthTextureData texture, ForgeCpuMeshLayer layer) {
+        int checkMode = checkMode(layer);
+        int[] bounds = ForgeOriginalVoxyTextureUtils.computeBounds(texture, checkMode);
         if (bounds[1] < bounds[0] || bounds[3] < bounds[2]) {
             return -1;
         }
-        float depth = texture.depth(layer, layer != ForgeCpuMeshLayer.SOLID);
+        float depth = ForgeOriginalVoxyTextureUtils.computeDepth(
+                texture,
+                layer != ForgeCpuMeshLayer.SOLID
+                        ? ForgeOriginalVoxyTextureUtils.DEPTH_MODE_MIN
+                        : ForgeOriginalVoxyTextureUtils.DEPTH_MODE_AVG,
+                checkMode
+        );
         if (depth < -0.1F) {
             return -1;
         }
@@ -906,20 +913,34 @@ final class ForgeMultiBlockFormalBakeUpload {
                 | (maxV << 12)
                 | (depthEncoded << 16);
         int area = Math.max(1, (maxU - minU + 1) * (maxV - minV + 1));
-        int written = texture.writtenPixelCount(layer);
+        int written = writtenPixelCount(texture, layer);
         boolean faceCoversFullBlock = minU == 0 && maxU == 15 && minV == 0 && maxV == 15;
         boolean needsAlphaDiscard = ((float) written / (float) area) < 0.9F;
         needsAlphaDiscard |= layer != ForgeCpuMeshLayer.SOLID;
         needsAlphaDiscard &= layer != ForgeCpuMeshLayer.TRANSLUCENT;
         faceData |= needsAlphaDiscard ? 1 << 22 : 0;
         faceData |= (!faceCoversFullBlock && layer != ForgeCpuMeshLayer.TRANSLUCENT) ? 1 << 23 : 0;
-        int tintState = texture.tintState(layer);
+        int tintState = tintState(texture, layer);
         if (tintState == 2) {
             faceData |= 1 << 24;
         } else if (tintState == 3) {
             faceData |= 2 << 24;
         }
         return faceData;
+    }
+
+    private static int writtenPixelCount(ForgeOriginalVoxyColourDepthTextureData texture, ForgeCpuMeshLayer layer) {
+        return ForgeOriginalVoxyTextureUtils.getWrittenPixelCount(texture, checkMode(layer));
+    }
+
+    private static int tintState(ForgeOriginalVoxyColourDepthTextureData texture, ForgeCpuMeshLayer layer) {
+        return ForgeOriginalVoxyTextureUtils.computeFaceTint(texture, checkMode(layer));
+    }
+
+    private static int checkMode(ForgeCpuMeshLayer layer) {
+        return layer == ForgeCpuMeshLayer.SOLID
+                ? ForgeOriginalVoxyTextureUtils.WRITE_CHECK_STENCIL
+                : ForgeOriginalVoxyTextureUtils.WRITE_CHECK_ALPHA;
     }
 
     private static int sampleTintColour(Minecraft minecraft, BlockState state, FaceUpload[] faces) {

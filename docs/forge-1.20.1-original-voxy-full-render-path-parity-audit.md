@@ -199,13 +199,26 @@ ForgeOriginalVoxyReuseVertexConsumer
  -> ForgeOriginalVoxySoftwareRasterizer
  -> whole block-atlas UV sampling
  -> original depth/stencil/tint/blend framebuffer packing
+ -> original-shaped scratch output buffer
+ -> ForgeOriginalVoxyColourDepthTextureData[6] extraction in ModelFactory
 ```
 
 This ports the original `ReuseVertexConsumer` / `SoftwareRasterizer` structure
 and removes the previous per-quad `TextureAtlasSprite.getPixelRGBA()` sampling
-path from the active bake. It is still not a full source-equivalent
-`SoftwareModelTextureBakery`: the atlas capture now uses the original-style DSA
-`glGetTextureImage` path and Forge fluid baking now selects the consumer from
+path from the active bake. The active Forge `ModelFactory` now owns the bake
+scratch buffer like original `ModelFactory.bakeScratchBuffer`; it calls the
+original-shaped `renderToOutput(..., outputBuffer)` contract and extracts
+`ColourDepthTextureData[6]` from the packed `long` framebuffer output before
+dedupe, metadata, mip-chain, and upload.
+
+The historical K/I `BakeResult.faces()` / `FaceTexture` substitute has been
+removed from the bakery surface. Historical preview code that still compiles
+against the bakery now consumes `ForgeOriginalVoxyColourDepthTextureData`
+directly. New parity work must not reintroduce a separate face texture DTO.
+
+It is still not a full source-equivalent `SoftwareModelTextureBakery`: the
+atlas capture uses the original-style DSA `glGetTextureImage` path and Forge
+fluid baking selects the consumer from
 `ItemBlockRenderTypes.getRenderLayer(fluidState)` instead of forcing every
 fluid through the translucent consumer, but Forge 1.20.1 still lacks the newer
 original source's `BlockStateModelPart`/`BakedQuad.materialInfo()` model
@@ -241,9 +254,10 @@ The old `ForgeFormalModelStore.uploadOriginalVoxy*` methods remain only for
 historical preview/prototype command compatibility. They are no longer the
 owner used by the original Voxy model pipeline.
 
-The old `BakeResult.faces()` and `FaceTexture` view remains only as deprecated
-compile compatibility for historical preview/debug classes. It is not the
-original Voxy route and must not be extended.
+The old `BakeResult.faces()` and `FaceTexture` view has been removed from the
+bakery API. Historical preview/debug classes are deprecated; where they still
+compile, they must consume the original-shaped `ColourDepthTextureData` output
+instead of forcing the formal path to preserve K-era DTOs.
 
 ## Source-set reality
 
@@ -263,11 +277,14 @@ semantics.
 
 ## Remaining bottom-up parity work
 
-1. Harden the Forge-port `ModelFactory` against original semantics: readback
+1. Resolve the remaining `SoftwareModelTextureBakery` version/API gaps:
+   original `BlockStateModelPart` collection, `BakedQuad.materialInfo()` layer
+   and shade/tint data, and dark-cutout mip strategy. If Forge/Embeddium cannot
+   expose an equivalent signal, document the exact platform blocker before any
+   adaptation.
+2. Harden the Forge-port `ModelFactory` against original semantics: readback
    audit, custom block-state id mapping, and documented Forge-only stair
    base-state reflection.
-2. Complete `SoftwareModelTextureBakery` runtime parity for solid, leaves,
-   cutout, translucent, fluid, tint, and atlas sampling.
 3. Keep removing historical `ForgeFormalModelStore` references from preview
    code; the original model pipeline now uses `ForgeOriginalVoxyModelStore`.
 4. Connect `RenderGenerationService` output to original-equivalent
@@ -287,7 +304,7 @@ semantics.
 | `TextureUtils` ColorSRGB path | original Voxy imports Sodium `ColorSRGB`; Forge runtime prerequisite is Embeddium, whose reference source keeps the same fast-srgb8 table under a moved package | Forge now ports that fast-srgb8 table locally and `textureUtilsByteForByteAuditReady=true` is reported when the table/mip sample audit passes. The 1.20.1 `ARGB` class name is unavailable, so alpha uses the same table helper as a documented mapping adaptation. |
 | `RenderGenerationService` request/requeue | original request/requeue depends on `RenderDataFactory.generateMesh()` throwing `IdNotYetComputedException` from real section generation | Forge now ports BuildTask priority, held-section retention, inner/outer missing-model scans, `requestBlockBake`, and requeue. Direct Fabric `ServiceManager` import is blocked by Fabric `commonImpl` dependencies, so a Forge-local worker carries the same task semantics; `originalServiceManagerParityReady=false` remains reported until the common thread stack is cleanly Forge-adapted. |
 | `RenderDataFactory` Java version helpers | original source uses `Integer.expand` / `Long.expand`, unavailable in Java 17 | Forge uses local equivalent bit-expansion helpers with the same mask/value semantics. |
-| `SoftwareModelTextureBakery` model collection and dark-cutout metadata | vertex storage, raster output, atlas capture, fluid layer selection, and mip-chain memory-buffer upload now match or map to original semantics; Forge 1.20.1 still lacks the newer `BlockStateModelPart`/`BakedQuad.materialInfo()` and `MipmapStrategy.DARK_CUTOUT` signals | `originalSoftwareModelTextureBakeryUsed=false` remains reported until these version/API differences are solved without guessing |
+| `SoftwareModelTextureBakery` model collection and dark-cutout metadata | vertex storage, raster output, scratch output buffer, atlas capture, fluid layer selection, and mip-chain memory-buffer upload now match or map to original semantics; Forge 1.20.1 still lacks the newer `BlockStateModelPart`/`BakedQuad.materialInfo()` and `MipmapStrategy.DARK_CUTOUT` signals | `originalSoftwareModelTextureBakeryUsed=false` remains reported until these version/API differences are solved without guessing |
 | `ModelStore` ownership | fixed: the original model pipeline now owns `ForgeOriginalVoxyModelStore` instead of historical `ForgeFormalModelStore`; uploads use original-style `MemoryBuffer` results, persistent `UploadStream`, and DSA texture mip uploads | `originalModelStoreUsed=true` is reported when the new owner is built and connected |
 
 ## Do not do

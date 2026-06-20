@@ -45,6 +45,7 @@ final class ForgeOriginalVoxyModelFactory {
     private final Mapper mapper;
     private final ForgeOriginalVoxyModelStore store;
     private final ForgeSoftwareModelTextureBakery softwareBakery = new ForgeSoftwareModelTextureBakery();
+    private final MemoryBuffer bakeScratchBuffer = new MemoryBuffer(ForgeSoftwareModelTextureBakery.OUTPUT_BUFFER_BYTES);
     private final ConcurrentLinkedDeque<BlockBake> bakeQueue = new ConcurrentLinkedDeque<>();
     private final ConcurrentLinkedDeque<Mapper.BiomeEntry> biomeQueue = new ConcurrentLinkedDeque<>();
     private final ConcurrentLinkedDeque<ResultUploader> uploadResults = new ConcurrentLinkedDeque<>();
@@ -278,6 +279,7 @@ final class ForgeOriginalVoxyModelFactory {
         }
         this.blockStatesInFlight.clear();
         this.softwareBakery.free();
+        this.bakeScratchBuffer.free();
     }
 
     private boolean ensureStoreReady() {
@@ -302,7 +304,17 @@ final class ForgeOriginalVoxyModelFactory {
             return true;
         }
 
-        ForgeSoftwareModelTextureBakery.BakeResult softwareBake = this.softwareBakery.renderToOutput(minecraft, bake.state(), bake.blockId());
+        int softwareFlags = this.softwareBakery.renderToOutput(minecraft, bake.state(), this.bakeScratchBuffer.address);
+        ForgeOriginalVoxyColourDepthTextureData[] textures =
+                ForgeSoftwareModelTextureBakery.texturesFromOutput(this.bakeScratchBuffer.address);
+        ForgeCpuMeshLayer layer = chooseLayer(bake.state(), softwareFlags, textures);
+        ForgeSoftwareModelTextureBakery.BakeResult softwareBake =
+                new ForgeSoftwareModelTextureBakery.BakeResult(
+                        textures,
+                        layer,
+                        softwareFlags,
+                        this.softwareBakery.lastFailureReason()
+                );
         if (!"none".equals(softwareBake.failureReason())) {
             this.removeInFlight(bake.blockId());
             this.failedBakeCount++;
@@ -549,6 +561,42 @@ final class ForgeOriginalVoxyModelFactory {
             }
         }
         return -1;
+    }
+
+    private static ForgeCpuMeshLayer chooseLayer(
+            BlockState state,
+            int flags,
+            ForgeOriginalVoxyColourDepthTextureData[] textures
+    ) {
+        ForgeCpuMeshLayer layer = ForgeCpuMeshLayer.OTHER;
+        if ((flags & 4) != 0) {
+            boolean anyTranslucent = false;
+            for (ForgeOriginalVoxyColourDepthTextureData face : textures) {
+                anyTranslucent |= face != null && ForgeOriginalVoxyTextureUtils.hasTranslucentPixel(face);
+                if (anyTranslucent) {
+                    break;
+                }
+            }
+            if (anyTranslucent) {
+                layer = ForgeCpuMeshLayer.TRANSLUCENT;
+            } else {
+                boolean solid = true;
+                for (ForgeOriginalVoxyColourDepthTextureData face : textures) {
+                    solid &= face == null || ForgeOriginalVoxyTextureUtils.isSolidWhereDrawn(face);
+                    if (!solid) {
+                        break;
+                    }
+                }
+                layer = solid ? ForgeCpuMeshLayer.SOLID : ForgeCpuMeshLayer.CUTOUT;
+            }
+        }
+        if (layer == ForgeCpuMeshLayer.OTHER && (flags & 8) != 0) {
+            layer = ForgeCpuMeshLayer.CUTOUT;
+        }
+        if (state.is(net.minecraft.tags.BlockTags.LEAVES)) {
+            layer = ForgeCpuMeshLayer.SOLID;
+        }
+        return layer == ForgeCpuMeshLayer.OTHER ? ForgeCpuMeshLayer.SOLID : layer;
     }
 
     private static boolean isBiomeDependentColour(Minecraft minecraft, BlockState state, int tintIndex) {

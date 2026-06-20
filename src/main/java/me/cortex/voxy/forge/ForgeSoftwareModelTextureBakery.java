@@ -1,6 +1,8 @@
 package me.cortex.voxy.forge;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import me.cortex.voxy.common.util.MemoryBuffer;
+import me.cortex.voxy.common.util.UnsafeUtil;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.ItemBlockRenderTypes;
 import net.minecraft.client.renderer.RenderType;
@@ -35,6 +37,7 @@ import org.lwjgl.opengl.GL15C;
 import org.lwjgl.opengl.GL21C;
 import org.lwjgl.opengl.GL30C;
 import org.lwjgl.opengl.GL11C;
+import org.lwjgl.system.MemoryUtil;
 
 import javax.annotation.Nullable;
 import java.nio.ByteBuffer;
@@ -43,6 +46,8 @@ import java.util.List;
 final class ForgeSoftwareModelTextureBakery {
     private static final int FACE_SIZE = ForgeModelAtlasLayout.MODEL_TEXTURE_SIZE;
     private static final int FACE_PIXELS = FACE_SIZE * FACE_SIZE;
+    static final long SINGLE_FACE_OUTPUT_SIZE = FACE_PIXELS * Long.BYTES;
+    static final long OUTPUT_BUFFER_BYTES = SINGLE_FACE_OUTPUT_SIZE * ForgeModelAtlasLayout.FACE_COUNT;
     private static final int FLAG_SHADED = 1;
     private static final int FLAG_DARKENED = 2;
     private static final int FLAG_TRANSLUCENT = 4;
@@ -57,27 +62,47 @@ final class ForgeSoftwareModelTextureBakery {
     private int atlasWidth;
     private int atlasHeight;
     private boolean freed;
+    private String lastFailureReason = "none";
 
     void prepareOnRenderThread(Minecraft minecraft) {
         this.setupTexture(minecraft);
     }
 
     BakeResult renderToOutput(Minecraft minecraft, BlockState state, int blockStateId) {
-        this.setupTexture(minecraft);
-        var faces = new ForgeOriginalVoxyColourDepthTextureData[ForgeModelAtlasLayout.FACE_COUNT];
-        for (int i = 0; i < faces.length; i++) {
-            faces[i] = emptyTexture();
+        MemoryBuffer output = new MemoryBuffer(OUTPUT_BUFFER_BYTES);
+        try {
+            int flags = this.renderToOutput(minecraft, state, output.address);
+            ForgeOriginalVoxyColourDepthTextureData[] faces = texturesFromOutput(output.address);
+            return new BakeResult(faces, chooseLayer(state, flags, faces), flags, this.lastFailureReason);
+        } finally {
+            output.free();
         }
+    }
+
+    int renderToOutput(Minecraft minecraft, BlockState state, long outputBuffer) {
+        this.lastFailureReason = "none";
+        MemoryUtil.memSet(outputBuffer, 0, OUTPUT_BUFFER_BYTES);
+        this.setupTexture(minecraft);
         if (state == null || state.isAir() || state.getRenderShape() == RenderShape.INVISIBLE) {
-            return new BakeResult(faces, ForgeCpuMeshLayer.OTHER, 0, "invisible-or-air");
+            this.lastFailureReason = "invisible-or-air";
+            return 0;
+        }
+        if (this.atlasPixels == null) {
+            this.lastFailureReason = "software-bakery-atlas-unavailable";
+            return 0;
         }
         if (state.getBlock() instanceof LiquidBlock) {
-            if (this.atlasPixels == null || Minecraft.getInstance().level == null) {
-                return new BakeResult(faces, ForgeCpuMeshLayer.OTHER, 0, "software-bakery-atlas-or-level-unavailable");
+            if (Minecraft.getInstance().level == null) {
+                this.lastFailureReason = "software-bakery-level-unavailable";
+                return 0;
             }
-            return this.renderFluid(state, faces);
+            return this.renderFluid(state, outputBuffer);
         }
-        return this.renderBlock(minecraft, state, blockStateId, faces);
+        return this.renderBlock(minecraft, state, outputBuffer);
+    }
+
+    String lastFailureReason() {
+        return this.lastFailureReason;
     }
 
     private void setupTexture(Minecraft minecraft) {
@@ -121,23 +146,24 @@ final class ForgeSoftwareModelTextureBakery {
         this.rasterizer.setSamplerTexture(this.atlasPixels, this.atlasWidth, this.atlasHeight);
     }
 
-    private BakeResult renderBlock(Minecraft minecraft, BlockState state, int blockStateId, ForgeOriginalVoxyColourDepthTextureData[] faces) {
+    private int renderBlock(Minecraft minecraft, BlockState state, long outputBuffer) {
         BakedModel model = minecraft.getBlockRenderer().getBlockModel(state);
         if (model == null || model.isCustomRenderer()) {
-            return new BakeResult(faces, ForgeCpuMeshLayer.OTHER, 0, "baked-model-missing-or-custom");
+            this.lastFailureReason = "baked-model-missing-or-custom";
+            return 0;
         }
         this.opaqueVC.reset();
         this.translucentVC.reset();
         int flags = 0;
         boolean anyRenderType = false;
         boolean forceSolid = state.is(BlockTags.LEAVES);
-        Iterable<RenderType> renderTypes = model.getRenderTypes(state, RandomSource.create(blockStateId), ModelData.EMPTY);
+        Iterable<RenderType> renderTypes = model.getRenderTypes(state, RandomSource.create(42L), ModelData.EMPTY);
         for (RenderType renderType : renderTypes) {
             anyRenderType = true;
             boolean translucentLayer = renderType == RenderType.translucent();
             ForgeOriginalVoxyReuseVertexConsumer target = translucentLayer ? this.translucentVC : this.opaqueVC;
             for (Direction direction : directionsWithNull()) {
-                List<BakedQuad> quads = getQuads(model, state, direction, blockStateId, renderType);
+                List<BakedQuad> quads = getQuads(model, state, direction, 42, renderType);
                 for (BakedQuad quad : quads) {
                     target.quad(quad, renderType, forceSolid);
                 }
@@ -145,7 +171,7 @@ final class ForgeSoftwareModelTextureBakery {
         }
         if (!anyRenderType) {
             for (Direction direction : directionsWithNull()) {
-                List<BakedQuad> quads = getQuads(model, state, direction, blockStateId, null);
+                List<BakedQuad> quads = getQuads(model, state, direction, 42, null);
                 for (BakedQuad quad : quads) {
                     this.opaqueVC.quad(quad, forceSolid);
                 }
@@ -156,19 +182,19 @@ final class ForgeSoftwareModelTextureBakery {
         flags |= !this.translucentVC.isEmpty() ? FLAG_TRANSLUCENT : 0;
         flags |= this.opaqueVC.anyDiscard ? FLAG_DISCARD : 0;
         if (this.opaqueVC.isEmpty() && this.translucentVC.isEmpty()) {
-            return new BakeResult(faces, ForgeCpuMeshLayer.OTHER, flags, "no-quads");
+            this.lastFailureReason = "no-quads";
+            return flags;
         }
-        for (int face = 0; face < faces.length; face++) {
+        for (int face = 0; face < ForgeModelAtlasLayout.FACE_COUNT; face++) {
             this.rasterizer.setFaceCull(face == 1 || face == 2 || face == 4);
             this.rasterizer.clear();
             this.rasterizer.setBlending(false);
             this.rasterizer.raster(VIEWS[face], this.opaqueVC);
             this.rasterizer.setBlending(true);
             this.rasterizer.raster(VIEWS[face], this.translucentVC);
-            faces[face] = this.rasterizer.copyFace();
+            this.copyFaceToOutput(face, outputBuffer);
         }
-        ForgeCpuMeshLayer layer = chooseLayer(state, flags, faces);
-        return new BakeResult(faces, layer, flags, "none");
+        return flags;
     }
 
     private static ForgeCpuMeshLayer chooseLayer(BlockState state, int flags, ForgeOriginalVoxyColourDepthTextureData[] faces) {
@@ -203,10 +229,10 @@ final class ForgeSoftwareModelTextureBakery {
         return layer == ForgeCpuMeshLayer.OTHER ? ForgeCpuMeshLayer.SOLID : layer;
     }
 
-    private BakeResult renderFluid(BlockState state, ForgeOriginalVoxyColourDepthTextureData[] faces) {
+    private int renderFluid(BlockState state, long outputBuffer) {
         int flags = 0;
         boolean anyFace = false;
-        for (int face = 0; face < faces.length; face++) {
+        for (int face = 0; face < ForgeModelAtlasLayout.FACE_COUNT; face++) {
             this.opaqueVC.reset();
             this.translucentVC.reset();
             this.bakeFluidFace(state, face);
@@ -222,13 +248,18 @@ final class ForgeSoftwareModelTextureBakery {
             this.rasterizer.raster(VIEWS[face], this.opaqueVC);
             this.rasterizer.setBlending(true);
             this.rasterizer.raster(VIEWS[face], this.translucentVC);
-            faces[face] = this.rasterizer.copyFace();
+            this.copyFaceToOutput(face, outputBuffer);
             anyFace = true;
         }
         if (!anyFace) {
-            return new BakeResult(faces, ForgeCpuMeshLayer.OTHER, flags, "no-fluid-quads");
+            this.lastFailureReason = "no-fluid-quads";
+            return flags;
         }
-        return new BakeResult(faces, chooseLayer(state, flags, faces), flags, "none");
+        return flags;
+    }
+
+    private void copyFaceToOutput(int face, long outputBuffer) {
+        UnsafeUtil.memcpy(this.rasterizer.getRawFramebuffer(), outputBuffer + SINGLE_FACE_OUTPUT_SIZE * face);
     }
 
     private void bakeFluidFace(BlockState state, int face) {
@@ -372,83 +403,6 @@ final class ForgeSoftwareModelTextureBakery {
             }
             return false;
         }
-
-        @Deprecated
-        FaceTexture[] faces() {
-            FaceTexture[] legacy = new FaceTexture[this.textures.length];
-            for (int i = 0; i < this.textures.length; i++) {
-                legacy[i] = FaceTexture.from(this.textures[i]);
-            }
-            return legacy;
-        }
-    }
-
-    @Deprecated
-    record FaceTexture(int[] colour, int[] depth, int width, int height) {
-        static FaceTexture from(ForgeOriginalVoxyColourDepthTextureData data) {
-            if (data == null) {
-                return new FaceTexture(new int[FACE_PIXELS], emptyDepth(), FACE_SIZE, FACE_SIZE);
-            }
-            return new FaceTexture(data.colour(), data.depth(), data.width(), data.height());
-        }
-
-        int writtenPixelCount(ForgeCpuMeshLayer layer) {
-            return ForgeOriginalVoxyTextureUtils.getWrittenPixelCount(this.asOriginalData(), layer == ForgeCpuMeshLayer.SOLID
-                    ? ForgeOriginalVoxyTextureUtils.WRITE_CHECK_STENCIL
-                    : ForgeOriginalVoxyTextureUtils.WRITE_CHECK_ALPHA);
-        }
-
-        boolean wasPixelWritten(int index, ForgeCpuMeshLayer layer) {
-            if (layer == ForgeCpuMeshLayer.SOLID) {
-                return (this.depth[index] & 0xFF) != 0;
-            }
-            return ((this.colour[index] >>> 24) & 0xFF) > 1;
-        }
-
-        boolean hasTranslucentPixel() {
-            return ForgeOriginalVoxyTextureUtils.hasTranslucentPixel(this.asOriginalData());
-        }
-
-        boolean isSolidWhereDrawn() {
-            return ForgeOriginalVoxyTextureUtils.isSolidWhereDrawn(this.asOriginalData());
-        }
-
-        int[] bounds(ForgeCpuMeshLayer layer) {
-            return ForgeOriginalVoxyTextureUtils.computeBounds(this.asOriginalData(), layer == ForgeCpuMeshLayer.SOLID
-                    ? ForgeOriginalVoxyTextureUtils.WRITE_CHECK_STENCIL
-                    : ForgeOriginalVoxyTextureUtils.WRITE_CHECK_ALPHA);
-        }
-
-        float depth(ForgeCpuMeshLayer layer, boolean minMode) {
-            return ForgeOriginalVoxyTextureUtils.computeDepth(
-                    this.asOriginalData(),
-                    minMode ? ForgeOriginalVoxyTextureUtils.DEPTH_MODE_MIN : ForgeOriginalVoxyTextureUtils.DEPTH_MODE_AVG,
-                    layer == ForgeCpuMeshLayer.SOLID
-                            ? ForgeOriginalVoxyTextureUtils.WRITE_CHECK_STENCIL
-                            : ForgeOriginalVoxyTextureUtils.WRITE_CHECK_ALPHA);
-        }
-
-        int tintState(ForgeCpuMeshLayer layer) {
-            return ForgeOriginalVoxyTextureUtils.computeFaceTint(this.asOriginalData(), layer == ForgeCpuMeshLayer.SOLID
-                    ? ForgeOriginalVoxyTextureUtils.WRITE_CHECK_STENCIL
-                    : ForgeOriginalVoxyTextureUtils.WRITE_CHECK_ALPHA);
-        }
-
-        private ForgeOriginalVoxyColourDepthTextureData asOriginalData() {
-            return new ForgeOriginalVoxyColourDepthTextureData(this.colour, this.depth, this.width, this.height);
-        }
-    }
-
-    private static ForgeOriginalVoxyColourDepthTextureData emptyTexture() {
-        return new ForgeOriginalVoxyColourDepthTextureData(new int[FACE_PIXELS], emptyDepth(), FACE_SIZE, FACE_SIZE);
-    }
-
-    private static int[] emptyDepth() {
-        int[] depth = new int[FACE_PIXELS];
-        for (int i = 0; i < depth.length; i++) {
-            depth[i] = ((1 << 24) - 1) << 8;
-        }
-        return depth;
     }
 
     static byte[] rgbaBytes(ForgeOriginalVoxyColourDepthTextureData face) {
@@ -464,8 +418,19 @@ final class ForgeSoftwareModelTextureBakery {
         return pixels;
     }
 
-    @Deprecated
-    static byte[] rgbaBytes(FaceTexture face) {
-        return rgbaBytes(new ForgeOriginalVoxyColourDepthTextureData(face.colour(), face.depth(), face.width(), face.height()));
+    static ForgeOriginalVoxyColourDepthTextureData[] texturesFromOutput(long outputBuffer) {
+        ForgeOriginalVoxyColourDepthTextureData[] textures = new ForgeOriginalVoxyColourDepthTextureData[ForgeModelAtlasLayout.FACE_COUNT];
+        for (int face = 0; face < textures.length; face++) {
+            long facePtr = outputBuffer + SINGLE_FACE_OUTPUT_SIZE * face;
+            int[] colour = new int[FACE_PIXELS];
+            int[] depth = new int[FACE_PIXELS];
+            for (int i = 0; i < FACE_PIXELS; i++) {
+                long value = MemoryUtil.memGetLong(facePtr + (long) i * Long.BYTES);
+                colour[i] = (int) value;
+                depth[i] = (int) (value >>> 32);
+            }
+            textures[face] = new ForgeOriginalVoxyColourDepthTextureData(colour, depth, FACE_SIZE, FACE_SIZE);
+        }
+        return textures;
     }
 }
