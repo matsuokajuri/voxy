@@ -65,6 +65,34 @@ If the jars exist, Gradle adds them as deobfuscated `compileOnly` and
 Forge source set still compiles because the active source set does not yet
 compile the original client Sodium/Iris integration classes.
 
+## Forge frontend compatibility status
+
+The active parity command surface includes:
+
+```text
+/voxy frontend_compat_status
+```
+
+This status uses Forge `ModList` and reports:
+
+```text
+embeddiumLoaded
+oculusLoaded
+embeddiumVersion
+oculusVersion
+frontendPrerequisitesReady
+fabricLoaderUsed=false
+sodiumRuntimeModIdUsed=false
+irisRuntimeModIdUsed=false
+javaPackageGlobalRenameAllowed=false
+rendererFrontendHookReady=false
+shaderpackFrontendHookReady=false
+```
+
+This command is a prerequisite check only. It does not load Embeddium/Oculus
+classes, register renderer hooks, connect shaderpack integration, or claim
+formal renderer readiness.
+
 ## Sodium to Embeddium package reality
 
 Embeddium's Forge mod id is `embeddium`, but much of its renderer API remains
@@ -169,7 +197,8 @@ Do not apply these mixins without a Forge-side compatibility gate.
 
 1. Add local Embeddium/Oculus jars through `dev-mods/` or Gradle properties.
 2. Port a small `ForgeFrontendCompat` or equivalent loader helper:
-   `embeddiumLoaded`, `oculusLoaded`, and version/reporting fields.
+   `embeddiumLoaded`, `oculusLoaded`, and version/reporting fields. Status:
+   first command/status layer present.
 3. Migrate original Sodium imports by package category, starting with low-level
    color and renderer-front classes, not the config UI.
 4. Replace Fabric `FabricLoader` checks with Forge `ModList` checks.
@@ -189,4 +218,3 @@ FogParameters/FogStorage require a dedicated Forge/Embeddium/Oculus audit
 no Embeddium/Oculus mixins have been ported yet
 no original VoxyRenderSystem frontend hook has been enabled yet
 ```
-

@@ -12,7 +12,9 @@ final class ForgeVoxyParityCommands {
     }
 
     static void register(LiteralArgumentBuilder<CommandSourceStack> root) {
-        root.then(Commands.literal("original_voxy_model_pipeline_start")
+        root.then(Commands.literal("frontend_compat_status")
+                        .executes(ctx -> frontendCompatStatus(ctx.getSource())))
+                .then(Commands.literal("original_voxy_model_pipeline_start")
                         .executes(ctx -> originalVoxyModelPipelineStart(ctx.getSource())))
                 .then(Commands.literal("original_voxy_model_pipeline_status")
                         .executes(ctx -> originalVoxyModelPipelineStatus(ctx.getSource())))
@@ -28,6 +30,12 @@ final class ForgeVoxyParityCommands {
                                         LongArgumentType.getLong(ctx, "sectionKey")))))
                 .then(Commands.literal("original_voxy_model_pipeline_clear")
                         .executes(ctx -> originalVoxyModelPipelineClear(ctx.getSource())));
+    }
+
+    private static int frontendCompatStatus(CommandSourceStack source) {
+        ForgeFrontendCompatStats status = ForgeFrontendCompat.createStatusSnapshot();
+        source.sendSuccess(() -> Component.literal(format(status)), false);
+        return 1;
     }
 
     private static int originalVoxyModelPipelineStart(CommandSourceStack source) {
@@ -158,5 +166,29 @@ final class ForgeVoxyParityCommands {
                 + " lastFailureReason=" + status.lastFailureReason()
                 + " formalRendererReady=" + status.formalRendererReady()
                 + " actualRendererDrawEnabled=" + status.actualRendererDrawEnabled();
+    }
+
+    private static String format(ForgeFrontendCompatStats status) {
+        return "Voxy frontend compat parity: "
+                + "stage=" + status.stage()
+                + " forgeFrontendCompatReady=" + status.forgeFrontendCompatReady()
+                + " forgeModListUsed=" + status.forgeModListUsed()
+                + " fabricLoaderUsed=" + status.fabricLoaderUsed()
+                + " sodiumRuntimeModIdUsed=" + status.sodiumRuntimeModIdUsed()
+                + " irisRuntimeModIdUsed=" + status.irisRuntimeModIdUsed()
+                + " embeddiumRequired=" + status.embeddiumRequired()
+                + " oculusRequired=" + status.oculusRequired()
+                + " embeddiumLoaded=" + status.embeddiumLoaded()
+                + " oculusLoaded=" + status.oculusLoaded()
+                + " embeddiumVersion=" + status.embeddiumVersion()
+                + " oculusVersion=" + status.oculusVersion()
+                + " frontendPrerequisitesReady=" + status.frontendPrerequisitesReady()
+                + " sodiumApiPackageNamesExpected=" + status.sodiumApiPackageNamesExpected()
+                + " irisApiPackageNamesExpected=" + status.irisApiPackageNamesExpected()
+                + " javaPackageGlobalRenameAllowed=" + status.javaPackageGlobalRenameAllowed()
+                + " configUiParityReady=" + status.configUiParityReady()
+                + " rendererFrontendHookReady=" + status.rendererFrontendHookReady()
+                + " shaderpackFrontendHookReady=" + status.shaderpackFrontendHookReady()
+                + " lastFailureReason=" + status.lastFailureReason();
     }
 }

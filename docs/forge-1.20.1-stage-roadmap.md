@@ -83,6 +83,7 @@ The L labels are parity-remediation stages, not feature demos.
 The Forge route now has a focused original-Voxy model-pipeline owner boundary:
 
 ```text
+ForgeFrontendCompat
 ForgeOriginalVoxyModelPipeline
 ForgeOriginalVoxyModelFactory
 ```
@@ -90,6 +91,8 @@ ForgeOriginalVoxyModelFactory
 It follows the original `VoxyRenderSystem` ordering at the boundary level:
 
 ```text
+Embeddium/Oculus frontend prerequisites verified through Forge ModList
+ -> no FabricLoader runtime check in the Forge route
 WorldEngine / Mapper
  -> existing biome entries queued
  -> mapper biome callback attached

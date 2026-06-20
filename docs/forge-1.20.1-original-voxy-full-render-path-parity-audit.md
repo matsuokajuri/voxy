@@ -42,6 +42,10 @@ Detailed frontend mapping is tracked in:
 docs/forge-1.20.1-embeddium-oculus-frontend-mapping.md
 ```
 
+The Forge source set now includes a small `ForgeFrontendCompat` status layer
+that uses Forge `ModList` to report Embeddium/Oculus presence and versions. It
+does not register renderer hooks or shaderpack hooks yet.
+
 ## Current verdict
 
 ```text
