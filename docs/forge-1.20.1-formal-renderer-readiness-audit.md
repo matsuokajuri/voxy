@@ -114,9 +114,11 @@ Some bottom-path corrections are now aligned in direction:
   original depth/stencil setup, and `HierarchicalOcclusionTraverser` owner now
   have runtime proof for real HiZ traversal from a Voxy-owned depth framebuffer.
 - Roman V production command-generation readback now passes without debug
-  command buffers: HOC produced a non-empty render-list, `cmdgen.comp` produced
-  opaque draw commands, and position-scratch readback matched the original
-  layout.
+  command buffers for the opaque/cutout command path: HOC produced a non-empty
+  render-list, `cmdgen.comp` produced opaque draw commands, and
+  position-scratch readback matched the original layout. The original
+  translucent prefix-sum / `buildtranslucents.comp` tail is still unported and
+  must not be counted as `MDICSectionRenderer.buildDrawCalls(...)` parity.
 - `RenderGenerationService` now uses original `ServiceManager` / `Service` /
   `UnifiedServiceThreadPool` execution, including service-thread config and
   Embeddium builder-thread semaphore sharing.

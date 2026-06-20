@@ -3,6 +3,8 @@ package me.cortex.voxy.forge;
 import com.mojang.blaze3d.systems.RenderSystem;
 import me.cortex.voxy.common.util.MemoryBuffer;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.texture.AbstractTexture;
+import net.minecraft.client.renderer.texture.TextureAtlas;
 import org.lwjgl.opengl.GL11C;
 import org.lwjgl.opengl.GL12C;
 import org.lwjgl.opengl.GL15C;
@@ -12,6 +14,7 @@ import org.lwjgl.opengl.GL43C;
 import org.lwjgl.opengl.GL45C;
 import org.lwjgl.system.MemoryUtil;
 
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 
 import static org.lwjgl.opengl.ARBDirectStateAccess.nglTextureSubImage2D;
@@ -47,9 +50,7 @@ final class ForgeOriginalVoxyModelStore {
                 return this.fail("model-store-sampler-create-failed");
             }
 
-            int mipLevel = minecraft == null || minecraft.options == null
-                    ? ForgeOriginalVoxyMipGen.LAYERS - 1
-                    : Math.min(minecraft.options.mipmapLevels().get(), ForgeOriginalVoxyMipGen.LAYERS - 1);
+            int mipLevel = resolveBlockAtlasMipLevel(minecraft);
             GL33C.glSamplerParameteri(this.blockSamplerId, GL11C.GL_TEXTURE_MIN_FILTER, GL11C.GL_NEAREST_MIPMAP_LINEAR);
             GL33C.glSamplerParameteri(this.blockSamplerId, GL11C.GL_TEXTURE_MAG_FILTER, GL11C.GL_NEAREST);
             GL33C.glSamplerParameteri(this.blockSamplerId, GL12C.GL_TEXTURE_MIN_LOD, 0);
@@ -329,6 +330,41 @@ final class ForgeOriginalVoxyModelStore {
 
     private static void giveBackModelStoreTextureAtlas(int texture) {
         MODEL_TEXTURE_CACHE.add(texture);
+    }
+
+    private static int resolveBlockAtlasMipLevel(Minecraft minecraft) {
+        if (minecraft == null || minecraft.getTextureManager() == null) {
+            return ForgeOriginalVoxyMipGen.LAYERS - 1;
+        }
+        AbstractTexture texture = minecraft.getTextureManager().getTexture(TextureAtlas.LOCATION_BLOCKS);
+        Integer atlasMipLevel = readIntField(texture, "maxMipLevel", "maxMipmapLevels", "f_119402_");
+        if (atlasMipLevel != null) {
+            return clampMipLevel(atlasMipLevel);
+        }
+        return clampMipLevel(readIntField(minecraft.getModelManager(), "maxMipmapLevels", "f_119402_"));
+    }
+
+    private static int clampMipLevel(Integer mipLevel) {
+        if (mipLevel == null) {
+            return ForgeOriginalVoxyMipGen.LAYERS - 1;
+        }
+        return Math.max(0, Math.min(mipLevel, ForgeOriginalVoxyMipGen.LAYERS - 1));
+    }
+
+    private static Integer readIntField(Object owner, String... names) {
+        if (owner == null) {
+            return null;
+        }
+        Class<?> type = owner.getClass();
+        for (String name : names) {
+            try {
+                Field field = type.getDeclaredField(name);
+                field.setAccessible(true);
+                return field.getInt(owner);
+            } catch (ReflectiveOperationException ignored) {
+            }
+        }
+        return null;
     }
 
     private static void zeroTexture(int texture) {

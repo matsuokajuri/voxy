@@ -202,7 +202,8 @@ V_ORIGINAL_MDIC_COMMAND_GENERATION_CHAIN
 ```
 
 The Forge route now has `ForgeOriginalVoxyMdicCommandGenerator`, which follows
-the original `MDICSectionRenderer.buildDrawCalls(...)` command-generation side:
+the opaque/cutout command-generation side of original
+`MDICSectionRenderer.buildDrawCalls(...)`:
 
 ```text
 MDICViewport render-list from HOC
@@ -219,6 +220,10 @@ buffers, preview command buffers, debug MDIC command buffers, or sample-set
 inputs. It still does not submit the generated commands to
 `glMultiDrawElementsIndirectCountARB`, does not call `MDICSectionRenderer`, and
 does not make the renderer ready.
+
+It also does not yet port the translucent tail of original
+`buildDrawCalls(...)`: `prefixsum.comp` and `buildtranslucents.comp` remain
+future renderer-chain parity work, not current Roman V success.
 
 Runtime readback now proves a non-empty MDICViewport render-list and production
 `cmdgen.comp` output. The latest audit produced `renderListSectionCount=146`,

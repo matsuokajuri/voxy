@@ -111,7 +111,10 @@ implementation scaffolding for formal MDIC.
    `cmdgen.comp` dispatch contract, output readback, and barrier audit as one
    coherent multi-step round. Implemented in code through
    `ForgeOriginalVoxyMdicCommandGenerator`; runtime audit now passes with a
-   non-empty HOC render-list and production `cmdgen.comp` draw-command output.
+   non-empty HOC render-list and production `cmdgen.comp` draw-command output
+   for the opaque/cutout command path. The translucent prefix-sum /
+   `buildtranslucents.comp` tail of original `buildDrawCalls(...)` remains
+   unported.
 9. Roman VI: port `MDICSectionRenderer` draw setup and binding order.
 10. Roman VII: bind the original `ModelStore` and terrain shader contract
     exactly as original Voxy expects.

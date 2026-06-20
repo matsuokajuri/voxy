@@ -76,6 +76,7 @@ public final class ForgeOriginalVoxyModelPipeline {
     private String lifecycleState = "UNINITIALIZED";
     private String lastLifecycleEvent = "initialized";
     private String lastFailureReason = "none";
+    private boolean renderEmbeddiumCutoutActive;
 
     ForgeOriginalVoxyModelPipeline(ForgeVoxyInstance instance) {
         this.instance = instance;
@@ -607,32 +608,38 @@ public final class ForgeOriginalVoxyModelPipeline {
             this.recordNonFatalFailure("original-hoc-embeddium-cutout-not-render-thread");
             return;
         }
-        ForgeOriginalVoxyMdicViewport viewport;
-        ForgeOriginalVoxyHierarchicalOcclusionTraverser traversal;
-        ForgeOriginalVoxyMdicCommandGenerator cmdgen;
-        ForgeOriginalVoxyPipelineDepthStage depthStage;
-        ForgeOriginalVoxyBasicSectionGeometryData geometryData;
-        ForgeOriginalVoxyAsyncNodeGeometrySync geometrySync;
-        ForgeOriginalVoxyNodeCleaner cleaner;
-        ForgeOriginalVoxyViewportSelector selector;
-        synchronized (this) {
-            if (!this.ownerReady || this.stale) {
-                return;
-            }
-            selector = this.viewportSelector;
-            traversal = this.hierarchicalOcclusionTraverser;
-            cmdgen = this.mdicCommandGenerator;
-            depthStage = this.pipelineDepthStage;
-            geometryData = this.basicSectionGeometryData;
-            geometrySync = this.asyncNodeGeometrySync;
-            cleaner = this.nodeCleaner;
-        }
-        viewport = selector == null ? null : selector.getViewport();
-        Minecraft minecraft = Minecraft.getInstance();
-        if (minecraft.level == null || minecraft.player == null || matrices == null || camera == null) {
+        if (this.renderEmbeddiumCutoutActive) {
+            this.recordNonFatalFailure("original-hoc-embeddium-cutout-reentrant");
             return;
         }
+        this.renderEmbeddiumCutoutActive = true;
+        boolean commandGenerationCompleted = false;
         try {
+            ForgeOriginalVoxyMdicViewport viewport;
+            ForgeOriginalVoxyHierarchicalOcclusionTraverser traversal;
+            ForgeOriginalVoxyMdicCommandGenerator cmdgen;
+            ForgeOriginalVoxyPipelineDepthStage depthStage;
+            ForgeOriginalVoxyBasicSectionGeometryData geometryData;
+            ForgeOriginalVoxyAsyncNodeGeometrySync geometrySync;
+            ForgeOriginalVoxyNodeCleaner cleaner;
+            ForgeOriginalVoxyViewportSelector selector;
+            synchronized (this) {
+                if (!this.ownerReady || this.stale) {
+                    return;
+                }
+                selector = this.viewportSelector;
+                traversal = this.hierarchicalOcclusionTraverser;
+                cmdgen = this.mdicCommandGenerator;
+                depthStage = this.pipelineDepthStage;
+                geometryData = this.basicSectionGeometryData;
+                geometrySync = this.asyncNodeGeometrySync;
+                cleaner = this.nodeCleaner;
+            }
+            viewport = selector == null ? null : selector.getViewport();
+            Minecraft minecraft = Minecraft.getInstance();
+            if (minecraft.level == null || minecraft.player == null || matrices == null || camera == null) {
+                return;
+            }
             if (viewport == null || traversal == null || cmdgen == null || depthStage == null || geometryData == null || !traversal.ready()) {
                 return;
             }
@@ -673,6 +680,7 @@ public final class ForgeOriginalVoxyModelPipeline {
             traversal.doTraversal(viewport);
             traversal.runReadbackAuditIfRequested(viewport);
             cmdgen.buildDrawCalls(viewport, geometryData, ForgeOriginalVoxyRenderProperties.getRenderProperties());
+            commandGenerationCompleted = true;
             synchronized (this) {
                 if (this.ownerReady && !this.stale) {
                     this.lifecycleState = "RUNNING_ORIGINAL_HOC_TRAVERSAL_AND_MDIC_CMDGEN";
@@ -683,7 +691,13 @@ public final class ForgeOriginalVoxyModelPipeline {
         } catch (RuntimeException e) {
             this.recordNonFatalFailure("original-hoc-embeddium-cutout-" + e.getClass().getSimpleName() + ":" + e.getMessage());
         } finally {
-            this.runOriginalPostDynamicWorkAfterCommandGeneration(camera.x, camera.z);
+            try {
+                if (commandGenerationCompleted) {
+                    this.runOriginalPostDynamicWorkAfterCommandGeneration(camera.x, camera.z);
+                }
+            } finally {
+                this.renderEmbeddiumCutoutActive = false;
+            }
         }
     }
 
