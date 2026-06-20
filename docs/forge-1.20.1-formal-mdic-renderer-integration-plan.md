@@ -103,11 +103,15 @@ implementation scaffolding for formal MDIC.
 5. Use the Forge-port `NodeManager` / `NodeStore` / `SectionUpdateRouter` /
    `NodeCleaner` / `GeometryCache` / `RenderDistanceTracker` ownership layer.
 6. Port original `Viewport` / `MDICViewport` / HiZ / render-list ownership. Done
-   for the active Roman route, with real HiZ traversal runtime proof.
+   for the active Roman route, including original-style depth/stencil setup
+   into a Voxy-owned `DepthFramebuffer(GL_DEPTH24_STENCIL8)` before HiZ.
 7. Port `HierarchicalOcclusionTraverser` request-batch production. Done for the
    active Roman route at the owner/traversal level.
-8. Roman V: port production `cmdgen.comp` inputs, dispatch contract, output
-   readback, and barrier audit as one coherent multi-step round.
+8. Roman V: port production `prep.comp`, cull-raster visibility input,
+   `cmdgen.comp` dispatch contract, output readback, and barrier audit as one
+   coherent multi-step round. Implemented in code through
+   `ForgeOriginalVoxyMdicCommandGenerator`; runtime audit now passes with a
+   non-empty HOC render-list and production `cmdgen.comp` draw-command output.
 9. Roman VI: port `MDICSectionRenderer` draw setup and binding order.
 10. Roman VII: bind the original `ModelStore` and terrain shader contract
     exactly as original Voxy expects.
@@ -119,7 +123,7 @@ implementation scaffolding for formal MDIC.
 Do not enable formal MDIC draw while any of these are true:
 
 ```text
-production cmdgen.comp not wired
+generated production cmdgen commands not yet submitted by MDICSectionRenderer
 original shader binding contract incomplete
 MDICSectionRenderer not wired
 ```

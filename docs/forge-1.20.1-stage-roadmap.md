@@ -187,10 +187,12 @@ original-shaped `NodeManager`, `NodeStore`, `SectionUpdateRouter`,
 `ForgeOriginalVoxyHierarchicalOcclusionTraverser`,
 `ForgeOriginalVoxyViewportSelector`, `ForgeOriginalVoxyMdicViewport`,
 `ForgeOriginalVoxyHiZBuffer`, and `ForgeOriginalVoxyDepthFramebuffer` are now
-part of the active route and have runtime proof for real HiZ traversal against
-the Minecraft depth attachment.
+part of the active route. The Forge route now mirrors original
+`AbstractRenderPipeline.initDepthStencil(...)` through
+`ForgeOriginalVoxyPipelineDepthStage`, copying the current depth attachment into
+a Voxy-owned `DepthFramebuffer(GL_DEPTH24_STENCIL8)` before building HiZ.
 
-The next active round is:
+The current active round is now implemented and runtime-audited:
 
 ```text
 V_ORIGINAL_MDIC_COMMAND_GENERATION_CHAIN
@@ -199,10 +201,31 @@ V_ORIGINAL_MDIC_COMMAND_GENERATION_CHAIN
  -> V.3_ORIGINAL_CMDGEN_READBACK_AND_BARRIER_AUDIT
 ```
 
-It must close the contract from `MDICViewport` / HOC render-list output into
-the original production `cmdgen.comp` inputs, run original `cmdgen.comp`, and
-audit command output/barriers. It must not reuse K-era synthetic cmdgen
-validation buffers or preview command buffers as formal inputs.
+The Forge route now has `ForgeOriginalVoxyMdicCommandGenerator`, which follows
+the original `MDICSectionRenderer.buildDrawCalls(...)` command-generation side:
+
+```text
+MDICViewport render-list from HOC
+ -> production prep.comp
+ -> production cull/raster visibility mark
+ -> production cmdgen.comp
+ -> DrawCommand / draw-count / position-scratch readback audit on request
+```
+
+This owner binds real `BasicSectionGeometryData` metadata/geometry buffers and
+the real `MDICViewport` draw-count, draw-command, visibility, indirect-lookup,
+and position-scratch buffers. It does not use K-era synthetic cmdgen validation
+buffers, preview command buffers, debug MDIC command buffers, or sample-set
+inputs. It still does not submit the generated commands to
+`glMultiDrawElementsIndirectCountARB`, does not call `MDICSectionRenderer`, and
+does not make the renderer ready.
+
+Runtime readback now proves a non-empty MDICViewport render-list and production
+`cmdgen.comp` output. The latest audit produced `renderListSectionCount=146`,
+`opaqueDrawCount=545`, original draw-count/cull-command layouts, and
+`positionScratchReadbackOk=true`. A zero-section render-list still must not be
+counted as `V.2_ORIGINAL_CMDGEN_COMP_OUTPUT_PARITY` or
+`V.3_ORIGINAL_CMDGEN_READBACK_AND_BARRIER_AUDIT` success.
 
 ## Required source trace
 

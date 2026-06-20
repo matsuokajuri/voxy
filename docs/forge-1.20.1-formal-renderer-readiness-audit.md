@@ -111,8 +111,12 @@ Some bottom-path corrections are now aligned in direction:
   `SectionUpdateRouter`, `NodeCleaner`, `GeometryCache`, and
   `RenderDistanceTracker` are now wired into the active parity pipeline.
 - Forge-local original-parity `ViewportSelector`, `MDICViewport`, HiZ owner,
-  depth framebuffer adapter, and `HierarchicalOcclusionTraverser` owner now
-  have runtime proof for real HiZ traversal from the Minecraft depth attachment.
+  original depth/stencil setup, and `HierarchicalOcclusionTraverser` owner now
+  have runtime proof for real HiZ traversal from a Voxy-owned depth framebuffer.
+- Roman V production command-generation readback now passes without debug
+  command buffers: HOC produced a non-empty render-list, `cmdgen.comp` produced
+  opaque draw commands, and position-scratch readback matched the original
+  layout.
 - `RenderGenerationService` now uses original `ServiceManager` / `Service` /
   `UnifiedServiceThreadPool` execution, including service-thread config and
   Embeddium builder-thread semaphore sharing.
@@ -125,7 +129,7 @@ These are progress toward parity, not renderer readiness.
 P0 gaps:
 
 ```text
-production cmdgen.comp integration incomplete
+production cmdgen.comp draw submission incomplete
 MDICSectionRenderer parity incomplete
 VoxyRenderSystem lifecycle parity incomplete
 ```
@@ -164,6 +168,7 @@ Validation must prove parity against original inputs and outputs:
 - section records are produced by `RenderDataFactory`-style logic;
 - geometry allocation/free/reuse follows original manager semantics;
 - visibility and render lists come from original traversal semantics;
-- command generation uses production `cmdgen.comp`;
+- command generation uses production `prep.comp`, cull raster visibility, and
+  `cmdgen.comp`;
 - draw submission is owned by the formal MDIC renderer;
 - deprecated preview/sample/debug paths are absent from the formal route.

@@ -12,16 +12,20 @@ import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.config.ModConfig;
 import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
+import org.spongepowered.asm.mixin.Mixins;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 @Mod(VoxyForge.MOD_ID)
 public final class VoxyForge {
     public static final String MOD_ID = "voxy";
+    private static final String FORGE_MIXIN_CONFIG = "voxy.forge.mixins.json";
     public static final Logger LOGGER = LoggerFactory.getLogger("Voxy");
     public static final PlatformServices PLATFORM = new ForgePlatformServices(MOD_ID);
 
     public VoxyForge() {
+        registerForgeMixinConfig();
+
         IEventBus modBus = FMLJavaModLoadingContext.get().getModEventBus();
         ModLoadingContext.get().registerConfig(ModConfig.Type.CLIENT, ForgeVoxyConfig.CLIENT_SPEC);
 
@@ -29,6 +33,16 @@ public final class VoxyForge {
         DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> modBus.addListener(this::onRegisterClientReloadListeners));
 
         LOGGER.info("Voxy Forge 1.20.1 skeleton loaded. LoD rendering and shader integration are disabled.");
+    }
+
+    private static void registerForgeMixinConfig() {
+        for (var config : Mixins.getConfigs()) {
+            if (FORGE_MIXIN_CONFIG.equals(config.getName())) {
+                return;
+            }
+        }
+        Mixins.addConfiguration(FORGE_MIXIN_CONFIG);
+        LOGGER.info("Registered Voxy Forge mixin config: {}", FORGE_MIXIN_CONFIG);
     }
 
     private void onClientSetup(FMLClientSetupEvent event) {

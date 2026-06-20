@@ -1,13 +1,21 @@
 package me.cortex.voxy.forge;
 
+import static org.lwjgl.opengl.GL11C.GL_DEPTH_FUNC;
 import static org.lwjgl.opengl.GL11C.GL_GEQUAL;
 import static org.lwjgl.opengl.GL11C.GL_GREATER;
 import static org.lwjgl.opengl.GL11C.GL_LEQUAL;
 import static org.lwjgl.opengl.GL11C.GL_LESS;
+import static org.lwjgl.opengl.GL11C.glGetInteger;
+import static org.lwjgl.opengl.GL45C.GL_CLIP_DEPTH_MODE;
+import static org.lwjgl.opengl.GL45C.GL_ZERO_TO_ONE;
 
 record ForgeOriginalVoxyRenderProperties(boolean isZero2One, boolean isReverseZ, boolean useBlockAtlasUVs) {
     static ForgeOriginalVoxyRenderProperties getRenderProperties() {
-        return new ForgeOriginalVoxyRenderProperties(false, false, false);
+        int depthFunc = glGetInteger(GL_DEPTH_FUNC);
+        return new ForgeOriginalVoxyRenderProperties(
+                glGetInteger(GL_CLIP_DEPTH_MODE) == GL_ZERO_TO_ONE,
+                depthFunc == GL_GEQUAL || depthFunc == GL_GREATER,
+                false);
     }
 
     String injectDefines(String source) {

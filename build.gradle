@@ -55,6 +55,7 @@ sourceSets {
             include 'me/cortex/voxy/common/config/compressors/StorageCompressor.java'
         }
         resources {
+            include 'META-INF/MANIFEST.MF'
             include 'META-INF/mods.toml'
             include 'voxy.forge.mixins.json'
             include 'pack.mcmeta'
@@ -182,7 +183,8 @@ jar {
                 'Implementation-Title'    : project.mod_name,
                 'Implementation-Version'  : project.jar.archiveVersion,
                 'Implementation-Vendor'   : project.mod_authors,
-                'Implementation-Timestamp': new Date().format("yyyy-MM-dd'T'HH:mm:ssZ")
+                'Implementation-Timestamp': new Date().format("yyyy-MM-dd'T'HH:mm:ssZ"),
+                'MixinConfigs'            : 'voxy.forge.mixins.json'
         ])
     }
 }

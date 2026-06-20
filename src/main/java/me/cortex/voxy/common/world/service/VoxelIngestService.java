@@ -4,6 +4,7 @@ import me.cortex.voxy.common.voxelization.ILightingSupplier;
 import me.cortex.voxy.common.voxelization.VoxelizedSection;
 import me.cortex.voxy.common.voxelization.WorldConversionFactory;
 import me.cortex.voxy.common.voxelization.WorldVoxilizedSectionMipper;
+import me.cortex.voxy.common.thread.ServiceManager;
 import me.cortex.voxy.common.world.WorldEngine;
 import me.cortex.voxy.common.world.WorldUpdater;
 import net.minecraft.core.BlockPos;
@@ -16,6 +17,11 @@ import org.slf4j.LoggerFactory;
 public class VoxelIngestService {
     private static final org.slf4j.Logger LOGGER = LoggerFactory.getLogger("Voxy");
     private static final ILightingSupplier NO_LIGHTING = (x, y, z) -> (byte) 0;
+    private static volatile AutoIngestTarget autoIngestTarget = chunk -> null;
+
+    public interface AutoIngestTarget {
+        WorldEngine getEngine(LevelChunk chunk);
+    }
 
     public record IngestStats(int convertedSections, int nonAirSections, int nonAirVoxels, int worldUpdates, int storageWrites) {
         public static final IngestStats EMPTY = new IngestStats(0, 0, 0, 0, 0);
@@ -46,6 +52,13 @@ public class VoxelIngestService {
     }
 
     public VoxelIngestService() {
+    }
+
+    public VoxelIngestService(ServiceManager serviceManager) {
+    }
+
+    public static void setAutoIngestTarget(AutoIngestTarget target) {
+        autoIngestTarget = target == null ? chunk -> null : target;
     }
 
     public boolean enqueueIngest(WorldEngine engine, LevelChunk chunk) {
@@ -135,8 +148,11 @@ public class VoxelIngestService {
     }
 
     public static boolean tryAutoIngestChunk(LevelChunk chunk) {
-        LOGGER.debug("Automatic chunk ingest is disabled in the Forge skeleton.");
-        return false;
+        WorldEngine engine = autoIngestTarget.getEngine(chunk);
+        if (engine == null) {
+            return false;
+        }
+        return ingestChunk(engine, chunk);
     }
 
     public int getTaskCount() {

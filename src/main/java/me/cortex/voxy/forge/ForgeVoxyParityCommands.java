@@ -28,6 +28,10 @@ final class ForgeVoxyParityCommands {
                                 .executes(ctx -> originalVoxyRenderGenerationEnqueueSection(
                                         ctx.getSource(),
                                         LongArgumentType.getLong(ctx, "sectionKey")))))
+                .then(Commands.literal("original_voxy_mdic_cmdgen_status")
+                        .executes(ctx -> originalVoxyMdicCmdgenStatus(ctx.getSource())))
+                .then(Commands.literal("original_voxy_mdic_cmdgen_request_audit")
+                        .executes(ctx -> originalVoxyMdicCmdgenRequestAudit(ctx.getSource())))
                 .then(Commands.literal("original_voxy_model_pipeline_clear")
                         .executes(ctx -> originalVoxyModelPipelineClear(ctx.getSource())));
     }
@@ -67,6 +71,22 @@ final class ForgeVoxyParityCommands {
                 .getOriginalVoxyModelPipeline()
                 .enqueueRenderGenerationTask(sectionKey);
         source.sendSuccess(() -> Component.literal(format(status)), false);
+        return 1;
+    }
+
+    private static int originalVoxyMdicCmdgenStatus(CommandSourceStack source) {
+        ForgeOriginalVoxyMdicCommandGenerationStats status = ForgeVoxyInstance.INSTANCE
+                .getOriginalVoxyModelPipeline()
+                .createMdicCommandGenerationStatusSnapshot();
+        source.sendSuccess(() -> Component.literal(format(status)), false);
+        return 1;
+    }
+
+    private static int originalVoxyMdicCmdgenRequestAudit(CommandSourceStack source) {
+        ForgeOriginalVoxyMdicCommandGenerationStats status = ForgeVoxyInstance.INSTANCE
+                .getOriginalVoxyModelPipeline()
+                .requestMdicCommandGenerationReadbackAudit();
+        source.sendSuccess(() -> Component.literal("Voxy original MDIC cmdgen audit requested: " + format(status)), false);
         return 1;
     }
 
@@ -145,6 +165,11 @@ final class ForgeVoxyParityCommands {
                 + " originalMdicViewportOwnerReady=" + status.originalMdicViewportOwnerReady()
                 + " originalHizOwnerReady=" + status.originalHizOwnerReady()
                 + " originalHizTraversalExecutableReady=" + status.originalHizTraversalExecutableReady()
+                + " originalHocTopNodeCount=" + status.originalHocTopNodeCount()
+                + " originalHocTraversalRunCount=" + status.originalHocTraversalRunCount()
+                + " originalHocRequestBatchForwardCount=" + status.originalHocRequestBatchForwardCount()
+                + " originalHocLastLifecycleEvent=" + status.originalHocLastLifecycleEvent()
+                + " originalHocLastFailureReason=" + status.originalHocLastFailureReason()
                 + " renderGenerationResultConsumerAttached=" + status.renderGenerationResultConsumerAttached()
                 + " originalBuildTaskPriorityUsed=" + status.originalBuildTaskPriorityUsed()
                 + " originalHoldingSectionPolicyUsed=" + status.originalHoldingSectionPolicyUsed()
@@ -266,6 +291,70 @@ final class ForgeVoxyParityCommands {
                 + " lastFailureReason=" + status.lastFailureReason()
                 + " formalRendererReady=" + status.formalRendererReady()
                 + " actualRendererDrawEnabled=" + status.actualRendererDrawEnabled();
+    }
+
+    private static String format(ForgeOriginalVoxyMdicCommandGenerationStats status) {
+        return "Voxy original MDIC command generation parity: "
+                + "stage=" + status.stage()
+                + " originalMdicCommandGenerationOwnerReady=" + status.originalMdicCommandGenerationOwnerReady()
+                + " originalMdicViewportCmdgenInputParityReady=" + status.originalMdicViewportCmdgenInputParityReady()
+                + " originalCmdgenCompOutputParityReady=" + status.originalCmdgenCompOutputParityReady()
+                + " originalCmdgenReadbackAuditReady=" + status.originalCmdgenReadbackAuditReady()
+                + " originalCmdgenBarrierAuditReady=" + status.originalCmdgenBarrierAuditReady()
+                + " productionCmdgenCompUsed=" + status.productionCmdgenCompUsed()
+                + " productionPrepCompUsed=" + status.productionPrepCompUsed()
+                + " productionCullRasterUsed=" + status.productionCullRasterUsed()
+                + " prepProgramReady=" + status.prepProgramReady()
+                + " cullProgramReady=" + status.cullProgramReady()
+                + " cmdgenProgramReady=" + status.cmdgenProgramReady()
+                + " uniformBufferReady=" + status.uniformBufferReady()
+                + " distanceCountBufferReady=" + status.distanceCountBufferReady()
+                + " sharedIndexBufferReady=" + status.sharedIndexBufferReady()
+                + " vertexArrayReady=" + status.vertexArrayReady()
+                + " viewportBuffersReady=" + status.viewportBuffersReady()
+                + " geometryMetadataBufferReady=" + status.geometryMetadataBufferReady()
+                + " geometryBufferReady=" + status.geometryBufferReady()
+                + " renderListInputReady=" + status.renderListInputReady()
+                + " visibilityBufferReady=" + status.visibilityBufferReady()
+                + " positionScratchBufferReady=" + status.positionScratchBufferReady()
+                + " prepDispatchCount=" + status.prepDispatchCount()
+                + " cullRasterCount=" + status.cullRasterCount()
+                + " cmdgenDispatchCount=" + status.cmdgenDispatchCount()
+                + " readbackAuditRuns=" + status.readbackAuditRuns()
+                + " readbackAuditFailures=" + status.readbackAuditFailures()
+                + " renderListSectionCount=" + status.renderListSectionCount()
+                + " cmdGenDispatchX=" + status.cmdGenDispatchX()
+                + " cmdGenDispatchY=" + status.cmdGenDispatchY()
+                + " cmdGenDispatchZ=" + status.cmdGenDispatchZ()
+                + " opaqueDrawCount=" + status.opaqueDrawCount()
+                + " translucentDrawCount=" + status.translucentDrawCount()
+                + " temporalOpaqueDrawCount=" + status.temporalOpaqueDrawCount()
+                + " cullCommandCount=" + status.cullCommandCount()
+                + " cullCommandInstanceCount=" + status.cullCommandInstanceCount()
+                + " cullCommandFirstIndex=" + status.cullCommandFirstIndex()
+                + " firstCommandCount=" + status.firstCommandCount()
+                + " firstCommandInstanceCount=" + status.firstCommandInstanceCount()
+                + " firstCommandFirstIndex=" + status.firstCommandFirstIndex()
+                + " firstCommandBaseVertex=" + status.firstCommandBaseVertex()
+                + " firstCommandBaseInstance=" + status.firstCommandBaseInstance()
+                + " firstPositionScratchWord0=" + status.firstPositionScratchWord0()
+                + " firstPositionScratchWord1=" + status.firstPositionScratchWord1()
+                + " drawCommandStride20Bytes=" + status.drawCommandStride20Bytes()
+                + " drawCountLayoutMatchesOriginal=" + status.drawCountLayoutMatchesOriginal()
+                + " cullCommandLayoutMatchesOriginal=" + status.cullCommandLayoutMatchesOriginal()
+                + " positionScratchReadbackOk=" + status.positionScratchReadbackOk()
+                + " noDebugCommandBuffersUsed=" + status.noDebugCommandBuffersUsed()
+                + " mdicSectionRendererCalled=" + status.mdicSectionRendererCalled()
+                + " voxyRenderSystemCalled=" + status.voxyRenderSystemCalled()
+                + " terrainDrawCalled=" + status.terrainDrawCalled()
+                + " glMultiDrawElementsIndirectCountCalled=" + status.glMultiDrawElementsIndirectCountCalled()
+                + " formalRendererReady=" + status.formalRendererReady()
+                + " actualRendererDrawEnabled=" + status.actualRendererDrawEnabled()
+                + " formalDrawPipelineReady=" + status.formalDrawPipelineReady()
+                + " lastGlError=" + status.lastGlError()
+                + " lifecycleState=" + status.lifecycleState()
+                + " lastLifecycleEvent=" + status.lastLifecycleEvent()
+                + " lastFailureReason=" + status.lastFailureReason();
     }
 
     private static String format(ForgeFrontendCompatStats status) {

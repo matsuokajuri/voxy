@@ -1,7 +1,8 @@
-package me.cortex.voxy.forge;
+package me.cortex.voxy.forge.mixin;
 
 import me.cortex.voxy.client.compat.SemaphoreBlockImpersonator;
 import me.cortex.voxy.common.thread.MultiThreadPrioritySemaphore;
+import me.cortex.voxy.forge.ForgeVoxyInstance;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;

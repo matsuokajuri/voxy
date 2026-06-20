@@ -1,7 +1,6 @@
 package me.cortex.voxy.forge;
 
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.pipeline.RenderTarget;
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
 import me.cortex.voxy.common.Logger;
 import me.cortex.voxy.common.thread.MultiThreadPrioritySemaphore;
@@ -9,9 +8,9 @@ import me.cortex.voxy.common.thread.UnifiedServiceThreadPool;
 import me.cortex.voxy.common.world.WorldEngine;
 import me.cortex.voxy.common.world.other.Mapper;
 import me.cortex.voxy.config.ForgeVoxyConfig;
+import me.jellysquid.mods.sodium.client.render.chunk.ChunkRenderMatrices;
+import me.jellysquid.mods.sodium.client.render.viewport.CameraTransform;
 import net.minecraft.client.Minecraft;
-import net.minecraft.world.phys.Vec3;
-import net.minecraftforge.client.event.RenderLevelStageEvent;
 import org.joml.Matrix4f;
 import org.joml.Matrix4fc;
 
@@ -19,11 +18,15 @@ import java.util.Arrays;
 import java.util.Optional;
 import java.util.concurrent.locks.LockSupport;
 
-import static org.lwjgl.opengl.GL30C.GL_DEPTH_ATTACHMENT;
-import static org.lwjgl.opengl.GL30C.GL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME;
-import static org.lwjgl.opengl.GL45C.glGetNamedFramebufferAttachmentParameteri;
+import static org.lwjgl.opengl.GL11C.GL_VIEWPORT;
+import static org.lwjgl.opengl.GL11C.glGetInteger;
+import static org.lwjgl.opengl.GL11C.glGetIntegerv;
+import static org.lwjgl.opengl.GL30C.GL_DRAW_FRAMEBUFFER_BINDING;
+import static org.lwjgl.opengl.GL42C.GL_FRAMEBUFFER_BARRIER_BIT;
+import static org.lwjgl.opengl.GL42C.GL_PIXEL_BUFFER_BARRIER_BIT;
+import static org.lwjgl.opengl.GL42C.glMemoryBarrier;
 
-final class ForgeOriginalVoxyModelPipeline {
+public final class ForgeOriginalVoxyModelPipeline {
     static final String STAGE = "L0_L4_ORIGINAL_VOXY_MODEL_PIPELINE_PARITY";
     private static final int MAX_MODEL_UPLOADS_PER_TICK = 2;
     private static final int ORIGINAL_GEOMETRY_MAX_SECTION_COUNT = 1 << 20;
@@ -41,6 +44,8 @@ final class ForgeOriginalVoxyModelPipeline {
     private ForgeOriginalVoxyNodeCleaner nodeCleaner;
     private ForgeOriginalVoxyRenderDistanceTracker renderDistanceTracker;
     private ForgeOriginalVoxyHierarchicalOcclusionTraverser hierarchicalOcclusionTraverser;
+    private ForgeOriginalVoxyMdicCommandGenerator mdicCommandGenerator;
+    private ForgeOriginalVoxyPipelineDepthStage pipelineDepthStage;
     private ForgeOriginalVoxyViewportSelector viewportSelector;
     private Thread processingThread;
     private volatile boolean processingThreadRunning;
@@ -109,29 +114,6 @@ final class ForgeOriginalVoxyModelPipeline {
         if (factory != null && factory.hasPendingUploads()) {
             this.runOnRenderThread(() -> this.processFactoryUploads(factory));
         }
-        ForgeOriginalVoxyAsyncNodeGeometrySync geometrySync;
-        ForgeOriginalVoxyNodeCleaner cleaner;
-        synchronized (this) {
-            geometrySync = this.asyncNodeGeometrySync;
-            cleaner = this.nodeCleaner;
-        }
-        if (geometrySync != null || ForgeOriginalVoxyDownloadStream.isReady() || ForgeOriginalVoxyUploadStream.isReady()) {
-            this.runOnRenderThread(() -> {
-                if (ForgeOriginalVoxyDownloadStream.isReady()) {
-                    ForgeOriginalVoxyDownloadStream.instance().tick();
-                }
-                this.processRenderDistanceTrackerOnRenderThread();
-                if (geometrySync != null) {
-                    geometrySync.tickOnRenderThread(cleaner);
-                }
-                if (geometrySync != null && cleaner != null) {
-                    cleaner.tickOnRenderThread(geometrySync);
-                }
-                if (ForgeOriginalVoxyUploadStream.isReady()) {
-                    ForgeOriginalVoxyUploadStream.instance().tick();
-                }
-            });
-        }
     }
 
     synchronized ForgeOriginalVoxyModelPipelineStats requestBlockBake(int blockStateId) {
@@ -162,6 +144,24 @@ final class ForgeOriginalVoxyModelPipeline {
         this.lastLifecycleEvent = "top-level-node-request-queued";
         this.lastFailureReason = "none";
         return this.createStatusSnapshot();
+    }
+
+    synchronized ForgeOriginalVoxyMdicCommandGenerationStats createMdicCommandGenerationStatusSnapshot() {
+        return this.mdicCommandGenerator == null
+                ? ForgeOriginalVoxyMdicCommandGenerationStats.unavailable("original-mdic-command-generator-not-started")
+                : this.mdicCommandGenerator.createStatusSnapshot();
+    }
+
+    synchronized ForgeOriginalVoxyMdicCommandGenerationStats requestMdicCommandGenerationReadbackAudit() {
+        if (this.mdicCommandGenerator == null || !this.ownerReady || this.stale) {
+            return ForgeOriginalVoxyMdicCommandGenerationStats.unavailable("original-mdic-command-generator-not-ready");
+        }
+        if (this.hierarchicalOcclusionTraverser != null) {
+            this.hierarchicalOcclusionTraverser.requestReadbackAudit();
+        }
+        this.mdicCommandGenerator.requestReadbackAudit();
+        this.lastLifecycleEvent = "original-mdic-command-generation-readback-audit-requested";
+        return this.mdicCommandGenerator.createStatusSnapshot();
     }
 
     synchronized ForgeOriginalVoxyModelPipelineStats createStatusSnapshot() {
@@ -269,6 +269,11 @@ final class ForgeOriginalVoxyModelPipeline {
                 mdicViewportOwnerReady && this.ownerReady && !this.stale,
                 hizOwnerReady && this.ownerReady && !this.stale,
                 hizTraversalExecutableReady && this.ownerReady && !this.stale,
+                hoc.topNodeCount(),
+                hoc.traversalRunCount(),
+                hoc.requestBatchForwardCount(),
+                hoc.lastLifecycleEvent(),
+                hoc.lastFailureReason(),
                 geometry.renderGenerationResultConsumerAttached(),
                 renderGeneration.originalBuildTaskPriorityUsed(),
                 renderGeneration.originalHoldingSectionPolicyUsed(),
@@ -438,7 +443,7 @@ final class ForgeOriginalVoxyModelPipeline {
             this.recordFailure("no-active-client-world");
             return;
         }
-        if (!this.instance.ensureActiveWorldSkeletonForCurrentWorldIfAllowed()) {
+        if (!this.instance.ensureOriginalVoxyActiveWorldForCurrentWorld()) {
             this.recordFailure("active-world-engine-missing");
             return;
         }
@@ -509,10 +514,24 @@ final class ForgeOriginalVoxyModelPipeline {
             return;
         }
         ForgeOriginalVoxyRenderProperties renderProperties = ForgeOriginalVoxyRenderProperties.getRenderProperties();
+        ForgeOriginalVoxyPipelineDepthStage depthStage;
+        try {
+            depthStage = new ForgeOriginalVoxyPipelineDepthStage(renderProperties);
+        } catch (RuntimeException e) {
+            geometrySync.stopOnRenderThread();
+            cleaner.freeOnRenderThread();
+            geometryData.freeOnRenderThread();
+            renderGeneration.shutdown();
+            factory.shutdown();
+            store.free();
+            this.recordFailure("original-pipeline-depth-stage-" + e.getClass().getSimpleName() + ":" + e.getMessage());
+            return;
+        }
         ForgeOriginalVoxyHierarchicalOcclusionTraverser hierarchicalOcclusionTraverser =
                 new ForgeOriginalVoxyHierarchicalOcclusionTraverser(geometrySync, cleaner, renderGeneration);
         String traversalError = hierarchicalOcclusionTraverser.buildOnRenderThread(renderProperties);
         if (!"none".equals(traversalError)) {
+            depthStage.freeOnRenderThread();
             hierarchicalOcclusionTraverser.freeOnRenderThread();
             geometrySync.stopOnRenderThread();
             cleaner.freeOnRenderThread();
@@ -521,6 +540,21 @@ final class ForgeOriginalVoxyModelPipeline {
             factory.shutdown();
             store.free();
             this.recordFailure(traversalError);
+            return;
+        }
+        ForgeOriginalVoxyMdicCommandGenerator mdicCommandGenerator = new ForgeOriginalVoxyMdicCommandGenerator();
+        String cmdgenError = mdicCommandGenerator.buildOnRenderThread(renderProperties);
+        if (!"none".equals(cmdgenError)) {
+            mdicCommandGenerator.freeOnRenderThread();
+            depthStage.freeOnRenderThread();
+            hierarchicalOcclusionTraverser.freeOnRenderThread();
+            geometrySync.stopOnRenderThread();
+            cleaner.freeOnRenderThread();
+            geometryData.freeOnRenderThread();
+            renderGeneration.shutdown();
+            factory.shutdown();
+            store.free();
+            this.recordFailure(cmdgenError);
             return;
         }
         ForgeOriginalVoxyViewportSelector viewportSelector = new ForgeOriginalVoxyViewportSelector(
@@ -533,7 +567,7 @@ final class ForgeOriginalVoxyModelPipeline {
                 maxSec,
                 geometrySync::addTopLevel,
                 geometrySync::removeTopLevel);
-        renderDistanceTracker.setRenderDistance((int) Math.ceil(ForgeVoxyConfig.ORIGINAL_VOXY_SECTION_RENDER_DISTANCE.get() + 1.0D));
+        renderDistanceTracker.setRenderDistance((int) Math.ceil(ForgeVoxyConfig.ORIGINAL_VOXY_SECTION_RENDER_DISTANCE.get()));
         geometrySync.start();
         renderGeneration.setResultConsumer(geometrySync::submitGeometryResult);
         synchronized (this) {
@@ -547,6 +581,8 @@ final class ForgeOriginalVoxyModelPipeline {
             this.nodeCleaner = cleaner;
             this.renderDistanceTracker = renderDistanceTracker;
             this.hierarchicalOcclusionTraverser = hierarchicalOcclusionTraverser;
+            this.mdicCommandGenerator = mdicCommandGenerator;
+            this.pipelineDepthStage = depthStage;
             this.viewportSelector = viewportSelector;
             this.ownerReady = true;
             this.mapperBiomeCallbackAttached = true;
@@ -566,16 +602,18 @@ final class ForgeOriginalVoxyModelPipeline {
         this.unparkProcessingThread();
     }
 
-    void renderLevelStage(RenderLevelStageEvent event) {
-        if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_TRANSLUCENT_BLOCKS) {
-            return;
-        }
+    public void renderEmbeddiumCutout(ChunkRenderMatrices matrices, CameraTransform camera) {
         if (!RenderSystem.isOnRenderThread()) {
-            this.recordNonFatalFailure("original-hoc-render-stage-not-render-thread");
+            this.recordNonFatalFailure("original-hoc-embeddium-cutout-not-render-thread");
             return;
         }
         ForgeOriginalVoxyMdicViewport viewport;
         ForgeOriginalVoxyHierarchicalOcclusionTraverser traversal;
+        ForgeOriginalVoxyMdicCommandGenerator cmdgen;
+        ForgeOriginalVoxyPipelineDepthStage depthStage;
+        ForgeOriginalVoxyBasicSectionGeometryData geometryData;
+        ForgeOriginalVoxyAsyncNodeGeometrySync geometrySync;
+        ForgeOriginalVoxyNodeCleaner cleaner;
         ForgeOriginalVoxyViewportSelector selector;
         synchronized (this) {
             if (!this.ownerReady || this.stale) {
@@ -583,49 +621,69 @@ final class ForgeOriginalVoxyModelPipeline {
             }
             selector = this.viewportSelector;
             traversal = this.hierarchicalOcclusionTraverser;
+            cmdgen = this.mdicCommandGenerator;
+            depthStage = this.pipelineDepthStage;
+            geometryData = this.basicSectionGeometryData;
+            geometrySync = this.asyncNodeGeometrySync;
+            cleaner = this.nodeCleaner;
         }
         viewport = selector == null ? null : selector.getViewport();
-        if (viewport == null || traversal == null || !traversal.ready()) {
-            return;
-        }
         Minecraft minecraft = Minecraft.getInstance();
-        if (minecraft.level == null || minecraft.player == null || event.getCamera() == null) {
-            return;
-        }
-        RenderTarget target = minecraft.getMainRenderTarget();
-        int sourceDepthTexture = glGetNamedFramebufferAttachmentParameteri(
-                target.frameBufferId,
-                GL_DEPTH_ATTACHMENT,
-                GL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME);
-        if (sourceDepthTexture == 0) {
-            this.recordNonFatalFailure("original-hoc-source-depth-texture-missing");
+        if (minecraft.level == null || minecraft.player == null || matrices == null || camera == null) {
             return;
         }
         try {
-            Vec3 camera = event.getCamera().getPosition();
-            Matrix4f rawMinecraftProjection = rawMinecraftProjection(minecraft);
+            if (viewport == null || traversal == null || cmdgen == null || depthStage == null || geometryData == null || !traversal.ready()) {
+                return;
+            }
+            int drawFramebuffer = glGetInteger(GL_DRAW_FRAMEBUFFER_BINDING);
+            if (drawFramebuffer == 0) {
+                this.recordNonFatalFailure("original-hoc-embeddium-cutout-default-framebuffer");
+                return;
+            }
+            int[] viewportDims = new int[4];
+            glGetIntegerv(GL_VIEWPORT, viewportDims);
+            int width = viewportDims[2];
+            int height = viewportDims[3];
+            if (width <= 0 || height <= 0) {
+                this.recordNonFatalFailure("original-hoc-embeddium-cutout-invalid-viewport");
+                return;
+            }
+            Matrix4f vanillaProjection = new Matrix4f(matrices.projection());
+            Matrix4f modelView = new Matrix4f(matrices.modelView());
+            Matrix4f rawMinecraftProjection = ForgeOriginalVoxyRenderStateCapture.projectionCopy();
+            if (rawMinecraftProjection == null) {
+                this.recordNonFatalFailure("original-hoc-raw-projection-not-captured");
+                return;
+            }
             Matrix4f voxyProjection = computeProjectionMat(
                     ForgeOriginalVoxyRenderProperties.getRenderProperties(),
-                    event.getProjectionMatrix(),
+                    vanillaProjection,
                     rawMinecraftProjection);
-            viewport.setVanillaProjection(event.getProjectionMatrix())
+            viewport.setVanillaProjection(vanillaProjection)
                     .setProjection(voxyProjection)
-                    .setModelView(event.getPoseStack().last().pose())
+                    .setModelView(modelView)
                     .setCamera(camera.x, camera.y, camera.z)
-                    .setScreenSize(target.width, target.height)
+                    .setScreenSize(width, height)
                     .update();
             viewport.frameId++;
-            viewport.buildHizFromSourceDepth(sourceDepthTexture, target.width, target.height);
+            int depthTexture = depthStage.setupDepthTexture(drawFramebuffer, width, height, width, height);
+            viewport.buildHizFromSourceDepth(depthTexture, width, height);
+            this.runOriginalInnerPrimaryWorkBeforeTraversal(geometrySync, cleaner);
             traversal.doTraversal(viewport);
+            traversal.runReadbackAuditIfRequested(viewport);
+            cmdgen.buildDrawCalls(viewport, geometryData, ForgeOriginalVoxyRenderProperties.getRenderProperties());
             synchronized (this) {
                 if (this.ownerReady && !this.stale) {
-                    this.lifecycleState = "RUNNING_ORIGINAL_HOC_TRAVERSAL";
-                    this.lastLifecycleEvent = "hiz-build-and-hoc-traversal";
+                    this.lifecycleState = "RUNNING_ORIGINAL_HOC_TRAVERSAL_AND_MDIC_CMDGEN";
+                    this.lastLifecycleEvent = "embeddium-cutout-hiz-hoc-traversal-and-mdic-cmdgen";
                     this.lastFailureReason = "none";
                 }
             }
         } catch (RuntimeException e) {
-            this.recordNonFatalFailure("original-hoc-render-stage-" + e.getClass().getSimpleName() + ":" + e.getMessage());
+            this.recordNonFatalFailure("original-hoc-embeddium-cutout-" + e.getClass().getSimpleName() + ":" + e.getMessage());
+        } finally {
+            this.runOriginalPostDynamicWorkAfterCommandGeneration(camera.x, camera.z);
         }
     }
 
@@ -640,7 +698,7 @@ final class ForgeOriginalVoxyModelPipeline {
         }
     }
 
-    MultiThreadPrioritySemaphore.Block createEmbeddiumBuilderSemaphoreBlock() {
+    public MultiThreadPrioritySemaphore.Block createEmbeddiumBuilderSemaphoreBlock() {
         this.updateDedicatedThreads();
         if (!this.originalEmbeddiumBuilderThreadSharingEnabled) {
             return null;
@@ -680,6 +738,8 @@ final class ForgeOriginalVoxyModelPipeline {
         ForgeOriginalVoxyNodeCleaner cleaner;
         ForgeOriginalVoxyRenderDistanceTracker tracker;
         ForgeOriginalVoxyHierarchicalOcclusionTraverser hierarchicalOcclusionTraverser;
+        ForgeOriginalVoxyMdicCommandGenerator mdicCommandGenerator;
+        ForgeOriginalVoxyPipelineDepthStage depthStage;
         ForgeOriginalVoxyViewportSelector viewportSelector;
         synchronized (this) {
             this.clearRuns++;
@@ -704,6 +764,8 @@ final class ForgeOriginalVoxyModelPipeline {
             cleaner = this.nodeCleaner;
             tracker = this.renderDistanceTracker;
             hierarchicalOcclusionTraverser = this.hierarchicalOcclusionTraverser;
+            mdicCommandGenerator = this.mdicCommandGenerator;
+            depthStage = this.pipelineDepthStage;
             viewportSelector = this.viewportSelector;
             this.world = null;
             this.modelStore = null;
@@ -715,6 +777,8 @@ final class ForgeOriginalVoxyModelPipeline {
             this.nodeCleaner = null;
             this.renderDistanceTracker = null;
             this.hierarchicalOcclusionTraverser = null;
+            this.mdicCommandGenerator = null;
+            this.pipelineDepthStage = null;
             this.viewportSelector = null;
         }
         if (callbackWorld != null) {
@@ -726,6 +790,12 @@ final class ForgeOriginalVoxyModelPipeline {
         this.runOnRenderThread(() -> {
             if (geometrySync != null) {
                 geometrySync.stopOnRenderThread();
+            }
+            if (mdicCommandGenerator != null) {
+                mdicCommandGenerator.freeOnRenderThread();
+            }
+            if (depthStage != null) {
+                depthStage.freeOnRenderThread();
             }
             if (hierarchicalOcclusionTraverser != null) {
                 hierarchicalOcclusionTraverser.freeOnRenderThread();
@@ -831,7 +901,29 @@ final class ForgeOriginalVoxyModelPipeline {
         }
     }
 
-    private void processRenderDistanceTrackerOnRenderThread() {
+    private void runOriginalInnerPrimaryWorkBeforeTraversal(
+            ForgeOriginalVoxyAsyncNodeGeometrySync geometrySync,
+            ForgeOriginalVoxyNodeCleaner cleaner) {
+        if (ForgeOriginalVoxyDownloadStream.isReady()) {
+            ForgeOriginalVoxyDownloadStream.instance().tick();
+        }
+        if (geometrySync != null) {
+            geometrySync.tickOnRenderThread(cleaner);
+        }
+        if (geometrySync != null && cleaner != null) {
+            cleaner.tickOnRenderThread(geometrySync);
+        }
+        glMemoryBarrier(GL_FRAMEBUFFER_BARRIER_BIT | GL_PIXEL_BUFFER_BARRIER_BIT);
+    }
+
+    private void runOriginalPostDynamicWorkAfterCommandGeneration(double cameraX, double cameraZ) {
+        if (ForgeOriginalVoxyUploadStream.isReady()) {
+            ForgeOriginalVoxyUploadStream.instance().tick();
+        }
+        this.processRenderDistanceTrackerOnRenderThread(cameraX, cameraZ);
+    }
+
+    private void processRenderDistanceTrackerOnRenderThread(double cameraX, double cameraZ) {
         if (!RenderSystem.isOnRenderThread()) {
             this.recordFailure("render-distance-tracker-not-render-thread");
             return;
@@ -846,12 +938,7 @@ final class ForgeOriginalVoxyModelPipeline {
         if (tracker == null) {
             return;
         }
-        Minecraft minecraft = Minecraft.getInstance();
-        if (minecraft.level == null || minecraft.player == null) {
-            return;
-        }
-        Vec3 camera = minecraft.gameRenderer.getMainCamera().getPosition();
-        tracker.setCenterAndProcess(camera.x, camera.z);
+        tracker.setCenterAndProcess(cameraX, cameraZ);
     }
 
     private synchronized void recordFailure(String reason) {
@@ -870,16 +957,11 @@ final class ForgeOriginalVoxyModelPipeline {
         this.lastFailureReason = reason == null || reason.isBlank() ? "unspecified" : reason.replace(' ', '-');
     }
 
-    private static Matrix4f rawMinecraftProjection(Minecraft minecraft) {
-        double fov = minecraft.options.fov().get();
-        return minecraft.gameRenderer.getProjectionMatrix(fov);
-    }
-
     private static Matrix4f computeProjectionMat(
             ForgeOriginalVoxyRenderProperties properties,
             Matrix4fc base,
             Matrix4fc rawMinecraftProjection) {
-        Matrix4f extraProjection = new Matrix4f(rawMinecraftProjection).invert().mul(base, new Matrix4f());
+        Matrix4f extraProjection = rawMinecraftProjection.invert(new Matrix4f()).mul(base);
         float near = minecraftRenderDistance() <= 32.0F ? 8.0F : 16.0F;
         float far = 16.0F * 3000.0F;
         if (properties.isReverseZ()) {

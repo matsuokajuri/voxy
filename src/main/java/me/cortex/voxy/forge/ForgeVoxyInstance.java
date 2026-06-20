@@ -3,8 +3,9 @@ package me.cortex.voxy.forge;
 import me.cortex.voxy.common.config.section.SectionSerializationStorage;
 import me.cortex.voxy.common.config.storage.inmemory.MemoryStorageBackend;
 import me.cortex.voxy.common.world.WorldEngine;
+import me.cortex.voxy.common.world.service.VoxelIngestService;
+import me.cortex.voxy.config.ForgeVoxyConfig;
 import net.minecraft.client.Minecraft;
-import net.minecraftforge.client.event.RenderLevelStageEvent;
 import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
 import net.minecraftforge.client.event.RegisterClientCommandsEvent;
 import net.minecraftforge.common.MinecraftForge;
@@ -79,10 +80,10 @@ public final class ForgeVoxyInstance {
     }
 
     public void register() {
+        VoxelIngestService.setAutoIngestTarget(chunk -> this.getCurrentEngineOptional().orElse(null));
         MinecraftForge.EVENT_BUS.addListener(this::onClientLogin);
         MinecraftForge.EVENT_BUS.addListener(this::onClientLogout);
         MinecraftForge.EVENT_BUS.addListener(this::onClientTick);
-        MinecraftForge.EVENT_BUS.addListener(this::onRenderLevelStage);
         MinecraftForge.EVENT_BUS.addListener(this::onRegisterClientCommands);
         this.chunkIngestManager.register();
         this.cpuMeshBuildManager.register();
@@ -340,10 +341,6 @@ public final class ForgeVoxyInstance {
         ForgeVoxyCommands.register(event.getDispatcher());
     }
 
-    private void onRenderLevelStage(RenderLevelStageEvent event) {
-        this.originalVoxyModelPipeline.renderLevelStage(event);
-    }
-
     private void onClientTick(TickEvent.ClientTickEvent event) {
         if (event.phase != TickEvent.Phase.END) {
             return;
@@ -352,6 +349,9 @@ public final class ForgeVoxyInstance {
         var minecraft = Minecraft.getInstance();
         if (minecraft.level == null || minecraft.player == null) {
             return;
+        }
+        if (ForgeVoxyConfig.ENABLED.get()) {
+            this.ensureOriginalVoxyActiveWorldForCurrentWorld();
         }
 
         String dimension = minecraft.level.dimension().location().toString();
@@ -419,9 +419,7 @@ public final class ForgeVoxyInstance {
         this.texturedMdicDebugRenderer.clear();
         this.gpuMeshCache.setActiveDimension(dimension);
         this.closeActiveWorld();
-        if (ForgeVoxyRuntimeOverrides.enabledWorldEngineSkeleton()) {
-            this.createActiveWorldSkeleton();
-        }
+        this.ensureOriginalVoxyActiveWorldForCurrentWorld();
         if (ForgeGpuGeometryReadbackMeshRefreshManager.refreshOnDimensionChange()) {
             this.gpuGeometryReadbackMeshRefreshManager.requestRefresh(ForgeGpuGeometryReadbackMeshRefreshManager.REASON_DIMENSION_CHANGE);
         }
@@ -432,18 +430,29 @@ public final class ForgeVoxyInstance {
     }
 
     private void onClientLogin(ClientPlayerNetworkEvent.LoggingIn event) {
-        if (!ForgeVoxyRuntimeOverrides.enabledWorldEngineSkeleton()) {
-            return;
-        }
-        if (this.activeWorld != null && this.activeWorld.isLive()) {
-            return;
-        }
-
-        this.createActiveWorldSkeleton();
+        this.ensureOriginalVoxyActiveWorldForCurrentWorld();
     }
 
     public boolean ensureActiveWorldSkeletonForCurrentWorldIfAllowed() {
         if (!ForgeVoxyRuntimeOverrides.enabledWorldEngineSkeleton()) {
+            return false;
+        }
+        if (this.activeWorld != null && this.activeWorld.isLive()) {
+            return true;
+        }
+
+        var minecraft = Minecraft.getInstance();
+        if (minecraft.level == null || minecraft.player == null) {
+            return false;
+        }
+
+        this.activeClientDimension = minecraft.level.dimension().location().toString();
+        this.createActiveWorldSkeleton();
+        return true;
+    }
+
+    public boolean ensureOriginalVoxyActiveWorldForCurrentWorld() {
+        if (!ForgeVoxyConfig.ENABLED.get()) {
             return false;
         }
         if (this.activeWorld != null && this.activeWorld.isLive()) {

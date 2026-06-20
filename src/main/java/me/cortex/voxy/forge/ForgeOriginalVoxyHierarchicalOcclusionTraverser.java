@@ -18,6 +18,7 @@ import static org.lwjgl.opengl.GL11C.GL_NEAREST;
 import static org.lwjgl.opengl.GL11C.GL_NEAREST_MIPMAP_NEAREST;
 import static org.lwjgl.opengl.GL12.GL_CLAMP_TO_EDGE;
 import static org.lwjgl.opengl.GL12.GL_UNPACK_IMAGE_HEIGHT;
+import static org.lwjgl.opengl.GL11C.GL_UNPACK_ROW_LENGTH;
 import static org.lwjgl.opengl.GL12.GL_UNPACK_SKIP_IMAGES;
 import static org.lwjgl.opengl.GL12.GL_UNPACK_SKIP_PIXELS;
 import static org.lwjgl.opengl.GL12.GL_UNPACK_SKIP_ROWS;
@@ -52,6 +53,7 @@ import static org.lwjgl.opengl.GL45C.glGetShaderi;
 import static org.lwjgl.opengl.GL45C.glLinkProgram;
 import static org.lwjgl.opengl.GL45C.glPixelStorei;
 import static org.lwjgl.opengl.GL45C.nglClearNamedBufferSubData;
+import static org.lwjgl.opengl.GL45C.nglGetNamedBufferSubData;
 import static org.lwjgl.opengl.GL45C.nglShaderSource;
 import static org.lwjgl.opengl.GL45C.glCompileShader;
 import static org.lwjgl.opengl.GL45C.glUseProgram;
@@ -70,6 +72,11 @@ final class ForgeOriginalVoxyHierarchicalOcclusionTraverser {
 
     private static final int MAX_ITERATIONS = WorldEngine.MAX_LOD_LAYER + 1;
     private static final int LOCAL_WORK_SIZE_BITS = 5;
+    private static final int READBACK_AUDIT_SAMPLE_COUNT = 256;
+    private static final int NULL_NODE = (1 << 24) - 1;
+    private static final int EMPTY_QUEUE_ID = (1 << 24) - 2;
+    private static final int NULL_MESH = (1 << 24) - 1;
+    private static final int EMPTY_MESH = (1 << 24) - 2;
 
     private static int bindingCounter = 1;
     private static final int SCENE_UNIFORM_BINDING = bindingCounter++;
@@ -100,6 +107,8 @@ final class ForgeOriginalVoxyHierarchicalOcclusionTraverser {
     private int topNodeCount;
     private long traversalRunCount;
     private long requestBatchForwardCount;
+    private boolean readbackAuditRequested;
+    private long readbackAuditRuns;
     private String lastLifecycleEvent = "created";
     private String lastFailureReason = "none";
 
@@ -166,6 +175,10 @@ final class ForgeOriginalVoxyHierarchicalOcclusionTraverser {
                 && this.scratchQueueB.id != 0;
     }
 
+    void requestReadbackAudit() {
+        this.readbackAuditRequested = true;
+    }
+
     void doTraversal(ForgeOriginalVoxyMdicViewport viewport) {
         if (!this.ready()) {
             this.recordFailure("hierarchical-occlusion-traverser-not-ready");
@@ -187,6 +200,235 @@ final class ForgeOriginalVoxyHierarchicalOcclusionTraverser {
         this.traversalRunCount++;
         this.lastLifecycleEvent = "do-traversal";
         this.lastFailureReason = "none";
+    }
+
+    void runReadbackAuditIfRequested(ForgeOriginalVoxyMdicViewport viewport) {
+        if (!this.readbackAuditRequested) {
+            return;
+        }
+        this.readbackAuditRequested = false;
+        this.readbackAuditRuns++;
+        glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT | GL_COMMAND_BARRIER_BIT | GL_BUFFER_UPDATE_BARRIER_BIT);
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            int firstTopNodeId = -1;
+            int firstNodeWord0 = 0;
+            int firstNodeWord1 = 0;
+            int firstNodeWord2 = 0;
+            int firstNodeWord3 = 0;
+            if (this.topNodeCount > 0) {
+                long firstTopNodePtr = stack.nmalloc(Integer.BYTES);
+                nglGetNamedBufferSubData(this.topNodeIds.id, 0L, Integer.BYTES, firstTopNodePtr);
+                firstTopNodeId = MemoryUtil.memGetInt(firstTopNodePtr);
+                if (firstTopNodeId >= 0 && firstTopNodeId < this.nodeBuffer.size() / 16L) {
+                    long nodePtr = stack.nmalloc(16);
+                    nglGetNamedBufferSubData(this.nodeBuffer.id, firstTopNodeId * 16L, 16L, nodePtr);
+                    firstNodeWord0 = MemoryUtil.memGetInt(nodePtr);
+                    firstNodeWord1 = MemoryUtil.memGetInt(nodePtr + 4L);
+                    firstNodeWord2 = MemoryUtil.memGetInt(nodePtr + 8L);
+                    firstNodeWord3 = MemoryUtil.memGetInt(nodePtr + 12L);
+                }
+            }
+
+            long queueMetaPtr = stack.nmalloc(16);
+            nglGetNamedBufferSubData(this.queueMetaBuffer.id, 0L, 16L, queueMetaPtr);
+            int queueDispatchX = MemoryUtil.memGetInt(queueMetaPtr);
+            int queueDispatchY = MemoryUtil.memGetInt(queueMetaPtr + 4L);
+            int queueDispatchZ = MemoryUtil.memGetInt(queueMetaPtr + 8L);
+            int queueInitialCount = MemoryUtil.memGetInt(queueMetaPtr + 12L);
+
+            int renderListCounter = -1;
+            if (viewport != null && viewport.renderListBufferId() != 0) {
+                long renderListPtr = stack.nmalloc(Integer.BYTES);
+                nglGetNamedBufferSubData(viewport.renderListBufferId(), 0L, Integer.BYTES, renderListPtr);
+                renderListCounter = MemoryUtil.memGetInt(renderListPtr);
+            }
+
+            AuditNodeSample sample = this.sampleTopNodes(stack, viewport);
+
+            String auditReason = "none";
+            if (this.topNodeCount == 0) {
+                auditReason = "hoc-no-top-level-nodes";
+            } else if (firstTopNodeId < 0) {
+                auditReason = "hoc-first-top-node-id-invalid";
+            } else if (firstNodeWord0 == -1 && firstNodeWord1 == -1 && firstNodeWord2 == -1 && firstNodeWord3 == -1) {
+                auditReason = "hoc-first-top-node-buffer-empty";
+            } else if (renderListCounter == 0) {
+                auditReason = "hoc-traversal-render-list-empty";
+            }
+            VoxyForge.LOGGER.info(
+                    "Original HOC readback audit: run={} topNodeCount={} firstTopNodeId={} firstNodeWords=[{},{},{},{}] queueMeta=[{},{},{},{}] renderListCounter={} reason={}",
+                    this.readbackAuditRuns,
+                    this.topNodeCount,
+                    firstTopNodeId,
+                    firstNodeWord0,
+                    firstNodeWord1,
+                    firstNodeWord2,
+                    firstNodeWord3,
+                    queueDispatchX,
+                    queueDispatchY,
+                    queueDispatchZ,
+                    queueInitialCount,
+                    renderListCounter,
+                    auditReason);
+            VoxyForge.LOGGER.info(
+                    "Original HOC top-node sample: sampled={} nearCamera={} renderableMesh={} emptyMesh={} nullMesh={} hasChildren={} nullChild={} emptyChildList={} requested={} nearestNodeId={} nearestLod={} nearestPos=[{},{},{}] nearestMesh={} nearestChild={} nearestFlags={} nearestDistanceBlocks={}",
+                    sample.sampled,
+                    sample.nearCamera,
+                    sample.renderableMesh,
+                    sample.emptyMesh,
+                    sample.nullMesh,
+                    sample.hasChildren,
+                    sample.nullChild,
+                    sample.emptyChildList,
+                    sample.requested,
+                    sample.nearestNodeId,
+                    sample.nearestLod,
+                    sample.nearestX,
+                    sample.nearestY,
+                    sample.nearestZ,
+                    sample.nearestMesh,
+                    sample.nearestChild,
+                    sample.nearestFlags,
+                    String.format(java.util.Locale.ROOT, "%.2f", Math.sqrt(Math.max(0.0D, sample.nearestDistanceSquared))));
+        }
+    }
+
+    private AuditNodeSample sampleTopNodes(MemoryStack stack, ForgeOriginalVoxyMdicViewport viewport) {
+        int sampleCount = Math.min(this.topNodeCount, READBACK_AUDIT_SAMPLE_COUNT);
+        AuditNodeSample sample = new AuditNodeSample(sampleCount);
+        if (sampleCount <= 0 || viewport == null) {
+            return sample;
+        }
+
+        long topIdsPtr = stack.nmalloc(sampleCount * Integer.BYTES);
+        nglGetNamedBufferSubData(this.topNodeIds.id, 0L, (long) sampleCount * Integer.BYTES, topIdsPtr);
+
+        double renderDistance = ForgeVoxyConfig.ORIGINAL_VOXY_SECTION_RENDER_DISTANCE.get() * 16.0D * 32.0D;
+        double renderDistanceSquared = renderDistance * renderDistance;
+        double cameraX = viewport.cameraX;
+        double cameraZ = viewport.cameraZ;
+        long nodePtr = stack.nmalloc(16);
+
+        for (int i = 0; i < sampleCount; i++) {
+            int nodeId = MemoryUtil.memGetInt(topIdsPtr + (long) i * Integer.BYTES);
+            if (nodeId < 0 || nodeId >= this.nodeBuffer.size() / 16L) {
+                continue;
+            }
+            nglGetNamedBufferSubData(this.nodeBuffer.id, nodeId * 16L, 16L, nodePtr);
+            int word0 = MemoryUtil.memGetInt(nodePtr);
+            int word1 = MemoryUtil.memGetInt(nodePtr + 4L);
+            int word2 = MemoryUtil.memGetInt(nodePtr + 8L);
+            int word3 = MemoryUtil.memGetInt(nodePtr + 12L);
+            if (word0 == -1 && word1 == -1 && word2 == -1 && word3 == -1) {
+                continue;
+            }
+
+            int lod = decodeLod(word0);
+            int x = decodeX(word1);
+            int y = decodeY(word0);
+            int z = decodeZ(word0, word1);
+            int mesh = word2 & 0xFFFFFF;
+            int child = word3 & 0xFFFFFF;
+            int flags = ((word2 >>> 24) & 0xFF) | (((word3 >>> 24) & 0xFF) << 8);
+
+            if (mesh == NULL_MESH) {
+                sample.nullMesh++;
+            } else if (mesh == EMPTY_MESH) {
+                sample.emptyMesh++;
+            } else {
+                sample.renderableMesh++;
+            }
+            if (child == NULL_NODE) {
+                sample.nullChild++;
+            } else {
+                sample.hasChildren++;
+                if (child == EMPTY_QUEUE_ID) {
+                    sample.emptyChildList++;
+                }
+            }
+            if ((flags & 1) != 0) {
+                sample.requested++;
+            }
+
+            double distanceSquared = nearestDistanceSquared(cameraX, cameraZ, x, z, lod);
+            if (distanceSquared <= renderDistanceSquared) {
+                sample.nearCamera++;
+            }
+            if (distanceSquared < sample.nearestDistanceSquared) {
+                sample.nearestDistanceSquared = distanceSquared;
+                sample.nearestNodeId = nodeId;
+                sample.nearestLod = lod;
+                sample.nearestX = x;
+                sample.nearestY = y;
+                sample.nearestZ = z;
+                sample.nearestMesh = mesh;
+                sample.nearestChild = child;
+                sample.nearestFlags = flags;
+            }
+        }
+        return sample;
+    }
+
+    private static int decodeLod(int word0) {
+        return word0 >>> 28;
+    }
+
+    private static int decodeX(int word1) {
+        return (word1 << 4) >> 8;
+    }
+
+    private static int decodeY(int word0) {
+        return (word0 << 4) >> 24;
+    }
+
+    private static int decodeZ(int word0, int word1) {
+        int z = (word0 & ((1 << 20) - 1)) << 4;
+        z |= word1 >>> 28;
+        return (z << 8) >> 8;
+    }
+
+    private static double nearestDistanceSquared(double cameraX, double cameraZ, int nodeX, int nodeZ, int lod) {
+        int minX = (nodeX << lod) << 5;
+        int minZ = (nodeZ << lod) << 5;
+        int size = 1 << (lod + 5);
+        double dx = nearestDelta(cameraX, minX, minX + size);
+        double dz = nearestDelta(cameraZ, minZ, minZ + size);
+        return dx * dx + dz * dz;
+    }
+
+    private static double nearestDelta(double point, int min, int max) {
+        if (point < min) {
+            return min - point;
+        }
+        if (point > max) {
+            return point - max;
+        }
+        return 0.0D;
+    }
+
+    private static final class AuditNodeSample {
+        final int sampled;
+        int nearCamera;
+        int renderableMesh;
+        int emptyMesh;
+        int nullMesh;
+        int hasChildren;
+        int nullChild;
+        int emptyChildList;
+        int requested;
+        int nearestNodeId = -1;
+        int nearestLod = -1;
+        int nearestX;
+        int nearestY;
+        int nearestZ;
+        int nearestMesh;
+        int nearestChild;
+        int nearestFlags;
+        double nearestDistanceSquared = Double.POSITIVE_INFINITY;
+
+        AuditNodeSample(int sampled) {
+            this.sampled = sampled;
+        }
     }
 
     void freeOnRenderThread() {
@@ -303,6 +545,7 @@ final class ForgeOriginalVoxyHierarchicalOcclusionTraverser {
     }
 
     private void traverseInternal() {
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
         glPixelStorei(GL_UNPACK_SKIP_PIXELS, 0);
         glPixelStorei(GL_UNPACK_SKIP_ROWS, 0);
         glPixelStorei(GL_UNPACK_IMAGE_HEIGHT, 0);
