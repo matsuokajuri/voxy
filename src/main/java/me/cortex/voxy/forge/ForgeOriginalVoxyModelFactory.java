@@ -23,6 +23,7 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.lighting.LevelLightEngine;
 import net.minecraft.world.level.material.FluidState;
+import org.lwjgl.opengl.GL11C;
 import org.lwjgl.system.MemoryUtil;
 
 import javax.annotation.Nullable;
@@ -190,6 +191,13 @@ final class ForgeOriginalVoxyModelFactory {
         }
         int processed = 0;
         ResultUploader upload = this.uploadResults.poll();
+        if (upload == null) {
+            return 0;
+        }
+        GL11C.glPixelStorei(GL11C.GL_UNPACK_ROW_LENGTH, 0);
+        GL11C.glPixelStorei(GL11C.GL_UNPACK_SKIP_PIXELS, 0);
+        GL11C.glPixelStorei(GL11C.GL_UNPACK_SKIP_ROWS, 0);
+        GL11C.glPixelStorei(GL11C.GL_UNPACK_ALIGNMENT, 4);
         while (upload != null && processed < maxUploads) {
             String error = upload.upload(this.store, this);
             upload.free();

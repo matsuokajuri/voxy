@@ -72,6 +72,8 @@ minecraft {
             workingDirectory project.file('run')
             property 'forge.logging.markers', 'REGISTRIES'
             property 'forge.logging.console.level', 'info'
+            property 'mixin.env.remapRefMap', 'true'
+            property 'mixin.env.refMapRemappingFile', "${projectDir}/build/createSrgToMcp/output.srg"
 
             mods {
                 voxy {
@@ -95,15 +97,33 @@ minecraft {
 
 repositories {
     mavenCentral()
+    flatDir {
+        dirs 'dev-mods'
+        ['voxyEmbeddiumDevJar', 'voxyOculusDevJar'].each { propertyName ->
+            def configuredPath = (project.findProperty(propertyName) ?: '').toString().trim()
+            if (!configuredPath.isEmpty()) {
+                dirs file(configuredPath).parentFile
+            }
+        }
+    }
+}
+
+def flatDirDependencyNotation = { File jarFile ->
+    def baseName = jarFile.name.replaceFirst(/\.jar$/, '')
+    def split = baseName.lastIndexOf('-')
+    if (split <= 0 || split == baseName.length() - 1) {
+        throw new GradleException("Frontend dev jar name must be name-version.jar: ${jarFile}")
+    }
+    return "voxyDev:${baseName.substring(0, split)}:${baseName.substring(split + 1)}"
 }
 
 def optionalFrontendJars = { propertyName, includePattern ->
     def configuredPath = (project.findProperty(propertyName) ?: '').toString().trim()
     if (!configuredPath.isEmpty()) {
-        return files(configuredPath)
+        return [flatDirDependencyNotation(file(configuredPath))]
     }
 
-    return fileTree(dir: 'dev-mods', include: includePattern)
+    return fileTree(dir: 'dev-mods', include: includePattern).files.collect { flatDirDependencyNotation(it) }
 }
 
 def embeddiumDevJars = optionalFrontendJars('voxyEmbeddiumDevJar', 'embeddium*.jar')
@@ -113,14 +133,14 @@ dependencies {
     minecraft "net.minecraftforge:forge:${project.minecraft_version}-${project.forge_version}"
     implementation "it.unimi.dsi:fastutil:${project.fastutil_version}"
 
-    if (!embeddiumDevJars.isEmpty()) {
-        compileOnly fg.deobf(embeddiumDevJars)
-        runtimeOnly fg.deobf(embeddiumDevJars)
+    for (def embeddiumDevJar : embeddiumDevJars) {
+        compileOnly fg.deobf(embeddiumDevJar)
+        runtimeOnly fg.deobf(embeddiumDevJar)
     }
 
-    if (!oculusDevJars.isEmpty()) {
-        compileOnly fg.deobf(oculusDevJars)
-        runtimeOnly fg.deobf(oculusDevJars)
+    for (def oculusDevJar : oculusDevJars) {
+        compileOnly fg.deobf(oculusDevJar)
+        runtimeOnly fg.deobf(oculusDevJar)
     }
 }
 

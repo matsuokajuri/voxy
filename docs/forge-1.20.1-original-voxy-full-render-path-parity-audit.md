@@ -500,6 +500,21 @@ UploadStream persistent mapped staging for buffers
 nglTextureSubImage2D for atlas mip-chain upload
 ```
 
+The Forge upload queue now also mirrors the original `ModelFactory.processUploads()`
+pixel unpack boundary before draining model upload results:
+
+```text
+GL_UNPACK_ROW_LENGTH=0
+GL_UNPACK_SKIP_PIXELS=0
+GL_UNPACK_SKIP_ROWS=0
+GL_UNPACK_ALIGNMENT=4
+```
+
+This matters because Minecraft, Embeddium, and Oculus may leave global pixel
+store state configured for their own atlas work. The original Voxy upload path
+clears that state before `nglTextureSubImage2D`; the Forge port now does the
+same instead of depending on whatever state the previous renderer left behind.
+
 The Forge owner now also has an original-route upload audit after
 `UploadStream.commit()`: the last committed model records are read back from
 the original `modelBuffer`, optional `modelColourBuffer` ranges are read back
@@ -516,6 +531,12 @@ modelStoreReadbackAuditFailures
 lastAuditedModelId
 lastModelStoreReadbackAuditFailureReason
 ```
+
+Because the readback audit is Forge validation scaffolding rather than an
+original renderer path, it saves and restores GL pack state around
+`glGetTextureSubImage` and uses a tight pack layout. This keeps the audit from
+being affected by unrelated renderer pixel-store state and prevents the audit
+from polluting later rendering work.
 
 The original Iris/Oculus shaderpack material id hook is also connected. Original
 Voxy calls `ModelFactory.setCustomBlockStateMapping(WorldRenderingSettings.INSTANCE.getBlockStateIds())`

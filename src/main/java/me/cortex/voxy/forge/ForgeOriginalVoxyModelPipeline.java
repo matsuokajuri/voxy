@@ -74,7 +74,6 @@ final class ForgeOriginalVoxyModelPipeline {
 
     ForgeOriginalVoxyModelPipeline(ForgeVoxyInstance instance) {
         this.instance = instance;
-        this.updateDedicatedThreads();
     }
 
     synchronized ForgeOriginalVoxyModelPipelineStats requestStart(String reason) {
@@ -470,6 +469,12 @@ final class ForgeOriginalVoxyModelPipeline {
         }
         factory.setCustomBlockStateMapping(blockStateIds.blockStateIds(), blockStateIds.source());
         this.updateDedicatedThreads();
+        if (!this.originalServiceThreadConfigOwnerReady) {
+            factory.shutdown();
+            store.free();
+            this.recordFailure("original-service-thread-config-not-ready:" + this.originalServiceThreadPolicyFailureReason);
+            return;
+        }
         ForgeOriginalVoxyRenderGenerationService renderGeneration =
                 new ForgeOriginalVoxyRenderGenerationService(
                         targetWorld,
@@ -648,9 +653,6 @@ final class ForgeOriginalVoxyModelPipeline {
 
     private synchronized void updateDedicatedThreads() {
         ForgeOriginalVoxyServiceThreadPolicy.Selection selection = ForgeOriginalVoxyServiceThreadPolicy.select();
-        if (this.serviceThreadPool.setNumThreads(selection.dedicatedThreadCount())) {
-            Logger.info("Dedicated voxy thread pool size: " + selection.dedicatedThreadCount());
-        }
         this.originalServiceThreadConfigOwnerReady = selection.configOwnerReady();
         this.originalEmbeddiumBuilderThreadSharingEnabled = selection.useEmbeddiumBuilderThreads();
         this.originalEmbeddiumBuilderThreadSharingReady = selection.useEmbeddiumBuilderThreads();
@@ -659,6 +661,12 @@ final class ForgeOriginalVoxyModelPipeline {
         this.originalEmbeddiumBuilderThreadCount = selection.embeddiumBuilderThreadCount();
         this.originalServiceThreadPolicySource = selection.source();
         this.originalServiceThreadPolicyFailureReason = selection.failureReason();
+        if (!selection.configOwnerReady()) {
+            return;
+        }
+        if (this.serviceThreadPool.setNumThreads(selection.dedicatedThreadCount())) {
+            Logger.info("Dedicated voxy thread pool size: " + selection.dedicatedThreadCount());
+        }
     }
 
     private void markStaleAndClear(String event) {

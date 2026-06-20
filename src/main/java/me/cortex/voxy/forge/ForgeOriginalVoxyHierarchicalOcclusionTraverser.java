@@ -60,6 +60,11 @@ import static org.lwjgl.opengl.GL20C.GL_COMPILE_STATUS;
 import static org.lwjgl.opengl.GL20C.GL_LINK_STATUS;
 
 final class ForgeOriginalVoxyHierarchicalOcclusionTraverser {
+    private static final boolean HIERARCHICAL_SHADER_DEBUG =
+            System.getProperty("voxy.hierarchicalShaderDebug", "false").equals("true");
+    private static final boolean ENABLE_PRINTF_DEBUGGING =
+            System.getProperty("voxy.enableShaderDebugPrintf", "false").equals("true");
+
     static final int MAX_REQUEST_QUEUE_SIZE = 50;
     static final int MAX_QUEUE_SIZE = 200_000;
 
@@ -122,7 +127,12 @@ final class ForgeOriginalVoxyHierarchicalOcclusionTraverser {
                 glDeleteProgram(this.traversalProgramId);
                 this.traversalProgramId = 0;
             }
-            String source = withDefines(properties.injectDefines(ForgeOriginalVoxyShaderSource.parse("voxy:lod/hierarchical/traversal_dev.comp")),
+            String source = properties.injectDefines(ForgeOriginalVoxyShaderSource.parse("voxy:lod/hierarchical/traversal_dev.comp"));
+            source = applyOriginalPrintfProcessor(source);
+            if (HIERARCHICAL_SHADER_DEBUG) {
+                source = withDefines(source, "DEBUG", 1);
+            }
+            source = withDefines(source,
                     "MAX_ITERATIONS", MAX_ITERATIONS,
                     "LOCAL_SIZE_BITS", LOCAL_WORK_SIZE_BITS,
                     "MAX_REQUEST_QUEUE_SIZE", MAX_REQUEST_QUEUE_SIZE,
@@ -336,6 +346,13 @@ final class ForgeOriginalVoxyHierarchicalOcclusionTraverser {
             glDispatchComputeIndirect(iteration * 4L * 4L);
         }
         glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT | GL_COMMAND_BARRIER_BIT);
+    }
+
+    private static String applyOriginalPrintfProcessor(String source) {
+        if (ENABLE_PRINTF_DEBUGGING) {
+            throw new IllegalStateException("Original HOC shader printf debugging processor is not ported to Forge");
+        }
+        return source.replace("printf", "//printf");
     }
 
     private void downloadResetRequestQueue() {

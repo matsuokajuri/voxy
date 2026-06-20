@@ -234,7 +234,9 @@ final class ForgeOriginalVoxyModelStore {
             return "invalid-original-model-texture-readback-size";
         }
         MemoryBuffer readback = new MemoryBuffer(ForgeOriginalVoxyMipGen.UPLOADED_MIP_CHAIN_BYTES);
+        PixelStoreState packState = PixelStoreState.capturePack();
         try {
+            PixelStoreState.applyTightPack();
             int x = (modelId & 0xFF) * ForgeModelAtlasLayout.MODEL_TEXTURE_SIZE * ForgeModelAtlasLayout.FACES_PER_MODEL_X;
             int y = ((modelId >> 8) & 0xFF) * ForgeModelAtlasLayout.MODEL_TEXTURE_SIZE * ForgeModelAtlasLayout.FACES_PER_MODEL_Y;
             long offset = 0L;
@@ -260,6 +262,7 @@ final class ForgeOriginalVoxyModelStore {
             copyBytes(readback.address, out);
             return this.glErrorOrNone("original-model-texture-readback");
         } finally {
+            packState.restorePack();
             readback.free();
         }
     }
@@ -353,5 +356,36 @@ final class ForgeOriginalVoxyModelStore {
             case GL11C.GL_OUT_OF_MEMORY -> "GL_OUT_OF_MEMORY";
             default -> "GL_ERROR_" + error;
         };
+    }
+
+    private record PixelStoreState(int alignment, int rowLength, int imageHeight, int skipRows, int skipPixels, int skipImages) {
+        static PixelStoreState capturePack() {
+            return new PixelStoreState(
+                    GL11C.glGetInteger(GL11C.GL_PACK_ALIGNMENT),
+                    GL11C.glGetInteger(GL11C.GL_PACK_ROW_LENGTH),
+                    GL11C.glGetInteger(GL12C.GL_PACK_IMAGE_HEIGHT),
+                    GL11C.glGetInteger(GL11C.GL_PACK_SKIP_ROWS),
+                    GL11C.glGetInteger(GL11C.GL_PACK_SKIP_PIXELS),
+                    GL11C.glGetInteger(GL12C.GL_PACK_SKIP_IMAGES)
+            );
+        }
+
+        static void applyTightPack() {
+            GL11C.glPixelStorei(GL11C.GL_PACK_ALIGNMENT, 1);
+            GL11C.glPixelStorei(GL11C.GL_PACK_ROW_LENGTH, 0);
+            GL11C.glPixelStorei(GL12C.GL_PACK_IMAGE_HEIGHT, 0);
+            GL11C.glPixelStorei(GL11C.GL_PACK_SKIP_ROWS, 0);
+            GL11C.glPixelStorei(GL11C.GL_PACK_SKIP_PIXELS, 0);
+            GL11C.glPixelStorei(GL12C.GL_PACK_SKIP_IMAGES, 0);
+        }
+
+        void restorePack() {
+            GL11C.glPixelStorei(GL11C.GL_PACK_ALIGNMENT, this.alignment);
+            GL11C.glPixelStorei(GL11C.GL_PACK_ROW_LENGTH, this.rowLength);
+            GL11C.glPixelStorei(GL12C.GL_PACK_IMAGE_HEIGHT, this.imageHeight);
+            GL11C.glPixelStorei(GL11C.GL_PACK_SKIP_ROWS, this.skipRows);
+            GL11C.glPixelStorei(GL11C.GL_PACK_SKIP_PIXELS, this.skipPixels);
+            GL11C.glPixelStorei(GL12C.GL_PACK_SKIP_IMAGES, this.skipImages);
+        }
     }
 }

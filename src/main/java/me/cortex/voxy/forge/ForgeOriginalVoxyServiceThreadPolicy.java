@@ -13,8 +13,22 @@ final class ForgeOriginalVoxyServiceThreadPolicy {
     }
 
     static Selection select() {
-        int target = Math.max(1, ForgeVoxyConfig.ORIGINAL_VOXY_SERVICE_THREADS.get());
-        boolean useBuilderThreads = ForgeVoxyConfig.ORIGINAL_VOXY_USE_EMBEDDIUM_BUILDER_THREADS.get();
+        int target;
+        boolean useBuilderThreads;
+        try {
+            target = Math.max(1, ForgeVoxyConfig.ORIGINAL_VOXY_SERVICE_THREADS.get());
+            useBuilderThreads = ForgeVoxyConfig.ORIGINAL_VOXY_USE_EMBEDDIUM_BUILDER_THREADS.get();
+        } catch (IllegalStateException e) {
+            return new Selection(
+                    false,
+                    false,
+                    false,
+                    0,
+                    0,
+                    0,
+                    "forge-config-not-loaded",
+                    e.getClass().getSimpleName() + ":" + String.valueOf(e.getMessage()));
+        }
         EmbeddiumBuilderThreads builderThreads = useBuilderThreads
                 ? queryEmbeddiumBuilderThreads()
                 : new EmbeddiumBuilderThreads(false, 0, "disabled-by-config", "none");
