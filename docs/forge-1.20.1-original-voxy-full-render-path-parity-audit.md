@@ -314,12 +314,13 @@ pipeline cleanup order
  -> free NodeCleaner / geometry / store
 ```
 
-The remaining node producer gap is now narrowed to HiZ-backed execution of the
-original `HierarchicalOcclusionTraverser`. It is not a CPU candidate snapshot
-and must not be replaced by the historical K-stage `ForgeFormalVisibilityOwner`.
-Forge now has a Forge-package port of the original HOC owner, shader import
-loader, top-level node mapping, request queue buffer, node buffer ownership,
-and request-batch download path. Original Voxy's HOC consumes and owns:
+The node producer route is now narrowed to runtime validation of HiZ-backed
+execution of the original `HierarchicalOcclusionTraverser`. It is not a CPU
+candidate snapshot and must not be replaced by the historical K-stage
+`ForgeFormalVisibilityOwner`. Forge now has a Forge-package port of the
+original HOC owner, shader import loader, top-level node mapping, request queue
+buffer, node buffer ownership, and request-batch download path. Original Voxy's
+HOC consumes and owns:
 
 ```text
 MDICViewport / Viewport
@@ -332,23 +333,43 @@ MDICViewport / Viewport
  -> AsyncNodeManager.submitRequestBatch()
 ```
 
+The current Forge parity route now owns the original `ViewportSelector` shape:
+default viewport, optional Vivecraft render-pass viewport, optional
+Oculus/Iris shadow viewport, and all `MDICViewport` resources owned by the
+selected viewport. The Forge adapters use reflection for the optional
+Vivecraft/Oculus sources so the Forge source set does not gain hard compile
+dependencies that the original Fabric source did not need in this environment.
+
 The current Forge parity route now owns the original MDIC viewport-side buffers
 (`drawCountCallBuffer`, `drawCallBuffer`, `positionScratchBuffer`,
 `indirectLookupBuffer`, and `visibilityBuffer`) and includes the original
 shader resources in the Forge build path. The status deliberately separates:
 
 ```text
+originalViewportSelectorReady
+originalViewportSelectorDefaultReady
+originalViewportSelectorExtraViewportCount
+originalViewportSelectorLastSelectedKey
 originalHierarchicalOcclusionTraverserOwnerReady
 originalMdicViewportOwnerReady
 originalHizOwnerReady
 originalHizTraversalExecutableReady
 ```
 
-`originalHierarchicalOcclusionTraverserReady` must remain false until the
-Forge path also ports the original `HiZBuffer` / depth framebuffer update and
-can execute `traversal_dev.comp` with a real depth pyramid. A CPU
-radius/frustum list or debug planner would be a route deviation and is not
-accepted as HOC parity.
+`originalHizOwnerReady=true` now means the original-shaped `HiZBuffer` and
+`DepthFramebuffer` owners exist. `originalHizTraversalExecutableReady=true`
+requires a real render frame to build the HiZ mip-chain from the real Minecraft
+main framebuffer depth attachment. `originalHierarchicalOcclusionTraverserReady`
+requires both the original HOC owner and that selected-viewport HiZ executable
+state. A CPU radius/frustum list or debug planner would be a route deviation
+and is not accepted as HOC parity.
+
+The Forge 1.20.1 projection adapter uses `GameRenderer.getProjectionMatrix(fov)`
+as the available raw Minecraft projection source, then applies the same original
+Voxy `extraProjection * adjustedRawProjection` near/far/reverse-Z transform.
+Original newer Voxy reads `gameRenderState.levelRenderState.cameraRenderState`
+directly; that field is not available in Forge 1.20.1, so this is a documented
+version adapter rather than a substitute traversal route.
 
 The model bake data path has been corrected away from the K-era `FaceTexture`
 formal-preview shape and back toward the original Voxy model texture contract:
@@ -557,7 +578,7 @@ semantics.
 | `AsyncNodeManager` render-side traversal producers | original Voxy receives top-level node adds/removes from `RenderDistanceTracker`, and request batches from `HierarchicalOcclusionTraverser` | Forge now ports the geometry-result queue, `SyncResults`, `ComputeMemoryCopy`, `UploadStream`, `DownloadStream`, `memcpy.comp`, `scatter.comp`, `SectionUpdateRouter`, `SingleNodeRequest`, `NodeChildRequest`, leaf-to-inner transitions, inner-node compaction, top-level node id deltas, cleaner reset/clear deltas, request batch entry points, remove batch entry points, render-side `NodeCleaner`, `GeometryCache`, `RenderDistanceTracker`, and the HOC owner/request-buffer path. `originalNodeManagerParityReady=true` is limited to this ownership layer. `originalHierarchicalOcclusionTraverserOwnerReady=true` does not imply HiZ traversal execution until `originalHizTraversalExecutableReady=true`. |
 | `AsyncNodeManager` GeometryCache | original Voxy has a CPU-side `GeometryCache` inside `AsyncNodeManager`; initial render generation first tries `geometryCache.remove(pos)`, and dirty world events clear cached geometry for the changed section | Fixed for the Forge parity route: `ForgeOriginalVoxyGeometryCache` mirrors original cache semantics, initial render callbacks consume cached geometry before queueing render generation, and world dirty callbacks clear stale cached geometry before forwarding router/remesh events. |
 | `RenderDistanceTracker` | original Voxy uses `RingTracker` to feed top-level LoD node add/remove events into `AsyncNodeManager` | Fixed for the Forge parity route: `ForgeOriginalVoxyRingTracker` and `ForgeOriginalVoxyRenderDistanceTracker` mirror the original algorithm and feed `AsyncNodeManager.addTopLevel/removeTopLevel`; render distance is now sourced from `originalVoxySectionRenderDistance`, the Forge config equivalent of original `VoxyConfig.CONFIG.sectionRenderDistance`. |
-| `HierarchicalOcclusionTraverser` | original Voxy uses GPU HiZ traversal to produce render-list entries and node request batches | Fixed for the Forge owner route: `ForgeOriginalVoxyHierarchicalOcclusionTraverser` ports the original request buffer, node buffer ownership, top-node GPU list, queue metadata, scratch queues, shader import loading, `traversal_dev.comp` compile path, render-list binding contract, and request download into `AsyncNodeManager.submitRequestBatch()`. `ForgeOriginalVoxyMdicViewport` now owns the original-shaped MDIC buffers plus `ForgeOriginalVoxyHiZBuffer` and `ForgeOriginalVoxyDepthFramebuffer`; the render-stage adapter queries the Minecraft main framebuffer `GL_DEPTH_ATTACHMENT`, runs the original HiZ mip-chain pass, then executes HOC traversal without MDIC drawing. `originalHizOwnerReady=true` means owner creation; `originalHizTraversalExecutableReady=true` and `originalHierarchicalOcclusionTraverserReady=true` require a real render frame to build the HiZ texture from the real depth attachment. The remaining adaptation is source-framebuffer ownership: until `VoxyRenderSystem` owns the render pipeline, Forge obtains the source framebuffer from `Minecraft.getMainRenderTarget()` instead of an original `AbstractRenderPipeline` argument. Historical CPU candidate snapshots/debug planners remain explicitly unacceptable as parity. |
+| `HierarchicalOcclusionTraverser` / `ViewportSelector` / `MDICViewport` / HiZ | original Voxy selects a per-pass viewport, builds a HiZ depth pyramid, then runs GPU HOC traversal to produce render-list entries and node request batches | Fixed for the Forge owner route: `ForgeOriginalVoxyHierarchicalOcclusionTraverser` ports the original request buffer, node buffer ownership, top-node GPU list, queue metadata, scratch queues, shader import loading, `traversal_dev.comp` compile path, render-list binding contract, mip-nearest HiZ sampler, and request download into `AsyncNodeManager.submitRequestBatch()`. `ForgeOriginalVoxyViewportSelector` now mirrors default / Vivecraft-pass / Oculus-shadow viewport selection. `ForgeOriginalVoxyMdicViewport` owns the original-shaped MDIC buffers plus `ForgeOriginalVoxyHiZBuffer` and `ForgeOriginalVoxyDepthFramebuffer`; the render-stage adapter queries the Minecraft main framebuffer `GL_DEPTH_ATTACHMENT`, runs the original HiZ mip-chain pass, then executes HOC traversal without MDIC drawing. `originalHizOwnerReady=true` means owner creation; `originalHizTraversalExecutableReady=true` and `originalHierarchicalOcclusionTraverserReady=true` require a real render frame to build the HiZ texture from the real depth attachment. Remaining adapters are source-framebuffer ownership and Forge 1.20.1 projection access: until `VoxyRenderSystem` owns the render pipeline, Forge obtains the source framebuffer from `Minecraft.getMainRenderTarget()` instead of an original `AbstractRenderPipeline` argument, and uses `GameRenderer.getProjectionMatrix(fov)` as the raw projection source available in 1.20.1. Historical CPU candidate snapshots/debug planners remain explicitly unacceptable as parity. |
 | `SoftwareModelTextureBakery` model collection and dark-cutout metadata | Forge 1.20.1 lacks the newer original `BlockStateModelPart` and public `BakedQuad.materialInfo()` API, but Embeddium injects the equivalent `BakedQuadView` and sprite transparency data used by its own chunk mesher | fixed for the active Forge/Embeddium route: `originalSoftwareModelTextureBakeryUsed=true`; the adaptation is constrained to Embeddium source-equivalent material and transparency signals |
 | `ModelStore` ownership and audit | fixed: the original model pipeline now owns `ForgeOriginalVoxyModelStore` instead of historical `ForgeFormalModelStore`; uploads use original-style `MemoryBuffer` results, persistent `UploadStream`, DSA texture mip uploads, and post-commit readback audit for modelData/modelColour/atlas mip-chain regions | `originalModelStoreUsed=true` is reported when the owner is built; `originalModelStoreReadbackAuditReady=true` is reported after a committed upload readback matches the CPU payload |
 | Iris/Oculus custom block-state ids | original Voxy receives `WorldRenderingSettings.INSTANCE.getBlockStateIds()` from the Iris pipeline; Forge cannot compile against Oculus source directly in this source set | Forge reads the same Oculus singleton through `ForgeOculusWorldRenderingSettingsBridge`; null maps write custom id zero, matching original behavior |

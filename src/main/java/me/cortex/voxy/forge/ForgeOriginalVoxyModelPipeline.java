@@ -12,6 +12,8 @@ import me.cortex.voxy.config.ForgeVoxyConfig;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.client.event.RenderLevelStageEvent;
+import org.joml.Matrix4f;
+import org.joml.Matrix4fc;
 
 import java.util.Arrays;
 import java.util.Optional;
@@ -39,7 +41,7 @@ final class ForgeOriginalVoxyModelPipeline {
     private ForgeOriginalVoxyNodeCleaner nodeCleaner;
     private ForgeOriginalVoxyRenderDistanceTracker renderDistanceTracker;
     private ForgeOriginalVoxyHierarchicalOcclusionTraverser hierarchicalOcclusionTraverser;
-    private ForgeOriginalVoxyMdicViewport mdicViewport;
+    private ForgeOriginalVoxyViewportSelector viewportSelector;
     private Thread processingThread;
     private volatile boolean processingThreadRunning;
     private volatile Throwable processingThreadException;
@@ -189,10 +191,14 @@ final class ForgeOriginalVoxyModelPipeline {
                 && this.processingThread != null
                 && this.processingThread.isAlive()
                 && this.processingThreadException == null;
-        boolean mdicViewportOwnerReady = this.mdicViewport != null && this.mdicViewport.ready();
-        boolean hizOwnerReady = this.mdicViewport != null && this.mdicViewport.hizOwnerReady();
+        boolean viewportSelectorReady = this.viewportSelector != null && this.viewportSelector.ready();
+        boolean viewportSelectorDefaultReady = this.viewportSelector != null && this.viewportSelector.defaultViewportReady();
+        int viewportSelectorExtraViewportCount = this.viewportSelector == null ? 0 : this.viewportSelector.extraViewportCount();
+        String viewportSelectorLastSelectedKey = this.viewportSelector == null ? "none" : this.viewportSelector.lastSelectedKey();
+        boolean mdicViewportOwnerReady = viewportSelectorReady;
+        boolean hizOwnerReady = this.viewportSelector != null && this.viewportSelector.hizOwnerReady();
         boolean hocOwnerReady = hoc.originalHierarchicalOcclusionTraverserReady();
-        boolean hizTraversalExecutableReady = this.mdicViewport != null && this.mdicViewport.hizTraversalReady();
+        boolean hizTraversalExecutableReady = this.viewportSelector != null && this.viewportSelector.selectedHizTraversalReady();
         boolean hocExecutableReady = hocOwnerReady && mdicViewportOwnerReady && hizTraversalExecutableReady;
         return new ForgeOriginalVoxyModelPipelineStats(
                 STAGE,
@@ -255,6 +261,10 @@ final class ForgeOriginalVoxyModelPipeline {
                 geometry.originalNodeManagerParityReady(),
                 nodeSync.originalGeometryCacheReady(),
                 this.renderDistanceTracker != null && this.ownerReady && !this.stale,
+                viewportSelectorReady && this.ownerReady && !this.stale,
+                viewportSelectorDefaultReady && this.ownerReady && !this.stale,
+                viewportSelectorExtraViewportCount,
+                viewportSelectorLastSelectedKey,
                 hocExecutableReady && this.ownerReady && !this.stale,
                 hocOwnerReady && this.ownerReady && !this.stale,
                 mdicViewportOwnerReady && this.ownerReady && !this.stale,
@@ -508,9 +518,8 @@ final class ForgeOriginalVoxyModelPipeline {
             this.recordFailure(traversalError);
             return;
         }
-        ForgeOriginalVoxyMdicViewport mdicViewport = new ForgeOriginalVoxyMdicViewport(
-                renderProperties,
-                ORIGINAL_GEOMETRY_MAX_SECTION_COUNT);
+        ForgeOriginalVoxyViewportSelector viewportSelector = new ForgeOriginalVoxyViewportSelector(
+                () -> new ForgeOriginalVoxyMdicViewport(renderProperties, ORIGINAL_GEOMETRY_MAX_SECTION_COUNT));
         int minSec = (minecraft.level.getMinBuildHeight() >> 4) >> 5;
         int maxSec = ((minecraft.level.getMaxBuildHeight() >> 4) - 1) >> 5;
         ForgeOriginalVoxyRenderDistanceTracker renderDistanceTracker = new ForgeOriginalVoxyRenderDistanceTracker(
@@ -533,7 +542,7 @@ final class ForgeOriginalVoxyModelPipeline {
             this.nodeCleaner = cleaner;
             this.renderDistanceTracker = renderDistanceTracker;
             this.hierarchicalOcclusionTraverser = hierarchicalOcclusionTraverser;
-            this.mdicViewport = mdicViewport;
+            this.viewportSelector = viewportSelector;
             this.ownerReady = true;
             this.mapperBiomeCallbackAttached = true;
             this.existingBiomeEntriesQueued = true;
@@ -562,13 +571,15 @@ final class ForgeOriginalVoxyModelPipeline {
         }
         ForgeOriginalVoxyMdicViewport viewport;
         ForgeOriginalVoxyHierarchicalOcclusionTraverser traversal;
+        ForgeOriginalVoxyViewportSelector selector;
         synchronized (this) {
             if (!this.ownerReady || this.stale) {
                 return;
             }
-            viewport = this.mdicViewport;
+            selector = this.viewportSelector;
             traversal = this.hierarchicalOcclusionTraverser;
         }
+        viewport = selector == null ? null : selector.getViewport();
         if (viewport == null || traversal == null || !traversal.ready()) {
             return;
         }
@@ -587,11 +598,18 @@ final class ForgeOriginalVoxyModelPipeline {
         }
         try {
             Vec3 camera = event.getCamera().getPosition();
-            viewport.setProjection(event.getProjectionMatrix())
+            Matrix4f rawMinecraftProjection = rawMinecraftProjection(minecraft);
+            Matrix4f voxyProjection = computeProjectionMat(
+                    ForgeOriginalVoxyRenderProperties.getRenderProperties(),
+                    event.getProjectionMatrix(),
+                    rawMinecraftProjection);
+            viewport.setVanillaProjection(event.getProjectionMatrix())
+                    .setProjection(voxyProjection)
                     .setModelView(event.getPoseStack().last().pose())
                     .setCamera(camera.x, camera.y, camera.z)
                     .setScreenSize(target.width, target.height)
                     .update();
+            viewport.frameId++;
             viewport.buildHizFromSourceDepth(sourceDepthTexture, target.width, target.height);
             traversal.doTraversal(viewport);
             synchronized (this) {
@@ -654,7 +672,7 @@ final class ForgeOriginalVoxyModelPipeline {
         ForgeOriginalVoxyNodeCleaner cleaner;
         ForgeOriginalVoxyRenderDistanceTracker tracker;
         ForgeOriginalVoxyHierarchicalOcclusionTraverser hierarchicalOcclusionTraverser;
-        ForgeOriginalVoxyMdicViewport mdicViewport;
+        ForgeOriginalVoxyViewportSelector viewportSelector;
         synchronized (this) {
             this.clearRuns++;
             this.startRequested = false;
@@ -678,7 +696,7 @@ final class ForgeOriginalVoxyModelPipeline {
             cleaner = this.nodeCleaner;
             tracker = this.renderDistanceTracker;
             hierarchicalOcclusionTraverser = this.hierarchicalOcclusionTraverser;
-            mdicViewport = this.mdicViewport;
+            viewportSelector = this.viewportSelector;
             this.world = null;
             this.modelStore = null;
             this.modelFactory = null;
@@ -689,7 +707,7 @@ final class ForgeOriginalVoxyModelPipeline {
             this.nodeCleaner = null;
             this.renderDistanceTracker = null;
             this.hierarchicalOcclusionTraverser = null;
-            this.mdicViewport = null;
+            this.viewportSelector = null;
         }
         if (callbackWorld != null) {
             callbackWorld.setDirtyCallback(null);
@@ -704,8 +722,8 @@ final class ForgeOriginalVoxyModelPipeline {
             if (hierarchicalOcclusionTraverser != null) {
                 hierarchicalOcclusionTraverser.freeOnRenderThread();
             }
-            if (mdicViewport != null) {
-                mdicViewport.free();
+            if (viewportSelector != null) {
+                viewportSelector.free();
             }
             if (renderGeneration != null) {
                 renderGeneration.shutdown();
@@ -842,6 +860,32 @@ final class ForgeOriginalVoxyModelPipeline {
     private synchronized void recordNonFatalFailure(String reason) {
         this.lastLifecycleEvent = "non-fatal-render-failure";
         this.lastFailureReason = reason == null || reason.isBlank() ? "unspecified" : reason.replace(' ', '-');
+    }
+
+    private static Matrix4f rawMinecraftProjection(Minecraft minecraft) {
+        double fov = minecraft.options.fov().get();
+        return minecraft.gameRenderer.getProjectionMatrix(fov);
+    }
+
+    private static Matrix4f computeProjectionMat(
+            ForgeOriginalVoxyRenderProperties properties,
+            Matrix4fc base,
+            Matrix4fc rawMinecraftProjection) {
+        Matrix4f extraProjection = new Matrix4f(rawMinecraftProjection).invert().mul(base, new Matrix4f());
+        float near = minecraftRenderDistance() <= 32.0F ? 8.0F : 16.0F;
+        float far = 16.0F * 3000.0F;
+        if (properties.isReverseZ()) {
+            float tmp = near;
+            near = far;
+            far = tmp;
+        }
+        return extraProjection.mulLocal(new Matrix4f(rawMinecraftProjection)
+                .m22((properties.isZero2One() ? far : far + near) / (near - far))
+                .m32((properties.isZero2One() ? far : far + far) * near / (near - far)));
+    }
+
+    private static float minecraftRenderDistance() {
+        return Minecraft.getInstance().options.getEffectiveRenderDistance() * 16.0F;
     }
 
     private static String safeReason(String reason) {

@@ -15,6 +15,7 @@ import static org.lwjgl.opengl.GL11.GL_TEXTURE_WRAP_T;
 import static org.lwjgl.opengl.GL11.GL_TRUE;
 import static org.lwjgl.opengl.GL11.GL_UNSIGNED_INT;
 import static org.lwjgl.opengl.GL11C.GL_NEAREST;
+import static org.lwjgl.opengl.GL11C.GL_NEAREST_MIPMAP_NEAREST;
 import static org.lwjgl.opengl.GL12.GL_CLAMP_TO_EDGE;
 import static org.lwjgl.opengl.GL12.GL_UNPACK_IMAGE_HEIGHT;
 import static org.lwjgl.opengl.GL12.GL_UNPACK_SKIP_IMAGES;
@@ -109,7 +110,7 @@ final class ForgeOriginalVoxyHierarchicalOcclusionTraverser {
         this.nodeSync.setTopLevelNodeCallbacks(this::addTopLevelNode, this::removeTopLevelNode);
         this.topNode2idxMapping.defaultReturnValue(-1);
 
-        glSamplerParameteri(this.hizSampler, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glSamplerParameteri(this.hizSampler, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
         glSamplerParameteri(this.hizSampler, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
         glSamplerParameteri(this.hizSampler, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
         glSamplerParameteri(this.hizSampler, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);

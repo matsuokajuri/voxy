@@ -63,6 +63,11 @@ final class ForgeOriginalVoxyMdicViewport {
         this.visibilityBuffer = new ForgeOriginalVoxyGlBuffer(maxSectionCount * 4L);
     }
 
+    ForgeOriginalVoxyMdicViewport setVanillaProjection(Matrix4fc projection) {
+        this.vanillaProjection.set(projection);
+        return this;
+    }
+
     ForgeOriginalVoxyMdicViewport setProjection(Matrix4fc projection) {
         this.projection.set(projection);
         return this;
