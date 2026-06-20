@@ -106,13 +106,17 @@ ForgeVoxyParityCommands
 
 It currently exposes `original_voxy_model_pipeline_*` commands for the active
 model-pipeline owner. This is not a preview route. The command surface now
-reports the Forge-port original `ModelFactory` mapping/upload state, but full
-model readiness is still blocked by original `UploadStream` persistent staging,
-byte-for-byte `TextureUtils` audit, readback proof, custom block-state id
-mapping, and `RenderGenerationService` model-miss retry behavior. The original
-worker thread, upload-result queue, biome LUT upload, and packed mip-chain atlas
-upload are now part of the active parity route, not the deprecated preview
-route.
+reports the Forge-port original `ModelFactory` mapping/upload state and the
+first original render-generation parity state. The original worker thread,
+upload-result queue, biome LUT upload, packed mip-chain atlas upload,
+persistent-mapped `UploadStream` staging, `RenderGenerationService`
+missing-model request/requeue, and `RenderDataFactory` raw-section mesh output
+are now part of the active parity route, not the deprecated preview route.
+
+Remaining model/render-generation blockers are byte-for-byte `TextureUtils`
+audit, readback proof, custom block-state id mapping, full non-solid/fluid edge
+coverage, and connection from `BuiltSection` output into original-equivalent
+geometry ownership.
 
 ## Replacement direction
 

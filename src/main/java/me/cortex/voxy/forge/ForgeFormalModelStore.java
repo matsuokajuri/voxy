@@ -214,11 +214,40 @@ final class ForgeFormalModelStore {
     }
 
     String uploadOriginalVoxyModelRecord(int formalModelId, int[] words) {
-        return this.uploadPrototypeModelRecord(formalModelId, words);
+        if (!this.canUploadOneBlockPrototype()) {
+            return "formal-model-store-not-upload-ready";
+        }
+        if (!ForgeModelAtlasLayout.isValidModelId(formalModelId) || formalModelId == 0) {
+            return "invalid-formal-model-id-" + formalModelId;
+        }
+        if (words == null || words.length != ForgeModelStoreFormalLayout.MODEL_RECORD_WORDS) {
+            return "invalid-model-record-word-count";
+        }
+        long ptr = ForgeOriginalVoxyUploadStream.instance().upload(
+                this.modelDataBufferId,
+                modelDataOffset(formalModelId),
+                ForgeModelStoreFormalLayout.MODEL_RECORD_BYTES);
+        for (int i = 0; i < words.length; i++) {
+            MemoryUtil.memPutInt(ptr + ((long) i * Integer.BYTES), words[i]);
+        }
+        int error = GL11C.glGetError();
+        return error == GL11C.GL_NO_ERROR ? "none" : "model-record-upload-stream-" + glErrorName(error);
     }
 
     String uploadOriginalVoxyModelColour(int formalModelId, int colour) {
-        return this.uploadPrototypeModelColour(formalModelId, colour);
+        if (!this.canUploadOneBlockPrototype()) {
+            return "formal-model-store-not-upload-ready";
+        }
+        if (!ForgeModelAtlasLayout.isValidModelId(formalModelId) || formalModelId == 0) {
+            return "invalid-formal-model-id-" + formalModelId;
+        }
+        long ptr = ForgeOriginalVoxyUploadStream.instance().upload(
+                this.modelColourBufferId,
+                modelColourOffset(formalModelId),
+                Integer.BYTES);
+        MemoryUtil.memPutInt(ptr, colour);
+        int error = GL11C.glGetError();
+        return error == GL11C.GL_NO_ERROR ? "none" : "model-colour-upload-stream-" + glErrorName(error);
     }
 
     String uploadOriginalVoxyModelRecordWord(int formalModelId, int wordIndex, int value) {
@@ -231,20 +260,13 @@ final class ForgeFormalModelStore {
         if (wordIndex < 0 || wordIndex >= ForgeModelStoreFormalLayout.MODEL_RECORD_WORDS) {
             return "invalid-model-record-word-index-" + wordIndex;
         }
-        long ptr = MemoryUtil.nmemAlloc(Integer.BYTES);
-        try {
-            MemoryUtil.memPutInt(ptr, value);
-            GL45C.nglNamedBufferSubData(
-                    this.modelDataBufferId,
-                    modelDataOffset(formalModelId) + ((long) wordIndex * Integer.BYTES),
-                    Integer.BYTES,
-                    ptr
-            );
-            int error = GL11C.glGetError();
-            return error == GL11C.GL_NO_ERROR ? "none" : "model-record-word-upload-" + glErrorName(error);
-        } finally {
-            MemoryUtil.nmemFree(ptr);
-        }
+        long ptr = ForgeOriginalVoxyUploadStream.instance().upload(
+                this.modelDataBufferId,
+                modelDataOffset(formalModelId) + ((long) wordIndex * Integer.BYTES),
+                Integer.BYTES);
+        MemoryUtil.memPutInt(ptr, value);
+        int error = GL11C.glGetError();
+        return error == GL11C.GL_NO_ERROR ? "none" : "model-record-word-upload-stream-" + glErrorName(error);
     }
 
     String uploadOriginalVoxyAtlasFace(int formalModelId, int faceIndex, byte[] pixels) {
@@ -317,17 +339,13 @@ final class ForgeFormalModelStore {
         if (baseIndex < 0 || colours == null || (long) (baseIndex + colours.length) * Integer.BYTES > MODEL_COLOUR_BYTES) {
             return "invalid-model-colour-range";
         }
-        long ptr = MemoryUtil.nmemAlloc((long) colours.length * Integer.BYTES);
-        try {
-            for (int i = 0; i < colours.length; i++) {
-                MemoryUtil.memPutInt(ptr + ((long) i * Integer.BYTES), colours[i]);
-            }
-            GL45C.nglNamedBufferSubData(this.modelColourBufferId, modelColourOffset(baseIndex), (long) colours.length * Integer.BYTES, ptr);
-            int error = GL11C.glGetError();
-            return error == GL11C.GL_NO_ERROR ? "none" : "model-colour-range-upload-" + glErrorName(error);
-        } finally {
-            MemoryUtil.nmemFree(ptr);
+        long size = (long) colours.length * Integer.BYTES;
+        long ptr = ForgeOriginalVoxyUploadStream.instance().upload(this.modelColourBufferId, modelColourOffset(baseIndex), size);
+        for (int i = 0; i < colours.length; i++) {
+            MemoryUtil.memPutInt(ptr + ((long) i * Integer.BYTES), colours[i]);
         }
+        int error = GL11C.glGetError();
+        return error == GL11C.GL_NO_ERROR ? "none" : "model-colour-range-upload-stream-" + glErrorName(error);
     }
 
     String uploadPrototypeModelRecord(int formalModelId, int[] words) {

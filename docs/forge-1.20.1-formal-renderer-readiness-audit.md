@@ -67,9 +67,12 @@ K10/K23-K54 preview movement/update results
 Some bottom-path corrections are now aligned in direction:
 
 - Forge-adapted `SoftwareModelTextureBakery` exists.
-- Forge-local `ModelQueries` exists.
-- formal direct section geometry is being redirected toward
-  `WorldSection -> RenderDataFactory` style generation.
+- Forge-local original-parity `ModelQueries` exists.
+- Forge-local original-parity `UploadStream` persistent mapped staging now
+  backs the active original model upload route.
+- Forge-local original-parity `RenderGenerationService` and
+  `RenderDataFactory` now generate `BuiltSection` output from raw
+  `WorldSection` data and request/requeue missing models.
 - substitute preview/sample routes are marked deprecated.
 
 These are progress toward parity, not renderer readiness.
@@ -79,9 +82,6 @@ These are progress toward parity, not renderer readiness.
 P0 gaps:
 
 ```text
-RenderGenerationService-equivalent async ownership missing
-full RenderDataFactory parity incomplete
-model-miss request/requeue lifecycle incomplete
 BasicAsyncGeometryManager parity incomplete
 BasicSectionGeometryData parity incomplete
 RenderDistanceTracker parity incomplete
@@ -90,6 +90,7 @@ MDICViewport parity incomplete
 production cmdgen.comp integration incomplete
 MDICSectionRenderer parity incomplete
 VoxyRenderSystem lifecycle parity incomplete
+original common ServiceManager parity incomplete
 ```
 
 P1 gaps:

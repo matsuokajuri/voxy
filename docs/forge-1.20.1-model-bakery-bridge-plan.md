@@ -80,10 +80,11 @@ Recent parity remediation added:
   biome colour LUT updates, matching the original `ModelBakeResultUpload` /
   `BiomeUploadResult` responsibilities at the semantic level.
 
-Remaining work must connect the on-demand missing-model request/requeue
-behavior from `RenderGenerationService` and replace the current direct GL
-subdata upload implementation with original `UploadStream`-equivalent
-persistent mapped staging.
+The on-demand missing-model request/requeue behavior from
+`RenderGenerationService` is now present in the Forge parity route, backed by a
+Forge-local port of original `RenderDataFactory` and `IdNotYetComputedException`
+semantics. Original `UploadStream`-equivalent persistent mapped staging now
+backs original-route modelData/modelColour uploads.
 
 ## Compile-source-set constraint
 
@@ -112,9 +113,12 @@ dedicated ModelBakerySubsystem processing thread
 upload-result queue separated from bake processing
 biome colour LUT upload
 packed 3x2 mip-chain atlas upload
+UploadStream persistent mapped staging for original modelData/modelColour writes
 TextureUtils helper logic port
 fluid pre-bake ordering
 idMappings / metadataCache / fluidStateLUT / modelTexture2id ownership
+RenderGenerationService missing-model request/requeue
+RenderDataFactory raw WorldSection mesh generation
 ```
 
 Still incomplete and must not be treated as readiness:
@@ -122,9 +126,9 @@ Still incomplete and must not be treated as readiness:
 ```text
 TextureUtils byte-for-byte output audit
 custom block-state id mapping
-original UploadStream persistent mapped staging
 readback audit for the new original route
-RenderGenerationService retry after IdNotYetComputedException
+full non-solid/fluid/tint software bake edge coverage
+BasicAsyncGeometryManager / BasicSectionGeometryData output ownership
 ```
 
 ## Required behavior

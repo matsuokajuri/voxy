@@ -101,10 +101,18 @@ Missing before L2/L3 can be considered complete:
 ```text
 custom block-state id mapping
 TextureUtils byte-for-byte audit against original output
-original UploadStream persistent mapped staging
 readback audit for original route uploads
-RenderGenerationService model-miss request/requeue
+full non-solid/fluid/tint software bake edge coverage
 ```
+
+The original persistent-mapped `UploadStream`, `RenderGenerationService`
+missing-model request/requeue, `RenderDataFactory`, `BuiltSection`,
+`ScanMesher2D`, `OccupancySet`, and `ModelQueries` parity pieces are now present
+in the Forge source set. `RenderGenerationService` reports
+`originalServiceManagerParityReady=false` because the original common
+`ServiceManager` pulls Fabric `commonImpl` dependencies; the Forge-local worker
+keeps the original BuildTask/requeue semantics until that thread stack is
+cleanly Forge-adapted.
 
 ## Required source trace
 
@@ -148,11 +156,11 @@ A subsystem is considered aligned only when:
 The next work should continue bottom-up parity, not preview hardening:
 
 ```text
-complete UploadStream / TextureUtils byte-for-byte parity proof
- -> restore original model-miss request/requeue semantics
- -> complete SoftwareModelTextureBakery parity
- -> introduce RenderGenerationService-style async ownership
- -> replace direct unit-quad section geometry with RenderDataFactory parity
+complete TextureUtils byte-for-byte parity proof
+ -> complete SoftwareModelTextureBakery edge parity
+ -> connect RenderGenerationService BuiltSection output to BasicAsyncGeometryManager
+ -> port BasicSectionGeometryData and original geometry ownership
+ -> continue into visibility / MDIC parity
 ```
 
 Visible preview work must not be treated as progress toward production parity

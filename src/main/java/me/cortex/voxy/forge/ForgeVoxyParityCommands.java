@@ -1,6 +1,7 @@
 package me.cortex.voxy.forge;
 
 import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.arguments.LongArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -20,6 +21,11 @@ final class ForgeVoxyParityCommands {
                                 .executes(ctx -> originalVoxyModelPipelineRequestBlockState(
                                         ctx.getSource(),
                                         IntegerArgumentType.getInteger(ctx, "blockStateId")))))
+                .then(Commands.literal("original_voxy_render_generation_enqueue_section")
+                        .then(Commands.argument("sectionKey", LongArgumentType.longArg())
+                                .executes(ctx -> originalVoxyRenderGenerationEnqueueSection(
+                                        ctx.getSource(),
+                                        LongArgumentType.getLong(ctx, "sectionKey")))))
                 .then(Commands.literal("original_voxy_model_pipeline_clear")
                         .executes(ctx -> originalVoxyModelPipelineClear(ctx.getSource())));
     }
@@ -44,6 +50,14 @@ final class ForgeVoxyParityCommands {
         ForgeOriginalVoxyModelPipelineStats status = ForgeVoxyInstance.INSTANCE
                 .getOriginalVoxyModelPipeline()
                 .requestBlockBake(blockStateId);
+        source.sendSuccess(() -> Component.literal(format(status)), false);
+        return 1;
+    }
+
+    private static int originalVoxyRenderGenerationEnqueueSection(CommandSourceStack source, long sectionKey) {
+        ForgeOriginalVoxyModelPipelineStats status = ForgeVoxyInstance.INSTANCE
+                .getOriginalVoxyModelPipeline()
+                .enqueueRenderGenerationTask(sectionKey);
         source.sendSuccess(() -> Component.literal(format(status)), false);
         return 1;
     }
@@ -96,6 +110,27 @@ final class ForgeVoxyParityCommands {
                 + " biomeColourLutUploadReady=" + status.biomeColourLutUploadReady()
                 + " uploadStreamPersistentMappedReady=" + status.uploadStreamPersistentMappedReady()
                 + " renderGenerationModelMissRequestRequeueReady=" + status.renderGenerationModelMissRequestRequeueReady()
+                + " originalRenderGenerationServiceUsed=" + status.originalRenderGenerationServiceUsed()
+                + " originalRenderDataFactoryUsed=" + status.originalRenderDataFactoryUsed()
+                + " originalBuildTaskPriorityUsed=" + status.originalBuildTaskPriorityUsed()
+                + " originalHoldingSectionPolicyUsed=" + status.originalHoldingSectionPolicyUsed()
+                + " originalServiceManagerParityReady=" + status.originalServiceManagerParityReady()
+                + " renderGenerationTaskQueueCount=" + status.renderGenerationTaskQueueCount()
+                + " renderGenerationTaskMapCount=" + status.renderGenerationTaskMapCount()
+                + " renderGenerationHoldingSectionCount=" + status.renderGenerationHoldingSectionCount()
+                + " renderGenerationEnqueuedTaskCount=" + status.renderGenerationEnqueuedTaskCount()
+                + " renderGenerationProcessedTaskCount=" + status.renderGenerationProcessedTaskCount()
+                + " renderGenerationCompletedMeshCount=" + status.renderGenerationCompletedMeshCount()
+                + " renderGenerationEmptyMeshCount=" + status.renderGenerationEmptyMeshCount()
+                + " renderGenerationRequeueCount=" + status.renderGenerationRequeueCount()
+                + " renderGenerationReplacedTaskCount=" + status.renderGenerationReplacedTaskCount()
+                + " renderGenerationModelMissRequestCount=" + status.renderGenerationModelMissRequestCount()
+                + " renderGenerationInnerModelRequestScanCount=" + status.renderGenerationInnerModelRequestScanCount()
+                + " renderGenerationOuterModelRequestScanCount=" + status.renderGenerationOuterModelRequestScanCount()
+                + " renderGenerationFailedMeshCount=" + status.renderGenerationFailedMeshCount()
+                + " renderGenerationLastTaskPosition=" + status.renderGenerationLastTaskPosition()
+                + " renderGenerationLastLifecycleEvent=" + status.renderGenerationLastLifecycleEvent()
+                + " renderGenerationLastFailureReason=" + status.renderGenerationLastFailureReason()
                 + " queuedBlockBakeCount=" + status.queuedBlockBakeCount()
                 + " queuedBiomeCount=" + status.queuedBiomeCount()
                 + " queuedUploadResultCount=" + status.queuedUploadResultCount()

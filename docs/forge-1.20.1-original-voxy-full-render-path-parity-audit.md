@@ -102,8 +102,30 @@ Forge-local TextureUtils helper port
 ```
 
 This is still not full renderer readiness. The persistent-mapped
-`UploadStream` staging path and `RenderGenerationService` model-miss
-request/requeue integration are not complete parity yet.
+`UploadStream` staging path, `RenderGenerationService` model-miss
+request/requeue integration, and `RenderDataFactory` raw-section mesh path now
+exist in the Forge parity source set, but the higher renderer owners after
+`BuiltSection` are still incomplete.
+
+The Forge route now also ports the first original render-generation layer:
+
+```text
+ForgeOriginalVoxyRenderGenerationService
+ -> original-style BuildTask priority/retry state
+ -> held-section policy capped at 1000 sections
+ -> ForgeOriginalVoxyRenderDataFactory
+ -> ForgeOriginalVoxyBuiltSection
+ -> missing model IdNotYetComputedException
+ -> ModelFactory requestBlockBake
+ -> task requeue
+```
+
+`ForgeOriginalVoxyRenderDataFactory` is a Forge-local port of original
+`RenderDataFactory`, including its raw `WorldSection` scan, opaque/non-opaque
+bucket emission, fluid lookup path, neighbor face acquisition, greedy
+`ScanMesher2D`, `OccupancySet`, and `BuiltSection` output layout. Java 17 lacks
+the original source's `Integer.expand` / `Long.expand` helpers, so equivalent
+Forge-local bit-expansion helpers are used to preserve the same bit semantics.
 
 ## Source-set reality
 
@@ -126,30 +148,27 @@ semantics.
 1. Harden the Forge-port `ModelFactory` against original semantics: readback
    audit, byte-for-byte `TextureUtils` output comparison, custom block-state id
    mapping, and documented Forge-only stair base-state reflection.
-2. Port the original persistent-mapped `UploadStream` stack or document the
-   exact Forge blocker after tracing its GL wrapper dependencies.
-3. Complete `SoftwareModelTextureBakery` runtime parity for solid, leaves,
+2. Complete `SoftwareModelTextureBakery` runtime parity for solid, leaves,
    cutout, translucent, fluid, tint, and atlas sampling.
-4. Complete `ModelStore` upload parity against the formal owner, including
+3. Complete `ModelStore` upload parity against the formal owner, including
    modelData/modelColour/atlas layout and upload thread rules.
-5. Complete `RenderDataFactory` parity, including neighbor-section logic,
-   opaque/non-opaque buckets, fluid model lookup, light/biome packing, and
-   greedy merge behavior.
-6. Port `RenderGenerationService` task queue and result-consumer behavior.
-7. Port `BasicAsyncGeometryManager` and `BasicSectionGeometryData`.
-8. Port `RenderDistanceTracker` and `HierarchicalOcclusionTraverser`.
-9. Port `MDICViewport` and production `cmdgen.comp`.
-10. Port `MDICSectionRenderer` and original terrain shader binding order.
-11. Port `VoxyRenderSystem` lifecycle only after the lower owners match.
+4. Connect `RenderGenerationService` output to original-equivalent
+   `BasicAsyncGeometryManager` / `BasicSectionGeometryData`.
+5. Port `BasicAsyncGeometryManager` and `BasicSectionGeometryData`.
+6. Port `RenderDistanceTracker` and `HierarchicalOcclusionTraverser`.
+7. Port `MDICViewport` and production `cmdgen.comp`.
+8. Port `MDICSectionRenderer` and original terrain shader binding order.
+9. Port `VoxyRenderSystem` lifecycle only after the lower owners match.
 
 ## Current documented Forge deviations
 
 | Area | Reason | Status |
 | --- | --- | --- |
 | `StairBlock.baseState` access | original source accesses the field directly; Forge 1.20.1 exposes it as private at compile time | Forge port uses a cached reflective field read to preserve original normalization semantics |
-| `UploadStream` persistent staging | original upload path depends on `GlPersistentMappedBuffer`, `GlFence`, `GlBuffer`, and `AllocationArena` from the original client-core GL stack | current Forge port still uses direct GL buffer/texture subdata uploads; persistent mapped UploadStream parity remains open |
+| `UploadStream` persistent staging | original upload path depends on `GlPersistentMappedBuffer`, `GlFence`, `GlBuffer`, and `AllocationArena` from the original client-core GL stack | Forge now ports this as `ForgeOriginalVoxyUploadStream`: persistent mapped staging buffer, `AllocationArena`, frame fences, explicit flush/copy/commit. The singleton is lazy-created on the render thread to respect Forge GL-context timing. |
 | `TextureUtils` byte-for-byte proof | helper logic is ported, but output has not yet been compared against original Sodium `ColorSRGB`/ARGB behavior by tests | status reports helper port ready but byte-for-byte audit not ready |
-| `RenderGenerationService` request/requeue | original request/requeue depends on `RenderDataFactory.generateMesh()` throwing `IdNotYetComputedException` from real section generation | not wired until RenderDataFactory parity is ported |
+| `RenderGenerationService` request/requeue | original request/requeue depends on `RenderDataFactory.generateMesh()` throwing `IdNotYetComputedException` from real section generation | Forge now ports BuildTask priority, held-section retention, inner/outer missing-model scans, `requestBlockBake`, and requeue. Direct Fabric `ServiceManager` import is blocked by Fabric `commonImpl` dependencies, so a Forge-local worker carries the same task semantics; `originalServiceManagerParityReady=false` remains reported until the common thread stack is cleanly Forge-adapted. |
+| `RenderDataFactory` Java version helpers | original source uses `Integer.expand` / `Long.expand`, unavailable in Java 17 | Forge uses local equivalent bit-expansion helpers with the same mask/value semantics. |
 
 ## Do not do
 
@@ -170,9 +189,9 @@ adapter shader as production terrain shader
 Continue with bottom-up parity:
 
 ```text
-complete UploadStream and TextureUtils byte-for-byte parity proof
- -> finish SoftwareModelTextureBakery parity
- -> restore model-miss request/requeue through RenderGenerationService
- -> introduce RenderGenerationService-style async generation
- -> replace direct unit-quad geometry with RenderDataFactory parity
+complete TextureUtils byte-for-byte parity proof
+ -> finish SoftwareModelTextureBakery parity for non-solid/fluid/tint edges
+ -> connect RenderGenerationService BuiltSection output to BasicAsyncGeometryManager
+ -> port BasicSectionGeometryData
+ -> replace remaining direct/debug geometry ownership with original Voxy geometry owners
 ```

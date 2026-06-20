@@ -176,6 +176,9 @@ final class ForgeOriginalVoxyModelFactory {
             processed++;
             upload = this.uploadResults.poll();
         }
+        if (ForgeOriginalVoxyUploadStream.isReady()) {
+            ForgeOriginalVoxyUploadStream.instance().commit();
+        }
         return processed;
     }
 
@@ -196,7 +199,7 @@ final class ForgeOriginalVoxyModelFactory {
                 true,
                 false,
                 true,
-                false,
+                true,
                 false,
                 this.requestedBlockStateCount,
                 this.biomeQueue.size(),
@@ -238,9 +241,13 @@ final class ForgeOriginalVoxyModelFactory {
         return blockId >= 0 && blockId < this.idMappings.length && this.idMappings[blockId] != -1;
     }
 
+    int[] _unsafeRawAccess() {
+        return this.idMappings;
+    }
+
     int getModelId(int blockId) {
         if (blockId < 0 || blockId >= this.idMappings.length || this.idMappings[blockId] == -1) {
-            throw new IllegalStateException("model-id-not-yet-computed-" + blockId);
+            throw new ForgeOriginalVoxyIdNotYetComputedException(blockId, true);
         }
         return this.idMappings[blockId];
     }
@@ -254,7 +261,7 @@ final class ForgeOriginalVoxyModelFactory {
 
     int getFluidClientStateId(int clientId) {
         if (clientId < 0 || clientId >= this.fluidStateLUT.length || this.fluidStateLUT[clientId] == -1) {
-            throw new IllegalStateException("fluid-model-id-not-yet-computed-" + clientId);
+            throw new ForgeOriginalVoxyIdNotYetComputedException(clientId, false);
         }
         return this.fluidStateLUT[clientId];
     }

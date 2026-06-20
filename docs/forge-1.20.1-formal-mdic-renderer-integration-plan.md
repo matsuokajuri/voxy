@@ -68,8 +68,8 @@ implementation scaffolding for formal MDIC.
 
 ## Integration order
 
-1. Confirm section geometry and metadata are produced by the original
-   `RenderDataFactory`-style path.
+1. Use the Forge-local original-parity `RenderGenerationService` /
+   `RenderDataFactory` / `BuiltSection` output as the section geometry source.
 2. Port `BasicAsyncGeometryManager` allocation, alignment, remove/reuse, and
    upload semantics.
 3. Port `BasicSectionGeometryData` buffer layout.
@@ -84,7 +84,6 @@ implementation scaffolding for formal MDIC.
 Do not enable formal MDIC draw while any of these are true:
 
 ```text
-RenderDataFactory parity incomplete
 BasicAsyncGeometryManager parity incomplete
 BasicSectionGeometryData parity incomplete
 RenderDistanceTracker / HierarchicalOcclusionTraverser parity incomplete
@@ -92,6 +91,7 @@ MDICViewport parity incomplete
 production cmdgen.comp not wired
 original shader binding contract incomplete
 formal ModelStore not owned by ModelBakerySubsystem-equivalent path
+original common ServiceManager parity incomplete
 ```
 
 ## Validation

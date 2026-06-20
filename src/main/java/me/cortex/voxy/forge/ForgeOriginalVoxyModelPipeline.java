@@ -18,6 +18,7 @@ final class ForgeOriginalVoxyModelPipeline {
     private final IntOpenHashSet seenBlockBakeRequests = new IntOpenHashSet(6000);
     private WorldEngine world;
     private ForgeOriginalVoxyModelFactory modelFactory;
+    private ForgeOriginalVoxyRenderGenerationService renderGenerationService;
     private Thread processingThread;
     private volatile boolean processingThreadRunning;
     private volatile Throwable processingThreadException;
@@ -76,6 +77,13 @@ final class ForgeOriginalVoxyModelPipeline {
         if (factory != null && factory.hasPendingUploads()) {
             this.runOnRenderThread(() -> this.processFactoryUploads(factory));
         }
+        if (ForgeOriginalVoxyUploadStream.isReady()) {
+            this.runOnRenderThread(() -> {
+                if (ForgeOriginalVoxyUploadStream.isReady()) {
+                    ForgeOriginalVoxyUploadStream.instance().tick();
+                }
+            });
+        }
     }
 
     synchronized ForgeOriginalVoxyModelPipelineStats requestBlockBake(int blockStateId) {
@@ -97,6 +105,17 @@ final class ForgeOriginalVoxyModelPipeline {
         return this.createStatusSnapshot();
     }
 
+    synchronized ForgeOriginalVoxyModelPipelineStats enqueueRenderGenerationTask(long sectionKey) {
+        if (!this.ownerReady || this.stale || this.renderGenerationService == null) {
+            this.lastFailureReason = "original-render-generation-service-not-ready";
+            return this.createStatusSnapshot();
+        }
+        this.renderGenerationService.enqueueTask(sectionKey);
+        this.lastLifecycleEvent = "render-generation-task-queued";
+        this.lastFailureReason = "none";
+        return this.createStatusSnapshot();
+    }
+
     synchronized ForgeOriginalVoxyModelPipelineStats createStatusSnapshot() {
         Mapper mapper = this.world == null ? null : this.world.getMapper();
         int mapperBlockStateCount = mapper == null ? 0 : mapper.getBlockStateCount();
@@ -104,6 +123,9 @@ final class ForgeOriginalVoxyModelPipeline {
         ForgeOriginalVoxyModelFactoryStats factory = this.modelFactory == null
                 ? ForgeOriginalVoxyModelFactoryStats.unavailable("model-factory-not-started")
                 : this.modelFactory.createStatusSnapshot();
+        ForgeOriginalVoxyRenderGenerationStats renderGeneration = this.renderGenerationService == null
+                ? ForgeOriginalVoxyRenderGenerationStats.unavailable("render-generation-not-started")
+                : this.renderGenerationService.createStatusSnapshot();
         boolean workerReady = this.processingThreadRunning
                 && this.processingThread != null
                 && this.processingThread.isAlive()
@@ -126,7 +148,7 @@ final class ForgeOriginalVoxyModelPipeline {
                 this.mapperBiomeCallbackAttached && this.ownerReady && !this.stale,
                 false,
                 this.existingBiomeEntriesQueued && this.ownerReady && !this.stale,
-                true,
+                renderGeneration.originalRenderDataFactoryUsed(),
                 false,
                 false,
                 false,
@@ -150,7 +172,28 @@ final class ForgeOriginalVoxyModelPipeline {
                 factory.textureUtilsByteForByteAuditReady(),
                 factory.biomeColourLutUploadReady(),
                 factory.uploadStreamPersistentMappedReady(),
-                factory.renderGenerationModelMissRequestRequeueReady(),
+                renderGeneration.originalModelMissRequestRequeueUsed(),
+                renderGeneration.renderGenerationServiceReady(),
+                renderGeneration.originalRenderDataFactoryUsed(),
+                renderGeneration.originalBuildTaskPriorityUsed(),
+                renderGeneration.originalHoldingSectionPolicyUsed(),
+                renderGeneration.originalServiceManagerParityReady(),
+                renderGeneration.taskQueueCount(),
+                renderGeneration.taskMapCount(),
+                renderGeneration.holdingSectionCount(),
+                renderGeneration.enqueuedTaskCount(),
+                renderGeneration.processedTaskCount(),
+                renderGeneration.completedMeshCount(),
+                renderGeneration.emptyMeshCount(),
+                renderGeneration.requeueCount(),
+                renderGeneration.replacedTaskCount(),
+                renderGeneration.modelMissRequestCount(),
+                renderGeneration.innerModelRequestScanCount(),
+                renderGeneration.outerModelRequestScanCount(),
+                renderGeneration.failedMeshCount(),
+                renderGeneration.lastTaskPosition(),
+                renderGeneration.lastLifecycleEvent(),
+                renderGeneration.lastFailureReason(),
                 factory.queuedBlockBakeCount(),
                 factory.queuedBiomeCount(),
                 factory.queuedUploadResultCount(),
@@ -241,9 +284,12 @@ final class ForgeOriginalVoxyModelPipeline {
         this.stopProcessingThread();
         ForgeOriginalVoxyModelFactory factory = new ForgeOriginalVoxyModelFactory(mapper, this.instance.getFormalModelStore());
         factory.prepareOnRenderThread(minecraft);
+        ForgeOriginalVoxyRenderGenerationService renderGeneration =
+                new ForgeOriginalVoxyRenderGenerationService(targetWorld, this, factory, false);
         synchronized (this) {
             this.world = targetWorld;
             this.modelFactory = factory;
+            this.renderGenerationService = renderGeneration;
             this.ownerReady = true;
             this.mapperBiomeCallbackAttached = true;
             this.existingBiomeEntriesQueued = true;
@@ -275,6 +321,7 @@ final class ForgeOriginalVoxyModelPipeline {
     private void markStaleAndClear(String event) {
         WorldEngine callbackWorld;
         ForgeOriginalVoxyModelFactory factory;
+        ForgeOriginalVoxyRenderGenerationService renderGeneration;
         synchronized (this) {
             this.clearRuns++;
             this.startRequested = false;
@@ -290,10 +337,15 @@ final class ForgeOriginalVoxyModelPipeline {
             this.seenBlockBakeRequests.clear();
             callbackWorld = this.world;
             factory = this.modelFactory;
+            renderGeneration = this.renderGenerationService;
             this.world = null;
             this.modelFactory = null;
+            this.renderGenerationService = null;
         }
         this.stopProcessingThread();
+        if (renderGeneration != null) {
+            renderGeneration.shutdown();
+        }
         if (factory != null) {
             factory.shutdown();
         }
