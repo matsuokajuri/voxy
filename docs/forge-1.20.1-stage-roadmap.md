@@ -133,6 +133,12 @@ Voxy's Sodium dependency through a Forge-local port of Embeddium's fast-srgb8
 `ColorSRGB` implementation. The remaining L3 work is the lower software bakery
 chain around it, not this color conversion helper.
 
+The active software bakery now also uses the original-shaped
+`ReuseVertexConsumer` / `SoftwareRasterizer` path: MemoryBuffer-backed
+24-byte vertex records, whole-atlas UV sampling, and original depth/stencil
+framebuffer packing. It still reports full bakery parity incomplete until the
+Forge 1.20.1 model/fluid collection differences are fully mapped.
+
 The original persistent-mapped `UploadStream`, `RenderGenerationService`
 missing-model request/requeue, `RenderDataFactory`, `BuiltSection`,
 `ScanMesher2D`, `OccupancySet`, and `ModelQueries` parity pieces are now present
@@ -184,7 +190,7 @@ A subsystem is considered aligned only when:
 The next work should continue bottom-up parity, not preview hardening:
 
 ```text
-complete SoftwareModelTextureBakery edge parity
+complete SoftwareModelTextureBakery model/fluid/dark-cutout parity
  -> connect RenderGenerationService BuiltSection output to BasicAsyncGeometryManager
  -> port BasicSectionGeometryData and original geometry ownership
  -> continue into visibility / MDIC parity

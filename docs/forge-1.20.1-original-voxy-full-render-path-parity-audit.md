@@ -190,6 +190,25 @@ through the same table helper and documented as a version-mapping adaptation.
 `TextureUtils`/mip sample audit passes; it does not imply that the whole
 software bakery or ModelStore owner is parity-complete.
 
+The software bake raster layer has also been corrected away from the Forge
+object-list substitute. The active Forge bakery now uses:
+
+```text
+ForgeOriginalVoxyReuseVertexConsumer
+ -> MemoryBuffer-backed 24-byte vertex records
+ -> ForgeOriginalVoxySoftwareRasterizer
+ -> whole block-atlas UV sampling
+ -> original depth/stencil/tint/blend framebuffer packing
+```
+
+This ports the original `ReuseVertexConsumer` / `SoftwareRasterizer` structure
+and removes the previous per-quad `TextureAtlasSprite.getPixelRGBA()` sampling
+path from the active bake. It is still not a full source-equivalent
+`SoftwareModelTextureBakery`: Forge 1.20.1 uses `BakedModel`/`BakedQuad`
+access and `LiquidBlockRenderer` signatures that differ from the newer
+original source's `BlockStateModelPart`, `FluidRenderer` layer callback, and
+`MipmapStrategy.DARK_CUTOUT` metadata.
+
 The old `BakeResult.faces()` and `FaceTexture` view remains only as deprecated
 compile compatibility for historical preview/debug classes. It is not the
 original Voxy route and must not be extended.
@@ -236,7 +255,7 @@ semantics.
 | `TextureUtils` ColorSRGB path | original Voxy imports Sodium `ColorSRGB`; Forge runtime prerequisite is Embeddium, whose reference source keeps the same fast-srgb8 table under a moved package | Forge now ports that fast-srgb8 table locally and `textureUtilsByteForByteAuditReady=true` is reported when the table/mip sample audit passes. The 1.20.1 `ARGB` class name is unavailable, so alpha uses the same table helper as a documented mapping adaptation. |
 | `RenderGenerationService` request/requeue | original request/requeue depends on `RenderDataFactory.generateMesh()` throwing `IdNotYetComputedException` from real section generation | Forge now ports BuildTask priority, held-section retention, inner/outer missing-model scans, `requestBlockBake`, and requeue. Direct Fabric `ServiceManager` import is blocked by Fabric `commonImpl` dependencies, so a Forge-local worker carries the same task semantics; `originalServiceManagerParityReady=false` remains reported until the common thread stack is cleanly Forge-adapted. |
 | `RenderDataFactory` Java version helpers | original source uses `Integer.expand` / `Long.expand`, unavailable in Java 17 | Forge uses local equivalent bit-expansion helpers with the same mask/value semantics. |
-| `SoftwareModelTextureBakery` vertex/raster path | the Forge class now outputs original `ColourDepthTextureData`, but it still uses a Forge-adapted `BakedModel`/`BakedQuad` access path and local vertex-list/rasterizer implementation instead of a full source-level port of original `ReuseVertexConsumer` / `SoftwareRasterizer` / `FluidRenderer` usage | `originalSoftwareModelTextureBakeryUsed=false` is reported until this lower layer is fully ported |
+| `SoftwareModelTextureBakery` model collection and fluid layer path | vertex storage and raster output now match the original `ReuseVertexConsumer` / `SoftwareRasterizer` shape, but Forge 1.20.1 still feeds them through Forge `BakedModel`/`BakedQuad` render-type access and `LiquidBlockRenderer` without the original layer callback | `originalSoftwareModelTextureBakeryUsed=false` remains reported until block model collection, fluid rendering, and dark-cutout metadata are fully mapped to original semantics |
 | `ModelStore` ownership | model record and atlas upload layout now uses original Voxy-shaped upload methods, but the owning class is still the historical `ForgeFormalModelStore` rather than a clean original `ModelStore` port | `originalModelStoreUsed=false` is reported until the owner and lifecycle match original Voxy |
 
 ## Do not do
@@ -258,7 +277,7 @@ adapter shader as production terrain shader
 Continue with bottom-up parity:
 
 ```text
-finish SoftwareModelTextureBakery vertex/raster path parity
+finish SoftwareModelTextureBakery model collection/fluid/dark-cutout parity
  -> finish original ModelStore owner/lifecycle parity
  -> connect RenderGenerationService BuiltSection output to BasicAsyncGeometryManager
  -> port BasicSectionGeometryData

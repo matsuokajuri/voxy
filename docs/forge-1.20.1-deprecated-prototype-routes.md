@@ -113,10 +113,10 @@ persistent-mapped `UploadStream` staging, `RenderGenerationService`
 missing-model request/requeue, and `RenderDataFactory` raw-section mesh output
 are now part of the active parity route, not the deprecated preview route.
 
-Remaining model/render-generation blockers are byte-for-byte `TextureUtils`
-audit, readback proof, custom block-state id mapping, full non-solid/fluid edge
-coverage, and connection from `BuiltSection` output into original-equivalent
-geometry ownership.
+Remaining model/render-generation blockers are readback proof, custom
+block-state id mapping, full model/fluid/dark-cutout bake coverage, and
+connection from `BuiltSection` output into original-equivalent geometry
+ownership.
 
 ## Replacement direction
 

@@ -271,6 +271,7 @@ final class ForgeOriginalVoxyModelFactory {
         this.biomeQueue.clear();
         this.uploadResults.clear();
         this.blockStatesInFlight.clear();
+        this.softwareBakery.free();
     }
 
     private boolean ensureStoreReady() {
