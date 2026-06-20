@@ -4,6 +4,7 @@ import me.cortex.voxy.common.config.section.SectionSerializationStorage;
 import me.cortex.voxy.common.config.storage.inmemory.MemoryStorageBackend;
 import me.cortex.voxy.common.world.WorldEngine;
 import net.minecraft.client.Minecraft;
+import net.minecraftforge.client.event.RenderLevelStageEvent;
 import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
 import net.minecraftforge.client.event.RegisterClientCommandsEvent;
 import net.minecraftforge.common.MinecraftForge;
@@ -81,6 +82,7 @@ public final class ForgeVoxyInstance {
         MinecraftForge.EVENT_BUS.addListener(this::onClientLogin);
         MinecraftForge.EVENT_BUS.addListener(this::onClientLogout);
         MinecraftForge.EVENT_BUS.addListener(this::onClientTick);
+        MinecraftForge.EVENT_BUS.addListener(this::onRenderLevelStage);
         MinecraftForge.EVENT_BUS.addListener(this::onRegisterClientCommands);
         this.chunkIngestManager.register();
         this.cpuMeshBuildManager.register();
@@ -336,6 +338,10 @@ public final class ForgeVoxyInstance {
 
     private void onRegisterClientCommands(RegisterClientCommandsEvent event) {
         ForgeVoxyCommands.register(event.getDispatcher());
+    }
+
+    private void onRenderLevelStage(RenderLevelStageEvent event) {
+        this.originalVoxyModelPipeline.renderLevelStage(event);
     }
 
     private void onClientTick(TickEvent.ClientTickEvent event) {

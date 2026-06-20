@@ -1,6 +1,7 @@
 package me.cortex.voxy.forge;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.pipeline.RenderTarget;
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
 import me.cortex.voxy.common.Logger;
 import me.cortex.voxy.common.thread.MultiThreadPrioritySemaphore;
@@ -10,10 +11,15 @@ import me.cortex.voxy.common.world.other.Mapper;
 import me.cortex.voxy.config.ForgeVoxyConfig;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.phys.Vec3;
+import net.minecraftforge.client.event.RenderLevelStageEvent;
 
 import java.util.Arrays;
 import java.util.Optional;
 import java.util.concurrent.locks.LockSupport;
+
+import static org.lwjgl.opengl.GL30C.GL_DEPTH_ATTACHMENT;
+import static org.lwjgl.opengl.GL30C.GL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME;
+import static org.lwjgl.opengl.GL45C.glGetNamedFramebufferAttachmentParameteri;
 
 final class ForgeOriginalVoxyModelPipeline {
     static final String STAGE = "L0_L4_ORIGINAL_VOXY_MODEL_PIPELINE_PARITY";
@@ -184,9 +190,10 @@ final class ForgeOriginalVoxyModelPipeline {
                 && this.processingThread.isAlive()
                 && this.processingThreadException == null;
         boolean mdicViewportOwnerReady = this.mdicViewport != null && this.mdicViewport.ready();
-        boolean hizOwnerReady = this.mdicViewport != null && this.mdicViewport.hizTextureId() != 0;
+        boolean hizOwnerReady = this.mdicViewport != null && this.mdicViewport.hizOwnerReady();
         boolean hocOwnerReady = hoc.originalHierarchicalOcclusionTraverserReady();
-        boolean hocExecutableReady = hocOwnerReady && mdicViewportOwnerReady && hizOwnerReady;
+        boolean hizTraversalExecutableReady = this.mdicViewport != null && this.mdicViewport.hizTraversalReady();
+        boolean hocExecutableReady = hocOwnerReady && mdicViewportOwnerReady && hizTraversalExecutableReady;
         return new ForgeOriginalVoxyModelPipelineStats(
                 STAGE,
                 this.startRequests,
@@ -252,7 +259,7 @@ final class ForgeOriginalVoxyModelPipeline {
                 hocOwnerReady && this.ownerReady && !this.stale,
                 mdicViewportOwnerReady && this.ownerReady && !this.stale,
                 hizOwnerReady && this.ownerReady && !this.stale,
-                hocExecutableReady && this.ownerReady && !this.stale,
+                hizTraversalExecutableReady && this.ownerReady && !this.stale,
                 geometry.renderGenerationResultConsumerAttached(),
                 renderGeneration.originalBuildTaskPriorityUsed(),
                 renderGeneration.originalHoldingSectionPolicyUsed(),
@@ -501,7 +508,9 @@ final class ForgeOriginalVoxyModelPipeline {
             this.recordFailure(traversalError);
             return;
         }
-        ForgeOriginalVoxyMdicViewport mdicViewport = new ForgeOriginalVoxyMdicViewport(ORIGINAL_GEOMETRY_MAX_SECTION_COUNT);
+        ForgeOriginalVoxyMdicViewport mdicViewport = new ForgeOriginalVoxyMdicViewport(
+                renderProperties,
+                ORIGINAL_GEOMETRY_MAX_SECTION_COUNT);
         int minSec = (minecraft.level.getMinBuildHeight() >> 4) >> 5;
         int maxSec = ((minecraft.level.getMaxBuildHeight() >> 4) - 1) >> 5;
         ForgeOriginalVoxyRenderDistanceTracker renderDistanceTracker = new ForgeOriginalVoxyRenderDistanceTracker(
@@ -541,6 +550,60 @@ final class ForgeOriginalVoxyModelPipeline {
         Arrays.stream(mapper.getBiomeEntries()).forEach(factory::addBiome);
         this.startProcessingThread(factory);
         this.unparkProcessingThread();
+    }
+
+    void renderLevelStage(RenderLevelStageEvent event) {
+        if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_TRANSLUCENT_BLOCKS) {
+            return;
+        }
+        if (!RenderSystem.isOnRenderThread()) {
+            this.recordNonFatalFailure("original-hoc-render-stage-not-render-thread");
+            return;
+        }
+        ForgeOriginalVoxyMdicViewport viewport;
+        ForgeOriginalVoxyHierarchicalOcclusionTraverser traversal;
+        synchronized (this) {
+            if (!this.ownerReady || this.stale) {
+                return;
+            }
+            viewport = this.mdicViewport;
+            traversal = this.hierarchicalOcclusionTraverser;
+        }
+        if (viewport == null || traversal == null || !traversal.ready()) {
+            return;
+        }
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft.level == null || minecraft.player == null || event.getCamera() == null) {
+            return;
+        }
+        RenderTarget target = minecraft.getMainRenderTarget();
+        int sourceDepthTexture = glGetNamedFramebufferAttachmentParameteri(
+                target.frameBufferId,
+                GL_DEPTH_ATTACHMENT,
+                GL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME);
+        if (sourceDepthTexture == 0) {
+            this.recordNonFatalFailure("original-hoc-source-depth-texture-missing");
+            return;
+        }
+        try {
+            Vec3 camera = event.getCamera().getPosition();
+            viewport.setProjection(event.getProjectionMatrix())
+                    .setModelView(event.getPoseStack().last().pose())
+                    .setCamera(camera.x, camera.y, camera.z)
+                    .setScreenSize(target.width, target.height)
+                    .update();
+            viewport.buildHizFromSourceDepth(sourceDepthTexture, target.width, target.height);
+            traversal.doTraversal(viewport);
+            synchronized (this) {
+                if (this.ownerReady && !this.stale) {
+                    this.lifecycleState = "RUNNING_ORIGINAL_HOC_TRAVERSAL";
+                    this.lastLifecycleEvent = "hiz-build-and-hoc-traversal";
+                    this.lastFailureReason = "none";
+                }
+            }
+        } catch (RuntimeException e) {
+            this.recordNonFatalFailure("original-hoc-render-stage-" + e.getClass().getSimpleName() + ":" + e.getMessage());
+        }
     }
 
     private void queueBiome(Mapper.BiomeEntry biomeEntry) {
@@ -774,6 +837,11 @@ final class ForgeOriginalVoxyModelPipeline {
         this.lifecycleState = "FAILED_SAFE";
         this.lastLifecycleEvent = "failure";
         this.lastFailureReason = reason == null || reason.isBlank() ? "unspecified" : reason;
+    }
+
+    private synchronized void recordNonFatalFailure(String reason) {
+        this.lastLifecycleEvent = "non-fatal-render-failure";
+        this.lastFailureReason = reason == null || reason.isBlank() ? "unspecified" : reason.replace(' ', '-');
     }
 
     private static String safeReason(String reason) {

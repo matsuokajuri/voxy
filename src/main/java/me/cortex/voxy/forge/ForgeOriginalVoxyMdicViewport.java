@@ -48,10 +48,13 @@ final class ForgeOriginalVoxyMdicViewport {
     double cameraX;
     double cameraY;
     double cameraZ;
-    private int hizTextureId;
-    private int packedHizLevels;
+    private final ForgeOriginalVoxyRenderProperties properties;
+    private final ForgeOriginalVoxyHiZBuffer hiZBuffer;
+    private final ForgeOriginalVoxyDepthFramebuffer depthBoundingBuffer = new ForgeOriginalVoxyDepthFramebuffer();
 
-    ForgeOriginalVoxyMdicViewport(int maxSectionCount) {
+    ForgeOriginalVoxyMdicViewport(ForgeOriginalVoxyRenderProperties properties, int maxSectionCount) {
+        this.properties = properties;
+        this.hiZBuffer = new ForgeOriginalVoxyHiZBuffer(properties);
         try {
             this.frustumPlanes = (Vector4f[]) PLANES_FIELD.get(this.frustum);
         } catch (IllegalAccessException e) {
@@ -83,12 +86,6 @@ final class ForgeOriginalVoxyMdicViewport {
         return this;
     }
 
-    ForgeOriginalVoxyMdicViewport setHiz(int textureId, int packedLevels) {
-        this.hizTextureId = textureId;
-        this.packedHizLevels = packedLevels;
-        return this;
-    }
-
     ForgeOriginalVoxyMdicViewport update() {
         this.projection.mul(this.modelView, this.MVP);
         this.frustum.set(this.MVP, false);
@@ -100,7 +97,14 @@ final class ForgeOriginalVoxyMdicViewport {
                 (float) (this.cameraX - (sx << 5)),
                 (float) (this.cameraY - (sy << 5)),
                 (float) (this.cameraZ - (sz << 5)));
+        if (this.depthBoundingBuffer.resize(this.width, this.height)) {
+            this.depthBoundingBuffer.clear(this.properties.inverseClearDepth());
+        }
         return this;
+    }
+
+    void buildHizFromSourceDepth(int sourceDepthTextureId, int sourceWidth, int sourceHeight) {
+        this.hiZBuffer.buildMipChain(sourceDepthTextureId, sourceWidth, sourceHeight);
     }
 
     int renderListBufferId() {
@@ -112,11 +116,19 @@ final class ForgeOriginalVoxyMdicViewport {
     }
 
     int hizTextureId() {
-        return this.hizTextureId;
+        return this.hiZBuffer.textureId();
     }
 
     int packedHizLevels() {
-        return this.packedHizLevels;
+        return this.hiZBuffer.packedLevels();
+    }
+
+    boolean hizOwnerReady() {
+        return this.hiZBuffer.ownerReady() && this.depthBoundingBuffer.ready();
+    }
+
+    boolean hizTraversalReady() {
+        return this.hiZBuffer.textureReady();
     }
 
     boolean ready() {
@@ -128,6 +140,8 @@ final class ForgeOriginalVoxyMdicViewport {
     }
 
     void free() {
+        this.depthBoundingBuffer.free();
+        this.hiZBuffer.free();
         this.visibilityBuffer.free();
         this.indirectLookupBuffer.free();
         this.drawCountCallBuffer.free();
