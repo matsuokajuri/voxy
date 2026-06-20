@@ -111,6 +111,19 @@ blocker makes exact parity impossible.
 
 ## 5. Parity audit requirements
 
+Code reading rule:
+
+- When inspecting or locating source code in this repository, use CodeGraph
+  first. Prefer `codegraph_explore` for subsystem questions, ownership/data-flow
+  tracing, and multi-symbol context; prefer `codegraph_node` for a specific
+  source file or symbol.
+- Use direct file reads, `rg`, or other shell tools only when CodeGraph reports
+  the target is not indexed, the target is not source code such as docs,
+  configs, resources, logs, or scripts, or a CodeGraph staleness warning needs
+  targeted confirmation.
+- If CodeGraph is unavailable or the repository is not indexed, say so and fall
+  back to the normal file tools.
+
 Before changing a subsystem:
 
 1. Read the original Voxy files that implement that subsystem.
