@@ -1,0 +1,63 @@
+package me.cortex.voxy.forge;
+
+record ForgeOriginalVoxyBasicAsyncGeometryStats(
+        boolean originalBasicAsyncGeometryManagerUsed,
+        boolean originalBasicSectionGeometryDataReady,
+        boolean originalNodeManagerParityReady,
+        boolean renderGenerationResultConsumerAttached,
+        int sectionCount,
+        int maxSectionCount,
+        long geometryUsedBytes,
+        long geometryCapacityBytes,
+        long arenaSizeItems,
+        long arenaLimitItems,
+        int arenaFreeBlocks,
+        int pendingHeapUploads,
+        long pendingHeapUploadBytes,
+        int pendingHeapRemovals,
+        int pendingMetadataUpdates,
+        long acceptedBuiltSectionCount,
+        long replacedBuiltSectionCount,
+        long removedBuiltSectionCount,
+        long emptyBuiltSectionCount,
+        long drainedUploadCount,
+        long drainedUploadBytes,
+        long drainedRemoveCount,
+        long drainedMetadataUpdateCount,
+        int lastSectionId,
+        long lastSectionPosition,
+        String lastLifecycleEvent,
+        String lastFailureReason
+) {
+    static ForgeOriginalVoxyBasicAsyncGeometryStats unavailable(String reason) {
+        return new ForgeOriginalVoxyBasicAsyncGeometryStats(
+                false,
+                false,
+                false,
+                false,
+                0,
+                0,
+                0L,
+                0L,
+                0L,
+                0L,
+                0,
+                0,
+                0L,
+                0,
+                0,
+                0L,
+                0L,
+                0L,
+                0L,
+                0L,
+                0L,
+                0L,
+                0L,
+                -1,
+                0L,
+                "unavailable",
+                reason == null || reason.isBlank() ? "basic-async-geometry-unavailable" : reason
+        );
+    }
+}

@@ -112,11 +112,12 @@ upload-result queue, biome LUT upload, packed mip-chain atlas upload,
 persistent-mapped `UploadStream` staging, `RenderGenerationService`
 missing-model request/requeue, and `RenderDataFactory` raw-section mesh output
 are now part of the active parity route, not the deprecated preview route.
+The original model upload path also has committed readback proof and the
+Oculus custom block-state id hook.
 
-Remaining model/render-generation blockers are readback proof, custom
-block-state id mapping, full model/fluid/dark-cutout bake coverage, and
-connection from `BuiltSection` output into original-equivalent geometry
-ownership.
+Remaining lower-renderer blockers are the render-thread
+`BasicSectionGeometryData` owner, `AsyncNodeManager` / `NodeManager`,
+visibility traversal, MDIC command generation, and the original draw owner.
 
 ## Replacement direction
 

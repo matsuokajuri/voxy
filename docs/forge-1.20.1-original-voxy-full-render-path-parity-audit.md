@@ -137,8 +137,11 @@ Forge-local TextureUtils helper port
 This is still not full renderer readiness. The persistent-mapped
 `UploadStream` staging path, `RenderGenerationService` model-miss
 request/requeue integration, and `RenderDataFactory` raw-section mesh path now
-exist in the Forge parity source set, but the higher renderer owners after
-`BuiltSection` are still incomplete.
+exist in the Forge parity source set. `BuiltSection` output is now consumed by
+a Forge-port `BasicAsyncGeometryManager` owner with original 8-byte geometry
+records, 128-record heap allocation, 32-byte metadata packing, and
+upload/remove/update event sets. The higher renderer owners after the async
+geometry overlay are still incomplete.
 
 The Forge route now also ports the first original render-generation layer:
 
@@ -159,6 +162,26 @@ bucket emission, fluid lookup path, neighbor face acquisition, greedy
 `ScanMesher2D`, `OccupancySet`, and `BuiltSection` output layout. Java 17 lacks
 the original source's `Integer.expand` / `Long.expand` helpers, so equivalent
 Forge-local bit-expansion helpers are used to preserve the same bit semantics.
+
+`ForgeOriginalVoxyBasicAsyncGeometryManager` is now a Forge-local port of
+original `BasicAsyncGeometryManager` for the active parity route. It preserves:
+
+```text
+HierarchicalBitSet section id allocation
+AllocationArena geometry heap allocation
+8-byte geometry records
+128-record allocation alignment
+32-byte section metadata layout
+heap upload / heap removal / metadata update sets
+writeMetadataSplit high/low metadata writes
+```
+
+The current bridge records generated sections into that owner and drains the
+pending sync events so the model/render-generation pipeline does not retain
+or leak `MemoryBuffer` uploads while `AsyncNodeManager` and the render-thread
+`BasicSectionGeometryData` owner are not ported yet. This is not draw readiness:
+`originalBasicSectionGeometryDataReady=false` and
+`originalNodeManagerParityReady=false` remain reported.
 
 The model bake data path has been corrected away from the K-era `FaceTexture`
 formal-preview shape and back toward the original Voxy model texture contract:
@@ -320,9 +343,10 @@ semantics.
 
 1. Keep removing historical `ForgeFormalModelStore` references from preview
    code; the original model pipeline now uses `ForgeOriginalVoxyModelStore`.
-2. Connect `RenderGenerationService` output to original-equivalent
-   `BasicAsyncGeometryManager` / `BasicSectionGeometryData`.
-3. Port `BasicAsyncGeometryManager` and `BasicSectionGeometryData`.
+2. Port original `BasicSectionGeometryData` render-thread GL owner and connect
+   the async geometry event sets to it.
+3. Port `AsyncNodeManager` / `NodeManager` ownership instead of the current
+   direct generated-section bridge.
 4. Port `RenderDistanceTracker` and `HierarchicalOcclusionTraverser`.
 5. Port `MDICViewport` and production `cmdgen.comp`.
 6. Port `MDICSectionRenderer` and original terrain shader binding order.
@@ -337,6 +361,7 @@ semantics.
 | `TextureUtils` ColorSRGB path | original Voxy imports Sodium `ColorSRGB`; Forge runtime prerequisite is Embeddium, whose reference source keeps the same fast-srgb8 table under a moved package | Forge now ports that fast-srgb8 table locally and `textureUtilsByteForByteAuditReady=true` is reported when the table/mip sample audit passes. The 1.20.1 `ARGB` class name is unavailable, so alpha uses the same table helper as a documented mapping adaptation. |
 | `RenderGenerationService` request/requeue | original request/requeue depends on `RenderDataFactory.generateMesh()` throwing `IdNotYetComputedException` from real section generation | Forge now ports BuildTask priority, held-section retention, inner/outer missing-model scans, `requestBlockBake`, and requeue. Direct Fabric `ServiceManager` import is blocked by Fabric `commonImpl` dependencies, so a Forge-local worker carries the same task semantics; `originalServiceManagerParityReady=false` remains reported until the common thread stack is cleanly Forge-adapted. |
 | `RenderDataFactory` Java version helpers | original source uses `Integer.expand` / `Long.expand`, unavailable in Java 17 | Forge uses local equivalent bit-expansion helpers with the same mask/value semantics. |
+| `BasicAsyncGeometryManager` result consumption before `NodeManager` parity | original Voxy routes render-generation results through `AsyncNodeManager` / `NodeManager`, which owns request state and mesh id replacement | Forge now ports the lower `BasicAsyncGeometryManager` allocation/metadata/event semantics and consumes generated sections into it, but reports `originalNodeManagerParityReady=false` until the original async node layer is ported. |
 | `SoftwareModelTextureBakery` model collection and dark-cutout metadata | Forge 1.20.1 lacks the newer original `BlockStateModelPart` and public `BakedQuad.materialInfo()` API, but Embeddium injects the equivalent `BakedQuadView` and sprite transparency data used by its own chunk mesher | fixed for the active Forge/Embeddium route: `originalSoftwareModelTextureBakeryUsed=true`; the adaptation is constrained to Embeddium source-equivalent material and transparency signals |
 | `ModelStore` ownership and audit | fixed: the original model pipeline now owns `ForgeOriginalVoxyModelStore` instead of historical `ForgeFormalModelStore`; uploads use original-style `MemoryBuffer` results, persistent `UploadStream`, DSA texture mip uploads, and post-commit readback audit for modelData/modelColour/atlas mip-chain regions | `originalModelStoreUsed=true` is reported when the owner is built; `originalModelStoreReadbackAuditReady=true` is reported after a committed upload readback matches the CPU payload |
 | Iris/Oculus custom block-state ids | original Voxy receives `WorldRenderingSettings.INSTANCE.getBlockStateIds()` from the Iris pipeline; Forge cannot compile against Oculus source directly in this source set | Forge reads the same Oculus singleton through `ForgeOculusWorldRenderingSettingsBridge`; null maps write custom id zero, matching original behavior |

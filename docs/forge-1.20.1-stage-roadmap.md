@@ -154,6 +154,13 @@ back the original `ModelStore` modelData, optional modelColour range, and
 connected through the same `WorldRenderingSettings.INSTANCE.getBlockStateIds()`
 source used by original Voxy.
 
+`RenderGenerationService` `BuiltSection` output is now consumed by a
+Forge-port `BasicAsyncGeometryManager` owner. This ports the original section id
+allocation, geometry heap allocation, 128-record alignment, 32-byte metadata
+packing, and heap upload/remove/update event sets. It does not yet make the
+render-thread `BasicSectionGeometryData`, `AsyncNodeManager`, or `NodeManager`
+ready.
+
 ## Required source trace
 
 Each parity batch must begin by reading the original Voxy component and its
@@ -196,8 +203,8 @@ A subsystem is considered aligned only when:
 The next work should continue bottom-up parity, not preview hardening:
 
 ```text
-connect RenderGenerationService BuiltSection output to BasicAsyncGeometryManager
- -> port BasicSectionGeometryData and original geometry ownership
+port BasicSectionGeometryData and original render-thread geometry data store
+ -> port AsyncNodeManager / NodeManager ownership around BasicAsyncGeometryManager
  -> continue into visibility / MDIC parity
 ```
 

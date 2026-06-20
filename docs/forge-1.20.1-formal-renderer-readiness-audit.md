@@ -94,6 +94,10 @@ Some bottom-path corrections are now aligned in direction:
 - Forge-local original-parity `RenderGenerationService` and
   `RenderDataFactory` now generate `BuiltSection` output from raw
   `WorldSection` data and request/requeue missing models.
+- Forge-local original-parity `BasicAsyncGeometryManager` now consumes
+  generated `BuiltSection` output into original-style section id allocation,
+  geometry heap allocation, 128-record alignment, metadata packing, and
+  upload/remove/update event sets.
 - substitute preview/sample routes are marked deprecated.
 
 These are progress toward parity, not renderer readiness.
@@ -103,8 +107,8 @@ These are progress toward parity, not renderer readiness.
 P0 gaps:
 
 ```text
-BasicAsyncGeometryManager parity incomplete
 BasicSectionGeometryData parity incomplete
+AsyncNodeManager / NodeManager parity incomplete
 RenderDistanceTracker parity incomplete
 HierarchicalOcclusionTraverser parity incomplete
 MDICViewport parity incomplete
