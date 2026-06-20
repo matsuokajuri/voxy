@@ -186,8 +186,8 @@ final class ForgeOriginalVoxyModelFactory {
         return new ForgeOriginalVoxyModelFactoryStats(
                 true,
                 true,
-                true,
-                true,
+                false,
+                false,
                 true,
                 true,
                 true,
@@ -311,7 +311,7 @@ final class ForgeOriginalVoxyModelFactory {
         }
 
         TintPlan tint = this.createTintPlan(minecraft, bake.state(), softwareBake);
-        ModelEntry entry = new ModelEntry(softwareBake.faces(), fluidModelId, tint.dedupeColour());
+        ModelEntry entry = new ModelEntry(softwareBake.textures(), fluidModelId, tint.dedupeColour());
         Integer duplicate = this.modelTexture2id.get(entry);
         if (duplicate != null) {
             this.idMappings[bake.blockId()] = duplicate;
@@ -404,7 +404,7 @@ final class ForgeOriginalVoxyModelFactory {
 
         for (Direction direction : DIRECTIONS) {
             int faceIndex = direction.get3DDataValue();
-            ForgeSoftwareModelTextureBakery.FaceTexture texture = softwareBake.faces()[faceIndex];
+            ForgeOriginalVoxyColourDepthTextureData texture = softwareBake.textures()[faceIndex];
             int writtenPixels = texture == null ? 0 : ForgeOriginalVoxyTextureUtils.getWrittenPixelCount(texture, checkMode);
             if (writtenPixels == 0) {
                 faces[faceIndex] = FaceUpload.empty(faceIndex, direction.getName());
@@ -431,7 +431,7 @@ final class ForgeOriginalVoxyModelFactory {
         words[ForgeModelStoreFormalLayout.WORD_FLAGS_A] = flags;
         words[ForgeModelStoreFormalLayout.WORD_COLOUR_TINT] = tint.recordColourTint();
         words[ForgeModelStoreFormalLayout.WORD_CUSTOM_ID] = 0;
-        byte[][] mipChain = ForgeOriginalVoxyMipGen.putTextures((softwareBake.flags() & 2) != 0, softwareBake.faces());
+        byte[][] mipChain = ForgeOriginalVoxyMipGen.putTextures((softwareBake.flags() & 2) != 0, softwareBake.textures());
         return new RecordBuild(
                 words,
                 tint.recordColourTint(),
@@ -533,7 +533,7 @@ final class ForgeOriginalVoxyModelFactory {
         int checkMode = softwareBake.layer() == ForgeCpuMeshLayer.SOLID
                 ? ForgeOriginalVoxyTextureUtils.WRITE_CHECK_STENCIL
                 : ForgeOriginalVoxyTextureUtils.WRITE_CHECK_ALPHA;
-        for (ForgeSoftwareModelTextureBakery.FaceTexture face : softwareBake.faces()) {
+        for (ForgeOriginalVoxyColourDepthTextureData face : softwareBake.textures()) {
             if (face != null) {
                 int tintState = ForgeOriginalVoxyTextureUtils.computeFaceTint(face, checkMode);
                 if (tintState == 2 || tintState == 3) {
@@ -663,7 +663,7 @@ final class ForgeOriginalVoxyModelFactory {
         }
     }
 
-    private static int encodeSoftwareFaceData(ForgeSoftwareModelTextureBakery.FaceTexture texture, ForgeCpuMeshLayer layer) {
+    private static int encodeSoftwareFaceData(ForgeOriginalVoxyColourDepthTextureData texture, ForgeCpuMeshLayer layer) {
         int checkMode = layer == ForgeCpuMeshLayer.SOLID
                 ? ForgeOriginalVoxyTextureUtils.WRITE_CHECK_STENCIL
                 : ForgeOriginalVoxyTextureUtils.WRITE_CHECK_ALPHA;
@@ -880,17 +880,17 @@ final class ForgeOriginalVoxyModelFactory {
     }
 
     private static final class ModelEntry {
-        private final ForgeSoftwareModelTextureBakery.FaceTexture[] faces;
+        private final ForgeOriginalVoxyColourDepthTextureData[] faces;
         private final int fluidModelId;
         private final int tintingColour;
         private final int hash;
 
-        private ModelEntry(ForgeSoftwareModelTextureBakery.FaceTexture[] faces, int fluidModelId, int tintingColour) {
+        private ModelEntry(ForgeOriginalVoxyColourDepthTextureData[] faces, int fluidModelId, int tintingColour) {
             this.faces = faces.clone();
             this.fluidModelId = fluidModelId;
             this.tintingColour = tintingColour;
             int value = 31 * fluidModelId + tintingColour;
-            for (ForgeSoftwareModelTextureBakery.FaceTexture face : this.faces) {
+            for (ForgeOriginalVoxyColourDepthTextureData face : this.faces) {
                 value = 31 * value + faceHash(face);
             }
             this.hash = value;
@@ -899,7 +899,7 @@ final class ForgeOriginalVoxyModelFactory {
         private String signature() {
             StringBuilder builder = new StringBuilder();
             builder.append(this.fluidModelId).append('|').append(this.tintingColour);
-            for (ForgeSoftwareModelTextureBakery.FaceTexture face : this.faces) {
+            for (ForgeOriginalVoxyColourDepthTextureData face : this.faces) {
                 builder.append('|').append(faceHash(face));
             }
             return builder.toString();
@@ -929,7 +929,7 @@ final class ForgeOriginalVoxyModelFactory {
             return this.hash;
         }
 
-        private static boolean faceEquals(ForgeSoftwareModelTextureBakery.FaceTexture left, ForgeSoftwareModelTextureBakery.FaceTexture right) {
+        private static boolean faceEquals(ForgeOriginalVoxyColourDepthTextureData left, ForgeOriginalVoxyColourDepthTextureData right) {
             if (left == right) {
                 return true;
             }
@@ -942,7 +942,7 @@ final class ForgeOriginalVoxyModelFactory {
                     && Arrays.equals(left.depth(), right.depth());
         }
 
-        private static int faceHash(ForgeSoftwareModelTextureBakery.FaceTexture face) {
+        private static int faceHash(ForgeOriginalVoxyColourDepthTextureData face) {
             if (face == null) {
                 return 0;
             }

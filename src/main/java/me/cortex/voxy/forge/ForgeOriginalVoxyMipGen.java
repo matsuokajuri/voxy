@@ -14,7 +14,7 @@ final class ForgeOriginalVoxyMipGen {
     private ForgeOriginalVoxyMipGen() {
     }
 
-    static byte[][] putTextures(boolean darkened, ForgeSoftwareModelTextureBakery.FaceTexture[] textures) {
+    static byte[][] putTextures(boolean darkened, ForgeOriginalVoxyColourDepthTextureData[] textures) {
         if (MODEL_TEXTURE_SIZE > 16) {
             throw new IllegalStateException("original MipGen port assumes 16 or smaller model texture size");
         }

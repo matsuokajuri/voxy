@@ -13,7 +13,7 @@ final class ForgeOriginalVoxyTextureUtils {
     private ForgeOriginalVoxyTextureUtils() {
     }
 
-    static int getWrittenPixelCount(ForgeSoftwareModelTextureBakery.FaceTexture texture, int checkMode) {
+    static int getWrittenPixelCount(ForgeOriginalVoxyColourDepthTextureData texture, int checkMode) {
         int count = 0;
         for (int i = 0; i < texture.colour().length; i++) {
             count += wasPixelWritten(texture, checkMode, i) ? 1 : 0;
@@ -21,7 +21,7 @@ final class ForgeOriginalVoxyTextureUtils {
         return count;
     }
 
-    static boolean hasTranslucentPixel(ForgeSoftwareModelTextureBakery.FaceTexture texture) {
+    static boolean hasTranslucentPixel(ForgeOriginalVoxyColourDepthTextureData texture) {
         for (int i = 0; i < texture.colour().length; i++) {
             int alpha = texture.colour()[i] >>> 24;
             int depth = texture.depth()[i];
@@ -32,7 +32,7 @@ final class ForgeOriginalVoxyTextureUtils {
         return false;
     }
 
-    static boolean isSolidWhereDrawn(ForgeSoftwareModelTextureBakery.FaceTexture texture) {
+    static boolean isSolidWhereDrawn(ForgeOriginalVoxyColourDepthTextureData texture) {
         for (int i = 0; i < texture.colour().length; i++) {
             int alpha = texture.colour()[i] >>> 24;
             int depth = texture.depth()[i];
@@ -43,7 +43,7 @@ final class ForgeOriginalVoxyTextureUtils {
         return true;
     }
 
-    static int computeFaceTint(ForgeSoftwareModelTextureBakery.FaceTexture texture, int checkMode) {
+    static int computeFaceTint(ForgeOriginalVoxyColourDepthTextureData texture, int checkMode) {
         boolean allTinted = true;
         boolean someTinted = false;
         boolean wasWritten = false;
@@ -67,7 +67,7 @@ final class ForgeOriginalVoxyTextureUtils {
         return someTinted ? (allTinted ? 3 : 2) : 1;
     }
 
-    static float computeDepth(ForgeSoftwareModelTextureBakery.FaceTexture texture, int mode, int checkMode) {
+    static float computeDepth(ForgeOriginalVoxyColourDepthTextureData texture, int mode, int checkMode) {
         int[] colourData = texture.colour();
         int[] depthData = texture.depth();
         long a = 0;
@@ -102,11 +102,11 @@ final class ForgeOriginalVoxyTextureUtils {
         throw new IllegalArgumentException();
     }
 
-    static long[] generateMask(ForgeSoftwareModelTextureBakery.FaceTexture texture, int checkMode) {
+    static long[] generateMask(ForgeOriginalVoxyColourDepthTextureData texture, int checkMode) {
         return generateMask(texture, checkMode, new long[texture.width() * texture.height() / 64]);
     }
 
-    static long[] generateMask(ForgeSoftwareModelTextureBakery.FaceTexture texture, int checkMode, long[] outMsk) {
+    static long[] generateMask(ForgeOriginalVoxyColourDepthTextureData texture, int checkMode, long[] outMsk) {
         Arrays.fill(outMsk, 0L);
         int i = 0;
         for (int y = 0; y < texture.height(); y++) {
@@ -120,7 +120,7 @@ final class ForgeOriginalVoxyTextureUtils {
         return outMsk;
     }
 
-    static int[] computeBounds(ForgeSoftwareModelTextureBakery.FaceTexture texture, int checkMode) {
+    static int[] computeBounds(ForgeOriginalVoxyColourDepthTextureData texture, int checkMode) {
         int minX = 0;
         minXCheck:
         do {
@@ -210,7 +210,7 @@ final class ForgeOriginalVoxyTextureUtils {
         );
     }
 
-    private static boolean wasPixelWritten(ForgeSoftwareModelTextureBakery.FaceTexture data, int mode, int index) {
+    private static boolean wasPixelWritten(ForgeOriginalVoxyColourDepthTextureData data, int mode, int index) {
         if (mode == WRITE_CHECK_STENCIL) {
             return (data.depth()[index] & 0xFF) != 0;
         } else if (mode == WRITE_CHECK_DEPTH) {

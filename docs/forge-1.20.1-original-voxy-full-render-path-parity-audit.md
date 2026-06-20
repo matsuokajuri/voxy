@@ -127,6 +127,30 @@ bucket emission, fluid lookup path, neighbor face acquisition, greedy
 the original source's `Integer.expand` / `Long.expand` helpers, so equivalent
 Forge-local bit-expansion helpers are used to preserve the same bit semantics.
 
+The model bake data path has been corrected away from the K-era `FaceTexture`
+formal-preview shape and back toward the original Voxy model texture contract:
+
+```text
+ForgeSoftwareModelTextureBakery
+ -> ForgeOriginalVoxyColourDepthTextureData[6]
+ -> ForgeOriginalVoxyTextureUtils
+ -> ForgeOriginalVoxyMipGen
+ -> ForgeOriginalVoxyModelFactory ModelEntry / metadata / model record
+ -> ForgeFormalModelStore original-Voxy upload methods
+```
+
+`ForgeOriginalVoxyColourDepthTextureData` is a direct Forge-package port of the
+original `ColourDepthTextureData` record, including hash, equality, and clone
+semantics. `ForgeOriginalVoxyTextureUtils` and `ForgeOriginalVoxyMipGen` now
+operate on that record instead of the historical `FaceTexture` substitute.
+`ForgeOriginalVoxyModelFactory` now dedupes, computes metadata, builds
+`faceData`, computes tint, and generates the mip-chain from
+`ForgeOriginalVoxyColourDepthTextureData[]`.
+
+The old `BakeResult.faces()` and `FaceTexture` view remains only as deprecated
+compile compatibility for historical preview/debug classes. It is not the
+original Voxy route and must not be extended.
+
 ## Source-set reality
 
 The authoritative original Voxy files under `me.cortex.voxy.client.core.*` are
@@ -169,6 +193,8 @@ semantics.
 | `TextureUtils` byte-for-byte proof | helper logic is ported, but output has not yet been compared against original Sodium `ColorSRGB`/ARGB behavior by tests | status reports helper port ready but byte-for-byte audit not ready |
 | `RenderGenerationService` request/requeue | original request/requeue depends on `RenderDataFactory.generateMesh()` throwing `IdNotYetComputedException` from real section generation | Forge now ports BuildTask priority, held-section retention, inner/outer missing-model scans, `requestBlockBake`, and requeue. Direct Fabric `ServiceManager` import is blocked by Fabric `commonImpl` dependencies, so a Forge-local worker carries the same task semantics; `originalServiceManagerParityReady=false` remains reported until the common thread stack is cleanly Forge-adapted. |
 | `RenderDataFactory` Java version helpers | original source uses `Integer.expand` / `Long.expand`, unavailable in Java 17 | Forge uses local equivalent bit-expansion helpers with the same mask/value semantics. |
+| `SoftwareModelTextureBakery` vertex/raster path | the Forge class now outputs original `ColourDepthTextureData`, but it still uses a Forge-adapted `BakedModel`/`BakedQuad` access path and local vertex-list/rasterizer implementation instead of a full source-level port of original `ReuseVertexConsumer` / `SoftwareRasterizer` / `FluidRenderer` usage | `originalSoftwareModelTextureBakeryUsed=false` is reported until this lower layer is fully ported |
+| `ModelStore` ownership | model record and atlas upload layout now uses original Voxy-shaped upload methods, but the owning class is still the historical `ForgeFormalModelStore` rather than a clean original `ModelStore` port | `originalModelStoreUsed=false` is reported until the owner and lifecycle match original Voxy |
 
 ## Do not do
 
@@ -189,8 +215,9 @@ adapter shader as production terrain shader
 Continue with bottom-up parity:
 
 ```text
-complete TextureUtils byte-for-byte parity proof
- -> finish SoftwareModelTextureBakery parity for non-solid/fluid/tint edges
+finish SoftwareModelTextureBakery vertex/raster path parity
+ -> complete TextureUtils byte-for-byte parity proof
+ -> finish original ModelStore owner/lifecycle parity
  -> connect RenderGenerationService BuiltSection output to BasicAsyncGeometryManager
  -> port BasicSectionGeometryData
  -> replace remaining direct/debug geometry ownership with original Voxy geometry owners
