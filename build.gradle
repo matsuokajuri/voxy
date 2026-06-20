@@ -104,6 +104,8 @@ tasks.named('processResources', ProcessResources).configure {
             forge_version          : project.forge_version,
             forge_version_range    : project.forge_version_range,
             loader_version_range   : project.loader_version_range,
+            embeddium_version_range: project.embeddium_version_range,
+            oculus_version_range   : project.oculus_version_range,
             mod_id                 : project.mod_id,
             mod_name               : project.mod_name,
             mod_license            : project.mod_license,

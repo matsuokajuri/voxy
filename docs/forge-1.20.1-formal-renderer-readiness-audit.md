@@ -20,6 +20,20 @@ Reason:
 the original Voxy ownership chain is not fully ported yet
 ```
 
+## Required Forge frontends
+
+The Forge renderer parity route requires:
+
+```text
+Embeddium
+Oculus
+```
+
+Embeddium replaces the original Sodium frontend on Forge. Oculus replaces the
+original Iris/shaderpack frontend on Forge. Their presence does not make the
+renderer ready; it only establishes the correct hard prerequisites for porting
+the original Voxy ownership chain.
+
 ## Required original owners
 
 The formal renderer cannot be ready until Forge has parity for:

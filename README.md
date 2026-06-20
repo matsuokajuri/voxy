@@ -1,14 +1,26 @@
 Voxy is an LoD rendering mod for minecraft
 
-## Forge 1.20.1 cached LoD PoC
+## Forge 1.20.1 Voxy parity port
 
-This branch contains an experimental Forge 1.20.1 cached LoD proof of concept. The pipeline can ingest loaded chunks, build CPU mesh data, upload simple vanilla GPU buffers, and render cached LoD color blocks outside the vanilla render-distance neighborhood.
+This branch is being remediated toward original Voxy renderer parity on Forge
+1.20.1. Original Voxy is the baseline; Forge code must port or adapt the
+original model, geometry, visibility, MDIC, shader, and lifecycle mechanisms
+rather than replacing them with preview/debug paths.
 
-The PoC is disabled by default and is not the final Voxy renderer. For the current renderer-migration baseline, use `/voxy preset lod_built_section` in a client world, lower Minecraft render distance to 4-6 chunks, fly through an area, then look back at chunks that have left vanilla view distance. Use `/voxy gpu_mesh_status` and `/voxy lod_visibility_status` for diagnostics.
+## Required Forge frontends
 
-There are two simple GPU mesh sources:
+The Forge port now requires these client-side mods:
 
-- `BUILT_SECTION` is the recommended renderer migration source. It decodes the CPU-only Voxy BuiltSection/GeometryCache path.
-- `CPU_MESH` is the older Forge PoC source and remains available as a fallback with `/voxy preset lod`.
+```text
+Embeddium
+Oculus
+```
 
-See `PORTING_NOTES.md` for the current status, test commands, limitations, and next migration steps.
+Embeddium is the Forge-side replacement for the original Voxy Sodium frontend.
+Oculus is the Forge-side replacement for the original Iris/shaderpack
+integration point and provides the Iris mod identity on Forge.
+
+Historical cached-LoD preview commands and debug renderers are deprecated as
+implementation direction. See `AGENTS.md`,
+`docs/forge-1.20.1-original-voxy-full-render-path-parity-audit.md`, and
+`PORTING_NOTES.md` for the current route.

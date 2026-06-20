@@ -23,3 +23,17 @@ mandatory=true
 versionRange="${minecraft_version_range}"
 ordering="NONE"
 side="BOTH"
+
+[[dependencies.${mod_id}]]
+modId="embeddium"
+mandatory=true
+versionRange="${embeddium_version_range}"
+ordering="AFTER"
+side="CLIENT"
+
+[[dependencies.${mod_id}]]
+modId="oculus"
+mandatory=true
+versionRange="${oculus_version_range}"
+ordering="AFTER"
+side="CLIENT"

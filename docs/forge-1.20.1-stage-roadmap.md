@@ -17,6 +17,21 @@ Preview, sample-set, synthetic, fallback, and QA-only paths are deprecated as
 future direction. They may stay in code temporarily only to preserve compilation
 until their references are removed.
 
+## Forge frontend prerequisites
+
+The Forge port now treats these client mods as hard prerequisites:
+
+```text
+Embeddium
+Oculus
+```
+
+Embeddium is the Forge replacement for the original Sodium frontend. Oculus is
+the Forge replacement for the original Iris/shaderpack integration point. New
+parity work that reaches Sodium/Iris-dependent original code must inspect the
+original Voxy source and then adapt it against Embeddium/Oculus, preserving the
+same ownership and data flow.
+
 ## Superseded historical plan
 
 The following are historical and not current route guidance:

@@ -16,6 +16,8 @@ implementation before code is written.
 - Project: Voxy Forge 1.20.1 renderer migration.
 - Main branch: `forge-1.20.1-skeleton`.
 - Environment: Windows, PowerShell, Gradle, Java, Forge 1.20.1.
+- Hard Forge client prerequisites: Embeddium and Oculus. These replace the
+  original Fabric-side Sodium and Iris frontends for the Forge port.
 - Goal: replicate original Voxy renderer behavior and performance on Forge as
   closely as the platform allows.
 

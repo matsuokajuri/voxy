@@ -7,6 +7,20 @@ The formal Forge MDIC path must be a port/adaptation of original Voxy
 debug command buffers, synthetic cmdgen validators, and K10 visible preview
 resources are deprecated and must not be extended into the renderer.
 
+## Forge frontend prerequisites
+
+Formal MDIC work must assume the Forge client is running with:
+
+```text
+Embeddium
+Oculus
+```
+
+Embeddium is the Forge-side Sodium frontend replacement used for chunk renderer
+and related frontend parity work. Oculus is the Forge-side Iris replacement
+used for shaderpack integration parity. Do not wire MDIC against old Fabric
+runtime dependencies.
+
 ## Original files to treat as authoritative
 
 ```text

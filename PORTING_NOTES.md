@@ -1,153 +1,156 @@
 # Voxy Forge 1.20.1 Porting Notes
 
-## Forge 1.20.1 LoD PoC Current Status
+## Current Route
 
-The `forge-1.20.1-skeleton` branch currently has a Forge 1.20.1 cached LoD proof of concept.
-
-Working today:
-
-- Starts as a Forge 1.20.1 client mod on Java 17.
-- Enters a client world without Fabric, Sodium, Iris, Embeddium, or Oculus dependencies.
-- Creates and closes a minimal in-memory `WorldEngine` skeleton.
-- Automatically ingests already-loaded client chunks when enabled.
-- Converts chunks into Voxy sections.
-- Builds CPU-side mesh data and stores it in a CPU mesh cache.
-- Builds CPU-only Voxy BuiltSection-style data and stores it in a GeometryCache-style cache.
-- Uploads simple mesh data into vanilla `VertexBuffer` objects.
-- Renders cached LoD color blocks outside the vanilla render-distance neighborhood.
-
-This renderer is a simple Forge GPU PoC. It is not the original Voxy renderer, and it does not use the original MDIC, SSBO, shader, or custom GL pipeline.
-
-## Mesh Source Modes
-
-The simple GPU renderer currently has two CPU data sources:
-
-- `CPU_MESH` - Legacy Forge PoC mesh source. It uploads the earlier Forge CPU mesh cache directly and is kept as a fallback for comparison.
-- `BUILT_SECTION` - Recommended renderer migration source. It decodes the CPU-only Voxy BuiltSection/GeometryCache path, which is closer to the original Voxy renderer architecture.
-
-Use these commands to switch and compare sources:
+The Forge port is now on the original Voxy parity-remediation route.
 
 ```text
-/voxy preset lod
-/voxy preset lod_built_section
-/voxy gpu_mesh_source cpu
-/voxy gpu_mesh_source built_section
+original Voxy source is the baseline
 ```
 
-`/voxy preset lod` keeps the `CPU_MESH` fallback behavior. `/voxy preset lod_built_section` enables auto ingest, auto BuiltSection build, the simple GPU renderer, and `source=BUILT_SECTION` through runtime-only overrides. Neither preset writes the TOML config.
+Historical cached-LoD previews, debug renderers, synthetic fixtures, sample
+model paths, and K-stage visible preview work are retained only as historical
+evidence while their references are being retired. They are not the formal
+renderer route.
 
-Current recommendation: use `/voxy preset lod_built_section` as the baseline for future renderer migration work. If a regression appears, switch back to `CPU_MESH` to check whether the issue is in the BuiltSection path or in the shared upload/render path.
+## Required Client Dependencies
 
-## CPU-Only Section Geometry Manager
-
-The Forge port also has a CPU-only `SectionGeometryManager` path that mirrors the intent layer of Voxy's original `BasicAsyncGeometryManager`.
-
-It currently tracks:
-
-- section ids
-- heap item pointers in 8-byte geometry-record units
-- 32-byte section metadata samples
-- upload intents
-- remove intents
-- dirty metadata ids
-
-The 32-byte metadata sample follows the original eight-int layout:
+The Forge port requires these client-side mods:
 
 ```text
-word0 = section position high 32 bits
-word1 = section position low 32 bits
-word2 = packed AABB
-word3 = geometry pointer + offsets[0]
-word4 = delta offsets 0->1 and 1->2
-word5 = delta offsets 2->3 and 3->4
-word6 = delta offsets 4->5 and 5->6
-word7 = delta offsets 6->7 and 7->itemCount
+Embeddium
+Oculus
 ```
 
-This is still CPU-only. It does not create `GlBuffer`, upload to an SSBO/MDIC heap, or connect to `VoxyRenderSystem`. The upload/remove intents are diagnostic inputs for the future GL heap migration. Use `/voxy geometry_manager_status` and `/voxy geometry_manager_dump_sample` to inspect validation, metadata words, decoded offsets, upload intent hashes, and sample quad records.
-
-## How To Reproduce Cached LoD
-
-1. Start the Forge client with `runClient`.
-2. Enter a singleplayer world.
-3. Run:
-
-   ```text
-   /voxy preset lod_built_section
-   ```
-
-4. Set Minecraft render distance to 4-6 chunks.
-5. Fly through an area long enough for chunks to be ingested, meshed, cached, and uploaded.
-6. Turn around and look toward chunks that have left the vanilla render-distance neighborhood.
-7. Check diagnostics:
-
-   ```text
-   /voxy gpu_mesh_status
-   /voxy lod_visibility_status
-   ```
-
-If no LoD is visible, the status commands should show whether cached mesh is too near, too far, still filtered by the vanilla render-distance skip mode, in another dimension, not uploaded, or already evicted.
-
-For a direct visibility check, use:
+Mapping from original Voxy frontends:
 
 ```text
-/voxy preset overlay
+Original Fabric Voxy hard dependency: Sodium
+Forge parity frontend: Embeddium
+
+Original Fabric Voxy shaderpack integration: Iris
+Forge parity shaderpack frontend: Oculus
 ```
 
-Overlay mode intentionally disables the loaded-chunk skip and uses bright debug colors. It is only a visibility/debug mode, not the intended cached LoD mode.
+Oculus declares `provides = ["iris"]` in its Forge metadata, so it is the
+correct Forge-side target for original Iris integration work. Embeddium retains
+many Sodium package/API names internally, so some source-level references may
+still use `sodium` package names while the actual Forge mod prerequisite is
+`embeddium`.
 
-## Common Commands
+Development runs must load Embeddium and Oculus as mods. The local source
+folders `embeddium-20.1-forge/` and `Oculus-1.20.1-new/` are reference source
+trees only unless the developer explicitly wires or builds them for the
+workspace. Do not commit those source folders as part of this repository unless
+the project policy changes.
 
-- `/voxy preset overlay` - Runtime-only overlay debug preset. Does not write the TOML config.
-- `/voxy preset lod` - Runtime-only cached LoD preset using `CPU_MESH`, the legacy PoC source and fallback. Does not write the TOML config.
-- `/voxy preset lod_built_section` - Runtime-only cached LoD preset using `BUILT_SECTION`, the recommended renderer migration source. Does not write the TOML config.
-- `/voxy preset off` - Runtime-only shutdown for engine, auto ingest, auto CPU mesh build, auto BuiltSection build, and renderers.
-- `/voxy preset status` - Shows effective config values and whether each value came from config or runtime override.
-- `/voxy gpu_mesh_source cpu` - Runtime-only switch to the `CPU_MESH` fallback source and clear GPU buffers.
-- `/voxy gpu_mesh_source built_section` - Runtime-only switch to the recommended `BUILT_SECTION` source and clear GPU buffers.
-- `/voxy ingest_current_chunk` - Manually ingest the current chunk.
-- `/voxy build_current_chunk_cpu_mesh` - Manually build CPU mesh for the current chunk.
-- `/voxy build_current_chunk_built_section` - Manually build CPU-only BuiltSection data for the current chunk.
-- `/voxy mesh_cache_status` - Shows CPU mesh cache and debug pipeline status.
-- `/voxy gpu_mesh_status` - Shows GPU upload/render/cache status and LoD filter diagnostics.
-- `/voxy built_section_cache_status` - Shows CPU-only BuiltSection cache, auto build, and consumer status.
-- `/voxy lod_visibility_status` - Shows whether cached chunks are inside the current LoD visibility window.
-- `/voxy gpu_mesh_clear` - Clears simple GPU buffers while keeping CPU mesh and BuiltSection caches.
-- `/voxy debug_pipeline_clear` - Clears ingest records, mesh build records, BuiltSection build records, CPU mesh cache, BuiltSection cache, and GPU mesh cache.
+## Active Porting Chain
 
-## Current Limitations
+The Forge implementation must converge on the original Voxy chain:
 
-- The renderer is a simple Forge GPU PoC, not the original Voxy MDIC/SSBO renderer.
-- There is no texture atlas integration yet.
-- There is no shaderpack support.
-- There is no Embeddium or Oculus integration.
-- Mesh output is currently simplified color-block rendering.
-- `BUILT_SECTION` geometry records are still partial-original-bit-layout records, not final original renderer records.
-- Translucent mesh is skipped.
-- Ambient occlusion is not restored.
-- Transparent sorting is not restored.
-- Real lightmap behavior is not restored.
-- Biome tint is only partially represented through current model-aware CPU mesh work.
-- Block entity and special model rendering are not restored.
-- Cross-chunk precise culling is not complete.
-- The original Voxy renderer is still not connected.
-- Long-duration stability testing still needs to be expanded.
-- Multiplayer testing has not been done.
+```text
+WorldEngine / WorldSection / Mapper
+ -> ModelBakerySubsystem
+ -> ModelFactory
+ -> SoftwareModelTextureBakery / TextureUtils / ModelQueries
+ -> ModelStore
+ -> RenderGenerationService
+ -> RenderDataFactory
+ -> BuiltSection
+ -> BasicAsyncGeometryManager
+ -> BasicSectionGeometryData
+ -> RenderDistanceTracker
+ -> HierarchicalOcclusionTraverser
+ -> ViewportSelector / Viewport
+ -> MDICViewport
+ -> cmdgen.comp
+ -> MDICSectionRenderer
+ -> original terrain shader contract
+```
 
-## Current Technical Stages
+If original Voxy depends on Sodium or Iris behavior at a layer, the Forge port
+must first inspect that original dependency and then port/adapt it against
+Embeddium or Oculus with the same ownership, data layout, lifecycle, and
+performance semantics.
 
-- Stage A: Forge 1.20.1 skeleton, Java 17, empty mod startup.
-- Stage B: Core section, storage, serialization, memory storage, and mapper migration.
-- Stage C: WorldEngine skeleton, chunk conversion, controlled manual and automatic ingest.
-- Stage D: CPU mesh validation, model-aware mesh statistics, CPU mesh cache.
-- Stage E: Debug renderer, simple GPU renderer, runtime presets, and cached LoD visibility.
-- Stage G: CPU-only BuiltSection/GeometryCache path and simple GPU rendering from BuiltSection source.
+## Current Positive Progress
 
-## Next Recommended Steps
+Current parity work has started at the bottom of the model and render-generation
+chain:
 
-1. F3: Improve LoD visual correctness, including color baseline, fog, depth behavior, and near/far blending.
-2. F4: Add texture, light, and biome tint support.
-3. F5: Add block update dirty rebuild and cache invalidation.
-4. G: Investigate Embeddium compatibility.
-5. H: Investigate Oculus shader compatibility.
-6. Run longer flight tests and GPU memory pressure tests.
+- original-style `ModelFactory` id mapping, dedupe, metadata cache, and fluid
+  lookup structures are being ported under the Forge source set;
+- original-style software model texture data now uses a
+  `ColourDepthTextureData`-shaped record rather than the deprecated preview
+  `FaceTexture` shape;
+- original-style `UploadStream`, mip-chain atlas upload, biome LUT upload,
+  `RenderGenerationService`, `RenderDataFactory`, `BuiltSection`,
+  `ScanMesher2D`, and `OccupancySet` parity pieces exist in the Forge path;
+- deprecated preview/debug command paths are documented and must not be
+  promoted into the formal route.
+
+These are partial parity pieces, not formal renderer readiness.
+
+## Blocking Gaps
+
+The renderer is not ready until these original owners are ported or adapted:
+
+```text
+BasicAsyncGeometryManager
+BasicSectionGeometryData
+RenderDistanceTracker
+HierarchicalOcclusionTraverser
+ViewportSelector / Viewport
+MDICViewport
+production cmdgen.comp
+MDICSectionRenderer
+original terrain shader contract
+VoxyRenderSystem lifecycle
+Embeddium/Sodium frontend integration points
+Oculus/Iris shaderpack integration points
+```
+
+The following readiness fields must remain false until those owners exist:
+
+```text
+formalRendererReady=false
+actualRendererDrawEnabled=false
+formalDrawPipelineReady=false
+earlyUsableLodRendererReady=false
+```
+
+## Deprecated Historical Paths
+
+Do not build new implementation on:
+
+```text
+simple Forge GPU mesh renderer
+debug MDIC renderers
+sample-set model/atlas paths
+synthetic command-generation fixtures
+temporary model-id rewrites
+visible preview owners
+manual QA commands as lifecycle substitutes
+```
+
+See:
+
+```text
+docs/forge-1.20.1-deprecated-prototype-routes.md
+docs/forge-1.20.1-original-voxy-full-render-path-parity-audit.md
+docs/forge-1.20.1-stage-roadmap.md
+```
+
+## Validation
+
+Default validation for code changes:
+
+```powershell
+git status
+.\gradlew compileJava
+```
+
+Run `.\gradlew runClient` only when the changed subsystem needs Minecraft
+runtime state, GL behavior, or visual validation. Because Embeddium and Oculus
+are now hard client prerequisites, development runtime validation must provide
+both mods.

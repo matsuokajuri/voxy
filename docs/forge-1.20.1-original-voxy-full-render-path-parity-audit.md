@@ -13,6 +13,29 @@ Every subsystem must be traced to original Voxy source before implementation.
 Deprecated preview, sample, synthetic, fallback, and QA-only paths must not be
 extended.
 
+## Forge frontend dependency policy
+
+Original Fabric Voxy depends on Sodium and integrates with Iris. The Forge port
+must target the Forge equivalents:
+
+```text
+Sodium frontend -> Embeddium hard client prerequisite
+Iris shaderpack integration -> Oculus hard client prerequisite
+```
+
+The root reference source folders currently present in the workspace are:
+
+```text
+embeddium-20.1-forge/
+Oculus-1.20.1-new/
+```
+
+They are reference sources for parity inspection, not repository artifacts to
+commit. Embeddium keeps many Sodium package/API names internally, and Oculus
+declares `provides = ["iris"]`, so source-level package names may still contain
+`sodium` or `iris` while the Forge metadata and runtime prerequisites are
+`embeddium` and `oculus`.
+
 ## Current verdict
 
 ```text
@@ -190,7 +213,7 @@ semantics.
 | --- | --- | --- |
 | `StairBlock.baseState` access | original source accesses the field directly; Forge 1.20.1 exposes it as private at compile time | Forge port uses a cached reflective field read to preserve original normalization semantics |
 | `UploadStream` persistent staging | original upload path depends on `GlPersistentMappedBuffer`, `GlFence`, `GlBuffer`, and `AllocationArena` from the original client-core GL stack | Forge now ports this as `ForgeOriginalVoxyUploadStream`: persistent mapped staging buffer, `AllocationArena`, frame fences, explicit flush/copy/commit. The singleton is lazy-created on the render thread to respect Forge GL-context timing. |
-| `TextureUtils` byte-for-byte proof | helper logic is ported, but output has not yet been compared against original Sodium `ColorSRGB`/ARGB behavior by tests | status reports helper port ready but byte-for-byte audit not ready |
+| `TextureUtils` byte-for-byte proof | helper logic is ported, but output has not yet been compared against original Sodium/Embeddium API `ColorSRGB`/ARGB behavior by tests | status reports helper port ready but byte-for-byte audit not ready |
 | `RenderGenerationService` request/requeue | original request/requeue depends on `RenderDataFactory.generateMesh()` throwing `IdNotYetComputedException` from real section generation | Forge now ports BuildTask priority, held-section retention, inner/outer missing-model scans, `requestBlockBake`, and requeue. Direct Fabric `ServiceManager` import is blocked by Fabric `commonImpl` dependencies, so a Forge-local worker carries the same task semantics; `originalServiceManagerParityReady=false` remains reported until the common thread stack is cleanly Forge-adapted. |
 | `RenderDataFactory` Java version helpers | original source uses `Integer.expand` / `Long.expand`, unavailable in Java 17 | Forge uses local equivalent bit-expansion helpers with the same mask/value semantics. |
 | `SoftwareModelTextureBakery` vertex/raster path | the Forge class now outputs original `ColourDepthTextureData`, but it still uses a Forge-adapted `BakedModel`/`BakedQuad` access path and local vertex-list/rasterizer implementation instead of a full source-level port of original `ReuseVertexConsumer` / `SoftwareRasterizer` / `FluidRenderer` usage | `originalSoftwareModelTextureBakeryUsed=false` is reported until this lower layer is fully ported |
