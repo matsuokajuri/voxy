@@ -1,0 +1,38 @@
+package me.cortex.voxy.forge;
+
+record ForgeOriginalVoxyModelPipelineStats(
+        String stage,
+        long startRequests,
+        long startRuns,
+        long tickRuns,
+        long uploadTickRuns,
+        long blockBakeRequests,
+        long clearRuns,
+        boolean startRequested,
+        boolean startQueuedOnRenderThread,
+        boolean ownerReady,
+        boolean modelBakerySubsystemOwnerReady,
+        boolean originalModelFactoryUsed,
+        boolean originalSoftwareModelTextureBakeryUsed,
+        boolean originalModelStoreUsed,
+        boolean mapperBiomeCallbackAttached,
+        boolean mapperStateCallbackAttached,
+        boolean existingBiomeEntriesQueued,
+        boolean renderDataFactoryRequestPathExpected,
+        boolean safeSetRouteUsed,
+        boolean previewRouteUsed,
+        boolean sampleSetRouteUsed,
+        boolean formalRendererReady,
+        boolean actualRendererDrawEnabled,
+        boolean stale,
+        boolean requiresRebuild,
+        int mapperBlockStateCount,
+        int mapperBiomeCount,
+        int processingCount,
+        int bakedModelCount,
+        boolean queuesEmpty,
+        String lifecycleState,
+        String lastLifecycleEvent,
+        String lastFailureReason
+) {
+}

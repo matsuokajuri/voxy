@@ -64,9 +64,31 @@ Recent parity remediation added:
 - Forge-local `ForgeModelQueries`;
 - formal metadata propagation into direct section geometry;
 - deprecation markers for sample-set and preview shader sources.
+- `ForgeOriginalVoxyModelPipeline`, a focused L0/L1 owner boundary that starts
+  from the active `WorldEngine`, queues existing mapper biomes, attaches the
+  mapper biome callback, and queues future block bake requests without using
+  safe-set or preview sources.
 
 Remaining work must remove safe-set assumptions and restore original
 on-demand model request/requeue behavior.
+
+## Compile-source-set constraint
+
+The original `me.cortex.voxy.client.core.model.*` files remain authoritative
+references, but they are not compiled by the current Forge source set. The
+Forge implementation must therefore port the original semantics into Forge
+classes rather than directly import the original classes.
+
+This constraint does not permit behavioral fallback. The Forge port must still
+match:
+
+```text
+ModelBakerySubsystem queue/thread behavior
+ModelFactory idMappings / metadataCache / fluidStateLUT / modelTexture2id
+SoftwareModelTextureBakery colour/depth output
+ModelStore modelData/modelColour/atlas upload contract
+RenderGenerationService missing-model request/requeue behavior
+```
 
 ## Required behavior
 

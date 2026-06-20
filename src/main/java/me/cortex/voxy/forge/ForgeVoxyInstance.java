@@ -16,6 +16,7 @@ public final class ForgeVoxyInstance {
     public static final ForgeVoxyInstance INSTANCE = new ForgeVoxyInstance();
 
     private WorldEngine activeWorld;
+    private final ForgeOriginalVoxyModelPipeline originalVoxyModelPipeline = new ForgeOriginalVoxyModelPipeline(this);
     private final ForgeChunkIngestManager chunkIngestManager = new ForgeChunkIngestManager(this);
     private final ForgeCpuMeshBuildManager cpuMeshBuildManager = new ForgeCpuMeshBuildManager(this);
     private final ForgeCpuMeshCache cpuMeshCache = new ForgeCpuMeshCache();
@@ -111,6 +112,10 @@ public final class ForgeVoxyInstance {
 
     public int getStorageWriteCount() {
         return this.storageWriteCount.get();
+    }
+
+    public ForgeOriginalVoxyModelPipeline getOriginalVoxyModelPipeline() {
+        return this.originalVoxyModelPipeline;
     }
 
     public ForgeChunkIngestManager getChunkIngestManager() {
@@ -346,9 +351,11 @@ public final class ForgeVoxyInstance {
         String dimension = minecraft.level.dimension().location().toString();
         if (this.activeClientDimension == null) {
             this.activeClientDimension = dimension;
+            this.originalVoxyModelPipeline.clientTick();
             return;
         }
         if (this.activeClientDimension.equals(dimension)) {
+            this.originalVoxyModelPipeline.clientTick();
             return;
         }
 
@@ -400,6 +407,7 @@ public final class ForgeVoxyInstance {
         this.formalTerrainShaderIntegration.markDimensionSwitch();
         this.formalVisibleLodPreview.markDimensionSwitch();
         this.formalRendererManager.markDimensionSwitch();
+        this.originalVoxyModelPipeline.markDimensionSwitch();
         this.texturedDebugQuadRenderer.clear();
         this.texturedReadbackRenderer.clear();
         this.texturedMdicDebugRenderer.clear();
@@ -511,6 +519,7 @@ public final class ForgeVoxyInstance {
         this.formalTerrainShaderIntegration.markWorldUnload();
         this.formalVisibleLodPreview.markWorldUnload();
         this.formalRendererManager.markWorldUnload();
+        this.originalVoxyModelPipeline.markWorldUnload();
         this.texturedDebugQuadRenderer.clear();
         this.texturedReadbackRenderer.clear();
         this.texturedMdicDebugRenderer.clear();

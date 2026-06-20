@@ -124,6 +124,7 @@ final class ForgeModelBridgeResourceReloadTracker {
             this.instance.getFormalTerrainShaderIntegration().markResourceReload();
             this.instance.getFormalVisibleLodPreview().markResourceReload();
             this.instance.getFormalRendererManager().markResourceReload();
+            this.instance.getOriginalVoxyModelPipeline().markResourceReload();
             this.instance.getTexturedDebugQuadRenderer().markStale(staleReason);
             this.instance.getTexturedReadbackRenderer().markStale(staleReason);
             this.instance.getTexturedMdicDebugRenderer().markStale(staleReason);

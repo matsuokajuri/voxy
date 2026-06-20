@@ -70,22 +70,45 @@ These are directionally correct but not complete readiness:
 - formal direct section geometry is moving toward `RenderDataFactory`-style
   `WorldSection` raw-data generation.
 - sample/preview/synthetic routes are explicitly deprecated.
+- `ForgeOriginalVoxyModelPipeline` now owns the first L0/L1 parity boundary:
+  it starts from the active `WorldEngine`, queues existing mapper biomes,
+  attaches the mapper biome callback, and queues block bake requests for the
+  future `RenderGenerationService` path.
+
+## Source-set reality
+
+The authoritative original Voxy files under `me.cortex.voxy.client.core.*` are
+reference sources in this repository, but the current Forge Gradle source set
+only compiles the Forge package, selected platform/config/common files, and
+world/storage utilities.
+
+That means the Forge route must port/adapt original mechanisms under
+`me.cortex.voxy.forge` instead of directly importing the original client-core
+classes. Direct import of `ModelBakerySubsystem` was tested and rejected by
+`compileJava` because the package is outside the active source set.
+
+This is not a license to substitute behavior. The Forge implementation must
+still match original ownership, data layout, lifecycle, and performance
+semantics.
 
 ## Remaining bottom-up parity work
 
-1. Complete `SoftwareModelTextureBakery` runtime parity for solid, leaves,
+1. Complete Forge-port `ModelBakerySubsystem` and `ModelFactory` parity,
+   including bake queue, in-flight map, upload queue, fluid pre-bake ordering,
+   dedupe, metadata cache, and model id mapping.
+2. Complete `SoftwareModelTextureBakery` runtime parity for solid, leaves,
    cutout, translucent, fluid, tint, and atlas sampling.
-2. Complete `ModelFactory` metadata, fluid LUT, dedupe, biome colour, and
-   on-demand model request/requeue behavior.
-3. Complete `RenderDataFactory` parity, including neighbor-section logic,
+3. Complete `ModelStore` upload parity against the formal owner, including
+   modelData/modelColour/atlas layout and upload thread rules.
+4. Complete `RenderDataFactory` parity, including neighbor-section logic,
    opaque/non-opaque buckets, fluid model lookup, light/biome packing, and
    greedy merge behavior.
-4. Port `RenderGenerationService` task queue and result-consumer behavior.
-5. Port `BasicAsyncGeometryManager` and `BasicSectionGeometryData`.
-6. Port `RenderDistanceTracker` and `HierarchicalOcclusionTraverser`.
-7. Port `MDICViewport` and production `cmdgen.comp`.
-8. Port `MDICSectionRenderer` and original terrain shader binding order.
-9. Port `VoxyRenderSystem` lifecycle only after the lower owners match.
+5. Port `RenderGenerationService` task queue and result-consumer behavior.
+6. Port `BasicAsyncGeometryManager` and `BasicSectionGeometryData`.
+7. Port `RenderDistanceTracker` and `HierarchicalOcclusionTraverser`.
+8. Port `MDICViewport` and production `cmdgen.comp`.
+9. Port `MDICSectionRenderer` and original terrain shader binding order.
+10. Port `VoxyRenderSystem` lifecycle only after the lower owners match.
 
 ## Do not do
 
@@ -106,8 +129,9 @@ adapter shader as production terrain shader
 Continue with bottom-up parity:
 
 ```text
-complete RenderDataFactory parity
+complete Forge-port ModelBakerySubsystem / ModelFactory parity
+ -> finish SoftwareModelTextureBakery and TextureUtils parity
  -> restore model-miss request/requeue
  -> introduce RenderGenerationService-style async generation
- -> feed BasicAsyncGeometryManager-style section upload/swap
+ -> replace direct unit-quad geometry with RenderDataFactory parity
 ```

@@ -36,6 +36,7 @@ public final class ForgeVoxyCommands {
 
         ForgeVoxyGeometryPipelineCommands.register(root);
         ForgeVoxyModelPipelineCommands.register(root);
+        ForgeVoxyParityCommands.register(root);
         ForgeVoxyLegacyDebugCommands.register(root);
         ForgeVoxyLegacyPreviewCommands.register(root);
         ForgeVoxyLegacyKPreviewCommands.register(root);
@@ -9664,6 +9665,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getFormalModelIdSectionGeometryPath().markPresetOff();
         ForgeVoxyInstance.INSTANCE.getFormalTerrainShaderIntegration().markPresetOff();
         ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview().markPresetOff();
+        ForgeVoxyInstance.INSTANCE.getOriginalVoxyModelPipeline().markPresetOff();
         ForgeVoxyInstance.INSTANCE.closeActiveWorld();
         source.sendSuccess(() -> Component.literal("Voxy preset off: runtime overrides disabled engine, auto ingest, auto CPU mesh build, auto BuiltSection build, auto geometry-manager consume, upload-only GL geometry heap, direct GL renderer skeleton, MDIC command skeleton/debug draw, simple GPU renderer, and debug renderer. Overrides are not written to toml."), false);
         return 1;
@@ -10475,6 +10477,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getFormalModelIdSectionGeometryPath().markPresetClear();
         ForgeVoxyInstance.INSTANCE.getFormalTerrainShaderIntegration().markPresetClear();
         ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview().markPresetClear();
+        ForgeVoxyInstance.INSTANCE.getOriginalVoxyModelPipeline().markPresetClear();
         source.sendSuccess(() -> Component.literal("Voxy preset clear: runtime overrides cleared; effective values now come from the toml config."), false);
         return 1;
     }
@@ -10824,6 +10827,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getFormalModelIdSectionGeometryPath().markDebugPipelineClear();
         ForgeVoxyInstance.INSTANCE.getFormalTerrainShaderIntegration().markDebugPipelineClear();
         ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview().markDebugPipelineClear();
+        ForgeVoxyInstance.INSTANCE.getOriginalVoxyModelPipeline().markDebugPipelineClear();
         ForgeVoxyInstance.INSTANCE.getTexturedDebugQuadRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedReadbackRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedMdicDebugRenderer().clear();
@@ -10920,6 +10924,7 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance.INSTANCE.getFormalModelIdSectionGeometryPath().markDebugPipelineClear();
         ForgeVoxyInstance.INSTANCE.getFormalTerrainShaderIntegration().markDebugPipelineClear();
         ForgeVoxyInstance.INSTANCE.getFormalVisibleLodPreview().markDebugPipelineClear();
+        ForgeVoxyInstance.INSTANCE.getOriginalVoxyModelPipeline().markDebugPipelineClear();
         ForgeVoxyInstance.INSTANCE.getTexturedDebugQuadRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedReadbackRenderer().clear();
         ForgeVoxyInstance.INSTANCE.getTexturedMdicDebugRenderer().clear();

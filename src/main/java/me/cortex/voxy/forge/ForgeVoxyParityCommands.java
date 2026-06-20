@@ -1,0 +1,95 @@
+package me.cortex.voxy.forge;
+
+import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import net.minecraft.network.chat.Component;
+
+final class ForgeVoxyParityCommands {
+    private ForgeVoxyParityCommands() {
+    }
+
+    static void register(LiteralArgumentBuilder<CommandSourceStack> root) {
+        root.then(Commands.literal("original_voxy_model_pipeline_start")
+                        .executes(ctx -> originalVoxyModelPipelineStart(ctx.getSource())))
+                .then(Commands.literal("original_voxy_model_pipeline_status")
+                        .executes(ctx -> originalVoxyModelPipelineStatus(ctx.getSource())))
+                .then(Commands.literal("original_voxy_model_pipeline_request_blockstate")
+                        .then(Commands.argument("blockStateId", IntegerArgumentType.integer(1))
+                                .executes(ctx -> originalVoxyModelPipelineRequestBlockState(
+                                        ctx.getSource(),
+                                        IntegerArgumentType.getInteger(ctx, "blockStateId")))))
+                .then(Commands.literal("original_voxy_model_pipeline_clear")
+                        .executes(ctx -> originalVoxyModelPipelineClear(ctx.getSource())));
+    }
+
+    private static int originalVoxyModelPipelineStart(CommandSourceStack source) {
+        ForgeOriginalVoxyModelPipelineStats status = ForgeVoxyInstance.INSTANCE
+                .getOriginalVoxyModelPipeline()
+                .requestStart("command-start");
+        source.sendSuccess(() -> Component.literal(format(status)), false);
+        return 1;
+    }
+
+    private static int originalVoxyModelPipelineStatus(CommandSourceStack source) {
+        ForgeOriginalVoxyModelPipelineStats status = ForgeVoxyInstance.INSTANCE
+                .getOriginalVoxyModelPipeline()
+                .createStatusSnapshot();
+        source.sendSuccess(() -> Component.literal(format(status)), false);
+        return 1;
+    }
+
+    private static int originalVoxyModelPipelineRequestBlockState(CommandSourceStack source, int blockStateId) {
+        ForgeOriginalVoxyModelPipelineStats status = ForgeVoxyInstance.INSTANCE
+                .getOriginalVoxyModelPipeline()
+                .requestBlockBake(blockStateId);
+        source.sendSuccess(() -> Component.literal(format(status)), false);
+        return 1;
+    }
+
+    private static int originalVoxyModelPipelineClear(CommandSourceStack source) {
+        ForgeVoxyInstance.INSTANCE.getOriginalVoxyModelPipeline().clear();
+        ForgeOriginalVoxyModelPipelineStats status = ForgeVoxyInstance.INSTANCE
+                .getOriginalVoxyModelPipeline()
+                .createStatusSnapshot();
+        source.sendSuccess(() -> Component.literal(format(status)), false);
+        return 1;
+    }
+
+    private static String format(ForgeOriginalVoxyModelPipelineStats status) {
+        return "Voxy original model pipeline parity: "
+                + "stage=" + status.stage()
+                + " ownerReady=" + status.ownerReady()
+                + " modelBakerySubsystemOwnerReady=" + status.modelBakerySubsystemOwnerReady()
+                + " originalModelFactoryUsed=" + status.originalModelFactoryUsed()
+                + " originalSoftwareModelTextureBakeryUsed=" + status.originalSoftwareModelTextureBakeryUsed()
+                + " originalModelStoreUsed=" + status.originalModelStoreUsed()
+                + " mapperBiomeCallbackAttached=" + status.mapperBiomeCallbackAttached()
+                + " mapperStateCallbackAttached=" + status.mapperStateCallbackAttached()
+                + " existingBiomeEntriesQueued=" + status.existingBiomeEntriesQueued()
+                + " renderDataFactoryRequestPathExpected=" + status.renderDataFactoryRequestPathExpected()
+                + " safeSetRouteUsed=" + status.safeSetRouteUsed()
+                + " previewRouteUsed=" + status.previewRouteUsed()
+                + " sampleSetRouteUsed=" + status.sampleSetRouteUsed()
+                + " startRequested=" + status.startRequested()
+                + " startQueuedOnRenderThread=" + status.startQueuedOnRenderThread()
+                + " startRequests=" + status.startRequests()
+                + " startRuns=" + status.startRuns()
+                + " tickRuns=" + status.tickRuns()
+                + " uploadTickRuns=" + status.uploadTickRuns()
+                + " blockBakeRequests=" + status.blockBakeRequests()
+                + " mapperBlockStateCount=" + status.mapperBlockStateCount()
+                + " mapperBiomeCount=" + status.mapperBiomeCount()
+                + " processingCount=" + status.processingCount()
+                + " bakedModelCount=" + status.bakedModelCount()
+                + " queuesEmpty=" + status.queuesEmpty()
+                + " stale=" + status.stale()
+                + " requiresRebuild=" + status.requiresRebuild()
+                + " lifecycleState=" + status.lifecycleState()
+                + " lastLifecycleEvent=" + status.lastLifecycleEvent()
+                + " lastFailureReason=" + status.lastFailureReason()
+                + " formalRendererReady=" + status.formalRendererReady()
+                + " actualRendererDrawEnabled=" + status.actualRendererDrawEnabled();
+    }
+}

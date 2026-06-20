@@ -34,27 +34,51 @@ K23-K54 minimal preview renderer batches
 These stages produced useful evidence, but they also introduced substitute
 routes. New work must not continue those routes.
 
-## Active roadmap: Voxy parity remediation
+## Active roadmap: L-stage Voxy parity remediation
 
 The active roadmap is component parity with the original renderer:
 
 ```text
-P0. Source audit and substitute retirement
-P1. ModelBakerySubsystem / ModelFactory / ModelStore parity
-P2. SoftwareModelTextureBakery / TextureUtils / ModelQueries parity
-P3. RenderGenerationService parity
-P4. RenderDataFactory parity
-P5. BuiltSection output and BasicAsyncGeometryManager parity
-P6. BasicSectionGeometryData and geometry heap ownership parity
-P7. RenderDistanceTracker / HierarchicalOcclusionTraverser parity
-P8. ViewportSelector / Viewport / MDICViewport parity
-P9. cmdgen.comp input/output parity
-P10. MDICSectionRenderer parity
-P11. Original terrain shader contract parity
-P12. Integrated VoxyRenderSystem lifecycle parity
+L0. Source audit and substitute retirement
+L1. Mapper / WorldEngine / original model-pipeline owner boundary
+L2. ModelBakerySubsystem / ModelFactory / ModelStore parity
+L3. SoftwareModelTextureBakery / TextureUtils / ModelQueries parity
+L4. RenderGenerationService parity
+L5. RenderDataFactory parity
+L6. BuiltSection output and BasicAsyncGeometryManager parity
+L7. BasicSectionGeometryData and geometry heap ownership parity
+L8. RenderDistanceTracker / HierarchicalOcclusionTraverser parity
+L9. ViewportSelector / Viewport / MDICViewport parity
+L10. cmdgen.comp input/output parity
+L11. MDICSectionRenderer parity
+L12. Original terrain shader contract parity
+L13. Integrated VoxyRenderSystem lifecycle parity
 ```
 
-The P labels are planning labels for parity remediation, not feature demos.
+The L labels are parity-remediation stages, not feature demos.
+
+## Current L0/L1 status
+
+The Forge route now has a focused original-Voxy model-pipeline owner boundary:
+
+```text
+ForgeOriginalVoxyModelPipeline
+```
+
+It follows the original `VoxyRenderSystem` ordering at the boundary level:
+
+```text
+WorldEngine / Mapper
+ -> existing biome entries queued
+ -> mapper biome callback attached
+ -> block model requests are queued for the future RenderGenerationService path
+```
+
+It does not yet claim `ModelFactory` or `SoftwareModelTextureBakery` parity.
+The original `me.cortex.voxy.client.core.*` files are authoritative source
+references but are not included in the current Forge compile source set, so the
+mechanisms must be ported/adapted under `me.cortex.voxy.forge` rather than
+directly imported.
 
 ## Required source trace
 
@@ -98,10 +122,11 @@ A subsystem is considered aligned only when:
 The next work should continue bottom-up parity, not preview hardening:
 
 ```text
-complete RenderDataFactory parity
+complete Forge-port ModelBakerySubsystem / ModelFactory parity
  -> restore original model-miss request/requeue semantics
+ -> port SoftwareModelTextureBakery output into the formal ModelStore owner
  -> introduce RenderGenerationService-style async ownership
- -> feed BasicAsyncGeometryManager-style section upload/swap
+ -> replace direct unit-quad section geometry with RenderDataFactory parity
 ```
 
 Visible preview work must not be treated as progress toward production parity

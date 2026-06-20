@@ -96,6 +96,19 @@ split current-route commands into focused parity registrars
 The command `/voxy parity_route_status` exists only to make this boundary
 visible while the old command surface is still compiled.
 
+## Current non-deprecated parity entry
+
+The new parity command registrar is:
+
+```text
+ForgeVoxyParityCommands
+```
+
+It currently exposes `original_voxy_model_pipeline_*` commands for the L0/L1
+model-pipeline owner boundary. This is not a preview route. It is also not full
+model readiness yet: `ModelFactory`, `SoftwareModelTextureBakery`, and
+`ModelStore` parity still need to be ported into the Forge package.
+
 ## Replacement direction
 
 Replacement work must follow the original Voxy chain:
