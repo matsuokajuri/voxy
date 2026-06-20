@@ -86,8 +86,10 @@ implementation scaffolding for formal MDIC.
    `RenderDataFactory` / `BuiltSection` output as the section geometry source.
 2. Use the Forge-port `BasicAsyncGeometryManager` allocation, alignment,
    remove/reuse, metadata, and upload-event semantics.
-3. Port `BasicSectionGeometryData` render-thread buffer layout.
-4. Port `AsyncNodeManager` / `NodeManager` ownership around generated sections.
+3. Use the Forge-port `BasicSectionGeometryData` render-thread metadata and
+   geometry buffer owner.
+4. Port `AsyncNodeManager` / `NodeManager` ownership around generated sections
+   and sync event sets into `BasicSectionGeometryData`.
 5. Port `MDICViewport` buffers and lifecycle.
 6. Port production `cmdgen.comp` inputs and dispatch contract.
 7. Port `MDICSectionRenderer` draw setup and binding order.
@@ -99,7 +101,6 @@ implementation scaffolding for formal MDIC.
 Do not enable formal MDIC draw while any of these are true:
 
 ```text
-BasicSectionGeometryData parity incomplete
 AsyncNodeManager / NodeManager parity incomplete
 RenderDistanceTracker / HierarchicalOcclusionTraverser parity incomplete
 MDICViewport parity incomplete

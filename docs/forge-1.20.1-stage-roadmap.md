@@ -157,9 +157,10 @@ source used by original Voxy.
 `RenderGenerationService` `BuiltSection` output is now consumed by a
 Forge-port `BasicAsyncGeometryManager` owner. This ports the original section id
 allocation, geometry heap allocation, 128-record alignment, 32-byte metadata
-packing, and heap upload/remove/update event sets. It does not yet make the
-render-thread `BasicSectionGeometryData`, `AsyncNodeManager`, or `NodeManager`
-ready.
+packing, and heap upload/remove/update event sets. A Forge-port
+`BasicSectionGeometryData` now owns the render-thread metadata/geometry buffer
+store with the original capacity policy, sparse-buffer behavior, and free
+lifecycle. It does not yet make `AsyncNodeManager` or `NodeManager` ready.
 
 ## Required source trace
 
@@ -203,8 +204,8 @@ A subsystem is considered aligned only when:
 The next work should continue bottom-up parity, not preview hardening:
 
 ```text
-port BasicSectionGeometryData and original render-thread geometry data store
- -> port AsyncNodeManager / NodeManager ownership around BasicAsyncGeometryManager
+port AsyncNodeManager / NodeManager ownership around BasicAsyncGeometryManager
+ -> sync async geometry event sets into BasicSectionGeometryData
  -> continue into visibility / MDIC parity
 ```
 

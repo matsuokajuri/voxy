@@ -98,6 +98,9 @@ Some bottom-path corrections are now aligned in direction:
   generated `BuiltSection` output into original-style section id allocation,
   geometry heap allocation, 128-record alignment, metadata packing, and
   upload/remove/update event sets.
+- Forge-local original-parity `BasicSectionGeometryData` now owns the
+  render-thread metadata/geometry buffers with the original capacity policy,
+  sparse-buffer workaround, sparse commitment growth, and free lifecycle.
 - substitute preview/sample routes are marked deprecated.
 
 These are progress toward parity, not renderer readiness.
@@ -107,7 +110,6 @@ These are progress toward parity, not renderer readiness.
 P0 gaps:
 
 ```text
-BasicSectionGeometryData parity incomplete
 AsyncNodeManager / NodeManager parity incomplete
 RenderDistanceTracker parity incomplete
 HierarchicalOcclusionTraverser parity incomplete

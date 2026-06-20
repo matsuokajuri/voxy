@@ -15,7 +15,6 @@ final class ForgeOriginalVoxyModelPipeline {
     static final String STAGE = "L0_L4_ORIGINAL_VOXY_MODEL_PIPELINE_PARITY";
     private static final int MAX_MODEL_UPLOADS_PER_TICK = 2;
     private static final int ORIGINAL_GEOMETRY_MAX_SECTION_COUNT = 1 << 20;
-    private static final long ORIGINAL_GEOMETRY_CAPACITY_BYTES = (1L << 32) - 1024L;
 
     private final ForgeVoxyInstance instance;
     private final IntOpenHashSet seenBlockBakeRequests = new IntOpenHashSet(6000);
@@ -25,6 +24,7 @@ final class ForgeOriginalVoxyModelPipeline {
     private ForgeOriginalVoxyModelFactory modelFactory;
     private ForgeOriginalVoxyRenderGenerationService renderGenerationService;
     private ForgeOriginalVoxyBasicAsyncGeometryManager asyncGeometryManager;
+    private ForgeOriginalVoxyBasicSectionGeometryData basicSectionGeometryData;
     private Thread processingThread;
     private volatile boolean processingThreadRunning;
     private volatile Throwable processingThreadException;
@@ -136,6 +136,9 @@ final class ForgeOriginalVoxyModelPipeline {
         ForgeOriginalVoxyBasicAsyncGeometryStats geometry = this.asyncGeometryManager == null
                 ? ForgeOriginalVoxyBasicAsyncGeometryStats.unavailable("basic-async-geometry-not-started")
                 : this.asyncGeometryManager.createStatusSnapshot(this.renderGenerationService != null);
+        ForgeOriginalVoxyBasicSectionGeometryDataStats geometryData = this.basicSectionGeometryData == null
+                ? ForgeOriginalVoxyBasicSectionGeometryDataStats.unavailable("basic-section-geometry-data-not-started")
+                : this.basicSectionGeometryData.createStatusSnapshot();
         boolean workerReady = this.processingThreadRunning
                 && this.processingThread != null
                 && this.processingThread.isAlive()
@@ -197,7 +200,7 @@ final class ForgeOriginalVoxyModelPipeline {
                 renderGeneration.renderGenerationServiceReady(),
                 renderGeneration.originalRenderDataFactoryUsed(),
                 geometry.originalBasicAsyncGeometryManagerUsed(),
-                geometry.originalBasicSectionGeometryDataReady(),
+                geometryData.originalBasicSectionGeometryDataReady(),
                 geometry.originalNodeManagerParityReady(),
                 geometry.renderGenerationResultConsumerAttached(),
                 renderGeneration.originalBuildTaskPriorityUsed(),
@@ -242,6 +245,25 @@ final class ForgeOriginalVoxyModelPipeline {
                 geometry.lastSectionPosition(),
                 geometry.lastLifecycleEvent(),
                 geometry.lastFailureReason(),
+                geometryData.renderThreadGeometryDataStoreReady(),
+                geometryData.originalGeometryCapacityPolicyUsed(),
+                geometryData.metadataBufferReady(),
+                geometryData.geometryBufferReady(),
+                geometryData.externalGeometryBuffer(),
+                geometryData.sparseGeometryBuffer(),
+                geometryData.sparseBufferSupported(),
+                geometryData.nvidiaWindowsSparseWorkaroundUsed(),
+                geometryData.currentSectionCount(),
+                geometryData.metadataBufferId(),
+                geometryData.geometryBufferId(),
+                geometryData.metadataCapacityBytes(),
+                geometryData.sparseCommitmentBytes(),
+                geometryData.generation(),
+                geometryData.buildCount(),
+                geometryData.freeCount(),
+                geometryData.lastGlError(),
+                geometryData.lastLifecycleEvent(),
+                geometryData.lastFailureReason(),
                 factory.queuedBlockBakeCount(),
                 factory.queuedBiomeCount(),
                 factory.queuedUploadResultCount(),
@@ -349,9 +371,19 @@ final class ForgeOriginalVoxyModelPipeline {
         factory.setCustomBlockStateMapping(blockStateIds.blockStateIds(), blockStateIds.source());
         ForgeOriginalVoxyRenderGenerationService renderGeneration =
                 new ForgeOriginalVoxyRenderGenerationService(targetWorld, this, factory, false);
+        ForgeOriginalVoxyBasicSectionGeometryData geometryData = new ForgeOriginalVoxyBasicSectionGeometryData(
+                ORIGINAL_GEOMETRY_MAX_SECTION_COUNT);
+        String geometryDataError = geometryData.buildOnRenderThread();
+        if (!"none".equals(geometryDataError)) {
+            renderGeneration.shutdown();
+            factory.shutdown();
+            store.free();
+            this.recordFailure(geometryDataError);
+            return;
+        }
         ForgeOriginalVoxyBasicAsyncGeometryManager geometryManager = new ForgeOriginalVoxyBasicAsyncGeometryManager(
                 ORIGINAL_GEOMETRY_MAX_SECTION_COUNT,
-                ORIGINAL_GEOMETRY_CAPACITY_BYTES);
+                geometryData.geometryCapacityBytes());
         renderGeneration.setResultConsumer(this::submitGeneratedBuiltSectionToOriginalGeometryOwner);
         synchronized (this) {
             this.world = targetWorld;
@@ -359,6 +391,7 @@ final class ForgeOriginalVoxyModelPipeline {
             this.modelFactory = factory;
             this.renderGenerationService = renderGeneration;
             this.asyncGeometryManager = geometryManager;
+            this.basicSectionGeometryData = geometryData;
             this.originalGeometrySectionIdsByPosition.clear();
             this.ownerReady = true;
             this.mapperBiomeCallbackAttached = true;
@@ -394,6 +427,7 @@ final class ForgeOriginalVoxyModelPipeline {
         ForgeOriginalVoxyModelStore store;
         ForgeOriginalVoxyRenderGenerationService renderGeneration;
         ForgeOriginalVoxyBasicAsyncGeometryManager geometryManager;
+        ForgeOriginalVoxyBasicSectionGeometryData geometryData;
         synchronized (this) {
             this.clearRuns++;
             this.startRequested = false;
@@ -412,11 +446,13 @@ final class ForgeOriginalVoxyModelPipeline {
             factory = this.modelFactory;
             renderGeneration = this.renderGenerationService;
             geometryManager = this.asyncGeometryManager;
+            geometryData = this.basicSectionGeometryData;
             this.world = null;
             this.modelStore = null;
             this.modelFactory = null;
             this.renderGenerationService = null;
             this.asyncGeometryManager = null;
+            this.basicSectionGeometryData = null;
             this.originalGeometrySectionIdsByPosition.clear();
         }
         this.stopProcessingThread();
@@ -428,6 +464,9 @@ final class ForgeOriginalVoxyModelPipeline {
         }
         if (geometryManager != null) {
             geometryManager.clear();
+        }
+        if (geometryData != null) {
+            this.runOnRenderThread(geometryData::freeOnRenderThread);
         }
         if (store != null) {
             this.runOnRenderThread(store::free);

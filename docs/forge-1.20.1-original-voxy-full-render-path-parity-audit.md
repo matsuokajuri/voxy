@@ -176,12 +176,25 @@ heap upload / heap removal / metadata update sets
 writeMetadataSplit high/low metadata writes
 ```
 
-The current bridge records generated sections into that owner and drains the
-pending sync events so the model/render-generation pipeline does not retain
-or leak `MemoryBuffer` uploads while `AsyncNodeManager` and the render-thread
-`BasicSectionGeometryData` owner are not ported yet. This is not draw readiness:
-`originalBasicSectionGeometryDataReady=false` and
-`originalNodeManagerParityReady=false` remain reported.
+`ForgeOriginalVoxyBasicSectionGeometryData` is now a Forge-local port of
+original `BasicSectionGeometryData` for the active parity route. It preserves:
+
+```text
+32-byte section metadata buffer allocation
+geometry buffer capacity policy from RenderResourceReuse
+NVIDIA Windows sparse allocation workaround
+ARB sparse buffer commitment growth in ensureAccessable
+render-thread-only build/free ownership
+driver memory-release wait during free
+```
+
+The current bridge records generated sections into the async geometry owner and
+drains the pending sync events so the model/render-generation pipeline does not
+retain or leak `MemoryBuffer` uploads while `AsyncNodeManager` / `NodeManager`
+are not ported yet. The render-thread `BasicSectionGeometryData` owner now
+exists and supplies the geometry capacity to the async owner, but the original
+node-layer sync into that owner is still missing. This is not draw readiness:
+`originalNodeManagerParityReady=false` remains reported.
 
 The model bake data path has been corrected away from the K-era `FaceTexture`
 formal-preview shape and back toward the original Voxy model texture contract:
@@ -343,10 +356,10 @@ semantics.
 
 1. Keep removing historical `ForgeFormalModelStore` references from preview
    code; the original model pipeline now uses `ForgeOriginalVoxyModelStore`.
-2. Port original `BasicSectionGeometryData` render-thread GL owner and connect
-   the async geometry event sets to it.
-3. Port `AsyncNodeManager` / `NodeManager` ownership instead of the current
+2. Port `AsyncNodeManager` / `NodeManager` ownership instead of the current
    direct generated-section bridge.
+3. Connect async geometry event sets to the render-thread
+   `BasicSectionGeometryData` owner through the original node-layer sync.
 4. Port `RenderDistanceTracker` and `HierarchicalOcclusionTraverser`.
 5. Port `MDICViewport` and production `cmdgen.comp`.
 6. Port `MDICSectionRenderer` and original terrain shader binding order.
@@ -385,7 +398,7 @@ adapter shader as production terrain shader
 Continue with bottom-up parity:
 
 ```text
-connect RenderGenerationService BuiltSection output to BasicAsyncGeometryManager
- -> port BasicSectionGeometryData
+port AsyncNodeManager / NodeManager ownership around BasicAsyncGeometryManager
+ -> sync event sets into BasicSectionGeometryData
  -> replace remaining direct/debug geometry ownership with original Voxy geometry owners
 ```
