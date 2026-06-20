@@ -2,7 +2,6 @@ package me.cortex.voxy.forge;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
-import it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap;
 import me.cortex.voxy.common.world.WorldEngine;
 import me.cortex.voxy.common.world.other.Mapper;
 import net.minecraft.client.Minecraft;
@@ -18,13 +17,13 @@ final class ForgeOriginalVoxyModelPipeline {
 
     private final ForgeVoxyInstance instance;
     private final IntOpenHashSet seenBlockBakeRequests = new IntOpenHashSet(6000);
-    private final Long2IntOpenHashMap originalGeometrySectionIdsByPosition = new Long2IntOpenHashMap(4096);
     private WorldEngine world;
     private ForgeOriginalVoxyModelStore modelStore;
     private ForgeOriginalVoxyModelFactory modelFactory;
     private ForgeOriginalVoxyRenderGenerationService renderGenerationService;
     private ForgeOriginalVoxyBasicAsyncGeometryManager asyncGeometryManager;
     private ForgeOriginalVoxyBasicSectionGeometryData basicSectionGeometryData;
+    private ForgeOriginalVoxyAsyncNodeGeometrySync asyncNodeGeometrySync;
     private Thread processingThread;
     private volatile boolean processingThreadRunning;
     private volatile Throwable processingThreadException;
@@ -48,7 +47,6 @@ final class ForgeOriginalVoxyModelPipeline {
 
     ForgeOriginalVoxyModelPipeline(ForgeVoxyInstance instance) {
         this.instance = instance;
-        this.originalGeometrySectionIdsByPosition.defaultReturnValue(-1);
     }
 
     synchronized ForgeOriginalVoxyModelPipelineStats requestStart(String reason) {
@@ -83,6 +81,13 @@ final class ForgeOriginalVoxyModelPipeline {
         }
         if (factory != null && factory.hasPendingUploads()) {
             this.runOnRenderThread(() -> this.processFactoryUploads(factory));
+        }
+        ForgeOriginalVoxyAsyncNodeGeometrySync geometrySync;
+        synchronized (this) {
+            geometrySync = this.asyncNodeGeometrySync;
+        }
+        if (geometrySync != null) {
+            this.runOnRenderThread(geometrySync::tickOnRenderThread);
         }
         if (ForgeOriginalVoxyUploadStream.isReady()) {
             this.runOnRenderThread(() -> {
@@ -139,6 +144,9 @@ final class ForgeOriginalVoxyModelPipeline {
         ForgeOriginalVoxyBasicSectionGeometryDataStats geometryData = this.basicSectionGeometryData == null
                 ? ForgeOriginalVoxyBasicSectionGeometryDataStats.unavailable("basic-section-geometry-data-not-started")
                 : this.basicSectionGeometryData.createStatusSnapshot();
+        ForgeOriginalVoxyAsyncNodeGeometrySyncStats nodeSync = this.asyncNodeGeometrySync == null
+                ? ForgeOriginalVoxyAsyncNodeGeometrySyncStats.unavailable("async-node-geometry-sync-not-started")
+                : this.asyncNodeGeometrySync.createStatusSnapshot();
         boolean workerReady = this.processingThreadRunning
                 && this.processingThread != null
                 && this.processingThread.isAlive()
@@ -264,6 +272,29 @@ final class ForgeOriginalVoxyModelPipeline {
                 geometryData.lastGlError(),
                 geometryData.lastLifecycleEvent(),
                 geometryData.lastFailureReason(),
+                nodeSync.originalAsyncNodeManagerSyncShapeReady(),
+                nodeSync.originalNodeManagerParityReady(),
+                nodeSync.geometryResultQueueReady(),
+                nodeSync.renderThreadTickReady(),
+                nodeSync.multiMemcpyProgramReady(),
+                nodeSync.scatterProgramReady(),
+                nodeSync.syncResultPending(),
+                nodeSync.directGeneratedSectionBridgeRemoved(),
+                nodeSync.queuedGeometryResults(),
+                nodeSync.trackedSectionIdCount(),
+                nodeSync.submittedGeometryResultCount(),
+                nodeSync.processedGeometryResultCount(),
+                nodeSync.publishedSyncResultCount(),
+                nodeSync.renderThreadTickCount(),
+                nodeSync.geometryUploadCopyDispatchCount(),
+                nodeSync.metadataScatterDispatchCount(),
+                nodeSync.uploadedGeometryCopyCount(),
+                nodeSync.uploadedGeometryBytes(),
+                nodeSync.metadataScatterWriteCount(),
+                nodeSync.currentMaxNodeId(),
+                nodeSync.usedGeometryBytes(),
+                nodeSync.lastLifecycleEvent(),
+                nodeSync.lastFailureReason(),
                 factory.queuedBlockBakeCount(),
                 factory.queuedBiomeCount(),
                 factory.queuedUploadResultCount(),
@@ -384,7 +415,10 @@ final class ForgeOriginalVoxyModelPipeline {
         ForgeOriginalVoxyBasicAsyncGeometryManager geometryManager = new ForgeOriginalVoxyBasicAsyncGeometryManager(
                 ORIGINAL_GEOMETRY_MAX_SECTION_COUNT,
                 geometryData.geometryCapacityBytes());
-        renderGeneration.setResultConsumer(this::submitGeneratedBuiltSectionToOriginalGeometryOwner);
+        ForgeOriginalVoxyAsyncNodeGeometrySync geometrySync =
+                new ForgeOriginalVoxyAsyncNodeGeometrySync(geometryManager, geometryData);
+        geometrySync.start();
+        renderGeneration.setResultConsumer(geometrySync::submitGeometryResult);
         synchronized (this) {
             this.world = targetWorld;
             this.modelStore = store;
@@ -392,7 +426,7 @@ final class ForgeOriginalVoxyModelPipeline {
             this.renderGenerationService = renderGeneration;
             this.asyncGeometryManager = geometryManager;
             this.basicSectionGeometryData = geometryData;
-            this.originalGeometrySectionIdsByPosition.clear();
+            this.asyncNodeGeometrySync = geometrySync;
             this.ownerReady = true;
             this.mapperBiomeCallbackAttached = true;
             this.existingBiomeEntriesQueued = true;
@@ -428,6 +462,7 @@ final class ForgeOriginalVoxyModelPipeline {
         ForgeOriginalVoxyRenderGenerationService renderGeneration;
         ForgeOriginalVoxyBasicAsyncGeometryManager geometryManager;
         ForgeOriginalVoxyBasicSectionGeometryData geometryData;
+        ForgeOriginalVoxyAsyncNodeGeometrySync geometrySync;
         synchronized (this) {
             this.clearRuns++;
             this.startRequested = false;
@@ -447,13 +482,14 @@ final class ForgeOriginalVoxyModelPipeline {
             renderGeneration = this.renderGenerationService;
             geometryManager = this.asyncGeometryManager;
             geometryData = this.basicSectionGeometryData;
+            geometrySync = this.asyncNodeGeometrySync;
             this.world = null;
             this.modelStore = null;
             this.modelFactory = null;
             this.renderGenerationService = null;
             this.asyncGeometryManager = null;
             this.basicSectionGeometryData = null;
-            this.originalGeometrySectionIdsByPosition.clear();
+            this.asyncNodeGeometrySync = null;
         }
         this.stopProcessingThread();
         if (renderGeneration != null) {
@@ -461,6 +497,9 @@ final class ForgeOriginalVoxyModelPipeline {
         }
         if (factory != null) {
             factory.shutdown();
+        }
+        if (geometrySync != null) {
+            this.runOnRenderThread(geometrySync::stopOnRenderThread);
         }
         if (geometryManager != null) {
             geometryManager.clear();
@@ -553,41 +592,6 @@ final class ForgeOriginalVoxyModelPipeline {
                 this.lastLifecycleEvent = "model-factory-upload-tick";
                 this.lastFailureReason = factory.createStatusSnapshot().lastFailureReason();
             }
-        }
-    }
-
-    private void submitGeneratedBuiltSectionToOriginalGeometryOwner(ForgeOriginalVoxyBuiltSection section) {
-        ForgeOriginalVoxyBasicAsyncGeometryManager geometryManager;
-        int oldSectionId;
-        synchronized (this) {
-            geometryManager = this.asyncGeometryManager;
-            if (!this.ownerReady || this.stale || geometryManager == null) {
-                section.free();
-                return;
-            }
-            oldSectionId = this.originalGeometrySectionIdsByPosition.get(section.position);
-        }
-
-        try {
-            if (section.isEmpty()) {
-                if (oldSectionId != -1) {
-                    geometryManager.removeSection(oldSectionId);
-                    synchronized (this) {
-                        this.originalGeometrySectionIdsByPosition.remove(section.position);
-                    }
-                }
-                geometryManager.discardEmptySection(section);
-            } else {
-                int newSectionId = oldSectionId == -1
-                        ? geometryManager.uploadSection(section)
-                        : geometryManager.uploadReplaceSection(oldSectionId, section);
-                synchronized (this) {
-                    this.originalGeometrySectionIdsByPosition.put(section.position, newSectionId);
-                }
-            }
-            geometryManager.drainPendingSyncEventsForCurrentParityOwner();
-        } catch (RuntimeException e) {
-            this.recordFailure("basic-async-geometry-" + e.getClass().getSimpleName() + ":" + e.getMessage());
         }
     }
 

@@ -101,6 +101,10 @@ Some bottom-path corrections are now aligned in direction:
 - Forge-local original-parity `BasicSectionGeometryData` now owns the
   render-thread metadata/geometry buffers with the original capacity policy,
   sparse-buffer workaround, sparse commitment growth, and free lifecycle.
+- Forge-local original-parity async geometry sync now applies
+  `BasicAsyncGeometryManager` event sets to `BasicSectionGeometryData` through
+  original-style `SyncResults`, persistent `UploadStream`, `memcpy.comp`, and
+  `scatter.comp` instead of immediately draining them.
 - substitute preview/sample routes are marked deprecated.
 
 These are progress toward parity, not renderer readiness.

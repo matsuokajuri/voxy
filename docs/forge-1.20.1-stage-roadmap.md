@@ -160,7 +160,11 @@ allocation, geometry heap allocation, 128-record alignment, 32-byte metadata
 packing, and heap upload/remove/update event sets. A Forge-port
 `BasicSectionGeometryData` now owns the render-thread metadata/geometry buffer
 store with the original capacity policy, sparse-buffer behavior, and free
-lifecycle. It does not yet make `AsyncNodeManager` or `NodeManager` ready.
+lifecycle. `ForgeOriginalVoxyAsyncNodeGeometrySync` now removes the old direct
+generated-section drain path and applies geometry uploads/metadata updates
+through original-style `SyncResults`, `UploadStream`, `memcpy.comp`, and
+`scatter.comp` into `BasicSectionGeometryData`. It does not yet make the full
+`NodeManager` tree/request state machine ready.
 
 ## Required source trace
 
@@ -204,8 +208,8 @@ A subsystem is considered aligned only when:
 The next work should continue bottom-up parity, not preview hardening:
 
 ```text
-port AsyncNodeManager / NodeManager ownership around BasicAsyncGeometryManager
- -> sync async geometry event sets into BasicSectionGeometryData
+port NodeStore / SingleNodeRequest / NodeChildRequest / NodeManager ownership
+ -> replace temporary section-id map in async geometry sync
  -> continue into visibility / MDIC parity
 ```
 

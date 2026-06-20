@@ -172,6 +172,26 @@ final class ForgeOriginalVoxyBasicAsyncGeometryManager {
         );
     }
 
+    synchronized Int2ObjectOpenHashMap<MemoryBuffer> getUploads() {
+        return this.heapUploads;
+    }
+
+    synchronized IntOpenHashSet getHeapRemovals() {
+        return this.heapRemoveUploads;
+    }
+
+    synchronized IntOpenHashSet getUpdateIds() {
+        return this.invalidatedIds;
+    }
+
+    synchronized int getSectionCount() {
+        return this.allocationSet.getCount();
+    }
+
+    synchronized long getGeometryUsedBytes() {
+        return this.usedCapacity * GEOMETRY_ELEMENT_SIZE;
+    }
+
     synchronized void drainPendingSyncEventsForCurrentParityOwner() {
         if (!this.heapUploads.isEmpty()) {
             var iter = this.heapUploads.int2ObjectEntrySet().fastIterator();

@@ -188,12 +188,24 @@ render-thread-only build/free ownership
 driver memory-release wait during free
 ```
 
-The current bridge records generated sections into the async geometry owner and
-drains the pending sync events so the model/render-generation pipeline does not
-retain or leak `MemoryBuffer` uploads while `AsyncNodeManager` / `NodeManager`
-are not ported yet. The render-thread `BasicSectionGeometryData` owner now
-exists and supplies the geometry capacity to the async owner, but the original
-node-layer sync into that owner is still missing. This is not draw readiness:
+`ForgeOriginalVoxyAsyncNodeGeometrySync` now ports the original
+`AsyncNodeManager` geometry result sync shape for the active parity route:
+
+```text
+RenderGenerationService result consumer
+ -> async geometry result queue
+ -> BasicAsyncGeometryManager event sets
+ -> SyncResults / ComputeMemoryCopy
+ -> UploadStream staging
+ -> util/memcpy.comp geometry copy
+ -> util/scatter.comp metadata writes
+ -> BasicSectionGeometryData
+```
+
+This removes the previous direct generated-section bridge that immediately
+drained pending event sets. The remaining missing part is the full original
+`NodeManager` tree/request/child-update state machine around those geometry
+events, so this is still not draw readiness:
 `originalNodeManagerParityReady=false` remains reported.
 
 The model bake data path has been corrected away from the K-era `FaceTexture`
@@ -356,10 +368,11 @@ semantics.
 
 1. Keep removing historical `ForgeFormalModelStore` references from preview
    code; the original model pipeline now uses `ForgeOriginalVoxyModelStore`.
-2. Port `AsyncNodeManager` / `NodeManager` ownership instead of the current
-   direct generated-section bridge.
-3. Connect async geometry event sets to the render-thread
-   `BasicSectionGeometryData` owner through the original node-layer sync.
+2. Port full `NodeManager` ownership around the current async geometry sync:
+   `NodeStore`, single/child requests, watcher routing, mesh replacement, and
+   top-level node id callbacks.
+3. Replace the temporary section-id side map inside the async geometry sync
+   with original `NodeManager` active-section ownership.
 4. Port `RenderDistanceTracker` and `HierarchicalOcclusionTraverser`.
 5. Port `MDICViewport` and production `cmdgen.comp`.
 6. Port `MDICSectionRenderer` and original terrain shader binding order.
@@ -374,7 +387,7 @@ semantics.
 | `TextureUtils` ColorSRGB path | original Voxy imports Sodium `ColorSRGB`; Forge runtime prerequisite is Embeddium, whose reference source keeps the same fast-srgb8 table under a moved package | Forge now ports that fast-srgb8 table locally and `textureUtilsByteForByteAuditReady=true` is reported when the table/mip sample audit passes. The 1.20.1 `ARGB` class name is unavailable, so alpha uses the same table helper as a documented mapping adaptation. |
 | `RenderGenerationService` request/requeue | original request/requeue depends on `RenderDataFactory.generateMesh()` throwing `IdNotYetComputedException` from real section generation | Forge now ports BuildTask priority, held-section retention, inner/outer missing-model scans, `requestBlockBake`, and requeue. Direct Fabric `ServiceManager` import is blocked by Fabric `commonImpl` dependencies, so a Forge-local worker carries the same task semantics; `originalServiceManagerParityReady=false` remains reported until the common thread stack is cleanly Forge-adapted. |
 | `RenderDataFactory` Java version helpers | original source uses `Integer.expand` / `Long.expand`, unavailable in Java 17 | Forge uses local equivalent bit-expansion helpers with the same mask/value semantics. |
-| `BasicAsyncGeometryManager` result consumption before `NodeManager` parity | original Voxy routes render-generation results through `AsyncNodeManager` / `NodeManager`, which owns request state and mesh id replacement | Forge now ports the lower `BasicAsyncGeometryManager` allocation/metadata/event semantics and consumes generated sections into it, but reports `originalNodeManagerParityReady=false` until the original async node layer is ported. |
+| `BasicAsyncGeometryManager` result consumption before full `NodeManager` parity | original Voxy routes render-generation results through `AsyncNodeManager` / `NodeManager`, which owns request state and mesh id replacement | Forge now ports the geometry-result queue, `SyncResults`, `ComputeMemoryCopy`, `UploadStream`, `memcpy.comp`, and `scatter.comp` path into `BasicSectionGeometryData`, but still uses a temporary section-id side map until the full original `NodeManager` state machine is ported. `originalNodeManagerParityReady=false` remains reported. |
 | `SoftwareModelTextureBakery` model collection and dark-cutout metadata | Forge 1.20.1 lacks the newer original `BlockStateModelPart` and public `BakedQuad.materialInfo()` API, but Embeddium injects the equivalent `BakedQuadView` and sprite transparency data used by its own chunk mesher | fixed for the active Forge/Embeddium route: `originalSoftwareModelTextureBakeryUsed=true`; the adaptation is constrained to Embeddium source-equivalent material and transparency signals |
 | `ModelStore` ownership and audit | fixed: the original model pipeline now owns `ForgeOriginalVoxyModelStore` instead of historical `ForgeFormalModelStore`; uploads use original-style `MemoryBuffer` results, persistent `UploadStream`, DSA texture mip uploads, and post-commit readback audit for modelData/modelColour/atlas mip-chain regions | `originalModelStoreUsed=true` is reported when the owner is built; `originalModelStoreReadbackAuditReady=true` is reported after a committed upload readback matches the CPU payload |
 | Iris/Oculus custom block-state ids | original Voxy receives `WorldRenderingSettings.INSTANCE.getBlockStateIds()` from the Iris pipeline; Forge cannot compile against Oculus source directly in this source set | Forge reads the same Oculus singleton through `ForgeOculusWorldRenderingSettingsBridge`; null maps write custom id zero, matching original behavior |
@@ -398,7 +411,7 @@ adapter shader as production terrain shader
 Continue with bottom-up parity:
 
 ```text
-port AsyncNodeManager / NodeManager ownership around BasicAsyncGeometryManager
- -> sync event sets into BasicSectionGeometryData
+port NodeStore / SingleNodeRequest / NodeChildRequest / NodeManager ownership
+ -> replace temporary section-id map in async geometry sync
  -> replace remaining direct/debug geometry ownership with original Voxy geometry owners
 ```

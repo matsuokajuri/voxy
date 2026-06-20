@@ -140,6 +140,10 @@ final class ForgeOriginalVoxyUploadStream {
         return addr;
     }
 
+    static int alignUpAlloc(int size) {
+        return alignUp(size, instance().baseAllocationAlignment);
+    }
+
     void commit() {
         if (!USE_COHERENT && this.caddr != -1L) {
             glFlushMappedNamedBufferRange(this.uploadBufferId, this.caddr, this.offset);

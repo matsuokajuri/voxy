@@ -88,13 +88,16 @@ implementation scaffolding for formal MDIC.
    remove/reuse, metadata, and upload-event semantics.
 3. Use the Forge-port `BasicSectionGeometryData` render-thread metadata and
    geometry buffer owner.
-4. Port `AsyncNodeManager` / `NodeManager` ownership around generated sections
-   and sync event sets into `BasicSectionGeometryData`.
-5. Port `MDICViewport` buffers and lifecycle.
-6. Port production `cmdgen.comp` inputs and dispatch contract.
-7. Port `MDICSectionRenderer` draw setup and binding order.
-8. Bind the original `ModelStore` exactly as original Voxy expects.
-9. Only then enable controlled renderer draw.
+4. Use the Forge-port async geometry sync to apply geometry upload and metadata
+   event sets into `BasicSectionGeometryData` through original-style
+   `UploadStream`, `memcpy.comp`, and `scatter.comp`.
+5. Port full `NodeManager` ownership around generated sections, replacing the
+   temporary section-id side map with original active-section/request state.
+6. Port `MDICViewport` buffers and lifecycle.
+7. Port production `cmdgen.comp` inputs and dispatch contract.
+8. Port `MDICSectionRenderer` draw setup and binding order.
+9. Bind the original `ModelStore` exactly as original Voxy expects.
+10. Only then enable controlled renderer draw.
 
 ## Non-negotiable blockers
 
