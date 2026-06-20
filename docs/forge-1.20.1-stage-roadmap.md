@@ -125,7 +125,6 @@ Missing before L2/L3 can be considered complete:
 ```text
 custom block-state id mapping
 readback audit for original route uploads
-full non-solid/fluid/tint software bake edge coverage
 ```
 
 The `TextureUtils` / `ColorSRGB` conversion path is now aligned to original
@@ -136,8 +135,10 @@ chain around it, not this color conversion helper.
 The active software bakery now also uses the original-shaped
 `ReuseVertexConsumer` / `SoftwareRasterizer` path: MemoryBuffer-backed
 24-byte vertex records, whole-atlas UV sampling, and original depth/stencil
-framebuffer packing. It still reports full bakery parity incomplete until the
-Forge 1.20.1 model/fluid collection differences are fully mapped.
+framebuffer packing. Its block material bridge now reads Embeddium's injected
+`BakedQuadView` and sprite transparency data instead of guessing from raw
+vanilla vertices, so the Forge/Embeddium route reports
+`originalSoftwareModelTextureBakeryUsed=true`.
 
 The original persistent-mapped `UploadStream`, `RenderGenerationService`
 missing-model request/requeue, `RenderDataFactory`, `BuiltSection`,
@@ -190,8 +191,7 @@ A subsystem is considered aligned only when:
 The next work should continue bottom-up parity, not preview hardening:
 
 ```text
-complete SoftwareModelTextureBakery model/fluid/dark-cutout parity
- -> connect RenderGenerationService BuiltSection output to BasicAsyncGeometryManager
+connect RenderGenerationService BuiltSection output to BasicAsyncGeometryManager
  -> port BasicSectionGeometryData and original geometry ownership
  -> continue into visibility / MDIC parity
 ```

@@ -189,7 +189,7 @@ final class ForgeOriginalVoxyModelFactory {
         return new ForgeOriginalVoxyModelFactoryStats(
                 true,
                 true,
-                false,
+                true,
                 this.store.originalModelStoreOwnerReady(),
                 true,
                 true,

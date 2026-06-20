@@ -216,14 +216,31 @@ removed from the bakery surface. Historical preview code that still compiles
 against the bakery now consumes `ForgeOriginalVoxyColourDepthTextureData`
 directly. New parity work must not reintroduce a separate face texture DTO.
 
-It is still not a full source-equivalent `SoftwareModelTextureBakery`: the
-atlas capture uses the original-style DSA `glGetTextureImage` path and Forge
-fluid baking selects the consumer from
-`ItemBlockRenderTypes.getRenderLayer(fluidState)` instead of forcing every
-fluid through the translucent consumer, but Forge 1.20.1 still lacks the newer
-original source's `BlockStateModelPart`/`BakedQuad.materialInfo()` model
-collection path and exposed `MipmapStrategy.DARK_CUTOUT` metadata. Those are
-version/API parity blockers; do not replace them with texture-name guesses.
+`SoftwareModelTextureBakery` is now source-aligned for the Forge 1.20.1 /
+Embeddium frontend: the atlas capture uses the original-style DSA
+`glGetTextureImage` path, block baking routes Forge render layers through the
+same material categories Embeddium uses for chunk meshing, and
+`ForgeOriginalVoxyReuseVertexConsumer` no longer decodes raw vanilla vertex
+arrays or guesses metadata. Instead, it reads Embeddium's injected
+`BakedQuadView` for position, UV, shade, tint, and sprite ownership, then maps
+the result onto the original Voxy 24-byte software-raster vertex record.
+
+The original source's `BakedQuad.materialInfo().layer()` is mapped to
+Embeddium's `DefaultMaterials.forRenderLayer(...)` source contract:
+
+```text
+solid -> no discard
+cutout / cutoutMipped / tripwire -> discard
+translucent -> translucent consumer + discard
+```
+
+The original `MipmapStrategy.DARK_CUTOUT` signal is not present as a public
+Forge 1.20.1 field. The Forge route now follows Embeddium's lower texture
+pipeline instead: `SpriteContentsMixin` records sprite transparency and keeps
+the source texture dark for mipmapped leaf sprites while rewriting other
+transparent pixels. The bakery bridge uses that same Embeddium source condition
+and sprite transparency signal for the original Voxy dark-cutout bit. This is a
+documented version/API mapping, not a free-form texture-name fallback.
 
 The original model upload owner has now been split away from the historical
 I/K-era formal store. `ForgeOriginalVoxyModelPipeline` creates a
@@ -277,23 +294,18 @@ semantics.
 
 ## Remaining bottom-up parity work
 
-1. Resolve the remaining `SoftwareModelTextureBakery` version/API gaps:
-   original `BlockStateModelPart` collection, `BakedQuad.materialInfo()` layer
-   and shade/tint data, and dark-cutout mip strategy. If Forge/Embeddium cannot
-   expose an equivalent signal, document the exact platform blocker before any
-   adaptation.
-2. Harden the Forge-port `ModelFactory` against original semantics: readback
+1. Harden the Forge-port `ModelFactory` against original semantics: readback
    audit, custom block-state id mapping, and documented Forge-only stair
    base-state reflection.
-3. Keep removing historical `ForgeFormalModelStore` references from preview
+2. Keep removing historical `ForgeFormalModelStore` references from preview
    code; the original model pipeline now uses `ForgeOriginalVoxyModelStore`.
-4. Connect `RenderGenerationService` output to original-equivalent
+3. Connect `RenderGenerationService` output to original-equivalent
    `BasicAsyncGeometryManager` / `BasicSectionGeometryData`.
-5. Port `BasicAsyncGeometryManager` and `BasicSectionGeometryData`.
-6. Port `RenderDistanceTracker` and `HierarchicalOcclusionTraverser`.
-7. Port `MDICViewport` and production `cmdgen.comp`.
-8. Port `MDICSectionRenderer` and original terrain shader binding order.
-9. Port `VoxyRenderSystem` lifecycle only after the lower owners match.
+4. Port `BasicAsyncGeometryManager` and `BasicSectionGeometryData`.
+5. Port `RenderDistanceTracker` and `HierarchicalOcclusionTraverser`.
+6. Port `MDICViewport` and production `cmdgen.comp`.
+7. Port `MDICSectionRenderer` and original terrain shader binding order.
+8. Port `VoxyRenderSystem` lifecycle only after the lower owners match.
 
 ## Current documented Forge deviations
 
@@ -304,7 +316,7 @@ semantics.
 | `TextureUtils` ColorSRGB path | original Voxy imports Sodium `ColorSRGB`; Forge runtime prerequisite is Embeddium, whose reference source keeps the same fast-srgb8 table under a moved package | Forge now ports that fast-srgb8 table locally and `textureUtilsByteForByteAuditReady=true` is reported when the table/mip sample audit passes. The 1.20.1 `ARGB` class name is unavailable, so alpha uses the same table helper as a documented mapping adaptation. |
 | `RenderGenerationService` request/requeue | original request/requeue depends on `RenderDataFactory.generateMesh()` throwing `IdNotYetComputedException` from real section generation | Forge now ports BuildTask priority, held-section retention, inner/outer missing-model scans, `requestBlockBake`, and requeue. Direct Fabric `ServiceManager` import is blocked by Fabric `commonImpl` dependencies, so a Forge-local worker carries the same task semantics; `originalServiceManagerParityReady=false` remains reported until the common thread stack is cleanly Forge-adapted. |
 | `RenderDataFactory` Java version helpers | original source uses `Integer.expand` / `Long.expand`, unavailable in Java 17 | Forge uses local equivalent bit-expansion helpers with the same mask/value semantics. |
-| `SoftwareModelTextureBakery` model collection and dark-cutout metadata | vertex storage, raster output, scratch output buffer, atlas capture, fluid layer selection, and mip-chain memory-buffer upload now match or map to original semantics; Forge 1.20.1 still lacks the newer `BlockStateModelPart`/`BakedQuad.materialInfo()` and `MipmapStrategy.DARK_CUTOUT` signals | `originalSoftwareModelTextureBakeryUsed=false` remains reported until these version/API differences are solved without guessing |
+| `SoftwareModelTextureBakery` model collection and dark-cutout metadata | Forge 1.20.1 lacks the newer original `BlockStateModelPart` and public `BakedQuad.materialInfo()` API, but Embeddium injects the equivalent `BakedQuadView` and sprite transparency data used by its own chunk mesher | fixed for the active Forge/Embeddium route: `originalSoftwareModelTextureBakeryUsed=true`; the adaptation is constrained to Embeddium source-equivalent material and transparency signals |
 | `ModelStore` ownership | fixed: the original model pipeline now owns `ForgeOriginalVoxyModelStore` instead of historical `ForgeFormalModelStore`; uploads use original-style `MemoryBuffer` results, persistent `UploadStream`, and DSA texture mip uploads | `originalModelStoreUsed=true` is reported when the new owner is built and connected |
 
 ## Do not do
@@ -326,8 +338,7 @@ adapter shader as production terrain shader
 Continue with bottom-up parity:
 
 ```text
-finish SoftwareModelTextureBakery model collection/dark-cutout parity without guessed metadata
- -> connect RenderGenerationService BuiltSection output to BasicAsyncGeometryManager
+connect RenderGenerationService BuiltSection output to BasicAsyncGeometryManager
  -> port BasicSectionGeometryData
  -> replace remaining direct/debug geometry ownership with original Voxy geometry owners
 ```

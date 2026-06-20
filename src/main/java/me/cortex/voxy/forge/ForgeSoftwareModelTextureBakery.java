@@ -158,24 +158,25 @@ final class ForgeSoftwareModelTextureBakery {
         boolean anyRenderType = false;
         boolean forceSolid = state.is(BlockTags.LEAVES);
         Iterable<RenderType> renderTypes = model.getRenderTypes(state, RandomSource.create(42L), ModelData.EMPTY);
-        for (RenderType renderType : renderTypes) {
-            anyRenderType = true;
-            boolean translucentLayer = renderType == RenderType.translucent();
-            ForgeOriginalVoxyReuseVertexConsumer target = translucentLayer ? this.translucentVC : this.opaqueVC;
-            for (Direction direction : directionsWithNull()) {
-                List<BakedQuad> quads = getQuads(model, state, direction, 42, renderType);
-                for (BakedQuad quad : quads) {
-                    target.quad(quad, renderType, forceSolid);
+        try {
+            for (RenderType renderType : renderTypes) {
+                anyRenderType = true;
+                ForgeOriginalVoxyReuseVertexConsumer target =
+                        ForgeOriginalVoxyQuadMaterialBridge.isTranslucentLayer(renderType) ? this.translucentVC : this.opaqueVC;
+                for (Direction direction : directionsWithNull()) {
+                    List<BakedQuad> quads = getQuads(model, state, direction, renderType);
+                    for (BakedQuad quad : quads) {
+                        target.quad(quad, renderType, forceSolid);
+                    }
                 }
             }
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            this.lastFailureReason = e.getMessage() == null ? "software-bakery-material-bridge-failed" : e.getMessage();
+            return 0;
         }
         if (!anyRenderType) {
-            for (Direction direction : directionsWithNull()) {
-                List<BakedQuad> quads = getQuads(model, state, direction, 42, null);
-                for (BakedQuad quad : quads) {
-                    this.opaqueVC.quad(quad, forceSolid);
-                }
-            }
+            this.lastFailureReason = "software-bakery-render-types-missing";
+            return 0;
         }
         flags |= (this.opaqueVC.anyShaded || this.translucentVC.anyShaded) ? FLAG_SHADED : 0;
         flags |= (this.opaqueVC.anyDarkenedTex || this.translucentVC.anyDarkenedTex) ? FLAG_DARKENED : 0;
@@ -235,7 +236,12 @@ final class ForgeSoftwareModelTextureBakery {
         for (int face = 0; face < ForgeModelAtlasLayout.FACE_COUNT; face++) {
             this.opaqueVC.reset();
             this.translucentVC.reset();
-            this.bakeFluidFace(state, face);
+            try {
+                this.bakeFluidFace(state, face);
+            } catch (IllegalArgumentException | IllegalStateException e) {
+                this.lastFailureReason = e.getMessage() == null ? "software-bakery-fluid-material-bridge-failed" : e.getMessage();
+                return 0;
+            }
             flags |= (this.opaqueVC.anyShaded || this.translucentVC.anyShaded) ? FLAG_SHADED : 0;
             flags |= (this.opaqueVC.anyDarkenedTex || this.translucentVC.anyDarkenedTex) ? FLAG_DARKENED : 0;
             flags |= this.opaqueVC.anyDiscard ? FLAG_DISCARD : 0;
@@ -319,10 +325,10 @@ final class ForgeSoftwareModelTextureBakery {
 
     private ForgeOriginalVoxyReuseVertexConsumer selectFluidConsumer(FluidState fluidState) {
         RenderType renderType = ItemBlockRenderTypes.getRenderLayer(fluidState);
-        if (renderType == RenderType.translucent()) {
+        if (ForgeOriginalVoxyQuadMaterialBridge.isTranslucentLayer(renderType)) {
             return this.translucentVC;
         }
-        if (renderType == RenderType.cutout() || renderType == RenderType.cutoutMipped()) {
+        if (ForgeOriginalVoxyQuadMaterialBridge.isDiscardLayer(renderType)) {
             this.opaqueVC.setDefaultMeta(this.opaqueVC.getDefaultMeta() | 1);
         } else {
             this.opaqueVC.setDefaultMeta(this.opaqueVC.getDefaultMeta() & ~1);
@@ -345,8 +351,8 @@ final class ForgeSoftwareModelTextureBakery {
         this.freed = true;
     }
 
-    private static List<BakedQuad> getQuads(BakedModel model, BlockState state, Direction direction, int blockStateId, @Nullable RenderType renderType) {
-        List<BakedQuad> quads = model.getQuads(state, direction, RandomSource.create(blockStateId * 31L + (direction == null ? 17L : direction.ordinal())), ModelData.EMPTY, renderType);
+    private static List<BakedQuad> getQuads(BakedModel model, BlockState state, Direction direction, RenderType renderType) {
+        List<BakedQuad> quads = model.getQuads(state, direction, RandomSource.create(42L), ModelData.EMPTY, renderType);
         return quads == null ? List.of() : quads;
     }
 

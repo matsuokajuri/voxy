@@ -124,12 +124,18 @@ RenderDataFactory raw WorldSection mesh generation
 Still incomplete and must not be treated as readiness:
 
 ```text
-TextureUtils byte-for-byte output audit
 custom block-state id mapping
 readback audit for the new original route
-full non-solid/fluid/tint software bake edge coverage
 BasicAsyncGeometryManager / BasicSectionGeometryData output ownership
 ```
+
+`SoftwareModelTextureBakery` now uses the Forge/Embeddium source-equivalent
+quad material route: block quads are read through Embeddium's injected
+`BakedQuadView`, render layers are mapped through the same solid/cutout/
+cutout-mipped/tripwire/translucent categories used by Embeddium's
+`DefaultMaterials`, and sprite transparency/dark-cutout behavior follows
+Embeddium's `SpriteContentsMixin` signal. This removes the previous raw
+vanilla vertex-array and guessed metadata route from the active model pipeline.
 
 ## Required behavior
 

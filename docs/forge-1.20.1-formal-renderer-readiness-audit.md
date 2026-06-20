@@ -80,7 +80,10 @@ K10/K23-K54 preview movement/update results
 
 Some bottom-path corrections are now aligned in direction:
 
-- Forge-adapted `SoftwareModelTextureBakery` exists.
+- Forge-adapted `SoftwareModelTextureBakery` now uses the original-shaped
+  output buffer, `ReuseVertexConsumer`, `SoftwareRasterizer`, Embeddium
+  `BakedQuadView` material signals, and Embeddium sprite transparency metadata
+  for the active Forge/Embeddium route.
 - Forge-local original-parity `ModelQueries` exists.
 - Forge-local original-parity `UploadStream` persistent mapped staging now
   backs the active original model upload route.

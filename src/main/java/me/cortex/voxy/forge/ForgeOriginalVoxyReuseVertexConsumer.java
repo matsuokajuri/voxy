@@ -2,7 +2,6 @@ package me.cortex.voxy.forge;
 
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import me.cortex.voxy.common.util.MemoryBuffer;
-import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.block.model.BakedQuad;
 import org.lwjgl.system.MemoryUtil;
 
@@ -80,38 +79,24 @@ final class ForgeOriginalVoxyReuseVertexConsumer implements VertexConsumer {
     }
 
     ForgeOriginalVoxyReuseVertexConsumer quad(BakedQuad quad, boolean forceSolid) {
-        return this.quad(quad, 0);
+        throw new IllegalStateException("render-layer-required-for-original-voxy-quad-material");
     }
 
-    ForgeOriginalVoxyReuseVertexConsumer quad(BakedQuad quad, RenderType renderType, boolean forceSolid) {
-        boolean translucent = renderType == RenderType.translucent();
-        boolean cutout = renderType == RenderType.cutout() || renderType == RenderType.cutoutMipped();
-        int meta = forceSolid ? 0 : (translucent || cutout ? 1 : 0);
-        return this.quad(quad, meta);
-    }
-
-    ForgeOriginalVoxyReuseVertexConsumer quad(BakedQuad quad, int metadata) {
-        this.anyShaded |= quad.isShade();
-        int meta = metadata | (quad.isTinted() ? 4 : 0) | this.globalOrMetadata;
+    ForgeOriginalVoxyReuseVertexConsumer quad(BakedQuad quad, net.minecraft.client.renderer.RenderType renderType, boolean forceSolid) {
+        ForgeOriginalVoxyQuadMaterialBridge.QuadMaterialData data = ForgeOriginalVoxyQuadMaterialBridge.read(quad, renderType, forceSolid);
+        this.anyShaded |= data.shaded();
+        this.anyDarkenedTex |= data.darkenedTexture();
+        int meta = data.metadata() | this.globalOrMetadata;
         this.anyDiscard |= (meta & 1) != 0;
-        int[] vertices = quad.getVertices();
-        if (vertices == null || vertices.length < 32) {
-            return this;
-        }
-        int stride = vertices.length / 4;
-        if (stride < 8) {
-            return this;
-        }
         this.ensureCanPut(4);
         for (int i = 0; i < 4; i++) {
-            int offset = i * stride;
             this.putVertex(
-                    Float.intBitsToFloat(vertices[offset]),
-                    Float.intBitsToFloat(vertices[offset + 1]),
-                    Float.intBitsToFloat(vertices[offset + 2]),
+                    data.x()[i],
+                    data.y()[i],
+                    data.z()[i],
                     meta,
-                    Float.intBitsToFloat(vertices[offset + 4]),
-                    Float.intBitsToFloat(vertices[offset + 5])
+                    data.u()[i],
+                    data.v()[i]
             );
         }
         return this;
