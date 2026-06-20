@@ -46,8 +46,8 @@ ForgeTexturedReadbackRenderer
 ForgeTexturedMdicDebugRenderer
 ```
 
-They must not feed new formal readiness, new production ownership, or new K/L
-renderer route decisions.
+They must not feed new formal readiness, new production ownership, or new
+Roman-numeral renderer route decisions.
 
 ## Deprecated route patterns
 
@@ -115,9 +115,11 @@ are now part of the active parity route, not the deprecated preview route.
 The original model upload path also has committed readback proof and the
 Oculus custom block-state id hook.
 
-Remaining lower-renderer blockers are the render-thread
-`BasicSectionGeometryData` owner, `AsyncNodeManager` / `NodeManager`,
-visibility traversal, MDIC command generation, and the original draw owner.
+Remaining lower-renderer blockers are production `cmdgen.comp`,
+`MDICSectionRenderer`, the original terrain shader contract, and integrated
+`VoxyRenderSystem` lifecycle. Render-thread geometry ownership, node ownership,
+RenderDistanceTracker, HiZ, HOC traversal, ViewportSelector, and MDICViewport
+now belong to the active Roman-route parity path.
 
 ## Replacement direction
 

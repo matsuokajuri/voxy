@@ -64,7 +64,7 @@ Recent parity remediation added:
 - Forge-local `ForgeModelQueries`;
 - formal metadata propagation into direct section geometry;
 - deprecation markers for sample-set and preview shader sources.
-- `ForgeOriginalVoxyModelPipeline`, a focused L0/L1 owner boundary that starts
+- `ForgeOriginalVoxyModelPipeline`, a focused Roman-route owner boundary that starts
   from the active `WorldEngine`, queues existing mapper biomes, attaches the
   mapper biome callback, and queues future block bake requests without using
   safe-set or preview sources.

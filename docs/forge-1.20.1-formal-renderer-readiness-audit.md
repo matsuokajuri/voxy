@@ -2,9 +2,10 @@
 
 This document supersedes the old preview/debug readiness audit.
 
-Readiness is now measured only against original Voxy parity. Preview pixels,
-sample-set uploads, synthetic GPU validation, offscreen smoke tests, and K10
-visible preview output do not count as formal renderer readiness.
+Readiness is now measured only against original Voxy parity. New implementation
+work uses Roman-major stage names with dotted substages. Preview pixels,
+sample-set uploads, synthetic GPU validation, offscreen smoke tests, and old
+K-era visible preview output do not count as formal renderer readiness.
 
 ## Current verdict
 
@@ -108,6 +109,9 @@ Some bottom-path corrections are now aligned in direction:
 - Forge-local original-parity `NodeManager`, `NodeStore`,
   `SectionUpdateRouter`, `NodeCleaner`, `GeometryCache`, and
   `RenderDistanceTracker` are now wired into the active parity pipeline.
+- Forge-local original-parity `ViewportSelector`, `MDICViewport`, HiZ owner,
+  depth framebuffer adapter, and `HierarchicalOcclusionTraverser` owner now
+  have runtime proof for real HiZ traversal from the Minecraft depth attachment.
 - `RenderGenerationService` now uses original `ServiceManager` / `Service` /
   `UnifiedServiceThreadPool` execution, including service-thread config and
   Embeddium builder-thread semaphore sharing.
@@ -120,9 +124,6 @@ These are progress toward parity, not renderer readiness.
 P0 gaps:
 
 ```text
-HierarchicalOcclusionTraverser parity incomplete
-Viewport / HiZ ownership incomplete
-MDICViewport parity incomplete
 production cmdgen.comp integration incomplete
 MDICSectionRenderer parity incomplete
 VoxyRenderSystem lifecycle parity incomplete

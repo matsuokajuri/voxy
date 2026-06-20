@@ -59,10 +59,20 @@ Historical code may remain temporarily if command/status references still need
 it for compilation, but new work must not extend it. Remove deprecated paths in
 controlled batches once their references are no longer needed.
 
-The current route is not "continue K preview work". The current route is:
+The current route is not "continue K preview work" or "continue L-stage work".
+The current route is:
 
 ```text
 original Voxy parity remediation
+```
+
+New implementation stages use Roman numerals only. Old alphanumeric labels such
+as H/I/J/K/L are historical labels and must not be used for new work. Use
+Roman-major and dotted-substage names, for example:
+
+```text
+V_ORIGINAL_MDIC_COMMAND_GENERATION_CHAIN
+V.1_ORIGINAL_MDIC_VIEWPORT_CMDGEN_INPUT_PARITY
 ```
 
 ## 4. Original Voxy chain to port

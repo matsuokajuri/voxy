@@ -1,6 +1,6 @@
-# Forge 1.20.1 stage roadmap
+# Forge 1.20.1 Roman stage roadmap
 
-This document supersedes the old H/I/J/K and K10-preview-era roadmap.
+This document supersedes the old H/I/J/K/L and K10-preview-era roadmap.
 
 The project route is now strict original Voxy parity. Historical stages remain
 in git history, but they are no longer the implementation plan.
@@ -55,30 +55,44 @@ K23-K54 minimal preview renderer batches
 These stages produced useful evidence, but they also introduced substitute
 routes. New work must not continue those routes.
 
-## Active roadmap: L-stage Voxy parity remediation
+## Active naming convention
+
+New implementation stages use Roman numerals only:
+
+```text
+I, II, III, IV, V, VI, VII, VIII, IX, X
+```
+
+Substages use dotted Roman-major labels:
+
+```text
+V.1_ORIGINAL_MDIC_VIEWPORT_CMDGEN_INPUT_PARITY
+V.2_ORIGINAL_CMDGEN_COMP_OUTPUT_PARITY
+```
+
+Old alphanumeric labels such as `H`, `I5`, `J2`, `K10`, `K23-K54`, and `L1`
+are historical labels only. They must not be used for new implementation work.
+
+## Active roadmap: Roman original Voxy parity remediation
 
 The active roadmap is component parity with the original renderer:
 
 ```text
-L0. Source audit and substitute retirement
-L1. Mapper / WorldEngine / original model-pipeline owner boundary
-L2. ModelBakerySubsystem / ModelFactory / ModelStore parity
-L3. SoftwareModelTextureBakery / TextureUtils / ModelQueries parity
-L4. RenderGenerationService parity
-L5. RenderDataFactory parity
-L6. BuiltSection output and BasicAsyncGeometryManager parity
-L7. BasicSectionGeometryData and geometry heap ownership parity
-L8. RenderDistanceTracker / HierarchicalOcclusionTraverser parity
-L9. ViewportSelector / Viewport / MDICViewport parity
-L10. cmdgen.comp input/output parity
-L11. MDICSectionRenderer parity
-L12. Original terrain shader contract parity
-L13. Integrated VoxyRenderSystem lifecycle parity
+I. Source audit and substitute retirement
+II. ModelBakerySubsystem / ModelFactory / SoftwareModelTextureBakery / ModelStore parity
+III. RenderGenerationService / RenderDataFactory / BuiltSection / geometry manager parity
+IV. RenderDistanceTracker / NodeManager / HierarchicalOcclusionTraverser / Viewport / HiZ / MDICViewport parity
+V. cmdgen.comp input/output parity
+VI. MDICSectionRenderer parity
+VII. Original terrain shader contract parity
+VIII. Visible LoD renderer integration behind explicit parity owner
+IX. Runtime lifecycle, reload, movement update, and performance parity
+X. Compatibility polish and deprecated-route retirement
 ```
 
-The L labels are parity-remediation stages, not feature demos.
+These Roman labels are parity-remediation stages, not feature demos.
 
-## Current L0/L1 status
+## Current Roman-route status
 
 The Forge route now has a focused original-Voxy model-pipeline owner boundary:
 
@@ -120,7 +134,7 @@ references but are not included in the current Forge compile source set, so the
 mechanisms must be ported/adapted under `me.cortex.voxy.forge` rather than
 directly imported.
 
-Missing before L2/L3 can be considered complete:
+Missing before Roman stage II model/upload parity can be considered complete:
 
 ```text
 none at the ModelFactory / ModelStore upload-contract level
@@ -128,8 +142,7 @@ none at the ModelFactory / ModelStore upload-contract level
 
 The `TextureUtils` / `ColorSRGB` conversion path is now aligned to original
 Voxy's Sodium dependency through a Forge-local port of Embeddium's fast-srgb8
-`ColorSRGB` implementation. The remaining L3 work is the lower software bakery
-chain around it, not this color conversion helper.
+`ColorSRGB` implementation.
 
 The active software bakery now also uses the original-shaped
 `ReuseVertexConsumer` / `SoftwareRasterizer` path: MemoryBuffer-backed
@@ -166,9 +179,22 @@ generated-section drain path and applies geometry uploads/metadata updates
 through original-style `SyncResults`, `UploadStream`, `memcpy.comp`, and
 `scatter.comp` into `BasicSectionGeometryData`. The Forge route now has
 original-shaped `NodeManager`, `NodeStore`, `SectionUpdateRouter`,
-`NodeCleaner`, `GeometryCache`, and `RenderDistanceTracker` ownership. The
-remaining visibility producer is the original `HierarchicalOcclusionTraverser`
-with `Viewport` / `MDICViewport` / HiZ / render-list ownership.
+`NodeCleaner`, `GeometryCache`, and `RenderDistanceTracker` ownership.
+`ForgeOriginalVoxyHierarchicalOcclusionTraverser`,
+`ForgeOriginalVoxyViewportSelector`, `ForgeOriginalVoxyMdicViewport`,
+`ForgeOriginalVoxyHiZBuffer`, and `ForgeOriginalVoxyDepthFramebuffer` are now
+part of the active route and have runtime proof for real HiZ traversal against
+the Minecraft depth attachment.
+
+The next active stage is:
+
+```text
+V.1_ORIGINAL_MDIC_VIEWPORT_CMDGEN_INPUT_PARITY
+```
+
+It must close the contract from `MDICViewport` / HOC render-list output into
+the original production `cmdgen.comp` inputs. It must not reuse K-era synthetic
+cmdgen validation buffers or preview command buffers as formal inputs.
 
 ## Required source trace
 
@@ -212,9 +238,10 @@ A subsystem is considered aligned only when:
 The next work should continue bottom-up parity, not preview hardening:
 
 ```text
-port NodeStore / SingleNodeRequest / NodeChildRequest / NodeManager ownership
- -> replace temporary section-id map in async geometry sync
- -> continue into visibility / MDIC parity
+V.1_ORIGINAL_MDIC_VIEWPORT_CMDGEN_INPUT_PARITY
+ -> V.2_ORIGINAL_CMDGEN_COMP_OUTPUT_PARITY
+ -> VI_ORIGINAL_MDIC_SECTION_RENDERER_CHAIN
+ -> VII_ORIGINAL_TERRAIN_SHADER_CONTRACT_CHAIN
 ```
 
 Visible preview work must not be treated as progress toward production parity

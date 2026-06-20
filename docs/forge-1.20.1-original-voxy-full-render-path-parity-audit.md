@@ -1,7 +1,9 @@
 # Forge 1.20.1 original Voxy full render-path parity audit
 
-This is the current route-control ledger. It supersedes old K-stage and preview
-audit language.
+This is the current route-control ledger. It supersedes old H/I/J/K/L-stage and
+preview audit language. New implementation work uses Roman-major stage names
+with dotted substages, for example
+`V.1_ORIGINAL_MDIC_VIEWPORT_CMDGEN_INPUT_PARITY`.
 
 ## Current rule
 
@@ -106,7 +108,8 @@ These are directionally correct but not complete readiness:
   `SectionUpdateRouter`, `GeometryCache`, `NodeCleaner`, and
   `RenderDistanceTracker` are now wired into the parity pipeline.
 - sample/preview/synthetic routes are explicitly deprecated.
-- `ForgeOriginalVoxyModelPipeline` now owns the first L0/L1 parity boundary:
+- `ForgeOriginalVoxyModelPipeline` now owns the first Roman-route model
+  pipeline parity boundary:
   it starts from the active `WorldEngine`, queues existing mapper biomes,
   attaches the mapper biome callback, and queues block bake requests for the
   future `RenderGenerationService` path.
