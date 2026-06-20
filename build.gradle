@@ -92,9 +92,31 @@ repositories {
     mavenCentral()
 }
 
+def optionalFrontendJars = { propertyName, includePattern ->
+    def configuredPath = (project.findProperty(propertyName) ?: '').toString().trim()
+    if (!configuredPath.isEmpty()) {
+        return files(configuredPath)
+    }
+
+    return fileTree(dir: 'dev-mods', include: includePattern)
+}
+
+def embeddiumDevJars = optionalFrontendJars('voxyEmbeddiumDevJar', 'embeddium*.jar')
+def oculusDevJars = optionalFrontendJars('voxyOculusDevJar', 'oculus*.jar')
+
 dependencies {
     minecraft "net.minecraftforge:forge:${project.minecraft_version}-${project.forge_version}"
     implementation "it.unimi.dsi:fastutil:${project.fastutil_version}"
+
+    if (!embeddiumDevJars.isEmpty()) {
+        compileOnly fg.deobf(embeddiumDevJars)
+        runtimeOnly fg.deobf(embeddiumDevJars)
+    }
+
+    if (!oculusDevJars.isEmpty()) {
+        compileOnly fg.deobf(oculusDevJars)
+        runtimeOnly fg.deobf(oculusDevJars)
+    }
 }
 
 tasks.named('processResources', ProcessResources).configure {

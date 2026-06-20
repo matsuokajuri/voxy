@@ -36,6 +36,12 @@ declares `provides = ["iris"]`, so source-level package names may still contain
 `sodium` or `iris` while the Forge metadata and runtime prerequisites are
 `embeddium` and `oculus`.
 
+Detailed frontend mapping is tracked in:
+
+```text
+docs/forge-1.20.1-embeddium-oculus-frontend-mapping.md
+```
+
 ## Current verdict
 
 ```text

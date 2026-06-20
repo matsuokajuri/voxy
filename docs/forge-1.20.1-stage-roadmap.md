@@ -32,6 +32,12 @@ parity work that reaches Sodium/Iris-dependent original code must inspect the
 original Voxy source and then adapt it against Embeddium/Oculus, preserving the
 same ownership and data flow.
 
+Frontend package and mod-id mapping is tracked in:
+
+```text
+docs/forge-1.20.1-embeddium-oculus-frontend-mapping.md
+```
+
 ## Superseded historical plan
 
 The following are historical and not current route guidance:
