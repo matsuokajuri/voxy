@@ -99,7 +99,7 @@ final class ForgeOriginalVoxyModelStore {
         if (!this.canUploadOriginalVoxyModel()) {
             return "original-model-store-not-upload-ready";
         }
-        if (!isValidModelId(modelId) || modelId == 0) {
+        if (!isValidModelId(modelId)) {
             return "invalid-original-model-id-" + modelId;
         }
         if (model == null || model.size != MODEL_SIZE) {
@@ -113,7 +113,7 @@ final class ForgeOriginalVoxyModelStore {
         if (!this.canUploadOriginalVoxyModel()) {
             return "original-model-store-not-upload-ready";
         }
-        if (!isValidModelId(modelId) || modelId == 0) {
+        if (!isValidModelId(modelId)) {
             return "invalid-original-model-id-" + modelId;
         }
         if (wordIndex < 0 || wordIndex >= MODEL_SIZE / Integer.BYTES) {
@@ -166,7 +166,7 @@ final class ForgeOriginalVoxyModelStore {
         if (!this.canUploadOriginalVoxyModel()) {
             return "original-model-store-not-upload-ready";
         }
-        if (!isValidModelId(modelId) || modelId == 0) {
+        if (!isValidModelId(modelId)) {
             return "invalid-original-model-id-" + modelId;
         }
         if (texture == null || texture.size < ForgeOriginalVoxyMipGen.UPLOADED_MIP_CHAIN_BYTES) {
@@ -189,7 +189,7 @@ final class ForgeOriginalVoxyModelStore {
         if (!this.canUploadOriginalVoxyModel()) {
             return "original-model-store-not-upload-ready";
         }
-        if (!isValidModelId(modelId) || modelId == 0) {
+        if (!isValidModelId(modelId)) {
             return "invalid-original-model-id-" + modelId;
         }
         if (out == null || out.length != MODEL_SIZE) {
@@ -227,7 +227,7 @@ final class ForgeOriginalVoxyModelStore {
         if (!this.canUploadOriginalVoxyModel()) {
             return "original-model-store-not-upload-ready";
         }
-        if (!isValidModelId(modelId) || modelId == 0) {
+        if (!isValidModelId(modelId)) {
             return "invalid-original-model-id-" + modelId;
         }
         if (out == null || out.length < ForgeOriginalVoxyMipGen.UPLOADED_MIP_CHAIN_BYTES) {

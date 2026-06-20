@@ -375,7 +375,12 @@ Follow-up parity review corrected three low-level model metadata divergences:
 ```text
 modelId=0
  -> now enters through addEntry(0), matching original ModelFactory startup
+ -> ForgeOriginalVoxyModelStore now accepts model id 0 for upload/readback
  -> no hand-reserved Forge-only model-zero shortcut
+
+air / invisible / empty software bake
+ -> now returns a successful all-zero output like original SoftwareModelTextureBakery
+ -> no longer treats air, invisible, no-render-type, no-quad, or empty-fluid output as a bake failure
 
 block emission metadata
  -> now checks BlockState.emissiveRendering(...) before vanilla light emission

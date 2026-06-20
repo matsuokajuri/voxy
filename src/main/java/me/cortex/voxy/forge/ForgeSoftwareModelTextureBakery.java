@@ -83,8 +83,11 @@ final class ForgeSoftwareModelTextureBakery {
         this.lastFailureReason = "none";
         MemoryUtil.memSet(outputBuffer, 0, OUTPUT_BUFFER_BYTES);
         this.setupTexture(minecraft);
-        if (state == null || state.isAir() || state.getRenderShape() == RenderShape.INVISIBLE) {
-            this.lastFailureReason = "invisible-or-air";
+        if (state == null) {
+            this.lastFailureReason = "null-block-state";
+            return 0;
+        }
+        if (state.isAir() || state.getRenderShape() == RenderShape.INVISIBLE) {
             return 0;
         }
         if (this.atlasPixels == null) {
@@ -175,7 +178,6 @@ final class ForgeSoftwareModelTextureBakery {
             return 0;
         }
         if (!anyRenderType) {
-            this.lastFailureReason = "software-bakery-render-types-missing";
             return 0;
         }
         flags |= (this.opaqueVC.anyShaded || this.translucentVC.anyShaded) ? FLAG_SHADED : 0;
@@ -183,7 +185,6 @@ final class ForgeSoftwareModelTextureBakery {
         flags |= !this.translucentVC.isEmpty() ? FLAG_TRANSLUCENT : 0;
         flags |= this.opaqueVC.anyDiscard ? FLAG_DISCARD : 0;
         if (this.opaqueVC.isEmpty() && this.translucentVC.isEmpty()) {
-            this.lastFailureReason = "no-quads";
             return flags;
         }
         for (int face = 0; face < ForgeModelAtlasLayout.FACE_COUNT; face++) {
@@ -258,7 +259,6 @@ final class ForgeSoftwareModelTextureBakery {
             anyFace = true;
         }
         if (!anyFace) {
-            this.lastFailureReason = "no-fluid-quads";
             return flags;
         }
         return flags;
