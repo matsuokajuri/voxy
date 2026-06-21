@@ -121,6 +121,10 @@ public final class ForgeVoxyInstance {
         return this.originalVoxyModelPipeline;
     }
 
+    public void markOriginalVoxyOculusWorldRenderingSettingsReload() {
+        this.originalVoxyModelPipeline.markOculusWorldRenderingSettingsReload();
+    }
+
     public ForgeChunkIngestManager getChunkIngestManager() {
         return this.chunkIngestManager;
     }

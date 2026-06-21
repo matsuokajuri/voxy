@@ -8,6 +8,11 @@
     "ForgeOriginalVoxyEmbeddiumChunkTrackerAccessor",
     "ForgeOriginalVoxyEmbeddiumDefaultChunkRendererMixin",
     "ForgeOriginalVoxyEmbeddiumRenderSectionManagerMixin",
+    "ForgeOriginalVoxyOculusCustomUniformsAccessor",
+    "ForgeOriginalVoxyOculusIrisRenderingPipelineAccessor",
+    "ForgeOriginalVoxyOculusIrisRenderingPipelineMixin",
+    "ForgeOriginalVoxyOculusProgramSetMixin",
+    "ForgeOriginalVoxyOculusWorldRenderingSettingsMixin",
     "ForgeOriginalVoxyLevelRendererRenderStateCaptureMixin"
   ],
   "injectors": {

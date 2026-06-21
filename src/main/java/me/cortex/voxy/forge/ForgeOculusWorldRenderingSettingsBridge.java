@@ -34,9 +34,37 @@ final class ForgeOculusWorldRenderingSettingsBridge {
         }
     }
 
+    static ReloadState isReloadRequired() {
+        try {
+            Class<?> type = Class.forName(WORLD_RENDERING_SETTINGS);
+            Field instanceField = type.getField("INSTANCE");
+            Object instance = instanceField.get(null);
+            Method method = type.getMethod("isReloadRequired");
+            Object value = method.invoke(instance);
+            if (!(value instanceof Boolean reloadRequired)) {
+                return new ReloadState(false, false, "oculus-world-rendering-settings", "oculus-reload-flag-wrong-type");
+            }
+            return new ReloadState(true, reloadRequired, "oculus-world-rendering-settings", "none");
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            return new ReloadState(
+                    false,
+                    false,
+                    "oculus-world-rendering-settings",
+                    "oculus-reload-flag-" + e.getClass().getSimpleName());
+        }
+    }
+
     record Result(
             boolean ready,
             @Nullable Object2IntMap<BlockState> blockStateIds,
+            String source,
+            String failureReason
+    ) {
+    }
+
+    record ReloadState(
+            boolean ready,
+            boolean reloadRequired,
             String source,
             String failureReason
     ) {

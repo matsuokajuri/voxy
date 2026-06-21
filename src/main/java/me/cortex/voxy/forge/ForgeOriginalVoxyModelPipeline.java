@@ -131,6 +131,9 @@ public final class ForgeOriginalVoxyModelPipeline {
     }
 
     void clientTick() {
+        if (this.consumeOculusWorldRenderingSettingsReload()) {
+            return;
+        }
         if (this.shouldScheduleStart()) {
             this.runOnRenderThread(this::startOnRenderThread);
         }
@@ -250,6 +253,32 @@ public final class ForgeOriginalVoxyModelPipeline {
         boolean finalBlitEnvironmentalFogEnabled = this.renderPipeline != null
                 ? this.renderPipeline.useEnvironmentalFog()
                 : this.originalFinalBlitEnvironmentalFogEnabled;
+        boolean oculusShaderpackPipelineActive = this.renderPipeline != null
+                && this.renderPipeline.oculusShaderpackActive();
+        boolean oculusShaderpackPipelineDataReady = this.renderPipeline != null
+                && this.renderPipeline.oculusPipelineDataReady();
+        boolean oculusShaderpackPatchShaderUsed = this.renderPipeline != null
+                && this.renderPipeline.oculusShaderPatchReady();
+        boolean oculusShaderpackBindingsUsed = this.renderPipeline != null
+                && this.renderPipeline.oculusShaderBindingsReady();
+        boolean oculusShaderpackDrawTargetsUsed = this.renderPipeline != null
+                && this.renderPipeline.oculusDrawTargetsReady();
+        boolean oculusShaderpackUniformsUsed = this.renderPipeline != null
+                && this.renderPipeline.oculusUniformsReady();
+        boolean oculusShaderpackSsboBindingsReady = this.renderPipeline != null
+                && this.renderPipeline.oculusSsboBindingsReady();
+        boolean oculusShaderpackImageBindingsReady = this.renderPipeline != null
+                && this.renderPipeline.oculusImageBindingsReady();
+        boolean oculusShaderpackBlendStateReady = this.renderPipeline != null
+                && this.renderPipeline.oculusBlendReady();
+        boolean oculusShaderpackTaaReady = this.renderPipeline != null
+                && this.renderPipeline.oculusTaaReady();
+        String oculusShaderpackSource = this.renderPipeline == null
+                ? "original-render-pipeline-not-started"
+                : this.renderPipeline.oculusPipelineSource();
+        String oculusShaderpackFailureReason = this.renderPipeline == null
+                ? "none"
+                : this.renderPipeline.oculusPipelineFailureReason();
         return new ForgeOriginalVoxyModelPipelineStats(
                 STAGE,
                 this.startRequests,
@@ -290,6 +319,18 @@ public final class ForgeOriginalVoxyModelPipeline {
                         this.originalViewportFogParametersUsed && this.ownerReady && !this.stale,
                         finalBlitEnvironmentalFogEnabled && this.ownerReady && !this.stale,
                         this.originalFinalBlitEnvironmentalFogUniformsUsed && this.ownerReady && !this.stale,
+                        oculusShaderpackPipelineActive,
+                        oculusShaderpackPipelineDataReady,
+                        oculusShaderpackPatchShaderUsed,
+                        oculusShaderpackBindingsUsed,
+                        oculusShaderpackDrawTargetsUsed,
+                        oculusShaderpackUniformsUsed,
+                        oculusShaderpackSsboBindingsReady,
+                        oculusShaderpackImageBindingsReady,
+                        oculusShaderpackBlendStateReady,
+                        oculusShaderpackTaaReady,
+                        oculusShaderpackSource,
+                        oculusShaderpackFailureReason,
                         this.originalVisibleFrameLastFogStart,
                         this.originalVisibleFrameLastFogEnd,
                         this.originalVisibleFrameRunCount,
@@ -483,6 +524,28 @@ public final class ForgeOriginalVoxyModelPipeline {
         this.markStaleAndClear("dimension-switch");
     }
 
+    void markOculusWorldRenderingSettingsReload() {
+        boolean shouldRestart;
+        synchronized (this) {
+            if ("oculus-world-rendering-settings-reload".equals(this.lastLifecycleEvent)
+                    && (this.stale || this.startRequested)) {
+                return;
+            }
+            shouldRestart = this.ownerReady || this.startRequested;
+            if (!this.ownerReady && !this.startRequested) {
+                this.requiresRebuild = true;
+                this.lifecycleState = "RELOAD_PENDING";
+                this.lastLifecycleEvent = "oculus-world-rendering-settings-reload";
+                this.lastFailureReason = "none";
+                return;
+            }
+        }
+        this.markStaleAndClear("oculus-world-rendering-settings-reload");
+        if (shouldRestart) {
+            this.requestStart("oculus-world-rendering-settings-reload");
+        }
+    }
+
     void markDebugPipelineClear() {
         this.markStaleAndClear("debug-pipeline-clear");
     }
@@ -504,6 +567,20 @@ public final class ForgeOriginalVoxyModelPipeline {
             return false;
         }
         this.startQueuedOnRenderThread = true;
+        return true;
+    }
+
+    private boolean consumeOculusWorldRenderingSettingsReload() {
+        ForgeOculusWorldRenderingSettingsBridge.ReloadState reloadState =
+                ForgeOculusWorldRenderingSettingsBridge.isReloadRequired();
+        if (!reloadState.ready()) {
+            this.recordNonFatalFailure(reloadState.failureReason());
+            return false;
+        }
+        if (!reloadState.reloadRequired()) {
+            return false;
+        }
+        this.markOculusWorldRenderingSettingsReload();
         return true;
     }
 

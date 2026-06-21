@@ -115,11 +115,13 @@ are now part of the active parity route, not the deprecated preview route.
 The original model upload path also has committed readback proof and the
 Oculus custom block-state id hook.
 
-Remaining lower-renderer blockers are production `cmdgen.comp`,
-`MDICSectionRenderer`, the original terrain shader contract, and integrated
-`VoxyRenderSystem` lifecycle. Render-thread geometry ownership, node ownership,
-RenderDistanceTracker, HiZ, HOC traversal, ViewportSelector, and MDICViewport
-now belong to the active Roman-route parity path.
+Remaining lower-renderer blockers are full integrated `VoxyRenderSystem`
+lifecycle, runtime validation of the Oculus shaderpack patch/data/binding
+bridge under real packs, and movement/update performance parity. Production
+`cmdgen.comp`, `MDICSectionRenderer`, the original terrain shader hook
+boundary, render-thread geometry ownership, node ownership, RenderDistanceTracker,
+HiZ, HOC traversal, ViewportSelector, MDICViewport, and the Oculus shaderpack
+patch bridge now belong to the active Roman-route parity path.
 
 ## Replacement direction
 
@@ -136,6 +138,8 @@ ModelBakerySubsystem / ModelFactory / ModelStore
  -> cmdgen.comp
  -> MDICSectionRenderer
  -> original terrain shader contract
+ -> Oculus shaderpack patch/data/binding bridge
+ -> VoxyRenderSystem lifecycle
 ```
 
 Any future Forge-specific adaptation must be documented in the parity audit
