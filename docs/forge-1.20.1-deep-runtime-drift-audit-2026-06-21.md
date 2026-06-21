@@ -35,6 +35,18 @@ false because the outer `VoxyRenderSystem` owner is incomplete and the
 shaderpack-patched terrain programs are requested but fall back to normal Voxy
 terrain shaders.
 
+The 2026-06-22 follow-up repair further fixes the original save-queue owner and
+the realtime section-light ingest path. It removes a dirty-section free failure
+seen during runtime shutdown/reload pressure and makes Embeddium section updates
+use the same chunk-aware lighting fallback as chunk-scan ingest. This improves
+the data-flow basis for visual testing, but visual parity still requires a
+fresh user-side screenshot/pass after the repair.
+
+The final 2026-06-22 `runClient` pass exited with code 0. It created the
+WorldEngine through the original SectionSavingService path, did not reproduce
+the dirty/free failure, logged zero Oculus projection/model-view/camera matrix
+diffs, and showed a populated source depth texture after the first frames.
+
 ## Runtime evidence
 
 ### Pre-repair pass
@@ -180,6 +192,10 @@ ForgeOriginalVoxyRenderGenerationService now releases taskMapLock before forward
 ForgeOriginalVoxyRenderGenerationService now calls a lightweight ForgeOriginalVoxyModelPipeline.requestBlockBakeInternal path, matching original ModelBakerySubsystem's queue request instead of building full status snapshots from render-generation workers.
 ForgeOriginalVoxyModelFactory processing now checks for remaining work with queue emptiness tests instead of repeatedly calling ConcurrentLinkedDeque.size() from the hot processing loop.
 Oculus shaderpack sidecar source discovery now includes voxy.json, voxy_opaque.glsl, voxy_translucent.glsl, and voxy_taa.glsl in Oculus ShaderPackSourceNames so the original-shaped sourceProvider can expose Voxy patch files.
+The original SectionSavingService is now compiled and used as the WorldEngine save callback; the Forge synchronous save-and-return-false callback is retired.
+The formal model pipeline now acquires the active WorldEngine while attached and releases it during render-thread cleanup, matching the original VoxyRenderSystem world reference ownership shape more closely.
+Forge active-world close now detaches the world and delays actual WorldEngine.free() until WorldEngine.isWorldIdle(), avoiding a race between render-thread releaseRef/save-queue refs and immediate skeleton free.
+Embeddium realtime section-update ingest now calls VoxelIngestService.ingestChunkSectionWithStats(...), so missing DataLayers use the same level-brightness fallback and missing-light accounting as chunk ingest.
 ```
 
 Remaining blockers after the repair are narrower:
@@ -189,6 +205,7 @@ full outer VoxyRenderSystem lifecycle ownership is still not ported
 model-bakery startup still lacks the complete original constructor boundary
 GL image bindings / indirect buffers / polygon mode are still not fully captured by the hook adapter
 shaderpack-patched terrain programs are requested but fall back because the current Forge/Oculus bridge does not yet provide every original patch uniform/sampler declaration required by ComplementaryUnbound
+fresh visual confirmation is still required after the 2026-06-22 save/light repair
 ```
 
 ## Why the white/bright far LoD artifact is still not shaderpack parity evidence
@@ -260,3 +277,9 @@ no simple GPU mesh draw submissions used as the visible result
 Until the patched shader status is true, screenshots and white/bright far-LoD
 artifacts are evidence about the remaining shaderpack bridge or data-ingest
 timing, not final original Voxy shaderpack parity.
+
+After the 2026-06-22 section-light repair, persistent black/white far-LoD
+artifacts should no longer be attributed to the old raw single-section DataLayer
+path without new evidence. The next audit target is the shaderpack
+patched-terrain compile/binding blocker, full lifecycle ownership, or another
+measured GL/resource state gap.

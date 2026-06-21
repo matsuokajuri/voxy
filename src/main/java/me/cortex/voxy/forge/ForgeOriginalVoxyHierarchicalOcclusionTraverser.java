@@ -4,6 +4,7 @@ import it.unimi.dsi.fastutil.ints.Int2IntOpenHashMap;
 import me.cortex.voxy.config.ForgeVoxyConfig;
 import me.cortex.voxy.common.util.MemoryBuffer;
 import me.cortex.voxy.common.world.WorldEngine;
+import org.joml.Vector4f;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
 
@@ -73,6 +74,8 @@ final class ForgeOriginalVoxyHierarchicalOcclusionTraverser {
     private static final int MAX_ITERATIONS = WorldEngine.MAX_LOD_LAYER + 1;
     private static final int LOCAL_WORK_SIZE_BITS = 5;
     private static final int READBACK_AUDIT_SAMPLE_COUNT = 256;
+    private static final int MAX_AUTO_READBACK_AUDITS = 20;
+    private static final int HOC_AUDIT_COUNTER_COUNT = 40;
     private static final int NULL_NODE = (1 << 24) - 1;
     private static final int EMPTY_QUEUE_ID = (1 << 24) - 2;
     private static final int NULL_MESH = (1 << 24) - 1;
@@ -88,6 +91,7 @@ final class ForgeOriginalVoxyHierarchicalOcclusionTraverser {
     private static final int NODE_QUEUE_SOURCE_BINDING = bindingCounter++;
     private static final int NODE_QUEUE_SINK_BINDING = bindingCounter++;
     private static final int RENDER_TRACKER_BINDING = bindingCounter++;
+    private static final int HOC_AUDIT_BINDING = bindingCounter++;
     private static final long SCRATCH = MemoryUtil.nmemAlloc(32);
 
     private final ForgeOriginalVoxyAsyncNodeGeometrySync nodeSync;
@@ -100,6 +104,7 @@ final class ForgeOriginalVoxyHierarchicalOcclusionTraverser {
     private final ForgeOriginalVoxyGlBuffer queueMetaBuffer = new ForgeOriginalVoxyGlBuffer(4L * 4L * MAX_ITERATIONS).zero();
     private final ForgeOriginalVoxyGlBuffer scratchQueueA = new ForgeOriginalVoxyGlBuffer(MAX_QUEUE_SIZE * 4L).zero();
     private final ForgeOriginalVoxyGlBuffer scratchQueueB = new ForgeOriginalVoxyGlBuffer(MAX_QUEUE_SIZE * 4L).zero();
+    private final ForgeOriginalVoxyGlBuffer hocAuditBuffer = new ForgeOriginalVoxyGlBuffer(HOC_AUDIT_COUNTER_COUNT * 4L).zero();
     private final Int2IntOpenHashMap topNode2idxMapping = new Int2IntOpenHashMap();
     private final int[] idx2topNodeMapping = new int[MAX_QUEUE_SIZE];
     private final int hizSampler = glGenSamplers();
@@ -166,7 +171,8 @@ final class ForgeOriginalVoxyHierarchicalOcclusionTraverser {
                     "NODE_QUEUE_META_BINDING", NODE_QUEUE_META_BINDING,
                     "NODE_QUEUE_SOURCE_BINDING", NODE_QUEUE_SOURCE_BINDING,
                     "NODE_QUEUE_SINK_BINDING", NODE_QUEUE_SINK_BINDING,
-                    "RENDER_TRACKER_BINDING", RENDER_TRACKER_BINDING);
+                    "RENDER_TRACKER_BINDING", RENDER_TRACKER_BINDING,
+                    "HOC_AUDIT_BINDING", HOC_AUDIT_BINDING);
             this.traversalProgramId = compileComputeProgram(source);
             this.lastLifecycleEvent = "build-on-render-thread";
             this.lastFailureReason = "none";
@@ -184,7 +190,8 @@ final class ForgeOriginalVoxyHierarchicalOcclusionTraverser {
                 && this.topNodeIds.id != 0
                 && this.queueMetaBuffer.id != 0
                 && this.scratchQueueA.id != 0
-                && this.scratchQueueB.id != 0;
+                && this.scratchQueueB.id != 0
+                && this.hocAuditBuffer.id != 0;
     }
 
     void requestReadbackAudit() {
@@ -206,6 +213,7 @@ final class ForgeOriginalVoxyHierarchicalOcclusionTraverser {
             this.taaPipeline.bindUniforms();
         }
         this.bindings(viewport);
+        this.hocAuditBuffer.zero();
         nglClearNamedBufferSubData(viewport.renderListBufferId(), GL_R32UI, 0L, Integer.BYTES, GL_RED_INTEGER, GL_UNSIGNED_INT, 0L);
         this.traverseInternal();
         this.downloadResetRequestQueue();
@@ -219,6 +227,10 @@ final class ForgeOriginalVoxyHierarchicalOcclusionTraverser {
 
     void runReadbackAuditIfRequested(ForgeOriginalVoxyMdicViewport viewport) {
         if (!this.readbackAuditRequested) {
+            return;
+        }
+        if (this.readbackAuditRuns >= MAX_AUTO_READBACK_AUDITS) {
+            this.readbackAuditRequested = false;
             return;
         }
         this.readbackAuditRequested = false;
@@ -259,6 +271,12 @@ final class ForgeOriginalVoxyHierarchicalOcclusionTraverser {
             }
 
             AuditNodeSample sample = this.sampleTopNodes(stack, viewport);
+            long hocAuditPtr = stack.nmalloc(HOC_AUDIT_COUNTER_COUNT * Integer.BYTES);
+            nglGetNamedBufferSubData(
+                    this.hocAuditBuffer.id,
+                    0L,
+                    HOC_AUDIT_COUNTER_COUNT * (long) Integer.BYTES,
+                    hocAuditPtr);
 
             String auditReason = "none";
             if (this.topNodeCount == 0) {
@@ -286,10 +304,14 @@ final class ForgeOriginalVoxyHierarchicalOcclusionTraverser {
                     renderListCounter,
                     auditReason);
             VoxyForge.LOGGER.info(
-                    "Original HOC top-node sample: sampled={} nearCamera={} renderableMesh={} emptyMesh={} nullMesh={} hasChildren={} nullChild={} emptyChildList={} requested={} nearestNodeId={} nearestLod={} nearestPos=[{},{},{}] nearestMesh={} nearestChild={} nearestFlags={} nearestDistanceBlocks={}",
+                    "Original HOC top-node sample: sampled={} nearCamera={} cpuFrustumInside={} cpuFrustumOutside={} renderableMesh={} renderableInside={} renderableOutside={} emptyMesh={} nullMesh={} hasChildren={} nullChild={} emptyChildList={} requested={} nearestNodeId={} nearestLod={} nearestPos=[{},{},{}] nearestMesh={} nearestChild={} nearestFlags={} nearestDistanceBlocks={} nearestRenderableNodeId={} nearestRenderableLod={} nearestRenderablePos=[{},{},{}] nearestRenderableMesh={} nearestRenderableOutsideFrustum={} nearestRenderableDistanceBlocks={}",
                     sample.sampled,
                     sample.nearCamera,
+                    sample.cpuFrustumInside,
+                    sample.cpuFrustumOutside,
                     sample.renderableMesh,
+                    sample.renderableInside,
+                    sample.renderableOutside,
                     sample.emptyMesh,
                     sample.nullMesh,
                     sample.hasChildren,
@@ -304,7 +326,52 @@ final class ForgeOriginalVoxyHierarchicalOcclusionTraverser {
                     sample.nearestMesh,
                     sample.nearestChild,
                     sample.nearestFlags,
-                    String.format(java.util.Locale.ROOT, "%.2f", Math.sqrt(Math.max(0.0D, sample.nearestDistanceSquared))));
+                    String.format(java.util.Locale.ROOT, "%.2f", Math.sqrt(Math.max(0.0D, sample.nearestDistanceSquared))),
+                    sample.nearestRenderableNodeId,
+                    sample.nearestRenderableLod,
+                    sample.nearestRenderableX,
+                    sample.nearestRenderableY,
+                    sample.nearestRenderableZ,
+                    sample.nearestRenderableMesh,
+                    sample.nearestRenderableOutsideFrustum,
+                    String.format(java.util.Locale.ROOT, "%.2f", Math.sqrt(Math.max(0.0D, sample.nearestRenderableDistanceSquared))));
+            VoxyForge.LOGGER.info(
+                    "Original HOC shader audit: valid={} withinDistance={} distanceCulled={} frustumCulled={} hizCulled={} visible={} enqueueChildren={} queuedRequests={} enqueueSelf={} enqueueSelfNonEmpty={} enqueueSelfEmpty={} hasMeshBranch={} noMeshBranch={} mainInvocations={} queueOutOfBounds={} queueMetaMax={}",
+                    MemoryUtil.memGetInt(hocAuditPtr),
+                    MemoryUtil.memGetInt(hocAuditPtr + 4L),
+                    MemoryUtil.memGetInt(hocAuditPtr + 8L),
+                    MemoryUtil.memGetInt(hocAuditPtr + 12L),
+                    MemoryUtil.memGetInt(hocAuditPtr + 16L),
+                    MemoryUtil.memGetInt(hocAuditPtr + 20L),
+                    MemoryUtil.memGetInt(hocAuditPtr + 24L),
+                    MemoryUtil.memGetInt(hocAuditPtr + 28L),
+                    MemoryUtil.memGetInt(hocAuditPtr + 32L),
+                    MemoryUtil.memGetInt(hocAuditPtr + 36L),
+                    MemoryUtil.memGetInt(hocAuditPtr + 40L),
+                    MemoryUtil.memGetInt(hocAuditPtr + 44L),
+                    MemoryUtil.memGetInt(hocAuditPtr + 48L),
+                    MemoryUtil.memGetInt(hocAuditPtr + 52L),
+                    MemoryUtil.memGetInt(hocAuditPtr + 56L),
+                    MemoryUtil.memGetInt(hocAuditPtr + 60L));
+            if (MemoryUtil.memGetInt(hocAuditPtr + 64L) != 0) {
+                VoxyForge.LOGGER.info(
+                        "Original HOC first HiZ cull: nodeId={} lod={} minZ={} maxZ={} pointSample={} depthAgainst={} mip={} minBB=[{},{}] maxBB=[{},{}] texels=[{},{}]-[{},{}]",
+                        MemoryUtil.memGetInt(hocAuditPtr + 68L),
+                        MemoryUtil.memGetInt(hocAuditPtr + 72L),
+                        Float.intBitsToFloat(MemoryUtil.memGetInt(hocAuditPtr + 76L)),
+                        Float.intBitsToFloat(MemoryUtil.memGetInt(hocAuditPtr + 80L)),
+                        Float.intBitsToFloat(MemoryUtil.memGetInt(hocAuditPtr + 84L)),
+                        Float.intBitsToFloat(MemoryUtil.memGetInt(hocAuditPtr + 88L)),
+                        MemoryUtil.memGetInt(hocAuditPtr + 92L),
+                        Float.intBitsToFloat(MemoryUtil.memGetInt(hocAuditPtr + 96L)),
+                        Float.intBitsToFloat(MemoryUtil.memGetInt(hocAuditPtr + 100L)),
+                        Float.intBitsToFloat(MemoryUtil.memGetInt(hocAuditPtr + 104L)),
+                        Float.intBitsToFloat(MemoryUtil.memGetInt(hocAuditPtr + 108L)),
+                        MemoryUtil.memGetInt(hocAuditPtr + 112L),
+                        MemoryUtil.memGetInt(hocAuditPtr + 116L),
+                        MemoryUtil.memGetInt(hocAuditPtr + 120L),
+                        MemoryUtil.memGetInt(hocAuditPtr + 124L));
+            }
         }
     }
 
@@ -345,6 +412,12 @@ final class ForgeOriginalVoxyHierarchicalOcclusionTraverser {
             int mesh = word2 & 0xFFFFFF;
             int child = word3 & 0xFFFFFF;
             int flags = ((word2 >>> 24) & 0xFF) | (((word3 >>> 24) & 0xFF) << 8);
+            boolean outsideFrustum = outsideFrustum(viewport, x, y, z, lod);
+            if (outsideFrustum) {
+                sample.cpuFrustumOutside++;
+            } else {
+                sample.cpuFrustumInside++;
+            }
 
             if (mesh == NULL_MESH) {
                 sample.nullMesh++;
@@ -352,6 +425,11 @@ final class ForgeOriginalVoxyHierarchicalOcclusionTraverser {
                 sample.emptyMesh++;
             } else {
                 sample.renderableMesh++;
+                if (outsideFrustum) {
+                    sample.renderableOutside++;
+                } else {
+                    sample.renderableInside++;
+                }
             }
             if (child == NULL_NODE) {
                 sample.nullChild++;
@@ -380,8 +458,37 @@ final class ForgeOriginalVoxyHierarchicalOcclusionTraverser {
                 sample.nearestChild = child;
                 sample.nearestFlags = flags;
             }
+            if (mesh != NULL_MESH && mesh != EMPTY_MESH && distanceSquared < sample.nearestRenderableDistanceSquared) {
+                sample.nearestRenderableDistanceSquared = distanceSquared;
+                sample.nearestRenderableNodeId = nodeId;
+                sample.nearestRenderableLod = lod;
+                sample.nearestRenderableX = x;
+                sample.nearestRenderableY = y;
+                sample.nearestRenderableZ = z;
+                sample.nearestRenderableMesh = mesh;
+                sample.nearestRenderableOutsideFrustum = outsideFrustum;
+            }
         }
         return sample;
+    }
+
+    private static boolean outsideFrustum(ForgeOriginalVoxyMdicViewport viewport, int nodeX, int nodeY, int nodeZ, int lod) {
+        float baseX = (float) ((((nodeX << lod) - viewport.section.x) << 5) - viewport.innerTranslation.x);
+        float baseY = (float) ((((nodeY << lod) - viewport.section.y) << 5) - viewport.innerTranslation.y);
+        float baseZ = (float) ((((nodeZ << lod) - viewport.section.z) << 5) - viewport.innerTranslation.z);
+        float size = (float) (32 << lod);
+        return !(testPlane(viewport.frustumPlanes[0], baseX, baseY, baseZ, size)
+                && testPlane(viewport.frustumPlanes[1], baseX, baseY, baseZ, size)
+                && testPlane(viewport.frustumPlanes[2], baseX, baseY, baseZ, size)
+                && testPlane(viewport.frustumPlanes[3], baseX, baseY, baseZ, size)
+                && testPlane(viewport.frustumPlanes[4], baseX, baseY, baseZ, size));
+    }
+
+    private static boolean testPlane(Vector4f plane, float baseX, float baseY, float baseZ, float size) {
+        float x = baseX + (plane.x < 0.0F ? 0.0F : size);
+        float y = baseY + (plane.y < 0.0F ? 0.0F : size);
+        float z = baseZ + (plane.z < 0.0F ? 0.0F : size);
+        return plane.x * x + plane.y * y + plane.z * z >= -plane.w;
     }
 
     private static int decodeLod(int word0) {
@@ -424,7 +531,11 @@ final class ForgeOriginalVoxyHierarchicalOcclusionTraverser {
     private static final class AuditNodeSample {
         final int sampled;
         int nearCamera;
+        int cpuFrustumInside;
+        int cpuFrustumOutside;
         int renderableMesh;
+        int renderableInside;
+        int renderableOutside;
         int emptyMesh;
         int nullMesh;
         int hasChildren;
@@ -440,6 +551,14 @@ final class ForgeOriginalVoxyHierarchicalOcclusionTraverser {
         int nearestChild;
         int nearestFlags;
         double nearestDistanceSquared = Double.POSITIVE_INFINITY;
+        int nearestRenderableNodeId = -1;
+        int nearestRenderableLod = -1;
+        int nearestRenderableX;
+        int nearestRenderableY;
+        int nearestRenderableZ;
+        int nearestRenderableMesh;
+        boolean nearestRenderableOutsideFrustum;
+        double nearestRenderableDistanceSquared = Double.POSITIVE_INFINITY;
 
         AuditNodeSample(int sampled) {
             this.sampled = sampled;
@@ -458,6 +577,7 @@ final class ForgeOriginalVoxyHierarchicalOcclusionTraverser {
         this.topNodeIds.free();
         this.scratchQueueA.free();
         this.scratchQueueB.free();
+        this.hocAuditBuffer.free();
         glDeleteSamplers(this.hizSampler);
         this.lastLifecycleEvent = "free-on-render-thread";
     }
@@ -470,7 +590,7 @@ final class ForgeOriginalVoxyHierarchicalOcclusionTraverser {
                 this.requestBuffer.id != 0,
                 this.topNodeIds.id != 0,
                 this.queueMetaBuffer.id != 0,
-                this.scratchQueueA.id != 0 && this.scratchQueueB.id != 0,
+                this.scratchQueueA.id != 0 && this.scratchQueueB.id != 0 && this.hocAuditBuffer.id != 0,
                 this.hizSampler != 0,
                 this.topNodeCount,
                 this.traversalRunCount,
@@ -557,6 +677,7 @@ final class ForgeOriginalVoxyHierarchicalOcclusionTraverser {
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, NODE_DATA_BINDING, this.nodeBuffer.id);
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, NODE_QUEUE_META_BINDING, this.queueMetaBuffer.id);
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, RENDER_TRACKER_BINDING, this.nodeCleaner.visibilityBufferId());
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, HOC_AUDIT_BINDING, this.hocAuditBuffer.id);
     }
 
     private void traverseInternal() {

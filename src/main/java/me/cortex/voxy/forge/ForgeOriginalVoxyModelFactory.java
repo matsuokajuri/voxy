@@ -114,6 +114,11 @@ final class ForgeOriginalVoxyModelFactory {
         this.customBlockStateIdMappingReady = true;
         this.customBlockStateIdMappingPresent = mapping != null;
         this.customBlockStateIdMappingSource = source == null || source.isBlank() ? "unknown" : source;
+        VoxyForge.LOGGER.info(
+                "Original Voxy block-state ID mapping source={} present={} size={}",
+                this.customBlockStateIdMappingSource,
+                this.customBlockStateIdMappingPresent,
+                mapping == null ? 0 : mapping.size());
     }
 
     boolean addEntry(int blockId) {
@@ -499,7 +504,7 @@ final class ForgeOriginalVoxyModelFactory {
             byte[] pixels = ForgeSoftwareModelTextureBakery.rgbaBytes(texture);
             float depth = computeSoftwareDepth(texture, layer);
             int[] bounds = ForgeOriginalVoxyTextureUtils.computeBounds(texture, checkMode);
-            int faceData = encodeSoftwareFaceData(texture, layer, depth, bounds, writtenPixels);
+            int faceData = encodeSoftwareFaceData(texture, layer, depth, bounds, writtenPixels, tint.hasTint());
             faces[faceIndex] = new FaceUpload(faceIndex, direction.getName(), pixels, ForgeModelAtlasPixelSample.checksum(pixels), faceData, writtenPixels, depth, coversFullBlock(bounds));
             words[faceIndex] = faceData;
             if (faceData >= 0) {
@@ -549,7 +554,7 @@ final class ForgeOriginalVoxyModelFactory {
     }
 
     private TintPlan finalizeTintForNewModel(Minecraft minecraft, int modelId, BlockState state, TintPlan tint) {
-        if (!tint.biomeDependent()) {
+        if (!tint.biomeDependent() || !tint.hasTint()) {
             return tint;
         }
         int biomeIndex = this.modelsRequiringBiomeColours.size() * this.biomes.size();
@@ -900,7 +905,8 @@ final class ForgeOriginalVoxyModelFactory {
             ForgeCpuMeshLayer layer,
             float depth,
             int[] bounds,
-            int written
+            int written,
+            boolean hasTint
     ) {
         int checkMode = layer == ForgeCpuMeshLayer.SOLID
                 ? ForgeOriginalVoxyTextureUtils.WRITE_CHECK_STENCIL
@@ -928,11 +934,13 @@ final class ForgeOriginalVoxyModelFactory {
         needsAlphaDiscard &= layer != ForgeCpuMeshLayer.TRANSLUCENT;
         faceData |= needsAlphaDiscard ? 1 << 22 : 0;
         faceData |= (!faceCoversFullBlock && layer != ForgeCpuMeshLayer.TRANSLUCENT) ? 1 << 23 : 0;
-        int tintState = ForgeOriginalVoxyTextureUtils.computeFaceTint(texture, checkMode);
-        if (tintState == 2) {
-            faceData |= 1 << 24;
-        } else if (tintState == 3) {
-            faceData |= 2 << 24;
+        if (hasTint) {
+            int tintState = ForgeOriginalVoxyTextureUtils.computeFaceTint(texture, checkMode);
+            if (tintState == 2) {
+                faceData |= 1 << 24;
+            } else if (tintState == 3) {
+                faceData |= 2 << 24;
+            }
         }
         return faceData;
     }
@@ -993,7 +1001,7 @@ final class ForgeOriginalVoxyModelFactory {
             fullyOpaque &= occludesFace;
         }
         long global = 0L;
-        global |= biomeColourDependent || hasTint ? 1L : 0L;
+        global |= biomeColourDependent ? 1L : 0L;
         global |= translucent ? 2L : 0L;
         global |= doubleSided ? 4L : 0L;
         global |= containsFluid ? 8L : 0L;

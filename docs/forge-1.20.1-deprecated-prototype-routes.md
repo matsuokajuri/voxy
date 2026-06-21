@@ -144,6 +144,24 @@ does not make the simple GPU renderer part of formal readiness. In the later
 post-repair pass, formal MDIC submission replaced simple-GPU evidence, but the
 shaderpack patched shader fallback remains a degraded active-route blocker.
 
+The 2026-06-22 lifecycle/light repair retires two more non-original shortcuts
+from the active route:
+
+```text
+the Forge-only synchronous WorldEngine save callback that saved immediately and
+returned false
+
+the Embeddium single-section raw light ingest path that bypassed the
+chunk-aware lighting fallback
+```
+
+The replacement path is active-route parity work, not a new prototype route:
+`WorldEngine.setSaveCallback(...)` now uses the original `SectionSavingService`
+ownership shape, and single-section Embeddium updates now reuse
+`VoxelIngestService.ingestChunkSectionWithStats(...)`. Active Forge worlds are
+also detached before delayed idle free, matching the original `WorldEngine`
+idle-cleanup rule more closely than the old immediate skeleton close.
+
 ## Replacement direction
 
 Replacement work must follow the original Voxy chain:

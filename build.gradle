@@ -45,6 +45,7 @@ sourceSets {
             include 'me/cortex/voxy/common/world/SaveLoadSystem3.java'
             include 'me/cortex/voxy/common/world/other/Mapper.java'
             include 'me/cortex/voxy/common/world/other/Mipper.java'
+            include 'me/cortex/voxy/common/world/service/SectionSavingService.java'
             include 'me/cortex/voxy/common/world/service/VoxelIngestService.java'
             include 'me/cortex/voxy/common/config/IMappingStorage.java'
             include 'me/cortex/voxy/common/config/IStoredSectionPositionIterator.java'

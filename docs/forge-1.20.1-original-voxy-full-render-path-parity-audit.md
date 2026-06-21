@@ -791,6 +791,68 @@ until both `opaquePatchedShaderUsed=true` and
 while the formal owner is requested, queued, or active, but the shaderpack patch
 fallback still makes visual output degraded.
 
+### 2026-06-22 runtime repair addendum
+
+The follow-up run after the post-X drift audit exposed one original lifecycle
+owner mismatch and one ingest data-flow mismatch:
+
+```text
+ForgeVoxyInstance.createActiveWorldSkeleton() used a synchronous save callback
+that saved the section and returned false instead of transferring ownership to
+the original SectionSavingService queue.
+
+ForgeOriginalVoxyEmbeddiumRenderSectionManagerMixin rewrote single sections by
+passing raw DataLayer values directly into rawIngest, bypassing the chunk-aware
+lighting fallback added for chunk ingest.
+```
+
+Both are fixed in the active Roman X route:
+
+```text
+SectionSavingService is compiled from the original source and wired as the
+WorldEngine save callback through the Forge model-pipeline ServiceManager.
+Forge WorldEngine lifetime now acquires a reference when the formal model
+pipeline attaches and releases it during render-thread cleanup.
+Forge active-world close now detaches the current WorldEngine and frees it only
+after `WorldEngine.isWorldIdle()`, so render-thread cleanup and save-queue
+section refs cannot race `WorldEngine.free()`.
+SectionStorage write accounting now wraps the real storage delegate instead of
+being coupled to the old synchronous callback.
+VoxelIngestService.ingestChunkSectionWithStats(...) now mirrors the chunk ingest
+path, including live-engine validation, section-index validation, DataLayer
+copying, missing-light accounting, and level brightness fallback.
+Embeddium section-update ingest now calls the same chunk-aware section path
+instead of writing raw section light directly.
+```
+
+Validation after these fixes:
+
+```text
+compileJava: passed
+runClient: entered world, exited with code 0, BUILD SUCCESSFUL
+dirty/free failure: not reproduced
+Oculus matrix audit: projection/model-view/camera diffs all zero
+depth-source audit: external depth source populated after the first frame
+auto ingest: storage writes now come from the original save service path
+```
+
+The high missing block/sky DataLayer counts seen during chunk ingest remain
+important runtime evidence, but they are now handled by the same fallback path
+for both chunk-scan ingest and Embeddium section-update ingest. If black or
+white far-LoD artifacts still persist after this fix, the next comparison point
+is no longer the old raw section-light path; it is the remaining shaderpack
+patched-terrain compile/binding blocker, full outer `VoxyRenderSystem`
+lifecycle ownership, or a newly observed platform-specific state gap.
+
+This addendum still does not flip readiness:
+
+```text
+formalRendererReady=false
+actualRendererDrawEnabled=false
+formalDrawPipelineReady=false
+earlyUsableLodRendererReady=false
+```
+
 ## Do not do
 
 Do not use:

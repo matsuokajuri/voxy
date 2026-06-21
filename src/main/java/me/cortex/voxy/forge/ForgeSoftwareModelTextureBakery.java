@@ -245,6 +245,7 @@ final class ForgeSoftwareModelTextureBakery {
             }
             flags |= (this.opaqueVC.anyShaded || this.translucentVC.anyShaded) ? FLAG_SHADED : 0;
             flags |= (this.opaqueVC.anyDarkenedTex || this.translucentVC.anyDarkenedTex) ? FLAG_DARKENED : 0;
+            flags |= !this.translucentVC.isEmpty() ? FLAG_TRANSLUCENT : 0;
             flags |= this.opaqueVC.anyDiscard ? FLAG_DISCARD : 0;
             if (this.opaqueVC.isEmpty() && this.translucentVC.isEmpty()) {
                 continue;

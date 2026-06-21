@@ -6,7 +6,6 @@ import java.util.function.Supplier;
 
 final class ForgeOriginalVoxyViewportSelector {
     private static final Object DEFAULT_VIEWPORT_KEY = new Object();
-    private static final Object OCULUS_SHADOW_VIEWPORT_KEY = new Object();
 
     private final Supplier<ForgeOriginalVoxyMdicViewport> creator;
     private final ForgeOriginalVoxyMdicViewport defaultViewport;
@@ -26,7 +25,9 @@ final class ForgeOriginalVoxyViewportSelector {
             return this.select(vivecraftPass, "vivecraft-" + String.valueOf(vivecraftPass));
         }
         if (ForgeOculusShadowStateBridge.shadowActive()) {
-            return this.select(OCULUS_SHADOW_VIEWPORT_KEY, "oculus-shadow");
+            this.lastSelectedViewport = null;
+            this.lastSelectedKey = "oculus-shadow-skipped";
+            return null;
         }
         return this.select(DEFAULT_VIEWPORT_KEY, "default");
     }

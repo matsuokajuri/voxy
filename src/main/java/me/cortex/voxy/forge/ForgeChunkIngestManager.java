@@ -28,6 +28,8 @@ public final class ForgeChunkIngestManager {
     private int windowNonAirSections;
     private int windowNonAirVoxels;
     private int windowStorageWrites;
+    private int windowMissingBlockLightSections;
+    private int windowMissingSkyLightSections;
     private double windowElapsedMs;
     private long lastSummaryTick;
     private double lastAverageMs;
@@ -210,6 +212,8 @@ public final class ForgeChunkIngestManager {
             this.windowNonAirSections += stats.nonAirSections();
             this.windowNonAirVoxels += stats.nonAirVoxels();
             this.windowStorageWrites += stats.storageWrites();
+            this.windowMissingBlockLightSections += stats.missingBlockLightSections();
+            this.windowMissingSkyLightSections += stats.missingSkyLightSections();
             this.windowElapsedMs += elapsedMs;
         } catch (Exception e) {
             this.ingestedChunks.add(key);
@@ -224,7 +228,7 @@ public final class ForgeChunkIngestManager {
 
         double averageMs = this.windowElapsedMs / this.windowChunks;
         VoxyForge.LOGGER.info(
-                "Voxy auto ingest {}: queued={} ingested={} converted={} nonAirSections={} nonAirVoxels={} storageWrites={} avgMs={}",
+                "Voxy auto ingest {}: queued={} ingested={} converted={} nonAirSections={} nonAirVoxels={} storageWrites={} missingBlockLightSections={} missingSkyLightSections={} avgMs={}",
                 dimension,
                 this.pendingChunks.size(),
                 this.windowChunks,
@@ -232,6 +236,8 @@ public final class ForgeChunkIngestManager {
                 this.windowNonAirSections,
                 this.windowNonAirVoxels,
                 this.windowStorageWrites,
+                this.windowMissingBlockLightSections,
+                this.windowMissingSkyLightSections,
                 String.format("%.2f", averageMs)
         );
         this.resetWindow();
@@ -245,6 +251,8 @@ public final class ForgeChunkIngestManager {
         this.windowNonAirSections = 0;
         this.windowNonAirVoxels = 0;
         this.windowStorageWrites = 0;
+        this.windowMissingBlockLightSections = 0;
+        this.windowMissingSkyLightSections = 0;
         this.windowElapsedMs = 0.0;
         this.lastSummaryTick = this.tickCounter;
     }

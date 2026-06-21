@@ -4,9 +4,11 @@ import me.cortex.voxy.forge.ForgeOriginalVoxyOculusPatchDataAccess;
 import me.cortex.voxy.forge.ForgeOriginalVoxyOculusPipelineDataAccess;
 import me.cortex.voxy.forge.ForgeOriginalVoxyOculusRenderPipelineData;
 import me.cortex.voxy.forge.ForgeOriginalVoxyOculusShaderPatch;
+import me.cortex.voxy.forge.ForgeVoxyInstance;
 import net.irisshaders.iris.gl.buffer.ShaderStorageBufferHolder;
 import net.irisshaders.iris.pipeline.IrisRenderingPipeline;
 import net.irisshaders.iris.shaderpack.programs.ProgramSet;
+import net.irisshaders.iris.uniforms.FrameUpdateNotifier;
 import net.irisshaders.iris.uniforms.custom.CustomUniforms;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -23,6 +25,9 @@ public class ForgeOriginalVoxyOculusIrisRenderingPipelineMixin implements ForgeO
     private CustomUniforms customUniforms;
     @Shadow
     private ShaderStorageBufferHolder shaderStorageBufferHolder;
+    @Shadow
+    @Final
+    private FrameUpdateNotifier updateNotifier;
     @Unique
     private ForgeOriginalVoxyOculusShaderPatch voxy$patchData;
     @Unique
@@ -36,8 +41,20 @@ public class ForgeOriginalVoxyOculusIrisRenderingPipelineMixin implements ForgeO
                     (IrisRenderingPipeline) (Object) this,
                     this.voxy$patchData,
                     this.customUniforms,
+                    this.updateNotifier,
                     this.shaderStorageBufferHolder);
         }
+    }
+
+    @Inject(
+            method = "beginLevelRendering",
+            at = @At(
+                    value = "INVOKE",
+                    target = "Lcom/mojang/blaze3d/systems/RenderSystem;activeTexture(I)V",
+                    shift = At.Shift.BEFORE),
+            remap = false)
+    private void voxy$injectViewportSetup(CallbackInfo ci) {
+        ForgeVoxyInstance.INSTANCE.getOriginalVoxyModelPipeline().applyCapturedOculusViewport();
     }
 
     @Override

@@ -10,6 +10,7 @@ import static org.lwjgl.opengl.GL11C.GL_BLEND;
 import static org.lwjgl.opengl.GL11C.GL_DEPTH_BUFFER_BIT;
 import static org.lwjgl.opengl.GL11C.GL_DEPTH_TEST;
 import static org.lwjgl.opengl.GL11C.GL_EQUAL;
+import static org.lwjgl.opengl.GL11C.GL_KEEP;
 import static org.lwjgl.opengl.GL11C.GL_NEAREST;
 import static org.lwjgl.opengl.GL11C.GL_ONE;
 import static org.lwjgl.opengl.GL11C.GL_ONE_MINUS_SRC_ALPHA;
@@ -21,6 +22,8 @@ import static org.lwjgl.opengl.GL11C.glDepthFunc;
 import static org.lwjgl.opengl.GL11C.glDisable;
 import static org.lwjgl.opengl.GL11C.glEnable;
 import static org.lwjgl.opengl.GL11C.glStencilFunc;
+import static org.lwjgl.opengl.GL11C.glStencilMask;
+import static org.lwjgl.opengl.GL11C.glStencilOp;
 import static org.lwjgl.opengl.GL14C.glBlendFuncSeparate;
 import static org.lwjgl.opengl.GL20C.glUniform4f;
 import static org.lwjgl.opengl.GL20C.nglUniformMatrix4fv;
@@ -140,6 +143,7 @@ final class ForgeOriginalVoxyRenderPipeline {
     void preSetup(ForgeOriginalVoxyMdicViewport viewport) {
         this.lastLifecycleEvent = "pre-setup";
         this.lastFailureReason = "none";
+        ForgeOriginalVoxyOculusVoxyUniforms.captureViewport(viewport);
         if (this.oculusShaderUniforms != null) {
             long ptr = ForgeOriginalVoxyUploadStream.instance()
                     .upload(this.oculusShaderUniforms.id, 0L, this.oculusShaderUniforms.size());
@@ -149,12 +153,23 @@ final class ForgeOriginalVoxyRenderPipeline {
         }
     }
 
-    int setup(ForgeOriginalVoxyMdicViewport viewport, int sourceFramebuffer, int srcWidth, int srcHeight) {
+    int setup(
+            ForgeOriginalVoxyMdicViewport viewport,
+            int sourceFramebuffer,
+            int alternateSourceFramebuffer,
+            int srcWidth,
+            int srcHeight) {
         if (this.oculusPipelineData != null && !this.oculusPipelineData.useViewportDims) {
             srcWidth = viewport.width;
             srcHeight = viewport.height;
         }
-        int depthTexture = this.depthStage.setupDepthTexture(sourceFramebuffer, srcWidth, srcHeight, viewport.width, viewport.height);
+        int depthTexture = this.depthStage.setupDepthTexture(
+                sourceFramebuffer,
+                alternateSourceFramebuffer,
+                srcWidth,
+                srcHeight,
+                viewport.width,
+                viewport.height);
         this.normalTargets.resize(this.depthStage, viewport.width, viewport.height, this.oculusPipelineData);
         this.setupCount++;
         this.lifecycleState = "SETUP";
@@ -173,6 +188,7 @@ final class ForgeOriginalVoxyRenderPipeline {
             return;
         }
         this.normalTargets.bindOpaqueFramebuffer(this.depthStage);
+        this.applyTerrainDepthStencilState();
         if (this.oculusPipelineData != null) {
             this.bindOculusShaderpackBindings();
         }
@@ -186,6 +202,7 @@ final class ForgeOriginalVoxyRenderPipeline {
             return;
         }
         this.normalTargets.bindTranslucentFramebuffer();
+        this.applyTerrainDepthStencilState();
         if (this.oculusPipelineData != null) {
             this.bindOculusShaderpackBindings();
             if (this.oculusPipelineData.getBlender() != null) {
@@ -194,9 +211,16 @@ final class ForgeOriginalVoxyRenderPipeline {
         }
     }
 
-    void postOpaquePreTranslucent(ForgeOriginalVoxyMdicViewport viewport, int sourceFramebuffer) {
+    void postOpaquePreTranslucent(ForgeOriginalVoxyMdicViewport viewport, int sourceFramebuffer, boolean emitDepthOutput) {
         this.postOpaquePreTranslucentCount++;
         this.lastLifecycleEvent = "post-opaque-pre-translucent";
+        if (!emitDepthOutput) {
+            glDisable(GL_STENCIL_TEST);
+            glDisable(GL_DEPTH_TEST);
+            this.lastLifecycleEvent = "post-opaque-pre-translucent-skipped-no-draw-output";
+            this.lastFailureReason = "none";
+            return;
+        }
         if (this.oculusPipelineData != null) {
             this.postOpaquePreTranslucentOculus(viewport);
             return;
@@ -215,7 +239,17 @@ final class ForgeOriginalVoxyRenderPipeline {
         this.lastFailureReason = "none";
     }
 
-    void finish(ForgeOriginalVoxyMdicViewport viewport, int sourceFramebuffer, int srcWidth, int srcHeight) {
+    void finish(ForgeOriginalVoxyMdicViewport viewport, int sourceFramebuffer, int srcWidth, int srcHeight, boolean emitDepthOutput) {
+        if (!emitDepthOutput) {
+            glDisable(GL_STENCIL_TEST);
+            glDisable(GL_DEPTH_TEST);
+            glDisable(GL_BLEND);
+            glBindFramebuffer(GL_FRAMEBUFFER, sourceFramebuffer);
+            this.finishCount++;
+            this.lastLifecycleEvent = "finish-skipped-no-draw-output";
+            this.lastFailureReason = "none";
+            return;
+        }
         if (this.oculusPipelineData != null) {
             this.finishOculus(viewport, sourceFramebuffer, srcWidth, srcHeight);
             return;
@@ -251,6 +285,10 @@ final class ForgeOriginalVoxyRenderPipeline {
 
     boolean hasTAA() {
         return this.oculusPipelineData != null && this.oculusPipelineData.TAA != null;
+    }
+
+    float[] renderScalingFactor() {
+        return this.oculusPipelineData == null ? null : this.oculusPipelineData.resolutionScale;
     }
 
     String taaFunction(String functionName) {
@@ -408,6 +446,15 @@ final class ForgeOriginalVoxyRenderPipeline {
         return this.normalTargets.colourSsaoTextureId();
     }
 
+    int oculusOpaqueDepthTextureId() {
+        return this.depthStage.depthTextureId();
+    }
+
+    int oculusTranslucentDepthTextureId() {
+        int translucentDepthTexture = this.normalTargets.translucentDepthTextureId();
+        return translucentDepthTexture == 0 ? this.depthStage.depthTextureId() : translucentDepthTexture;
+    }
+
     long normalTargetResizeCount() {
         return this.normalTargets.resizeCount();
     }
@@ -484,7 +531,7 @@ final class ForgeOriginalVoxyRenderPipeline {
         }
         if (this.shaderDepthHackFixTransformBlit != null) {
             this.normalTargets.bindOpaqueFramebuffer(this.depthStage);
-            glEnable(GL_DEPTH_TEST);
+            this.applyTerrainDepthStencilState();
             glColorMask(false, false, false, false);
             try {
                 glDepthFunc(GL_ALWAYS);
@@ -511,6 +558,15 @@ final class ForgeOriginalVoxyRenderPipeline {
                 GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT,
                 GL_NEAREST);
         this.lastFailureReason = "none";
+    }
+
+    private void applyTerrainDepthStencilState() {
+        glEnable(GL_DEPTH_TEST);
+        glDepthFunc(this.properties.closerEqualDepthCompare());
+        glEnable(GL_STENCIL_TEST);
+        glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
+        glStencilFunc(GL_EQUAL, 1, 0xFF);
+        glStencilMask(0xFF);
     }
 
     private void finishOculus(ForgeOriginalVoxyMdicViewport viewport, int sourceFramebuffer, int srcWidth, int srcHeight) {

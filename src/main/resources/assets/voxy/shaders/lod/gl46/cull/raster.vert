@@ -54,6 +54,7 @@ void main() {
     uint previous = visibilityData[sid]&0x7fffffffu;
     bool wasVisibleLastFrame = previous==(frameId-1);
     value = (frameId&0x7fffffffu)|(uint(wasVisibleLastFrame)<<31);//Encode if it was visible last frame
+
 }
 
 

@@ -96,7 +96,7 @@ public final class ForgeVoxyCommands {
             double elapsedMs = (System.nanoTime() - start) / 1_000_000.0;
             String dimension = level.dimension().location().toString();
             String message = String.format(
-                    "Voxy: ingested %s chunk %d,%d: converted=%d nonAirSections=%d nonAirVoxels=%d worldUpdates=%d storageWrites=%d elapsed=%.2fms",
+                    "Voxy: ingested %s chunk %d,%d: converted=%d nonAirSections=%d nonAirVoxels=%d worldUpdates=%d storageWrites=%d missingBlockLightSections=%d missingSkyLightSections=%d elapsed=%.2fms",
                     dimension,
                     chunkX,
                     chunkZ,
@@ -105,6 +105,8 @@ public final class ForgeVoxyCommands {
                     stats.nonAirVoxels(),
                     stats.worldUpdates(),
                     stats.storageWrites(),
+                    stats.missingBlockLightSections(),
+                    stats.missingSkyLightSections(),
                     elapsedMs
             );
             VoxyForge.LOGGER.info(message);

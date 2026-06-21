@@ -3,7 +3,14 @@ package me.cortex.voxy.forge;
 import org.lwjgl.system.MemoryStack;
 
 import static org.lwjgl.opengl.GL11C.GL_DEPTH;
+import static org.lwjgl.opengl.GL11C.GL_NEAREST;
 import static org.lwjgl.opengl.GL14C.GL_DEPTH_COMPONENT24;
+import static org.lwjgl.opengl.GL11C.GL_TEXTURE_2D;
+import static org.lwjgl.opengl.GL11C.GL_TEXTURE_MAG_FILTER;
+import static org.lwjgl.opengl.GL11C.GL_TEXTURE_MIN_FILTER;
+import static org.lwjgl.opengl.GL11C.GL_TEXTURE_WRAP_S;
+import static org.lwjgl.opengl.GL11C.GL_TEXTURE_WRAP_T;
+import static org.lwjgl.opengl.GL12C.GL_CLAMP_TO_EDGE;
 import static org.lwjgl.opengl.GL30C.GL_DEPTH24_STENCIL8;
 import static org.lwjgl.opengl.GL30C.GL_DEPTH_ATTACHMENT;
 import static org.lwjgl.opengl.GL30C.GL_DEPTH_STENCIL_ATTACHMENT;
@@ -17,6 +24,7 @@ import static org.lwjgl.opengl.GL45C.glCreateTextures;
 import static org.lwjgl.opengl.GL45C.glDeleteFramebuffers;
 import static org.lwjgl.opengl.GL45C.glDeleteTextures;
 import static org.lwjgl.opengl.GL45C.glNamedFramebufferTexture;
+import static org.lwjgl.opengl.GL45C.glTextureParameteri;
 import static org.lwjgl.opengl.GL45C.glTextureStorage2D;
 import static org.lwjgl.opengl.GL45C.nglClearNamedFramebufferfv;
 import static org.lwjgl.opengl.GL45C.nglClearNamedFramebufferiv;
@@ -48,8 +56,12 @@ final class ForgeOriginalVoxyDepthFramebuffer {
             glDeleteTextures(this.depthTextureId);
             this.depthTextureId = 0;
         }
-        this.depthTextureId = glCreateTextures(org.lwjgl.opengl.GL11C.GL_TEXTURE_2D);
+        this.depthTextureId = glCreateTextures(GL_TEXTURE_2D);
         glTextureStorage2D(this.depthTextureId, 1, this.depthType, width, height);
+        glTextureParameteri(this.depthTextureId, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTextureParameteri(this.depthTextureId, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTextureParameteri(this.depthTextureId, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTextureParameteri(this.depthTextureId, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
         glNamedFramebufferTexture(this.framebufferId, this.depthAttachmentType(), this.depthTextureId, 0);
         int status = glCheckNamedFramebufferStatus(this.framebufferId, GL_FRAMEBUFFER);
         if (status != GL_FRAMEBUFFER_COMPLETE) {

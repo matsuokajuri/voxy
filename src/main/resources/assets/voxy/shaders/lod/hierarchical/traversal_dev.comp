@@ -22,6 +22,18 @@ layout(binding = SCENE_UNIFORM_BINDING, std140) uniform SceneUniform {
 
 #import <voxy:lod/hierarchical/queue.glsl>
 #import <voxy:lod/hierarchical/node.glsl>
+
+#ifdef HOC_AUDIT_BINDING
+layout(binding = HOC_AUDIT_BINDING, std430) restrict buffer hocAuditBuffer {
+    uint hocAuditCounters[];
+};
+#define HOC_AUDIT_INC(index) atomicAdd(hocAuditCounters[index], 1u)
+#define HOC_AUDIT_MAX(index, value) atomicMax(hocAuditCounters[index], value)
+#else
+#define HOC_AUDIT_INC(index)
+#define HOC_AUDIT_MAX(index, value)
+#endif
+
 #import <voxy:lod/hierarchical/screenspace.glsl>
 
 //SIMPLE_QUEUE(uvec2, requestQueue, REQUEST_QUEUE_BINDING);
@@ -53,6 +65,7 @@ void addRequest(inout UnpackedNode node) {
         if (requestQueueIndex.x < requestQueueSize) {//Soft limit
             uint atomRes = atomicAdd(requestQueueIndex.x, 1);
             if (atomRes < MAX_REQUEST_QUEUE_SIZE) {//Hard limit
+                HOC_AUDIT_INC(7);
                 //Mark node as having a request submitted to prevent duplicate submissions
                 requestQueue[atomRes] = getRawPos(node);
                 markRequested(node);
@@ -66,6 +79,7 @@ void enqueueChildren(in UnpackedNode node) {
         return;
     }
 
+    HOC_AUDIT_INC(6);
     uint children = getChildCount(node);
     pushNodesInit(children);
     uint ptr = getChildPtr(node);
@@ -76,9 +90,11 @@ void enqueueChildren(in UnpackedNode node) {
 
 void enqueueSelfForRender(in UnpackedNode node) {
     //printf("render %d@[%d,%d,%d]", node.lodLevel, node.pos.x, node.pos.y, node.pos.z);
+    HOC_AUDIT_INC(8);
     if (renderQueueIndex < renderQueueMaxSize) {
         lastRenderFrame[getId(node)] = frameId;
         if (!isEmptyMesh(node)) {
+            HOC_AUDIT_INC(9);
             uint renderIndex = atomicAdd(renderQueueIndex, 1);
             if (renderIndex < renderQueueMaxSize) {
                 renderQueue[renderIndex] = getMesh(node);
@@ -91,6 +107,8 @@ void enqueueSelfForRender(in UnpackedNode node) {
                 atomicAdd(renderCounts[node.lodLevel], 1);
                 #endif
             }
+        } else {
+            HOC_AUDIT_INC(10);
         }
     }
 }
@@ -125,9 +143,23 @@ void traverse(in UnpackedNode node) {
     setupScreenspace(node);
     //debugDumpNode(node);
 
-    if (outsideFrustum() || isCulledByHiz()) {
+    bool frustumCulled = outsideFrustum();
+    bool hizCulled = false;
+    if (frustumCulled) {
+        HOC_AUDIT_INC(3);
+    } else {
+        #ifndef HOC_DISABLE_HIZ
+        hizCulled = isCulledByHiz();
+        #endif
+        if (hizCulled) {
+            HOC_AUDIT_INC(4);
+        }
+    }
+
+    if (frustumCulled || hizCulled) {
         //printf("culled");
     } else {
+        HOC_AUDIT_INC(5);
         //It is visible, TODO: maybe do a more detailed hiz test? (or make it so that )
 
         //Only decend if not a root node
@@ -154,9 +186,11 @@ void traverse(in UnpackedNode node) {
             }
         } else {
             if (hasMesh(node)) {
+                HOC_AUDIT_INC(11);
                 //printf("C");
                 enqueueSelfForRender(node);
             } else {
+                HOC_AUDIT_INC(12);
                 //printf("D");
                 //!! not ideal, we want to render this mesh but dont have it. If we havent sent a request
                 // then send a request for a mesh for this node.
@@ -172,15 +206,26 @@ void traverse(in UnpackedNode node) {
 }
 
 void main() {
+    HOC_AUDIT_INC(13);
+    uint auditQueueCount = nodeQueueMetadata[queueIdx].w;
+    HOC_AUDIT_MAX(15, auditQueueCount);
+    if (auditQueueCount <= gl_GlobalInvocationID.x) {
+        HOC_AUDIT_INC(14);
+    }
+
     uint nodeId = getCurrentNode();
     if (nodeId != SENTINAL_OUT_OF_BOUNDS) {
+        HOC_AUDIT_INC(0);
         //Fetch + decode node
         UnpackedNode node;
         unpackNode(node, nodeId);
 
         //Check if were inside the render distastance before traversince
         if (isWithinRenderDistance(node)) {
+            HOC_AUDIT_INC(1);
             traverse(node);
+        } else {
+            HOC_AUDIT_INC(2);
         }
 
         /*

@@ -168,6 +168,9 @@ bool isCulledByHiz() {
     ssize = max(ivec2(1), ssize>>ml);
     ivec2 mxbb = min(ivec2(ceil(_maxBB.xy*ssize)),ssize-1);
     ivec2 mnbb = ivec2(floor(_minBB.xy*ssize));
+    if (any(greaterThan(mnbb, mxbb))) {
+        return false;
+    }
 
     float pointSample = (NEAR*3.0f)-1.0f;
     //float pointSample2 = 0.0f;
@@ -186,7 +189,29 @@ bool isCulledByHiz() {
     #else
     depthTestAgainst = _minBB.z;
     #endif
-    return DEPTH_SCALAR_COMPARE_EQUAL(pointSample,depthTestAgainst);
+    bool culled = DEPTH_SCALAR_COMPARE_EQUAL(pointSample,depthTestAgainst);
+
+    #ifdef HOC_AUDIT_BINDING
+    if (culled && atomicCompSwap(hocAuditCounters[16], 0u, 1u) == 0u) {
+        hocAuditCounters[17] = getId(node22);
+        hocAuditCounters[18] = node22.lodLevel;
+        hocAuditCounters[19] = floatBitsToUint(_minBB.z);
+        hocAuditCounters[20] = floatBitsToUint(_maxBB.z);
+        hocAuditCounters[21] = floatBitsToUint(pointSample);
+        hocAuditCounters[22] = floatBitsToUint(depthTestAgainst);
+        hocAuditCounters[23] = uint(ml);
+        hocAuditCounters[24] = floatBitsToUint(_minBB.x);
+        hocAuditCounters[25] = floatBitsToUint(_minBB.y);
+        hocAuditCounters[26] = floatBitsToUint(_maxBB.x);
+        hocAuditCounters[27] = floatBitsToUint(_maxBB.y);
+        hocAuditCounters[28] = uint(mnbb.x);
+        hocAuditCounters[29] = uint(mnbb.y);
+        hocAuditCounters[30] = uint(mxbb.x);
+        hocAuditCounters[31] = uint(mxbb.y);
+    }
+    #endif
+
+    return culled;
 }
 
 

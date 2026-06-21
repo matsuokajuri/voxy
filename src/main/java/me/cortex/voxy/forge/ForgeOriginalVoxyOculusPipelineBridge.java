@@ -1,11 +1,46 @@
 package me.cortex.voxy.forge;
 
+import me.cortex.voxy.config.ForgeVoxyConfig;
 import net.irisshaders.iris.Iris;
 import net.irisshaders.iris.pipeline.IrisRenderingPipeline;
 import net.irisshaders.iris.pipeline.WorldRenderingPipeline;
 
-final class ForgeOriginalVoxyOculusPipelineBridge {
+public final class ForgeOriginalVoxyOculusPipelineBridge {
+    private static final boolean FORMAL_SHADERPACK_PATCH_OUTPUT_READY = true;
+    private static volatile ForgeOriginalVoxyOculusShaderPatch currentShaderpackPatch;
+
     private ForgeOriginalVoxyOculusPipelineBridge() {
+    }
+
+    public static boolean shaderpackActive() {
+        try {
+            return Iris.getCurrentPack().isPresent();
+        } catch (RuntimeException ignored) {
+            return false;
+        }
+    }
+
+    public static boolean shadowActive() {
+        return ForgeOculusShadowStateBridge.shadowActive();
+    }
+
+    public static boolean shouldExposeVoxyShaderpackPatch() {
+        /*
+         * Original Voxy exposes VOXY/patch data when rendering is enabled because
+         * its MDIC terrain path can already write the requested shaderpack buffers.
+         * The Forge port still audits zero MDIC output on the normal Oculus path,
+         * so exposing only the render-target table is the safe original-equivalent
+         * subset until the formal draw output owner is ready.
+         */
+        return ForgeVoxyConfig.isEnabledEarlySafe() && FORMAL_SHADERPACK_PATCH_OUTPUT_READY;
+    }
+
+    public static void captureCurrentShaderpackPatch(ForgeOriginalVoxyOculusShaderPatch patch) {
+        currentShaderpackPatch = patch;
+    }
+
+    public static ForgeOriginalVoxyOculusShaderPatch currentShaderpackPatch() {
+        return currentShaderpackPatch;
     }
 
     static Result captureCurrentData() {

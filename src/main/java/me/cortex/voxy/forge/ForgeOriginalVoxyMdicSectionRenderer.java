@@ -11,15 +11,23 @@ import org.lwjgl.system.MemoryUtil;
 import static org.lwjgl.opengl.ARBIndirectParameters.GL_PARAMETER_BUFFER_ARB;
 import static org.lwjgl.opengl.ARBIndirectParameters.glMultiDrawElementsIndirectCountARB;
 import static org.lwjgl.opengl.GL11C.GL_BLEND;
+import static org.lwjgl.opengl.GL11C.GL_BACK;
 import static org.lwjgl.opengl.GL11C.GL_COLOR_WRITEMASK;
 import static org.lwjgl.opengl.GL11C.GL_CULL_FACE;
+import static org.lwjgl.opengl.GL11C.GL_CULL_FACE_MODE;
+import static org.lwjgl.opengl.GL11C.GL_CCW;
 import static org.lwjgl.opengl.GL11C.GL_DEPTH_FUNC;
 import static org.lwjgl.opengl.GL11C.GL_DEPTH_WRITEMASK;
 import static org.lwjgl.opengl.GL11C.GL_DEPTH_TEST;
+import static org.lwjgl.opengl.GL11C.GL_EQUAL;
 import static org.lwjgl.opengl.GL11C.GL_FALSE;
 import static org.lwjgl.opengl.GL11C.GL_FRONT_AND_BACK;
+import static org.lwjgl.opengl.GL11C.GL_FRONT_FACE;
+import static org.lwjgl.opengl.GL11C.GL_KEEP;
 import static org.lwjgl.opengl.GL11C.GL_LINE;
 import static org.lwjgl.opengl.GL11C.GL_NO_ERROR;
+import static org.lwjgl.opengl.GL11C.GL_SCISSOR_TEST;
+import static org.lwjgl.opengl.GL11C.GL_STENCIL_TEST;
 import static org.lwjgl.opengl.GL11C.GL_TRIANGLES;
 import static org.lwjgl.opengl.GL11C.GL_TRUE;
 import static org.lwjgl.opengl.GL11C.GL_UNSIGNED_BYTE;
@@ -29,12 +37,17 @@ import static org.lwjgl.opengl.GL11C.glDepthFunc;
 import static org.lwjgl.opengl.GL11C.glDepthMask;
 import static org.lwjgl.opengl.GL11C.glDisable;
 import static org.lwjgl.opengl.GL11C.glEnable;
+import static org.lwjgl.opengl.GL11C.glCullFace;
+import static org.lwjgl.opengl.GL11C.glFrontFace;
 import static org.lwjgl.opengl.GL11C.glGetBoolean;
 import static org.lwjgl.opengl.GL11C.glGetBooleanv;
 import static org.lwjgl.opengl.GL11C.glGetError;
 import static org.lwjgl.opengl.GL11C.glGetInteger;
 import static org.lwjgl.opengl.GL11C.glIsEnabled;
 import static org.lwjgl.opengl.GL11C.glPolygonMode;
+import static org.lwjgl.opengl.GL11C.glStencilFunc;
+import static org.lwjgl.opengl.GL11C.glStencilMask;
+import static org.lwjgl.opengl.GL11C.glStencilOp;
 import static org.lwjgl.opengl.GL11C.GL_FILL;
 import static org.lwjgl.opengl.GL15C.GL_ELEMENT_ARRAY_BUFFER;
 import static org.lwjgl.opengl.GL15C.glBindBuffer;
@@ -79,6 +92,7 @@ import static org.lwjgl.opengl.GL43C.glDispatchCompute;
 import static org.lwjgl.opengl.GL43C.glDispatchComputeIndirect;
 import static org.lwjgl.opengl.GL45C.glBindTextureUnit;
 import static org.lwjgl.opengl.GL45C.nglGetNamedBufferSubData;
+import static org.lwjgl.opengl.GL30C.GL_RASTERIZER_DISCARD;
 import static org.lwjgl.opengl.NVRepresentativeFragmentTest.GL_REPRESENTATIVE_FRAGMENT_TEST_NV;
 
 final class ForgeOriginalVoxyMdicSectionRenderer {
@@ -93,6 +107,9 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
     private static final int DRAW_COUNT_WORDS = 11;
     private static final int CULL_COMMAND_OFFSET_BYTES = 6 * Integer.BYTES;
     private static final int CULL_COMMAND_COUNT = 6 * 2 * 3;
+    private static final int READBACK_SAMPLE_SECTIONS = 4;
+    private static final int SECTION_META_WORDS = 8;
+    private static final int MAX_AUTO_READBACK_AUDITS = 8;
     private static final int DRAW_BUFFER_BINDING = 1;
     private static final int DRAW_COUNT_BUFFER_BINDING = 2;
     private static final int SECTION_METADATA_BUFFER_BINDING = 3;
@@ -237,6 +254,7 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
                     "TRANSLUCENT_DISTANCE_BUFFER_BINDING", TRANSLUCENT_BUILD_DISTANCE_BUFFER_BINDING,
                     "TRANSLUCENT_OFFSET", TRANSLUCENT_OFFSET);
             this.translucentGenProgramId = compileComputeProgram(translucentGenSource, "buildtranslucents.comp");
+            this.readbackAuditRequested = false;
             this.lifecycleState = "READY";
             this.lastLifecycleEvent = "build-on-render-thread";
             this.lastFailureReason = "none";
@@ -252,6 +270,13 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
     void requestReadbackAudit() {
         this.readbackAuditRequested = true;
         this.lastLifecycleEvent = "readback-audit-requested";
+    }
+
+    boolean hasAuditedDrawOutput() {
+        return this.readbackAuditReady
+                && (this.opaqueDrawCount > 0
+                || this.temporalOpaqueDrawCount > 0
+                || this.translucentDrawCount > 0);
     }
 
     boolean ready() {
@@ -376,9 +401,9 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
             this.rasterCullVisibility(viewport, geometryData, properties);
             this.dispatchCmdgen(viewport, geometryData);
             this.dispatchTranslucentCommandGeneration(viewport, geometryData);
-            if (this.readbackAuditRequested) {
+            if (this.readbackAuditRequested && this.readbackAuditRuns < MAX_AUTO_READBACK_AUDITS) {
                 this.readbackAuditRequested = false;
-                this.readbackAudit(viewport);
+                this.readbackAudit(viewport, geometryData);
             }
             this.inputParityReady = true;
             this.lifecycleState = "RUNNING_ORIGINAL_MDIC_CMDGEN";
@@ -538,6 +563,7 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
         this.bindRenderingBuffers(viewport, geometryData, modelStore);
         glMemoryBarrier(GL_COMMAND_BARRIER_BIT | GL_SHADER_STORAGE_BARRIER_BIT);
         glProvokingVertex(GL_FIRST_VERTEX_CONVENTION);
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
         glMultiDrawElementsIndirectCountARB(
                 GL_TRIANGLES,
                 GL_UNSIGNED_SHORT,
@@ -545,6 +571,7 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
                 drawCountOffset,
                 maxDrawCount,
                 0);
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
         glEnable(GL_CULL_FACE);
         glBindVertexArray(0);
         glBindSampler(0, 0);
@@ -592,8 +619,12 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
             ForgeOriginalVoxyRenderProperties properties) {
         boolean depthWasEnabled = glIsEnabled(GL_DEPTH_TEST);
         boolean cullWasEnabled = glIsEnabled(GL_CULL_FACE);
+        boolean scissorWasEnabled = glIsEnabled(GL_SCISSOR_TEST);
+        boolean rasterizerDiscardWasEnabled = glIsEnabled(GL_RASTERIZER_DISCARD);
         boolean depthMask = glGetBoolean(GL_DEPTH_WRITEMASK);
         int depthFunc = glGetInteger(GL_DEPTH_FUNC);
+        int cullFaceMode = glGetInteger(GL_CULL_FACE_MODE);
+        int frontFace = glGetInteger(GL_FRONT_FACE);
         boolean representativeFragmentEnabled = false;
         try (MemoryStack stack = MemoryStack.stackPush()) {
             var colorMask = stack.malloc(4);
@@ -604,6 +635,9 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
             boolean colorMaskA = colorMask.get(3) != 0;
             try {
                 glUseProgram(this.cullProgramId);
+                if (this.pipeline != null && this.pipeline.hasTAA()) {
+                    this.pipeline.bindUniforms();
+                }
                 glBindVertexArray(this.vertexArrayId);
                 glBindBufferBase(GL_UNIFORM_BUFFER, 0, this.uniformBuffer.id);
                 glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, geometryData.metadataBufferId());
@@ -615,8 +649,16 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
                     glEnable(GL_REPRESENTATIVE_FRAGMENT_TEST_NV);
                     representativeFragmentEnabled = true;
                 }
+                glDisable(GL_SCISSOR_TEST);
+                glDisable(GL_RASTERIZER_DISCARD);
+                glCullFace(GL_BACK);
+                glFrontFace(GL_CCW);
                 glEnable(GL_DEPTH_TEST);
                 glDepthFunc(properties.closerEqualDepthCompare());
+                glEnable(GL_STENCIL_TEST);
+                glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
+                glStencilFunc(GL_EQUAL, 1, 0xFF);
+                glStencilMask(0xFF);
                 glColorMask(false, false, false, false);
                 glDepthMask(false);
                 glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT | GL_COMMAND_BARRIER_BIT);
@@ -637,6 +679,18 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
             } else {
                 glDisable(GL_CULL_FACE);
             }
+            if (scissorWasEnabled) {
+                glEnable(GL_SCISSOR_TEST);
+            } else {
+                glDisable(GL_SCISSOR_TEST);
+            }
+            if (rasterizerDiscardWasEnabled) {
+                glEnable(GL_RASTERIZER_DISCARD);
+            } else {
+                glDisable(GL_RASTERIZER_DISCARD);
+            }
+            glCullFace(cullFaceMode);
+            glFrontFace(frontFace);
             glDepthFunc(depthFunc);
             glBindVertexArray(0);
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
@@ -714,7 +768,8 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
         this.translucentGenDispatchCount++;
     }
 
-    private void readbackAudit(ForgeOriginalVoxyMdicViewport viewport) {
+    private void readbackAudit(ForgeOriginalVoxyMdicViewport viewport, ForgeOriginalVoxyBasicSectionGeometryData geometryData) {
+        int geometrySections = geometryData.sectionCount();
         this.readbackAuditRuns++;
         try (MemoryStack stack = MemoryStack.stackPush()) {
             long drawCountPtr = stack.nmalloc(DRAW_COUNT_WORDS * Integer.BYTES);
@@ -736,6 +791,49 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
             long renderListPtr = stack.nmalloc(Integer.BYTES);
             nglGetNamedBufferSubData(viewport.indirectLookupBuffer.id, 0L, Integer.BYTES, renderListPtr);
             this.renderListSectionCount = MemoryUtil.memGetInt(renderListPtr);
+
+            if (this.renderListSectionCount > 0) {
+                int sampleCount = Math.min(this.renderListSectionCount, READBACK_SAMPLE_SECTIONS);
+                long sampleIdsPtr = stack.nmalloc(sampleCount * Integer.BYTES);
+                nglGetNamedBufferSubData(
+                        viewport.indirectLookupBuffer.id,
+                        Integer.BYTES,
+                        sampleCount * (long) Integer.BYTES,
+                        sampleIdsPtr);
+                StringBuilder sample = new StringBuilder();
+                for (int i = 0; i < sampleCount; i++) {
+                    int sectionId = MemoryUtil.memGetInt(sampleIdsPtr + i * 4L);
+                    long visibilityPtr = stack.nmalloc(Integer.BYTES);
+                    nglGetNamedBufferSubData(
+                            viewport.visibilityBuffer.id,
+                            sectionId * (long) Integer.BYTES,
+                            Integer.BYTES,
+                            visibilityPtr);
+                    int visibility = MemoryUtil.memGetInt(visibilityPtr);
+                    long metaPtr = stack.nmalloc(SECTION_META_WORDS * Integer.BYTES);
+                    nglGetNamedBufferSubData(
+                            geometryData.metadataBufferId(),
+                            sectionId * SECTION_META_WORDS * (long) Integer.BYTES,
+                            SECTION_META_WORDS * (long) Integer.BYTES,
+                            metaPtr);
+                    int metaA0 = MemoryUtil.memGetInt(metaPtr);
+                    int metaA1 = MemoryUtil.memGetInt(metaPtr + 4L);
+                    int metaA3 = MemoryUtil.memGetInt(metaPtr + 12L);
+                    int countX = MemoryUtil.memGetInt(metaPtr + 16L);
+                    int countY = MemoryUtil.memGetInt(metaPtr + 20L);
+                    int countZ = MemoryUtil.memGetInt(metaPtr + 24L);
+                    int countW = MemoryUtil.memGetInt(metaPtr + 28L);
+                    if (i != 0) {
+                        sample.append("; ");
+                    }
+                    sample.append("id=").append(sectionId)
+                            .append(" vis=").append(Integer.toUnsignedString(visibility))
+                            .append(" frame=").append(viewport.frameId & 0x7fffffff)
+                            .append(" metaA=[").append(metaA0).append(',').append(metaA1).append(',').append(metaA3).append(']')
+                            .append(" counts=[").append(countX).append(',').append(countY).append(',').append(countZ).append(',').append(countW).append(']');
+                }
+                VoxyForge.LOGGER.info("Original MDIC sample audit: {}", sample);
+            }
 
             if (this.opaqueDrawCount > 0) {
                 long commandPtr = stack.nmalloc(DRAW_COMMAND_BYTES);
@@ -789,6 +887,28 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
         } else {
             this.lastFailureReason = "none";
         }
+        VoxyForge.LOGGER.info(
+                "Original MDIC readback audit: ready={} geometrySections={} renderList={} dispatch={}x{}x{} opaque={} translucent={} temporal={} cullCommand=count:{} instances:{} firstIndex:{} firstDraw=count:{} instances:{} firstIndex:{} baseVertex:{} baseInstance:{} positionScratch=[{},{}] glError={}",
+                this.readbackAuditReady,
+                geometrySections,
+                this.renderListSectionCount,
+                this.cmdGenDispatchX,
+                this.cmdGenDispatchY,
+                this.cmdGenDispatchZ,
+                this.opaqueDrawCount,
+                this.translucentDrawCount,
+                this.temporalOpaqueDrawCount,
+                this.cullCommandCount,
+                this.cullCommandInstanceCount,
+                this.cullCommandFirstIndex,
+                this.firstCommandCount,
+                this.firstCommandInstanceCount,
+                this.firstCommandFirstIndex,
+                this.firstCommandBaseVertex,
+                this.firstCommandBaseInstance,
+                this.firstPositionScratchWord0,
+                this.firstPositionScratchWord1,
+                this.lastGlError);
         this.lastLifecycleEvent = "readback-audit";
         this.lastGlError = glGetError();
     }

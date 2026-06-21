@@ -263,6 +263,16 @@ public class ActiveSectionTracker implements WorldSection.ReleaseTracker {
                 return;
             }
 
+            if (section.getRefCount() == 0 && this.engine != null && section.shouldSave()) {
+                lock.unlockWrite(stamp);
+                this.tryUnload(section, hints);
+                return;
+            }
+            if (section.getRefCount() == 0 && section.inSaveQueue) {
+                lock.unlockWrite(stamp);
+                return;
+            }
+
             if (section.getRefCount() == 0 && section.trySetFreed()) {
                 var cached = cache.remove(section.key);
                 var obj = cached.obj;

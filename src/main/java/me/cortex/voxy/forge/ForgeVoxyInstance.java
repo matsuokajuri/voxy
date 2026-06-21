@@ -1,8 +1,12 @@
 package me.cortex.voxy.forge;
 
+import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
+import me.cortex.voxy.common.config.section.SectionStorage;
 import me.cortex.voxy.common.config.section.SectionSerializationStorage;
 import me.cortex.voxy.common.config.storage.inmemory.MemoryStorageBackend;
 import me.cortex.voxy.common.world.WorldEngine;
+import me.cortex.voxy.common.world.WorldSection;
+import me.cortex.voxy.common.world.service.SectionSavingService;
 import me.cortex.voxy.common.world.service.VoxelIngestService;
 import me.cortex.voxy.config.ForgeVoxyConfig;
 import net.minecraft.client.Minecraft;
@@ -11,14 +15,21 @@ import net.minecraftforge.client.event.RegisterClientCommandsEvent;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.TickEvent;
 
+import java.nio.ByteBuffer;
+import java.util.ArrayDeque;
+import java.util.Iterator;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.LongConsumer;
 
 public final class ForgeVoxyInstance {
     public static final ForgeVoxyInstance INSTANCE = new ForgeVoxyInstance();
 
     private WorldEngine activeWorld;
+    private final ArrayDeque<WorldEngine> closingWorlds = new ArrayDeque<>();
     private final ForgeOriginalVoxyModelPipeline originalVoxyModelPipeline = new ForgeOriginalVoxyModelPipeline(this);
+    private final SectionSavingService originalVoxySectionSavingService =
+            new SectionSavingService(this.originalVoxyModelPipeline.getServiceManager());
     private final ForgeChunkIngestManager chunkIngestManager = new ForgeChunkIngestManager(this);
     private final ForgeCpuMeshBuildManager cpuMeshBuildManager = new ForgeCpuMeshBuildManager(this);
     private final ForgeCpuMeshCache cpuMeshCache = new ForgeCpuMeshCache();
@@ -119,6 +130,18 @@ public final class ForgeVoxyInstance {
 
     public ForgeOriginalVoxyModelPipeline getOriginalVoxyModelPipeline() {
         return this.originalVoxyModelPipeline;
+    }
+
+    public void resetOriginalVoxyChunkBoundTracker() {
+        this.originalVoxyModelPipeline.resetChunkBoundTracker();
+    }
+
+    public boolean isOriginalVoxyChunkBoundTrackerActive() {
+        return this.originalVoxyModelPipeline.isChunkBoundTrackerActive();
+    }
+
+    public void trackOriginalVoxyChunkBoundSection(boolean wasBuilt, int x, int y, int z) {
+        this.originalVoxyModelPipeline.trackChunkBoundSection(wasBuilt, x, y, z);
     }
 
     public void markOriginalVoxyOculusWorldRenderingSettingsReload() {
@@ -352,8 +375,10 @@ public final class ForgeVoxyInstance {
 
         var minecraft = Minecraft.getInstance();
         if (minecraft.level == null || minecraft.player == null) {
+            this.drainClosingWorlds();
             return;
         }
+        this.drainClosingWorlds();
         if (ForgeVoxyConfig.ENABLED.get()) {
             this.ensureOriginalVoxyActiveWorldForCurrentWorld();
         }
@@ -474,20 +499,14 @@ public final class ForgeVoxyInstance {
     }
 
     private void createActiveWorldSkeleton() {
-        var storage = new SectionSerializationStorage(new MemoryStorageBackend());
         this.storageWriteCount.set(0);
+        var storage = new CountingSectionStorage(
+                new SectionSerializationStorage(new MemoryStorageBackend()),
+                this.storageWriteCount);
+        this.originalVoxyModelPipeline.ensureOriginalServiceThreads();
         this.activeWorld = new WorldEngine(storage, this);
-        this.activeWorld.setSaveCallback((engine, section, nonBlocking, sectionAlreadyAcquired) -> {
-            try {
-                section.setNotDirty();
-                engine.storage.saveSection(section);
-                this.storageWriteCount.incrementAndGet();
-            } catch (Exception e) {
-                VoxyForge.LOGGER.error("Failed to synchronously save Voxy skeleton section", e);
-            }
-            return false;
-        });
-        VoxyForge.LOGGER.info("Created empty Voxy WorldEngine skeleton for client world.");
+        this.activeWorld.setSaveCallback(this.originalVoxySectionSavingService::enqueueSave);
+        VoxyForge.LOGGER.info("Created Voxy WorldEngine using original section saving service.");
     }
 
     private void onClientLogout(ClientPlayerNetworkEvent.LoggingOut event) {
@@ -548,15 +567,73 @@ public final class ForgeVoxyInstance {
     }
 
     public void closeActiveWorld() {
-        if (this.activeWorld == null) {
-            return;
+        if (this.activeWorld != null) {
+            this.closingWorlds.add(this.activeWorld);
+            this.activeWorld = null;
+        }
+        this.drainClosingWorlds();
+    }
+
+    private void drainClosingWorlds() {
+        Iterator<WorldEngine> iterator = this.closingWorlds.iterator();
+        while (iterator.hasNext()) {
+            WorldEngine world = iterator.next();
+            if (!world.isLive()) {
+                iterator.remove();
+                continue;
+            }
+            if (!world.isWorldIdle()) {
+                continue;
+            }
+            world.free();
+            VoxyForge.LOGGER.info("Closed Voxy WorldEngine skeleton.");
+            iterator.remove();
+        }
+    }
+
+    private static final class CountingSectionStorage extends SectionStorage {
+        private final SectionStorage delegate;
+        private final AtomicInteger storageWriteCount;
+
+        private CountingSectionStorage(SectionStorage delegate, AtomicInteger storageWriteCount) {
+            this.delegate = delegate;
+            this.storageWriteCount = storageWriteCount;
         }
 
-        try {
-            this.activeWorld.free();
-            VoxyForge.LOGGER.info("Closed Voxy WorldEngine skeleton.");
-        } finally {
-            this.activeWorld = null;
+        @Override
+        public int loadSection(WorldSection into) {
+            return this.delegate.loadSection(into);
+        }
+
+        @Override
+        public void saveSection(WorldSection section) {
+            this.delegate.saveSection(section);
+            this.storageWriteCount.incrementAndGet();
+        }
+
+        @Override
+        public void putIdMapping(int id, ByteBuffer data) {
+            this.delegate.putIdMapping(id, data);
+        }
+
+        @Override
+        public Int2ObjectOpenHashMap<byte[]> getIdMappingsData() {
+            return this.delegate.getIdMappingsData();
+        }
+
+        @Override
+        public void flush() {
+            this.delegate.flush();
+        }
+
+        @Override
+        public void close() {
+            this.delegate.close();
+        }
+
+        @Override
+        public void iteratePositions(int level, LongConsumer callback) {
+            this.delegate.iteratePositions(level, callback);
         }
     }
 }

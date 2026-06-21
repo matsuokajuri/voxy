@@ -18,7 +18,9 @@ import org.lwjgl.opengl.ARBDrawBuffersBlend;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.function.IntSupplier;
 
@@ -66,32 +68,14 @@ public final class ForgeOriginalVoxyOculusShaderPatch {
             ShaderPack ipack,
             AbsolutePackPath directory,
             Function<AbsolutePackPath, String> sourceProvider) {
-        String voxyPatchData = sourceProvider.apply(directory.resolve("voxy.json"));
-        if (voxyPatchData == null || voxyPatchData.isBlank()) {
+        String voxyPatchData = readPatchDataSource(directory, sourceProvider);
+        if (voxyPatchData == null) {
             return null;
         }
 
-        voxyPatchData = voxyPatchData.replace("\\", "\\\\");
         PatchGson patchData;
         try {
-            StringBuilder builder = new StringBuilder(voxyPatchData.length());
-            for (String line : voxyPatchData.split("\n")) {
-                int idx = line.indexOf("//");
-                if (idx != -1) {
-                    builder.append(line, 0, idx);
-                    builder.append(line.substring(idx).replace("\"", "\\\""));
-                } else {
-                    builder.append(line);
-                }
-                builder.append('\n');
-            }
-            voxyPatchData = builder.toString();
-            voxyPatchData = voxyPatchData.replaceAll("void _cfi_ignoreMarker\\(\\) \\{\\}", "");
-
-            patchData = GSON.fromJson(voxyPatchData, PatchGson.class);
-            if (patchData == null) {
-                throw new IllegalStateException("Voxy shaderpack patch json returned null");
-            }
+            patchData = parsePatchData(voxyPatchData);
 
             String opaque = sourceProvider.apply(directory.resolve("voxy_opaque.glsl"));
             if (opaque != null) {
@@ -124,6 +108,79 @@ public final class ForgeOriginalVoxyOculusShaderPatch {
                             + VERSION + " got " + patchData.version);
         }
         return new ForgeOriginalVoxyOculusShaderPatch(patchData, ipack);
+    }
+
+    public static Set<Integer> collectRequestedRenderTargets(
+            AbsolutePackPath directory,
+            Function<AbsolutePackPath, String> sourceProvider) {
+        String voxyPatchData = readPatchDataSource(directory, sourceProvider);
+        if (voxyPatchData == null) {
+            return Set.of();
+        }
+        PatchGson patchData = parsePatchData(voxyPatchData);
+        Set<Integer> targets = new LinkedHashSet<>();
+        collectDrawBufferTargets(patchData.opaqueDrawBuffers, targets);
+        collectDrawBufferTargets(patchData.translucentDrawBuffers, targets);
+        if (patchData.samplers != null) {
+            for (String sampler : patchData.samplers.keySet()) {
+                int target = parseColortexTarget(sampler);
+                if (target >= 0) {
+                    targets.add(target);
+                }
+            }
+        }
+        return targets;
+    }
+
+    private static String readPatchDataSource(
+            AbsolutePackPath directory,
+            Function<AbsolutePackPath, String> sourceProvider) {
+        String voxyPatchData = sourceProvider.apply(directory.resolve("voxy.json"));
+        return voxyPatchData == null || voxyPatchData.isBlank() ? null : voxyPatchData;
+    }
+
+    private static PatchGson parsePatchData(String voxyPatchData) {
+        voxyPatchData = voxyPatchData.replace("\\", "\\\\");
+        StringBuilder builder = new StringBuilder(voxyPatchData.length());
+        for (String line : voxyPatchData.split("\n")) {
+            int idx = line.indexOf("//");
+            if (idx != -1) {
+                builder.append(line, 0, idx);
+                builder.append(line.substring(idx).replace("\"", "\\\""));
+            } else {
+                builder.append(line);
+            }
+            builder.append('\n');
+        }
+        voxyPatchData = builder.toString();
+        voxyPatchData = voxyPatchData.replaceAll("void _cfi_ignoreMarker\\(\\) \\{\\}", "");
+
+        PatchGson patchData = GSON.fromJson(voxyPatchData, PatchGson.class);
+        if (patchData == null) {
+            throw new IllegalStateException("Voxy shaderpack patch json returned null");
+        }
+        return patchData;
+    }
+
+    private static void collectDrawBufferTargets(int[] drawBuffers, Set<Integer> targets) {
+        if (drawBuffers == null) {
+            return;
+        }
+        for (int target : drawBuffers) {
+            targets.add(target);
+        }
+    }
+
+    private static int parseColortexTarget(String sampler) {
+        String prefix = "colortex";
+        if (sampler == null || !sampler.startsWith(prefix)) {
+            return -1;
+        }
+        try {
+            return Integer.parseInt(sampler.substring(prefix.length()));
+        } catch (NumberFormatException ignored) {
+            return -1;
+        }
     }
 
     public ShaderPack pack() {
