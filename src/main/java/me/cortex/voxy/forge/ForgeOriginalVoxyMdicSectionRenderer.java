@@ -1,5 +1,6 @@
 package me.cortex.voxy.forge;
 
+import me.cortex.voxy.common.world.WorldEngine;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.Direction;
 import org.joml.Matrix4f;
@@ -13,6 +14,7 @@ import static org.lwjgl.opengl.GL11C.GL_BLEND;
 import static org.lwjgl.opengl.GL11C.GL_COLOR_WRITEMASK;
 import static org.lwjgl.opengl.GL11C.GL_CULL_FACE;
 import static org.lwjgl.opengl.GL11C.GL_DEPTH_FUNC;
+import static org.lwjgl.opengl.GL11C.GL_DEPTH_WRITEMASK;
 import static org.lwjgl.opengl.GL11C.GL_DEPTH_TEST;
 import static org.lwjgl.opengl.GL11C.GL_FALSE;
 import static org.lwjgl.opengl.GL11C.GL_FRONT_AND_BACK;
@@ -27,6 +29,7 @@ import static org.lwjgl.opengl.GL11C.glDepthFunc;
 import static org.lwjgl.opengl.GL11C.glDepthMask;
 import static org.lwjgl.opengl.GL11C.glDisable;
 import static org.lwjgl.opengl.GL11C.glEnable;
+import static org.lwjgl.opengl.GL11C.glGetBoolean;
 import static org.lwjgl.opengl.GL11C.glGetBooleanv;
 import static org.lwjgl.opengl.GL11C.glGetError;
 import static org.lwjgl.opengl.GL11C.glGetInteger;
@@ -97,12 +100,14 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
     private static final int INDIRECT_SECTION_LOOKUP_BINDING = 5;
     private static final int POSITION_SCRATCH_BINDING = 6;
     private static final int TRANSLUCENT_DISTANCE_BUFFER_BINDING = 7;
+    private static final int STATISTICS_BUFFER_BINDING = 8;
     private static final int TRANSLUCENT_INDIRECT_SECTION_LOOKUP_BINDING = 4;
     private static final int TRANSLUCENT_BUILD_DISTANCE_BUFFER_BINDING = 5;
 
     private final ForgeOriginalVoxyGlBuffer uniformBuffer = new ForgeOriginalVoxyGlBuffer(1024).zero();
     private final ForgeOriginalVoxyGlBuffer distanceCountBuffer =
             new ForgeOriginalVoxyGlBuffer(TRANSLUCENT_WRITE_BASE * 4L + TRANSLUCENT_DRAW_COUNT * 4L).zero();
+    private final ForgeOriginalVoxyGlBuffer statisticsBuffer = new ForgeOriginalVoxyGlBuffer(1024).zero();
     private final ForgeOriginalVoxySharedIndexBuffer sharedIndexBuffer = new ForgeOriginalVoxySharedIndexBuffer();
     private final int vertexArrayId = glGenVertexArrays();
     private int terrainProgramId;
@@ -189,6 +194,12 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
                     "TRANSLUCENT_WRITE_BASE", TRANSLUCENT_WRITE_BASE,
                     "TEMPORAL_OFFSET", TEMPORAL_OFFSET,
                     "TRANSLUCENT_DISTANCE_BUFFER_BINDING", TRANSLUCENT_DISTANCE_BUFFER_BINDING);
+            if (ForgeOriginalVoxyRenderStatistics.enabled) {
+                cmdgenSource = withDefines(
+                        cmdgenSource,
+                        "HAS_STATISTICS", 1,
+                        "STATISTICS_BUFFER_BINDING", STATISTICS_BUFFER_BINDING);
+            }
             this.cmdgenProgramId = compileComputeProgram(cmdgenSource, "cmdgen.comp");
             String prefixSumSource = withDefines(
                     ForgeOriginalVoxyShaderSource.parse(supportsSubgroupPrefixSum()
@@ -208,6 +219,7 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
             this.lastGlError = GL_NO_ERROR;
             return "none";
         } catch (RuntimeException e) {
+            this.freePrograms();
             this.recordFailure("original-mdic-cmdgen-build-" + e.getClass().getSimpleName() + ":" + e.getMessage());
             return this.lastFailureReason;
         }
@@ -228,6 +240,7 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
                 && this.translucentGenProgramId != 0
                 && this.uniformBuffer.id != 0
                 && this.distanceCountBuffer.id != 0
+                && this.statisticsBuffer.id != 0
                 && this.sharedIndexBuffer.ready()
                 && this.vertexArrayId != 0;
     }
@@ -428,6 +441,7 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
         this.freePrograms();
         this.uniformBuffer.free();
         this.distanceCountBuffer.free();
+        this.statisticsBuffer.free();
         this.sharedIndexBuffer.free();
         if (this.vertexArrayId != 0) {
             glDeleteVertexArrays(this.vertexArrayId);
@@ -545,36 +559,42 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
             ForgeOriginalVoxyRenderProperties properties) {
         boolean depthWasEnabled = glIsEnabled(GL_DEPTH_TEST);
         boolean cullWasEnabled = glIsEnabled(GL_CULL_FACE);
+        boolean depthMask = glGetBoolean(GL_DEPTH_WRITEMASK);
         int depthFunc = glGetInteger(GL_DEPTH_FUNC);
+        boolean representativeFragmentEnabled = false;
         try (MemoryStack stack = MemoryStack.stackPush()) {
             var colorMask = stack.malloc(4);
             glGetBooleanv(GL_COLOR_WRITEMASK, colorMask);
-            glUseProgram(this.cullProgramId);
-            glBindVertexArray(this.vertexArrayId);
-            glBindBufferBase(GL_UNIFORM_BUFFER, 0, this.uniformBuffer.id);
-            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, geometryData.metadataBufferId());
-            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, viewport.visibilityBuffer.id);
-            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, viewport.indirectLookupBuffer.id);
-            glBindBuffer(GL_DRAW_INDIRECT_BUFFER, viewport.drawCountCallBuffer.id);
-            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, this.sharedIndexBuffer.id());
-            if (representativeFragmentTestSupported()) {
-                glEnable(GL_REPRESENTATIVE_FRAGMENT_TEST_NV);
+            boolean colorMaskR = colorMask.get(0) != 0;
+            boolean colorMaskG = colorMask.get(1) != 0;
+            boolean colorMaskB = colorMask.get(2) != 0;
+            boolean colorMaskA = colorMask.get(3) != 0;
+            try {
+                glUseProgram(this.cullProgramId);
+                glBindVertexArray(this.vertexArrayId);
+                glBindBufferBase(GL_UNIFORM_BUFFER, 0, this.uniformBuffer.id);
+                glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, geometryData.metadataBufferId());
+                glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, viewport.visibilityBuffer.id);
+                glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, viewport.indirectLookupBuffer.id);
+                glBindBuffer(GL_DRAW_INDIRECT_BUFFER, viewport.drawCountCallBuffer.id);
+                glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, this.sharedIndexBuffer.id());
+                if (representativeFragmentTestSupported()) {
+                    glEnable(GL_REPRESENTATIVE_FRAGMENT_TEST_NV);
+                    representativeFragmentEnabled = true;
+                }
+                glEnable(GL_DEPTH_TEST);
+                glDepthFunc(properties.closerEqualDepthCompare());
+                glColorMask(false, false, false, false);
+                glDepthMask(false);
+                glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT | GL_COMMAND_BARRIER_BIT);
+                glDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_BYTE, CULL_COMMAND_OFFSET_BYTES);
+            } finally {
+                if (representativeFragmentEnabled) {
+                    glDisable(GL_REPRESENTATIVE_FRAGMENT_TEST_NV);
+                }
+                glDepthMask(depthMask);
+                glColorMask(colorMaskR, colorMaskG, colorMaskB, colorMaskA);
             }
-            glEnable(GL_DEPTH_TEST);
-            glDepthFunc(properties.closerEqualDepthCompare());
-            glColorMask(false, false, false, false);
-            glDepthMask(false);
-            glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT | GL_COMMAND_BARRIER_BIT);
-            glDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_BYTE, CULL_COMMAND_OFFSET_BYTES);
-            if (representativeFragmentTestSupported()) {
-                glDisable(GL_REPRESENTATIVE_FRAGMENT_TEST_NV);
-            }
-            glDepthMask(true);
-            glColorMask(
-                    colorMask.get(0) != 0,
-                    colorMask.get(1) != 0,
-                    colorMask.get(2) != 0,
-                    colorMask.get(3) != 0);
         } finally {
             if (!depthWasEnabled) {
                 glDisable(GL_DEPTH_TEST);
@@ -606,11 +626,29 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, INDIRECT_SECTION_LOOKUP_BINDING, viewport.indirectLookupBuffer.id);
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, POSITION_SCRATCH_BINDING, viewport.positionScratchBuffer.id);
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, TRANSLUCENT_DISTANCE_BUFFER_BINDING, this.distanceCountBuffer.id);
+        if (ForgeOriginalVoxyRenderStatistics.enabled) {
+            this.statisticsBuffer.zero();
+            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, STATISTICS_BUFFER_BINDING, this.statisticsBuffer.id);
+        }
 
         glBindBuffer(GL_DISPATCH_INDIRECT_BUFFER, viewport.drawCountCallBuffer.id);
         glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
         glDispatchComputeIndirect(0L);
         glMemoryBarrier(GL_COMMAND_BARRIER_BIT | GL_SHADER_STORAGE_BARRIER_BIT);
+        if (ForgeOriginalVoxyRenderStatistics.enabled) {
+            ForgeOriginalVoxyDownloadStream.instance().download(
+                    this.statisticsBuffer.id,
+                    this.statisticsBuffer.size(),
+                    down -> {
+                        final int layers = WorldEngine.MAX_LOD_LAYER + 1;
+                        for (int i = 0; i < layers; i++) {
+                            ForgeOriginalVoxyRenderStatistics.visibleSections[i] = MemoryUtil.memGetInt(down.address + i * 4L);
+                        }
+                        for (int i = 0; i < layers; i++) {
+                            ForgeOriginalVoxyRenderStatistics.quadCount[i] = MemoryUtil.memGetInt(down.address + layers * 4L + i * 4L);
+                        }
+                    });
+        }
         glBindBuffer(GL_DISPATCH_INDIRECT_BUFFER, 0);
         glUseProgram(0);
         this.barrierAuditReady = true;

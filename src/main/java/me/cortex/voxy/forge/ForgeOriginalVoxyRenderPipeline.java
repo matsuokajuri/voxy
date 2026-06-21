@@ -120,13 +120,16 @@ final class ForgeOriginalVoxyRenderPipeline {
         glBindTextureUnit(3, this.normalTargets.colourSsaoTextureId());
         glEnable(GL_BLEND);
         glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-        transformBlitDepth(
-                this.finalBlit,
-                this.depthStage.depthTextureId(),
-                sourceFramebuffer,
-                viewport,
-                new Matrix4f(viewport.vanillaProjection).mul(viewport.modelView));
-        glDisable(GL_BLEND);
+        try {
+            transformBlitDepth(
+                    this.finalBlit,
+                    this.depthStage.depthTextureId(),
+                    sourceFramebuffer,
+                    viewport,
+                    new Matrix4f(viewport.vanillaProjection).mul(viewport.modelView));
+        } finally {
+            glDisable(GL_BLEND);
+        }
         this.finishCount++;
         this.lastLifecycleEvent = "finish";
         this.lastFailureReason = "none";

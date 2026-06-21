@@ -613,6 +613,12 @@ semantics.
 | `ModelStore` ownership and audit | fixed: the original model pipeline now owns `ForgeOriginalVoxyModelStore` instead of historical `ForgeFormalModelStore`; uploads use original-style `MemoryBuffer` results, persistent `UploadStream`, DSA texture mip uploads, block-atlas-derived sampler max LOD, and post-commit readback audit for modelData/modelColour/atlas mip-chain regions | `originalModelStoreUsed=true` is reported when the owner is built; `originalModelStoreReadbackAuditReady=true` is reported after a committed upload readback matches the CPU payload |
 | Iris/Oculus custom block-state ids | original Voxy receives `WorldRenderingSettings.INSTANCE.getBlockStateIds()` from the Iris pipeline; Forge cannot compile against Oculus source directly in this source set | Forge reads the same Oculus singleton through `ForgeOculusWorldRenderingSettingsBridge`; null maps write custom id zero, matching original behavior |
 
+### VI/VII audit corrections
+
+- `MDICSectionRenderer` statistics path: original Voxy conditionally compiles `cmdgen.comp` with `HAS_STATISTICS`, owns a 1024-byte statistics buffer, binds it at binding 8, and downloads visible-section / quad-count data through `DownloadStream`. Forge now mirrors that shape with `ForgeOriginalVoxyRenderStatistics`, `statisticsBuffer`, and `ForgeOriginalVoxyDownloadStream`. The statistics owner defaults disabled, matching original debug-only behavior.
+- VI build failure cleanup: if shader/program construction fails during `ForgeOriginalVoxyMdicSectionRenderer.buildOnRenderThread(...)`, already-created GL programs are now freed before recording failure.
+- VI/VII GL state cleanup: the Forge hook adapter now restores cull-raster color mask, depth mask, representative-fragment state, and final-blit blend state on exceptional exits. This is limited to adapter-owned state protection while `VoxyRenderSystem` is not yet the outer lifecycle owner.
+
 ## Do not do
 
 Do not use:
