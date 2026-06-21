@@ -100,6 +100,7 @@ final class ForgeVoxyParityCommands {
     }
 
     private static String format(ForgeOriginalVoxyModelPipelineStats status) {
+        ForgeOriginalVoxyVisibleRendererStats visible = status.visibleRenderer();
         return "Voxy original model pipeline parity: "
                 + "stage=" + status.stage()
                 + " ownerReady=" + status.ownerReady()
@@ -114,6 +115,24 @@ final class ForgeVoxyParityCommands {
                 + " safeSetRouteUsed=" + status.safeSetRouteUsed()
                 + " previewRouteUsed=" + status.previewRouteUsed()
                 + " sampleSetRouteUsed=" + status.sampleSetRouteUsed()
+                + " originalVisibleRendererStage=" + visible.originalVisibleRendererStage()
+                + " originalVisibleRendererOwnerReady=" + visible.originalVisibleRendererOwnerReady()
+                + " originalVoxyRunPipelineOrderUsed=" + visible.originalVoxyRunPipelineOrderUsed()
+                + " originalVisibleMdicDrawSubmissionUsed=" + visible.originalVisibleMdicDrawSubmissionUsed()
+                + " originalPostFrameDynamicWorkUsed=" + visible.originalPostFrameDynamicWorkUsed()
+                + " originalMdicOpaqueDrawSubmitted=" + visible.originalMdicOpaqueDrawSubmitted()
+                + " originalMdicTemporalDrawSubmitted=" + visible.originalMdicTemporalDrawSubmitted()
+                + " originalMdicTranslucentDrawSubmitted=" + visible.originalMdicTranslucentDrawSubmitted()
+                + " originalPipelineFinishCalled=" + visible.originalPipelineFinishCalled()
+                + " originalVisibleRendererStateRestoreUsed=" + visible.originalVisibleRendererStateRestoreUsed()
+                + " originalVisibleFrameRunCount=" + visible.originalVisibleFrameRunCount()
+                + " originalVisibleFrameSkippedCount=" + visible.originalVisibleFrameSkippedCount()
+                + " originalVisibleFrameFailureCount=" + visible.originalVisibleFrameFailureCount()
+                + " originalVisibleFrameDrawSubmissionCount=" + visible.originalVisibleFrameDrawSubmissionCount()
+                + " originalVisibleFrameLastFramebuffer=" + visible.originalVisibleFrameLastFramebuffer()
+                + " originalVisibleFrameLastViewportWidth=" + visible.originalVisibleFrameLastViewportWidth()
+                + " originalVisibleFrameLastViewportHeight=" + visible.originalVisibleFrameLastViewportHeight()
+                + " originalVisibleRendererUsesPreviewRoute=" + visible.originalVisibleRendererUsesPreviewRoute()
                 + " startRequested=" + status.startRequested()
                 + " startQueuedOnRenderThread=" + status.startQueuedOnRenderThread()
                 + " startRequests=" + status.startRequests()

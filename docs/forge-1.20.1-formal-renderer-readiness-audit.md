@@ -118,8 +118,7 @@ Some bottom-path corrections are now aligned in direction:
   HOC produced a non-empty render-list, `cmdgen.comp` produced opaque draw
   commands, position-scratch readback matched the original layout, and the
   owner now includes the original prefix-sum / `buildtranslucents.comp`
-  translucent command-build tail. The active Forge hook still does not submit
-  those draw commands to the main renderer.
+  translucent command-build tail.
 - Roman VII has started the original terrain-shader contract chain:
   `ForgeOriginalVoxyRenderPipeline` owns the `AbstractRenderPipeline`-shaped
   shader hook boundary, and `ForgeOriginalVoxyMdicSectionRenderer` now builds
@@ -130,6 +129,12 @@ Some bottom-path corrections are now aligned in direction:
   framebuffer attachment handoff, SSAO compute owner, original `SSAO.AUTO`
   capability selection, `postOpaquePreTranslucent(...)`, and final
   `transformBlitDepth(...)` handoff.
+- Roman VIII now submits visible MDIC terrain draw through the original-shaped
+  owner sequence from the Embeddium cutout hook: `preSetup`, `setup`,
+  `renderOpaque`, HOC inner work, production `buildDrawCalls`,
+  `renderTemporal`, `postOpaquePreTranslucent`, `renderTranslucent`, `finish`,
+  post-frame dynamic work, and original-style GL state restore. This is progress
+  toward original frame order parity, not full renderer readiness.
 - `RenderGenerationService` now uses original `ServiceManager` / `Service` /
   `UnifiedServiceThreadPool` execution, including service-thread config and
   Embeddium builder-thread semaphore sharing.
@@ -142,10 +147,9 @@ These are progress toward parity, not renderer readiness.
 P0 gaps:
 
 ```text
-MDICSectionRenderer draw submission not yet active in the original pipeline
-original render-pipeline / VoxyRenderSystem lifecycle incomplete
+VoxyRenderSystem lifecycle / shutdown / reload ownership incomplete
 original terrain shader environmental fog and shaderpack patch semantics incomplete
-VoxyRenderSystem lifecycle parity incomplete
+movement and runtime update performance parity still belongs to IX
 ```
 
 P1 gaps:

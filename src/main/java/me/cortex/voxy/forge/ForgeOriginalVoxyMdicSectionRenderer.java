@@ -287,6 +287,9 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
         this.temporalRenderCallCount++;
     }
 
+    void postOpaquePreperation(ForgeOriginalVoxyMdicViewport viewport) {
+    }
+
     void renderTranslucent(
             ForgeOriginalVoxyMdicViewport viewport,
             ForgeOriginalVoxyBasicSectionGeometryData geometryData,

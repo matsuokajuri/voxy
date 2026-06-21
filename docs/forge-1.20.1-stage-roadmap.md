@@ -316,10 +316,10 @@ V.1_ORIGINAL_MDIC_VIEWPORT_CMDGEN_INPUT_PARITY
 Visible preview work must not be treated as progress toward production parity
 unless it is being removed or replaced by the original Voxy mechanism.
 
-## VIII preparation
+## VIII implementation
 
-`VIII_ORIGINAL_VISIBLE_RENDERER_OWNER_CHAIN` should be implemented as one
-coherent Roman round with these internal steps:
+`VIII_ORIGINAL_VISIBLE_RENDERER_OWNER_CHAIN` is implemented as one coherent
+Roman round with these internal steps:
 
 ```text
 VIII.1_ORIGINAL_VOXY_RENDER_SYSTEM_FRAME_ORDER
@@ -329,8 +329,8 @@ VIII.1_ORIGINAL_VOXY_RENDER_SYSTEM_FRAME_ORDER
 
 The source baseline is original `VoxyRenderSystem.renderOpaque(...)` plus
 `AbstractRenderPipeline.runPipeline(...)`, not the historical visible preview
-owner. The Forge route must use the existing Embeddium cutout hook only as the
-platform entry point, then run the original-shaped owner sequence:
+owner. The Forge route uses the existing Embeddium cutout hook only as the
+platform entry point, then runs the original-shaped owner sequence:
 
 ```text
 select/update Viewport
@@ -350,10 +350,13 @@ select/update Viewport
  -> restore framebuffer, viewport, samplers, buffers, and Embeddium/Minecraft state
 ```
 
-VIII may enable a controlled visible LoD draw through the original
+VIII enables controlled visible LoD draw submission through the original-shaped
 `ForgeOriginalVoxyMdicSectionRenderer` and `ForgeOriginalVoxyRenderPipeline`
-owners. It must not reintroduce K-era preview draw paths, synthetic geometry,
-debug command buffers, or manual-refresh substitutes.
+owners. It does not reintroduce K-era preview draw paths, synthetic geometry,
+debug command buffers, or manual-refresh substitutes. The new status evidence
+is grouped under `ForgeOriginalVoxyVisibleRendererStats`, including
+`originalVoxyRunPipelineOrderUsed`, `originalVisibleMdicDrawSubmissionUsed`,
+`originalPipelineFinishCalled`, and `originalVisibleRendererStateRestoreUsed`.
 
 VIII must still report these as false until the full original runtime lifecycle
 and compatibility semantics are complete:

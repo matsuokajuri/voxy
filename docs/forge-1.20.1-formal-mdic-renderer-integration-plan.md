@@ -16,6 +16,8 @@ V_ORIGINAL_MDIC_COMMAND_GENERATION_CHAIN
  -> V.2_ORIGINAL_CMDGEN_COMP_OUTPUT_PARITY
  -> V.3_ORIGINAL_CMDGEN_READBACK_AND_BARRIER_AUDIT
  -> VI_ORIGINAL_MDIC_SECTION_RENDERER_CHAIN
+ -> VII_ORIGINAL_TERRAIN_SHADER_CONTRACT_CHAIN
+ -> VIII_ORIGINAL_VISIBLE_RENDERER_OWNER_CHAIN
 ```
 
 ## Forge frontend prerequisites
@@ -118,7 +120,7 @@ implementation scaffolding for formal MDIC.
    shader program ownership, prefix-sum and `buildtranslucents.comp` command
    build tail, shared index, lightmap binding adapter, and original-shaped
    `renderOpaque` / `renderTemporal` / `renderTranslucent` binding methods.
-   The active hook still does not submit MDIC terrain draw calls.
+   Implemented.
 10. Roman VII: bind the original `ModelStore` and terrain shader contract
     exactly as original Voxy expects. The first VII pass is now implemented at
     the owner/source-contract level: `ForgeOriginalVoxyRenderPipeline` mirrors
@@ -131,10 +133,13 @@ implementation scaffolding for formal MDIC.
     framebuffer attachment handoff, the SSAO compute owner, original
     `SSAO.AUTO` capability selection, `postOpaquePreTranslucent(...)`, and the
     final `transformBlitDepth(...)` handoff. Environmental fog uniforms and
-    Oculus-backed shaderpack patch semantics are still not ported, so the
-    active hook still does not submit MDIC terrain draw calls.
-11. Roman VIII: only then enable controlled renderer draw behind the original
-    renderer owner.
+    Oculus-backed shaderpack patch semantics are still not ported.
+11. Roman VIII: enable controlled renderer draw behind the original-shaped
+    owner sequence. Implemented in the Embeddium cutout hook adapter by calling
+    `preSetup`, `setup`, `renderOpaque`, HOC inner work, production
+    `buildDrawCalls`, `renderTemporal`, `postOpaquePreTranslucent`,
+    `renderTranslucent`, `finish`, post-frame dynamic work, and GL state
+    restore. This is not yet full `VoxyRenderSystem` lifecycle parity.
 
 ## Non-negotiable blockers
 
@@ -143,7 +148,7 @@ Do not enable formal MDIC draw while any of these are true:
 ```text
 original render-pipeline final handoff / VoxyRenderSystem lifecycle not yet ported
 original terrain shader environmental fog / shaderpack-patch semantics incomplete
-MDICSectionRenderer draw methods not called by active pipeline
+runtime movement/update performance parity not yet validated
 ```
 
 ## Validation

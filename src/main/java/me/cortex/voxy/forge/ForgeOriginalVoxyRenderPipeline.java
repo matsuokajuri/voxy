@@ -68,6 +68,11 @@ final class ForgeOriginalVoxyRenderPipeline {
         return this.properties;
     }
 
+    void preSetup(ForgeOriginalVoxyMdicViewport viewport) {
+        this.lastLifecycleEvent = "pre-setup";
+        this.lastFailureReason = "none";
+    }
+
     int setup(ForgeOriginalVoxyMdicViewport viewport, int sourceFramebuffer, int srcWidth, int srcHeight) {
         int depthTexture = this.depthStage.setupDepthTexture(sourceFramebuffer, srcWidth, srcHeight, viewport.width, viewport.height);
         this.normalTargets.resize(this.depthStage, viewport.width, viewport.height);

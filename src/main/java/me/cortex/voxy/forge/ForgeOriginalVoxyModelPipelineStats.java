@@ -24,6 +24,7 @@ record ForgeOriginalVoxyModelPipelineStats(
         boolean sampleSetRouteUsed,
         boolean formalRendererReady,
         boolean actualRendererDrawEnabled,
+        ForgeOriginalVoxyVisibleRendererStats visibleRenderer,
         boolean stale,
         boolean requiresRebuild,
         int mapperBlockStateCount,

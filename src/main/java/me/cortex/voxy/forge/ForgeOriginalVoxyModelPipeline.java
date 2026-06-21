@@ -19,15 +19,30 @@ import java.util.Optional;
 import java.util.concurrent.locks.LockSupport;
 
 import static org.lwjgl.opengl.GL11C.GL_VIEWPORT;
+import static org.lwjgl.opengl.GL11C.GL_DEPTH_TEST;
+import static org.lwjgl.opengl.GL11C.GL_STENCIL_TEST;
+import static org.lwjgl.opengl.GL11C.glDisable;
+import static org.lwjgl.opengl.GL11C.glEnable;
 import static org.lwjgl.opengl.GL11C.glGetInteger;
 import static org.lwjgl.opengl.GL11C.glGetIntegerv;
+import static org.lwjgl.opengl.GL11C.glViewport;
+import static org.lwjgl.opengl.GL20C.glUseProgram;
+import static org.lwjgl.opengl.GL30C.GL_FRAMEBUFFER;
 import static org.lwjgl.opengl.GL30C.GL_DRAW_FRAMEBUFFER_BINDING;
+import static org.lwjgl.opengl.GL30C.glBindBufferBase;
+import static org.lwjgl.opengl.GL30C.glBindFramebuffer;
+import static org.lwjgl.opengl.GL30C.glBindVertexArray;
+import static org.lwjgl.opengl.GL30C.glGetIntegeri;
+import static org.lwjgl.opengl.GL33C.glBindSampler;
 import static org.lwjgl.opengl.GL42C.GL_FRAMEBUFFER_BARRIER_BIT;
 import static org.lwjgl.opengl.GL42C.GL_PIXEL_BUFFER_BARRIER_BIT;
 import static org.lwjgl.opengl.GL42C.glMemoryBarrier;
+import static org.lwjgl.opengl.GL43C.GL_SHADER_STORAGE_BUFFER;
+import static org.lwjgl.opengl.GL43C.GL_SHADER_STORAGE_BUFFER_BINDING;
+import static org.lwjgl.opengl.GL45C.glBindTextureUnit;
 
 public final class ForgeOriginalVoxyModelPipeline {
-    static final String STAGE = "L0_L4_ORIGINAL_VOXY_MODEL_PIPELINE_PARITY";
+    static final String STAGE = "ORIGINAL_VOXY_MODEL_PIPELINE_PARITY";
     private static final int MAX_MODEL_UPLOADS_PER_TICK = 2;
     private static final int ORIGINAL_GEOMETRY_MAX_SECTION_COUNT = 1 << 20;
 
@@ -77,6 +92,21 @@ public final class ForgeOriginalVoxyModelPipeline {
     private String lastLifecycleEvent = "initialized";
     private String lastFailureReason = "none";
     private boolean renderEmbeddiumCutoutActive;
+    private long originalVisibleFrameRunCount;
+    private long originalVisibleFrameSkippedCount;
+    private long originalVisibleFrameFailureCount;
+    private long originalVisibleFrameDrawSubmissionCount;
+    private boolean originalVoxyRunPipelineOrderUsed;
+    private boolean originalVisibleMdicDrawSubmissionUsed;
+    private boolean originalPostFrameDynamicWorkUsed;
+    private boolean originalMdicOpaqueDrawSubmitted;
+    private boolean originalMdicTemporalDrawSubmitted;
+    private boolean originalMdicTranslucentDrawSubmitted;
+    private boolean originalPipelineFinishCalled;
+    private boolean originalVisibleRendererStateRestoreUsed;
+    private int originalVisibleFrameLastFramebuffer;
+    private int originalVisibleFrameLastViewportWidth;
+    private int originalVisibleFrameLastViewportHeight;
 
     ForgeOriginalVoxyModelPipeline(ForgeVoxyInstance instance) {
         this.instance = instance;
@@ -200,6 +230,16 @@ public final class ForgeOriginalVoxyModelPipeline {
         boolean hocOwnerReady = hoc.originalHierarchicalOcclusionTraverserReady();
         boolean hizTraversalExecutableReady = this.viewportSelector != null && this.viewportSelector.selectedHizTraversalReady();
         boolean hocExecutableReady = hocOwnerReady && mdicViewportOwnerReady && hizTraversalExecutableReady;
+        boolean visibleRendererOwnerReady = this.ownerReady
+                && !this.stale
+                && mdicViewportOwnerReady
+                && hocExecutableReady
+                && this.modelStore != null
+                && this.basicSectionGeometryData != null
+                && this.renderPipeline != null
+                && this.renderPipeline.ready()
+                && this.mdicSectionRenderer != null
+                && this.mdicSectionRenderer.ready();
         return new ForgeOriginalVoxyModelPipelineStats(
                 STAGE,
                 this.startRequests,
@@ -224,6 +264,25 @@ public final class ForgeOriginalVoxyModelPipeline {
                 false,
                 false,
                 false,
+                new ForgeOriginalVoxyVisibleRendererStats(
+                        "VIII_ORIGINAL_VISIBLE_RENDERER_CHAIN",
+                        visibleRendererOwnerReady,
+                        this.originalVoxyRunPipelineOrderUsed && this.ownerReady && !this.stale,
+                        this.originalVisibleMdicDrawSubmissionUsed && this.ownerReady && !this.stale,
+                        this.originalPostFrameDynamicWorkUsed && this.ownerReady && !this.stale,
+                        this.originalMdicOpaqueDrawSubmitted && this.ownerReady && !this.stale,
+                        this.originalMdicTemporalDrawSubmitted && this.ownerReady && !this.stale,
+                        this.originalMdicTranslucentDrawSubmitted && this.ownerReady && !this.stale,
+                        this.originalPipelineFinishCalled && this.ownerReady && !this.stale,
+                        this.originalVisibleRendererStateRestoreUsed && this.ownerReady && !this.stale,
+                        this.originalVisibleFrameRunCount,
+                        this.originalVisibleFrameSkippedCount,
+                        this.originalVisibleFrameFailureCount,
+                        this.originalVisibleFrameDrawSubmissionCount,
+                        this.originalVisibleFrameLastFramebuffer,
+                        this.originalVisibleFrameLastViewportWidth,
+                        this.originalVisibleFrameLastViewportHeight,
+                        false),
                 this.stale,
                 this.requiresRebuild,
                 mapperBlockStateCount,
@@ -614,6 +673,15 @@ public final class ForgeOriginalVoxyModelPipeline {
         }
         this.renderEmbeddiumCutoutActive = true;
         boolean commandGenerationCompleted = false;
+        boolean visibleFrameCompleted = false;
+        boolean opaqueSubmitted = false;
+        boolean temporalSubmitted = false;
+        boolean translucentSubmitted = false;
+        boolean finishCalled = false;
+        boolean capturedRenderState = false;
+        int oldFramebuffer = 0;
+        int[] oldViewportDims = null;
+        int[] oldBufferBindings = null;
         try {
             ForgeOriginalVoxyMdicViewport viewport;
             ForgeOriginalVoxyHierarchicalOcclusionTraverser traversal;
@@ -623,8 +691,10 @@ public final class ForgeOriginalVoxyModelPipeline {
             ForgeOriginalVoxyAsyncNodeGeometrySync geometrySync;
             ForgeOriginalVoxyNodeCleaner cleaner;
             ForgeOriginalVoxyViewportSelector selector;
+            ForgeOriginalVoxyModelStore modelStore;
             synchronized (this) {
                 if (!this.ownerReady || this.stale) {
+                    this.originalVisibleFrameSkippedCount++;
                     return;
                 }
                 selector = this.viewportSelector;
@@ -634,24 +704,34 @@ public final class ForgeOriginalVoxyModelPipeline {
                 geometryData = this.basicSectionGeometryData;
                 geometrySync = this.asyncNodeGeometrySync;
                 cleaner = this.nodeCleaner;
+                modelStore = this.modelStore;
             }
             viewport = selector == null ? null : selector.getViewport();
             Minecraft minecraft = Minecraft.getInstance();
             if (minecraft.level == null || minecraft.player == null || matrices == null || camera == null) {
+                synchronized (this) {
+                    this.originalVisibleFrameSkippedCount++;
+                }
                 return;
             }
-            if (viewport == null || traversal == null || sectionRenderer == null || renderPipeline == null || geometryData == null || !traversal.ready()) {
+            if (viewport == null || traversal == null || sectionRenderer == null || renderPipeline == null || geometryData == null
+                    || modelStore == null || !traversal.ready()) {
+                synchronized (this) {
+                    this.originalVisibleFrameSkippedCount++;
+                }
                 return;
             }
-            int drawFramebuffer = glGetInteger(GL_DRAW_FRAMEBUFFER_BINDING);
-            if (drawFramebuffer == 0) {
+            oldBufferBindings = captureShaderStorageBufferBindings();
+            oldFramebuffer = glGetInteger(GL_DRAW_FRAMEBUFFER_BINDING);
+            if (oldFramebuffer == 0) {
                 this.recordNonFatalFailure("original-hoc-embeddium-cutout-default-framebuffer");
                 return;
             }
-            int[] viewportDims = new int[4];
-            glGetIntegerv(GL_VIEWPORT, viewportDims);
-            int width = viewportDims[2];
-            int height = viewportDims[3];
+            oldViewportDims = new int[4];
+            glGetIntegerv(GL_VIEWPORT, oldViewportDims);
+            capturedRenderState = true;
+            int width = oldViewportDims[2];
+            int height = oldViewportDims[3];
             if (width <= 0 || height <= 0) {
                 this.recordNonFatalFailure("original-hoc-embeddium-cutout-invalid-viewport");
                 return;
@@ -674,26 +754,77 @@ public final class ForgeOriginalVoxyModelPipeline {
                     .setScreenSize(width, height)
                     .update();
             viewport.frameId++;
-            int depthTexture = renderPipeline.setup(viewport, drawFramebuffer, width, height);
+            glViewport(0, 0, viewport.width, viewport.height);
+            renderPipeline.preSetup(viewport);
+            int depthTexture = renderPipeline.setup(viewport, oldFramebuffer, width, height);
+            boolean hasGeometry = geometryData.sectionCount() > 0;
+            sectionRenderer.renderOpaque(viewport, geometryData, modelStore, renderPipeline);
+            opaqueSubmitted = hasGeometry;
             viewport.buildHizFromSourceDepth(depthTexture, width, height);
             this.runOriginalInnerPrimaryWorkBeforeTraversal(geometrySync, cleaner);
             traversal.doTraversal(viewport);
             traversal.runReadbackAuditIfRequested(viewport);
             sectionRenderer.buildDrawCalls(viewport, geometryData, ForgeOriginalVoxyRenderProperties.getRenderProperties());
             commandGenerationCompleted = true;
+            sectionRenderer.renderTemporal(viewport, geometryData, modelStore, renderPipeline);
+            temporalSubmitted = hasGeometry;
+            sectionRenderer.postOpaquePreperation(viewport);
+            renderPipeline.postOpaquePreTranslucent(viewport, oldFramebuffer);
+            sectionRenderer.renderTranslucent(viewport, geometryData, modelStore, renderPipeline);
+            translucentSubmitted = hasGeometry && renderPipeline.translucentDrawTargetReady();
+            renderPipeline.finish(viewport, oldFramebuffer, width, height);
+            finishCalled = true;
+            visibleFrameCompleted = true;
             synchronized (this) {
                 if (this.ownerReady && !this.stale) {
-                    this.lifecycleState = "RUNNING_ORIGINAL_HOC_TRAVERSAL_AND_MDIC_CMDGEN";
-                    this.lastLifecycleEvent = "embeddium-cutout-hiz-hoc-traversal-and-mdic-cmdgen";
+                    this.originalVisibleFrameRunCount++;
+                    if (opaqueSubmitted || temporalSubmitted || translucentSubmitted) {
+                        this.originalVisibleFrameDrawSubmissionCount++;
+                    }
+                    this.originalVoxyRunPipelineOrderUsed = true;
+                    this.originalVisibleMdicDrawSubmissionUsed = opaqueSubmitted || temporalSubmitted || translucentSubmitted;
+                    this.originalMdicOpaqueDrawSubmitted = opaqueSubmitted;
+                    this.originalMdicTemporalDrawSubmitted = temporalSubmitted;
+                    this.originalMdicTranslucentDrawSubmitted = translucentSubmitted;
+                    this.originalPipelineFinishCalled = finishCalled;
+                    this.originalVisibleFrameLastFramebuffer = oldFramebuffer;
+                    this.originalVisibleFrameLastViewportWidth = width;
+                    this.originalVisibleFrameLastViewportHeight = height;
+                    this.lifecycleState = "RUNNING_ORIGINAL_VISIBLE_MDIC_FRAME";
+                    this.lastLifecycleEvent = "embeddium-cutout-original-run-pipeline-order";
                     this.lastFailureReason = "none";
                 }
             }
         } catch (RuntimeException e) {
+            synchronized (this) {
+                this.originalVisibleFrameFailureCount++;
+            }
             this.recordNonFatalFailure("original-hoc-embeddium-cutout-" + e.getClass().getSimpleName() + ":" + e.getMessage());
         } finally {
             try {
-                if (commandGenerationCompleted) {
-                    this.runOriginalPostDynamicWorkAfterCommandGeneration(camera.x, camera.z);
+                try {
+                    if (commandGenerationCompleted) {
+                        try {
+                            this.runOriginalPostDynamicWorkAfterCommandGeneration(camera.x, camera.z);
+                            synchronized (this) {
+                                this.originalPostFrameDynamicWorkUsed = true;
+                            }
+                        } catch (RuntimeException e) {
+                            this.recordNonFatalFailure("original-post-dynamic-" + e.getClass().getSimpleName() + ":" + e.getMessage());
+                        }
+                    }
+                    if (!visibleFrameCompleted && !commandGenerationCompleted) {
+                        synchronized (this) {
+                            this.originalVisibleFrameSkippedCount++;
+                        }
+                    }
+                } finally {
+                    if (capturedRenderState) {
+                        restoreOriginalVoxyRenderState(oldFramebuffer, oldViewportDims, oldBufferBindings);
+                        synchronized (this) {
+                            this.originalVisibleRendererStateRestoreUsed = true;
+                        }
+                    }
                 }
             } finally {
                 this.renderEmbeddiumCutoutActive = false;
@@ -896,6 +1027,10 @@ public final class ForgeOriginalVoxyModelPipeline {
     }
 
     private void processFactoryUploads(ForgeOriginalVoxyModelFactory factory) {
+        this.processFactoryUploads(factory, MAX_MODEL_UPLOADS_PER_TICK);
+    }
+
+    private void processFactoryUploads(ForgeOriginalVoxyModelFactory factory, int maxUploads) {
         if (!RenderSystem.isOnRenderThread()) {
             this.recordFailure("model-factory-upload-not-render-thread");
             return;
@@ -904,7 +1039,7 @@ public final class ForgeOriginalVoxyModelPipeline {
         if (minecraft.level == null || minecraft.player == null) {
             return;
         }
-        int processed = factory.processUploadsOnRenderThread(MAX_MODEL_UPLOADS_PER_TICK);
+        int processed = factory.processUploadsOnRenderThread(maxUploads);
         if (processed > 0) {
             synchronized (this) {
                 this.uploadTickRuns++;
@@ -935,6 +1070,41 @@ public final class ForgeOriginalVoxyModelPipeline {
             ForgeOriginalVoxyUploadStream.instance().tick();
         }
         this.processRenderDistanceTrackerOnRenderThread(cameraX, cameraZ);
+        ForgeOriginalVoxyModelFactory factory;
+        synchronized (this) {
+            factory = this.ownerReady && !this.stale ? this.modelFactory : null;
+        }
+        if (factory != null) {
+            this.processFactoryUploads(factory, Integer.MAX_VALUE);
+        }
+    }
+
+    private static int[] captureShaderStorageBufferBindings() {
+        int[] oldBufferBindings = new int[10];
+        for (int i = 0; i < oldBufferBindings.length; i++) {
+            oldBufferBindings[i] = glGetIntegeri(GL_SHADER_STORAGE_BUFFER_BINDING, i);
+        }
+        return oldBufferBindings;
+    }
+
+    private static void restoreOriginalVoxyRenderState(int oldFramebuffer, int[] oldViewportDims, int[] oldBufferBindings) {
+        glBindFramebuffer(GL_FRAMEBUFFER, oldFramebuffer);
+        if (oldViewportDims != null && oldViewportDims.length >= 4) {
+            glViewport(oldViewportDims[0], oldViewportDims[1], oldViewportDims[2], oldViewportDims[3]);
+        }
+        glUseProgram(0);
+        glEnable(GL_DEPTH_TEST);
+        glDisable(GL_STENCIL_TEST);
+        glBindVertexArray(0);
+        for (int i = 0; i < 12; i++) {
+            glBindTextureUnit(i, 0);
+            glBindSampler(i, 0);
+        }
+        if (oldBufferBindings != null) {
+            for (int i = 0; i < oldBufferBindings.length; i++) {
+                glBindBufferBase(GL_SHADER_STORAGE_BUFFER, i, oldBufferBindings[i]);
+            }
+        }
     }
 
     private void processRenderDistanceTrackerOnRenderThread(double cameraX, double cameraZ) {
