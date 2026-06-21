@@ -116,12 +116,19 @@ The original model upload path also has committed readback proof and the
 Oculus custom block-state id hook.
 
 Remaining lower-renderer blockers are full integrated `VoxyRenderSystem`
-lifecycle, runtime validation of the Oculus shaderpack patch/data/binding
-bridge under real packs, and movement/update performance parity. Production
+lifecycle, formal Voxy consumption of the Oculus shaderpack patch/data/binding
+bridge, the shaderpack far-LoD white/bright visual artifact seen in the
+2026-06-21 runtime pass, and movement/update performance parity. Production
 `cmdgen.comp`, `MDICSectionRenderer`, the original terrain shader hook
 boundary, render-thread geometry ownership, node ownership, RenderDistanceTracker,
 HiZ, HOC traversal, ViewportSelector, MDICViewport, and the Oculus shaderpack
 patch bridge now belong to the active Roman-route parity path.
+
+The 2026-06-21 real-pack check with `ComplementaryUnbound_r5.8.1.zip` is
+active-route evidence only: it validates Oculus shaderpack loading and world
+entry after Forge-safe constructor hook fixes. It does not flip formal renderer
+readiness, because the full `VoxyRenderSystem` owner still has to start and
+consume that shaderpack pipeline data.
 
 ## Replacement direction
 

@@ -491,6 +491,14 @@ public final class ForgeVoxyConfig {
     private ForgeVoxyConfig() {
     }
 
+    public static boolean isEnabledEarlySafe() {
+        try {
+            return ENABLED.get();
+        } catch (IllegalStateException ignored) {
+            return true;
+        }
+    }
+
     private static int defaultServiceThreads() {
         return Math.max((int) (ForgeOriginalVoxyCpuLayout.getCoreCount() / 1.5D), 1);
     }

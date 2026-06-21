@@ -20,19 +20,14 @@ public class ForgeOriginalVoxyOculusProgramSetMixin implements ForgeOriginalVoxy
     @Unique
     private ForgeOriginalVoxyOculusShaderPatch voxy$patchData;
 
-    @Inject(
-            method = "<init>",
-            at = @At(
-                    value = "INVOKE",
-                    target = "Lnet/irisshaders/iris/shaderpack/programs/ProgramSet;locateDirectives()V",
-                    shift = At.Shift.BEFORE))
+    @Inject(method = "<init>", at = @At("TAIL"))
     private void voxy$injectPatchMaker(
             AbsolutePackPath directory,
             Function<AbsolutePackPath, String> sourceProvider,
             ShaderProperties shaderProperties,
             ShaderPack pack,
             CallbackInfo ci) {
-        if (ForgeVoxyConfig.ENABLED.get()) {
+        if (ForgeVoxyConfig.isEnabledEarlySafe()) {
             this.voxy$patchData = ForgeOriginalVoxyOculusShaderPatch.makePatch(pack, directory, sourceProvider);
         }
     }
