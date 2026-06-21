@@ -246,10 +246,15 @@ contract work. The next VII pass now also ports the original
 `NormalRenderPipeline` target ownership shape: the Voxy-owned depth/stencil
 framebuffer receives the opaque colour attachment, a separate SSAO/translucent
 framebuffer receives the SSAO colour attachment, and the original final blit
-shader source is owned by the pipeline. SSAO compute execution, final
-transform/blit handoff, environmental fog parameters, and Oculus-backed
-shaderpack patch semantics are still not ported. VII progress is therefore not
-renderer readiness and must not enable visible or live terrain draw.
+shader source is owned by the pipeline. The Forge owner now also has the
+original SSAO compute owner, original `SSAO.AUTO` capability selection, the
+`postOpaquePreTranslucent(...)` SSAO handoff, and the original
+`transformBlitDepth(...)` final depth blit shape. Environmental fog parameters
+and Oculus-backed shaderpack patch semantics are still not ported because the
+current Embeddium hook does not expose the original `Viewport.fogParameters`
+input and the Forge source set still lacks an Oculus pipeline-data bridge
+equivalent to original `IrisVoxyRenderPipelineData`. VII progress is therefore
+not renderer readiness and must not enable visible or live terrain draw.
 
 Runtime readback now proves a non-empty MDICViewport render-list and production
 `cmdgen.comp` output. The latest audit produced `renderListSectionCount=146`,

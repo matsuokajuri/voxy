@@ -128,10 +128,11 @@ implementation scaffolding for formal MDIC.
     original TAA hook, shader patch hook, and patched-or-normal fallback shape.
     The original `NormalRenderPipeline` colour-target owner shape is now also
     present: opaque colour texture, SSAO/translucent colour texture, the
-    framebuffer attachment handoff, and the final blit shader owner. SSAO
-    compute execution, final transform/blit handoff, environmental fog
-    uniforms, and Oculus-backed shaderpack patch semantics are still not
-    ported, so the active hook still does not submit MDIC terrain draw calls.
+    framebuffer attachment handoff, the SSAO compute owner, original
+    `SSAO.AUTO` capability selection, `postOpaquePreTranslucent(...)`, and the
+    final `transformBlitDepth(...)` handoff. Environmental fog uniforms and
+    Oculus-backed shaderpack patch semantics are still not ported, so the
+    active hook still does not submit MDIC terrain draw calls.
 11. Roman VIII: only then enable controlled renderer draw behind the original
     renderer owner.
 
@@ -141,7 +142,7 @@ Do not enable formal MDIC draw while any of these are true:
 
 ```text
 original render-pipeline final handoff / VoxyRenderSystem lifecycle not yet ported
-original terrain shader SSAO/fog/shaderpack-patch semantics incomplete
+original terrain shader environmental fog / shaderpack-patch semantics incomplete
 MDICSectionRenderer draw methods not called by active pipeline
 ```
 

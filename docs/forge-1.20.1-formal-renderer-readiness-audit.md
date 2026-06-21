@@ -127,7 +127,9 @@ Some bottom-path corrections are now aligned in direction:
   through the original TAA hook, shader patch hook, and patched-or-normal
   fallback shape. The Forge pipeline now also owns the original-shaped
   `NormalRenderPipeline` opaque colour target, SSAO/translucent colour target,
-  framebuffer attachment handoff, and final blit shader source owner.
+  framebuffer attachment handoff, SSAO compute owner, original `SSAO.AUTO`
+  capability selection, `postOpaquePreTranslucent(...)`, and final
+  `transformBlitDepth(...)` handoff.
 - `RenderGenerationService` now uses original `ServiceManager` / `Service` /
   `UnifiedServiceThreadPool` execution, including service-thread config and
   Embeddium builder-thread semaphore sharing.
@@ -141,8 +143,8 @@ P0 gaps:
 
 ```text
 MDICSectionRenderer draw submission not yet active in the original pipeline
-original render-pipeline final transform/blit handoff incomplete
-original terrain shader SSAO, environmental fog, and shaderpack patch semantics incomplete
+original render-pipeline / VoxyRenderSystem lifecycle incomplete
+original terrain shader environmental fog and shaderpack patch semantics incomplete
 VoxyRenderSystem lifecycle parity incomplete
 ```
 

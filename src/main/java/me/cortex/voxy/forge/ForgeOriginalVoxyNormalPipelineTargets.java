@@ -70,14 +70,6 @@ final class ForgeOriginalVoxyNormalPipelineTargets {
         return this.colourSsaoTextureId != 0 && this.ssaoFramebufferId != 0;
     }
 
-    boolean ssaoComputeReady() {
-        return false;
-    }
-
-    boolean finalBlitReady() {
-        return false;
-    }
-
     int colourTextureId() {
         return this.colourTextureId;
     }

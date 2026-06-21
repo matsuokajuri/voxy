@@ -1,9 +1,21 @@
 package me.cortex.voxy.forge;
 
+import org.joml.Matrix4f;
+import org.lwjgl.system.MemoryStack;
+
+import static org.lwjgl.opengl.GL11C.GL_BLEND;
+import static org.lwjgl.opengl.GL11C.GL_DEPTH_TEST;
+import static org.lwjgl.opengl.GL11C.GL_ONE;
+import static org.lwjgl.opengl.GL11C.GL_ONE_MINUS_SRC_ALPHA;
+import static org.lwjgl.opengl.GL11C.GL_SRC_ALPHA;
 import static org.lwjgl.opengl.GL11C.GL_STENCIL_TEST;
 import static org.lwjgl.opengl.GL11C.glDisable;
+import static org.lwjgl.opengl.GL11C.glEnable;
+import static org.lwjgl.opengl.GL14C.glBlendFuncSeparate;
+import static org.lwjgl.opengl.GL20C.nglUniformMatrix4fv;
 import static org.lwjgl.opengl.GL30C.GL_FRAMEBUFFER;
 import static org.lwjgl.opengl.GL30C.glBindFramebuffer;
+import static org.lwjgl.opengl.GL45C.glBindTextureUnit;
 
 final class ForgeOriginalVoxyRenderPipeline {
     static final String STAGE = "VII_ORIGINAL_TERRAIN_SHADER_CONTRACT_CHAIN";
@@ -12,9 +24,11 @@ final class ForgeOriginalVoxyRenderPipeline {
     private final ForgeOriginalVoxyPipelineDepthStage depthStage;
     private final ForgeOriginalVoxyNormalPipelineTargets normalTargets;
     private final ForgeOriginalVoxyFullscreenBlit finalBlit;
+    private final ForgeOriginalVoxySSAO ssao;
     private long setupCount;
     private long setupAndBindOpaqueCount;
     private long setupAndBindTranslucentCount;
+    private long postOpaquePreTranslucentCount;
     private long finishCount;
     private String lifecycleState = "CREATED";
     private String lastLifecycleEvent = "created";
@@ -24,14 +38,22 @@ final class ForgeOriginalVoxyRenderPipeline {
         this.properties = properties;
         ForgeOriginalVoxyPipelineDepthStage createdDepthStage = new ForgeOriginalVoxyPipelineDepthStage(properties);
         ForgeOriginalVoxyNormalPipelineTargets createdNormalTargets = new ForgeOriginalVoxyNormalPipelineTargets();
-        ForgeOriginalVoxyFullscreenBlit createdFinalBlit;
+        ForgeOriginalVoxyFullscreenBlit createdFinalBlit = null;
+        ForgeOriginalVoxySSAO createdSsao = null;
         try {
             createdFinalBlit = new ForgeOriginalVoxyFullscreenBlit(
                     properties,
                     "voxy:post/fullscreen.vert",
                     "voxy:post/blit_texture_depth_cutout.frag",
                     "EMIT_COLOUR");
+            createdSsao = ForgeOriginalVoxySSAO.create(properties, ForgeOriginalVoxySSAO.SSAOMode.AUTO);
         } catch (RuntimeException e) {
+            if (createdSsao != null) {
+                createdSsao.free();
+            }
+            if (createdFinalBlit != null) {
+                createdFinalBlit.free();
+            }
             createdNormalTargets.freeOnRenderThread();
             createdDepthStage.freeOnRenderThread();
             throw e;
@@ -39,6 +61,7 @@ final class ForgeOriginalVoxyRenderPipeline {
         this.depthStage = createdDepthStage;
         this.normalTargets = createdNormalTargets;
         this.finalBlit = createdFinalBlit;
+        this.ssao = createdSsao;
     }
 
     ForgeOriginalVoxyRenderProperties properties() {
@@ -75,11 +98,38 @@ final class ForgeOriginalVoxyRenderPipeline {
         this.normalTargets.bindTranslucentFramebuffer();
     }
 
-    void finish(int sourceFramebuffer) {
-        glDisable(GL_STENCIL_TEST);
-        glBindFramebuffer(GL_FRAMEBUFFER, sourceFramebuffer);
+    void postOpaquePreTranslucent(ForgeOriginalVoxyMdicViewport viewport, int sourceFramebuffer) {
+        this.postOpaquePreTranslucentCount++;
+        this.lastLifecycleEvent = "post-opaque-pre-translucent";
+        if (!this.opaqueDrawTargetReady() || !this.translucentDrawTargetReady()) {
+            this.lastFailureReason = "original-normal-pipeline-ssao-target-not-ready";
+            return;
+        }
+        this.ssao.compute(
+                viewport,
+                this.normalTargets.colourSsaoTextureId(),
+                this.normalTargets.colourTextureId(),
+                this.depthStage.depthTextureId(),
+                sourceFramebuffer);
+        this.normalTargets.bindTranslucentFramebuffer();
+        this.lastFailureReason = "none";
+    }
+
+    void finish(ForgeOriginalVoxyMdicViewport viewport, int sourceFramebuffer, int srcWidth, int srcHeight) {
+        this.finalBlit.bind();
+        glBindTextureUnit(3, this.normalTargets.colourSsaoTextureId());
+        glEnable(GL_BLEND);
+        glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+        transformBlitDepth(
+                this.finalBlit,
+                this.depthStage.depthTextureId(),
+                sourceFramebuffer,
+                viewport,
+                new Matrix4f(viewport.vanillaProjection).mul(viewport.modelView));
+        glDisable(GL_BLEND);
         this.finishCount++;
         this.lastLifecycleEvent = "finish";
+        this.lastFailureReason = "none";
     }
 
     boolean hasTAA() {
@@ -103,7 +153,7 @@ final class ForgeOriginalVoxyRenderPipeline {
     }
 
     boolean ready() {
-        return this.depthStage.ready();
+        return this.depthStage.ready() && this.ssao.ready() && this.finalBlit != null;
     }
 
     boolean terrainShaderSourceParityReady() {
@@ -123,11 +173,11 @@ final class ForgeOriginalVoxyRenderPipeline {
     }
 
     boolean ssaoComputeReady() {
-        return this.normalTargets.ssaoComputeReady();
+        return this.ssao.ready();
     }
 
     boolean finalBlitReady() {
-        return false;
+        return this.finalBlit != null;
     }
 
     boolean finalBlitShaderReady() {
@@ -158,8 +208,20 @@ final class ForgeOriginalVoxyRenderPipeline {
         return this.setupAndBindTranslucentCount;
     }
 
+    long postOpaquePreTranslucentCount() {
+        return this.postOpaquePreTranslucentCount;
+    }
+
     long finishCount() {
         return this.finishCount;
+    }
+
+    long ssaoComputeCount() {
+        return this.ssao.computeCount();
+    }
+
+    String ssaoModeName() {
+        return this.ssao.modeName();
     }
 
     String lifecycleState() {
@@ -179,10 +241,34 @@ final class ForgeOriginalVoxyRenderPipeline {
     }
 
     void freeOnRenderThread() {
+        this.ssao.free();
         this.finalBlit.free();
         this.normalTargets.freeOnRenderThread();
         this.depthStage.freeOnRenderThread();
         this.lifecycleState = "FREED";
         this.lastLifecycleEvent = "free-on-render-thread";
+    }
+
+    private static void transformBlitDepth(
+            ForgeOriginalVoxyFullscreenBlit blitShader,
+            int sourceDepthTexture,
+            int destinationFramebuffer,
+            ForgeOriginalVoxyMdicViewport viewport,
+            Matrix4f targetTransform) {
+        glDisable(GL_STENCIL_TEST);
+        glBindFramebuffer(GL_FRAMEBUFFER, destinationFramebuffer);
+        blitShader.bind();
+        glBindTextureUnit(0, sourceDepthTexture);
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            long matrix = stack.nmalloc(4 * 4 * 4);
+            new Matrix4f(viewport.MVP).invert().getToAddress(matrix);
+            nglUniformMatrix4fv(1, 1, false, matrix);
+            targetTransform.getToAddress(matrix);
+            nglUniformMatrix4fv(2, 1, false, matrix);
+        }
+        glEnable(GL_DEPTH_TEST);
+        blitShader.blit();
+        glDisable(GL_STENCIL_TEST);
+        glDisable(GL_DEPTH_TEST);
     }
 }
