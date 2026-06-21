@@ -9,6 +9,7 @@ public final class ForgeVoxyConfig {
     public static final ForgeConfigSpec.BooleanValue ORIGINAL_VOXY_USE_EMBEDDIUM_BUILDER_THREADS;
     public static final ForgeConfigSpec.DoubleValue ORIGINAL_VOXY_SECTION_RENDER_DISTANCE;
     public static final ForgeConfigSpec.DoubleValue ORIGINAL_VOXY_SUBDIVISION_SIZE;
+    public static final ForgeConfigSpec.BooleanValue ORIGINAL_VOXY_USE_ENVIRONMENTAL_FOG;
     public static final ForgeConfigSpec.BooleanValue ENABLE_WORLD_ENGINE_SKELETON;
     public static final ForgeConfigSpec.BooleanValue ENABLE_AUTO_CHUNK_INGEST;
     public static final ForgeConfigSpec.IntValue AUTO_INGEST_RADIUS;
@@ -141,6 +142,9 @@ public final class ForgeVoxyConfig {
         ORIGINAL_VOXY_SUBDIVISION_SIZE = builder
                 .comment("Forge equivalent of original VoxyConfig.CONFIG.subDivisionSize. Used by hierarchical traversal screen-space descent threshold.")
                 .defineInRange("originalVoxySubDivisionSize", 64.0D, 1.0D, 512.0D);
+        ORIGINAL_VOXY_USE_ENVIRONMENTAL_FOG = builder
+                .comment("Forge equivalent of original VoxyConfig.CONFIG.useEnvironmentalFog. Used by the original-shaped NormalRenderPipeline final blit fog uniforms.")
+                .define("originalVoxyUseEnvironmentalFog", true);
         ENABLE_WORLD_ENGINE_SKELETON = builder
                 .comment("Creates an empty in-memory WorldEngine on client world join for lifecycle testing only. It does not ingest chunks or render LoD.")
                 .define("enableWorldEngineSkeleton", false);

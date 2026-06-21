@@ -1,5 +1,7 @@
 package me.cortex.voxy.forge;
 
+import me.cortex.voxy.config.ForgeVoxyConfig;
+import net.minecraft.client.Minecraft;
 import org.joml.Matrix4f;
 import org.lwjgl.system.MemoryStack;
 
@@ -12,6 +14,7 @@ import static org.lwjgl.opengl.GL11C.GL_STENCIL_TEST;
 import static org.lwjgl.opengl.GL11C.glDisable;
 import static org.lwjgl.opengl.GL11C.glEnable;
 import static org.lwjgl.opengl.GL14C.glBlendFuncSeparate;
+import static org.lwjgl.opengl.GL20C.glUniform4f;
 import static org.lwjgl.opengl.GL20C.nglUniformMatrix4fv;
 import static org.lwjgl.opengl.GL30C.GL_FRAMEBUFFER;
 import static org.lwjgl.opengl.GL30C.glBindFramebuffer;
@@ -25,6 +28,7 @@ final class ForgeOriginalVoxyRenderPipeline {
     private final ForgeOriginalVoxyNormalPipelineTargets normalTargets;
     private final ForgeOriginalVoxyFullscreenBlit finalBlit;
     private final ForgeOriginalVoxySSAO ssao;
+    private final boolean useEnvFog;
     private long setupCount;
     private long setupAndBindOpaqueCount;
     private long setupAndBindTranslucentCount;
@@ -36,16 +40,20 @@ final class ForgeOriginalVoxyRenderPipeline {
 
     ForgeOriginalVoxyRenderPipeline(ForgeOriginalVoxyRenderProperties properties) {
         this.properties = properties;
+        this.useEnvFog = ForgeVoxyConfig.ORIGINAL_VOXY_USE_ENVIRONMENTAL_FOG.get();
         ForgeOriginalVoxyPipelineDepthStage createdDepthStage = new ForgeOriginalVoxyPipelineDepthStage(properties);
         ForgeOriginalVoxyNormalPipelineTargets createdNormalTargets = new ForgeOriginalVoxyNormalPipelineTargets();
         ForgeOriginalVoxyFullscreenBlit createdFinalBlit = null;
         ForgeOriginalVoxySSAO createdSsao = null;
         try {
+            String[] finalBlitDefines = this.useEnvFog
+                    ? new String[]{"USE_ENV_FOG", "EMIT_COLOUR"}
+                    : new String[]{"EMIT_COLOUR"};
             createdFinalBlit = new ForgeOriginalVoxyFullscreenBlit(
                     properties,
                     "voxy:post/fullscreen.vert",
                     "voxy:post/blit_texture_depth_cutout.frag",
-                    "EMIT_COLOUR");
+                    finalBlitDefines);
             createdSsao = ForgeOriginalVoxySSAO.create(properties, ForgeOriginalVoxySSAO.SSAOMode.AUTO);
         } catch (RuntimeException e) {
             if (createdSsao != null) {
@@ -123,16 +131,26 @@ final class ForgeOriginalVoxyRenderPipeline {
     void finish(ForgeOriginalVoxyMdicViewport viewport, int sourceFramebuffer, int srcWidth, int srcHeight) {
         this.finalBlit.bind();
         glBindTextureUnit(3, this.normalTargets.colourSsaoTextureId());
-        glEnable(GL_BLEND);
-        glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-        try {
-            transformBlitDepth(
-                    this.finalBlit,
-                    this.depthStage.depthTextureId(),
-                    sourceFramebuffer,
-                    viewport,
-                    new Matrix4f(viewport.vanillaProjection).mul(viewport.modelView));
-        } finally {
+        boolean fogCoversAllRendering = viewport.fogParameters.environmentalEnd() < minecraftRenderDistance();
+        if (this.useEnvFog) {
+            uploadEnvironmentalFogUniforms(viewport.fogParameters);
+        }
+        if (!fogCoversAllRendering) {
+            glEnable(GL_BLEND);
+            glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+            try {
+                transformBlitDepth(
+                        this.finalBlit,
+                        this.depthStage.depthTextureId(),
+                        sourceFramebuffer,
+                        viewport,
+                        new Matrix4f(viewport.vanillaProjection).mul(viewport.modelView));
+            } finally {
+                glDisable(GL_BLEND);
+            }
+        } else {
+            glDisable(GL_STENCIL_TEST);
+            glDisable(GL_DEPTH_TEST);
             glDisable(GL_BLEND);
         }
         this.finishCount++;
@@ -190,6 +208,10 @@ final class ForgeOriginalVoxyRenderPipeline {
 
     boolean finalBlitShaderReady() {
         return this.finalBlit != null;
+    }
+
+    boolean useEnvironmentalFog() {
+        return this.useEnvFog;
     }
 
     int colourTextureId() {
@@ -278,5 +300,30 @@ final class ForgeOriginalVoxyRenderPipeline {
         blitShader.blit();
         glDisable(GL_STENCIL_TEST);
         glDisable(GL_DEPTH_TEST);
+    }
+
+    private static void uploadEnvironmentalFogUniforms(ForgeOriginalVoxyFogParameters fogParameters) {
+        float start = fogParameters.environmentalStart();
+        float end = fogParameters.environmentalEnd();
+        if (Math.abs(end - start) > 1.0F) {
+            float invEndFogDelta = 1.0F / (end - start);
+            float endDistance = Math.max(minecraftRenderDistance(), 20.0F * 16.0F);
+            endDistance *= (float) Math.sqrt(3.0D);
+            float startDelta = -start * invEndFogDelta;
+            float endParameter = clamp01(endDistance * invEndFogDelta + startDelta);
+            glUniform4f(4, invEndFogDelta, startDelta, endParameter, 0.0F);
+            glUniform4f(5, fogParameters.red(), fogParameters.green(), fogParameters.blue(), fogParameters.alpha());
+        } else {
+            glUniform4f(4, 0.0F, 0.0F, 0.0F, 0.0F);
+            glUniform4f(5, 0.0F, 0.0F, 0.0F, 0.0F);
+        }
+    }
+
+    private static float minecraftRenderDistance() {
+        return Minecraft.getInstance().options.getEffectiveRenderDistance() * 16.0F;
+    }
+
+    private static float clamp01(float value) {
+        return Math.max(0.0F, Math.min(value, 1.0F));
     }
 }

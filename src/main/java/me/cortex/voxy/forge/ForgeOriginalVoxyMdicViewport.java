@@ -48,6 +48,7 @@ final class ForgeOriginalVoxyMdicViewport {
     double cameraX;
     double cameraY;
     double cameraZ;
+    ForgeOriginalVoxyFogParameters fogParameters = ForgeOriginalVoxyFogParameters.disabled();
     private final ForgeOriginalVoxyRenderProperties properties;
     private final ForgeOriginalVoxyHiZBuffer hiZBuffer;
     private final ForgeOriginalVoxyDepthFramebuffer depthBoundingBuffer = new ForgeOriginalVoxyDepthFramebuffer();
@@ -88,6 +89,11 @@ final class ForgeOriginalVoxyMdicViewport {
     ForgeOriginalVoxyMdicViewport setScreenSize(int width, int height) {
         this.width = Math.max(1, width);
         this.height = Math.max(1, height);
+        return this;
+    }
+
+    ForgeOriginalVoxyMdicViewport setFogParameters(ForgeOriginalVoxyFogParameters fogParameters) {
+        this.fogParameters = fogParameters == null ? ForgeOriginalVoxyFogParameters.disabled() : fogParameters;
         return this;
     }
 

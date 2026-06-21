@@ -249,12 +249,16 @@ framebuffer receives the SSAO colour attachment, and the original final blit
 shader source is owned by the pipeline. The Forge owner now also has the
 original SSAO compute owner, original `SSAO.AUTO` capability selection, the
 `postOpaquePreTranslucent(...)` SSAO handoff, and the original
-`transformBlitDepth(...)` final depth blit shape. Environmental fog parameters
-and Oculus-backed shaderpack patch semantics are still not ported because the
-current Embeddium hook does not expose the original `Viewport.fogParameters`
-input and the Forge source set still lacks an Oculus pipeline-data bridge
-equivalent to original `IrisVoxyRenderPipelineData`. VII progress is therefore
-not renderer readiness and must not enable visible or live terrain draw.
+`transformBlitDepth(...)` final depth blit shape. IX now ports original
+environmental fog final-blit semantics by capturing Forge 1.20.1
+`RenderSystem` fog state into `ForgeOriginalVoxyFogParameters`, storing it on
+`ForgeOriginalVoxyMdicViewport`, compiling the final blit with `USE_ENV_FOG`
+when `originalVoxyUseEnvironmentalFog=true`, uploading the original uniforms,
+and skipping the transform blit when fog covers all Voxy rendering. The Forge
+source set still lacks an Oculus pipeline-data bridge equivalent to original
+`IrisVoxyRenderPipelineData`, so Oculus-backed shaderpack patch semantics are
+still not ported. VII/VIII/IX progress is therefore not renderer readiness and
+must not enable visible or live terrain draw as a formal-ready route.
 
 Runtime readback now proves a non-empty MDICViewport render-list and production
 `cmdgen.comp` output. The latest audit produced `renderListSectionCount=146`,
@@ -311,6 +315,8 @@ V.1_ORIGINAL_MDIC_VIEWPORT_CMDGEN_INPUT_PARITY
  -> VI_ORIGINAL_MDIC_SECTION_RENDERER_CHAIN
  -> VII_ORIGINAL_TERRAIN_SHADER_CONTRACT_CHAIN
  -> VIII_ORIGINAL_VISIBLE_RENDERER_OWNER_CHAIN
+ -> IX_ORIGINAL_RUNTIME_FOG_AND_LIFECYCLE_PARITY
+ -> X_ORIGINAL_COMPATIBILITY_AND_DEPRECATED_ROUTE_RETIREMENT
 ```
 
 Visible preview work must not be treated as progress toward production parity
@@ -371,8 +377,41 @@ earlyUsableLodRendererReady=false
 Known VIII blockers to carry forward into status:
 
 ```text
-environmental fog uniforms are not yet sourced from an original Viewport fog object
 Oculus/Iris shaderpack pipeline patch semantics are not yet ported
 VoxyRenderSystem lifecycle/shutdown/reload ownership is only partially mirrored
-runtime movement/update performance parity belongs to IX
+runtime movement/update performance parity still needs real-runtime validation
 ```
+
+## IX implementation
+
+`IX_ORIGINAL_RUNTIME_FOG_AND_LIFECYCLE_PARITY` is implemented as one coherent
+Roman round with these internal steps:
+
+```text
+IX.1_ORIGINAL_VIEWPORT_FOG_AND_FINAL_BLIT_PARITY
+ -> IX.2_ORIGINAL_RENDERER_LIFECYCLE_FLUSH_PARITY
+ -> IX.3_ORIGINAL_RUNTIME_STATUS_AUDIT_VISIBILITY
+```
+
+The source baseline is original `Viewport`, `NormalRenderPipeline.finish(...)`,
+and `VoxyRenderSystem.shutdown()`. The Forge route keeps the Embeddium cutout
+hook as a platform entry point only, then maps the missing newer
+`Viewport.fogParameters` input through Forge 1.20.1 `RenderSystem` fog state.
+
+IX adds:
+
+```text
+originalVoxyUseEnvironmentalFog config
+ForgeOriginalVoxyFogParameters
+MDICViewport fog parameter storage
+NormalRenderPipeline final-blit USE_ENV_FOG define/uniform behavior
+fog-covers-all-rendering final-blit skip behavior
+DownloadStream.flushWaitClear lifecycle drain
+render-state capture clear on stale/reload
+status fields for fog and lifecycle flush evidence
+```
+
+IX removes environmental fog from the VIII blocker list, but it does not make
+the renderer formal-ready. The remaining blockers are Oculus/Iris shaderpack
+pipeline-data parity, full `VoxyRenderSystem` lifecycle/reload ownership, and
+movement/update performance validation under the original-shaped owner.

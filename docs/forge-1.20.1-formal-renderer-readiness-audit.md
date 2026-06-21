@@ -13,6 +13,7 @@ K-era visible preview output do not count as formal renderer readiness.
 ```text
 FORMAL_RENDERER_READY=false
 ACTUAL_RENDERER_DRAW_ENABLED=false
+FORMAL_DRAW_PIPELINE_READY=false
 EARLY_USABLE_LOD_RENDERER_READY=false
 ```
 
@@ -135,6 +136,14 @@ Some bottom-path corrections are now aligned in direction:
   `renderTemporal`, `postOpaquePreTranslucent`, `renderTranslucent`, `finish`,
   post-frame dynamic work, and original-style GL state restore. This is progress
   toward original frame order parity, not full renderer readiness.
+- Roman IX now ports original environmental fog final-blit semantics and
+  lifecycle drain visibility: Forge captures the render fog start/end/color
+  state into `ForgeOriginalVoxyFogParameters`, stores it on
+  `ForgeOriginalVoxyMdicViewport`, compiles the final blit with `USE_ENV_FOG`
+  when enabled, uploads the original fog uniforms, skips the final transform
+  blit when fog covers all Voxy rendering, clears captured render state on
+  stale/reload, and flushes `ForgeOriginalVoxyDownloadStream` around render
+  resource teardown when present.
 - `RenderGenerationService` now uses original `ServiceManager` / `Service` /
   `UnifiedServiceThreadPool` execution, including service-thread config and
   Embeddium builder-thread semaphore sharing.
@@ -148,8 +157,8 @@ P0 gaps:
 
 ```text
 VoxyRenderSystem lifecycle / shutdown / reload ownership incomplete
-original terrain shader environmental fog and shaderpack patch semantics incomplete
-movement and runtime update performance parity still belongs to IX
+original terrain shader Oculus/Iris shaderpack patch semantics incomplete
+movement and runtime update performance parity still needs real-runtime validation
 ```
 
 P1 gaps:

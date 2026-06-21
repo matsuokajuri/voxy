@@ -8,6 +8,8 @@ record ForgeOriginalVoxyModelPipelineStats(
         long uploadTickRuns,
         long blockBakeRequests,
         long clearRuns,
+        boolean originalLifecycleDownloadFlushUsed,
+        boolean originalRenderStateCaptureClearUsed,
         boolean startRequested,
         boolean startQueuedOnRenderThread,
         boolean ownerReady,

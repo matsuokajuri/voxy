@@ -156,6 +156,22 @@ final class ForgeOriginalVoxyDownloadStream {
         }
     }
 
+    void flushWaitClear() {
+        glFinish();
+        this.tick();
+        Fence fence = new Fence();
+        glFinish();
+        while (!fence.signaled()) {
+            glFinish();
+            Thread.onSpinWait();
+        }
+        fence.free();
+        this.tick();
+        if (!this.frames.isEmpty()) {
+            throw new IllegalStateException();
+        }
+    }
+
     void free() {
         this.commit();
         while (!this.frames.isEmpty()) {

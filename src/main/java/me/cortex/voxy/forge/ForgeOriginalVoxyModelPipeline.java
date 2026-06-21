@@ -104,9 +104,16 @@ public final class ForgeOriginalVoxyModelPipeline {
     private boolean originalMdicTranslucentDrawSubmitted;
     private boolean originalPipelineFinishCalled;
     private boolean originalVisibleRendererStateRestoreUsed;
+    private boolean originalViewportFogParametersUsed;
+    private boolean originalFinalBlitEnvironmentalFogEnabled;
+    private boolean originalFinalBlitEnvironmentalFogUniformsUsed;
     private int originalVisibleFrameLastFramebuffer;
     private int originalVisibleFrameLastViewportWidth;
     private int originalVisibleFrameLastViewportHeight;
+    private float originalVisibleFrameLastFogStart;
+    private float originalVisibleFrameLastFogEnd;
+    private boolean originalLifecycleDownloadFlushUsed;
+    private boolean originalRenderStateCaptureClearUsed;
 
     ForgeOriginalVoxyModelPipeline(ForgeVoxyInstance instance) {
         this.instance = instance;
@@ -240,6 +247,9 @@ public final class ForgeOriginalVoxyModelPipeline {
                 && this.renderPipeline.ready()
                 && this.mdicSectionRenderer != null
                 && this.mdicSectionRenderer.ready();
+        boolean finalBlitEnvironmentalFogEnabled = this.renderPipeline != null
+                ? this.renderPipeline.useEnvironmentalFog()
+                : this.originalFinalBlitEnvironmentalFogEnabled;
         return new ForgeOriginalVoxyModelPipelineStats(
                 STAGE,
                 this.startRequests,
@@ -248,6 +258,8 @@ public final class ForgeOriginalVoxyModelPipeline {
                 this.uploadTickRuns,
                 this.blockBakeRequests,
                 this.clearRuns,
+                this.originalLifecycleDownloadFlushUsed,
+                this.originalRenderStateCaptureClearUsed,
                 this.startRequested,
                 this.startQueuedOnRenderThread,
                 this.ownerReady && !this.stale,
@@ -275,6 +287,11 @@ public final class ForgeOriginalVoxyModelPipeline {
                         this.originalMdicTranslucentDrawSubmitted && this.ownerReady && !this.stale,
                         this.originalPipelineFinishCalled && this.ownerReady && !this.stale,
                         this.originalVisibleRendererStateRestoreUsed && this.ownerReady && !this.stale,
+                        this.originalViewportFogParametersUsed && this.ownerReady && !this.stale,
+                        finalBlitEnvironmentalFogEnabled && this.ownerReady && !this.stale,
+                        this.originalFinalBlitEnvironmentalFogUniformsUsed && this.ownerReady && !this.stale,
+                        this.originalVisibleFrameLastFogStart,
+                        this.originalVisibleFrameLastFogEnd,
                         this.originalVisibleFrameRunCount,
                         this.originalVisibleFrameSkippedCount,
                         this.originalVisibleFrameFailureCount,
@@ -747,11 +764,14 @@ public final class ForgeOriginalVoxyModelPipeline {
                     ForgeOriginalVoxyRenderProperties.getRenderProperties(),
                     vanillaProjection,
                     rawMinecraftProjection);
+            ForgeOriginalVoxyFogParameters fogParameters = ForgeOriginalVoxyFogParameters.captureFromRenderSystem(
+                    ForgeVoxyConfig.ORIGINAL_VOXY_USE_ENVIRONMENTAL_FOG.get());
             viewport.setVanillaProjection(vanillaProjection)
                     .setProjection(voxyProjection)
                     .setModelView(modelView)
                     .setCamera(camera.x, camera.y, camera.z)
                     .setScreenSize(width, height)
+                    .setFogParameters(fogParameters)
                     .update();
             viewport.frameId++;
             glViewport(0, 0, viewport.width, viewport.height);
@@ -787,9 +807,14 @@ public final class ForgeOriginalVoxyModelPipeline {
                     this.originalMdicTemporalDrawSubmitted = temporalSubmitted;
                     this.originalMdicTranslucentDrawSubmitted = translucentSubmitted;
                     this.originalPipelineFinishCalled = finishCalled;
+                    this.originalViewportFogParametersUsed = true;
+                    this.originalFinalBlitEnvironmentalFogEnabled = renderPipeline.useEnvironmentalFog();
+                    this.originalFinalBlitEnvironmentalFogUniformsUsed = renderPipeline.useEnvironmentalFog();
                     this.originalVisibleFrameLastFramebuffer = oldFramebuffer;
                     this.originalVisibleFrameLastViewportWidth = width;
                     this.originalVisibleFrameLastViewportHeight = height;
+                    this.originalVisibleFrameLastFogStart = fogParameters.environmentalStart();
+                    this.originalVisibleFrameLastFogEnd = fogParameters.environmentalEnd();
                     this.lifecycleState = "RUNNING_ORIGINAL_VISIBLE_MDIC_FRAME";
                     this.lastLifecycleEvent = "embeddium-cutout-original-run-pipeline-order";
                     this.lastFailureReason = "none";
@@ -931,8 +956,17 @@ public final class ForgeOriginalVoxyModelPipeline {
             callbackWorld.getMapper().setBiomeCallback(null);
             callbackWorld.getMapper().setStateCallback(null);
         }
+        ForgeOriginalVoxyRenderStateCapture.clear();
+        synchronized (this) {
+            this.originalRenderStateCaptureClearUsed = true;
+        }
         this.stopProcessingThread();
         this.runOnRenderThread(() -> {
+            boolean flushedDownloadStream = false;
+            if (ForgeOriginalVoxyDownloadStream.isReady()) {
+                ForgeOriginalVoxyDownloadStream.instance().flushWaitClear();
+                flushedDownloadStream = true;
+            }
             if (geometrySync != null) {
                 geometrySync.stopOnRenderThread();
             }
@@ -965,6 +999,15 @@ public final class ForgeOriginalVoxyModelPipeline {
             }
             if (store != null) {
                 store.free();
+            }
+            if (ForgeOriginalVoxyDownloadStream.isReady()) {
+                ForgeOriginalVoxyDownloadStream.instance().flushWaitClear();
+                flushedDownloadStream = true;
+            }
+            if (flushedDownloadStream) {
+                synchronized (this) {
+                    this.originalLifecycleDownloadFlushUsed = true;
+                }
             }
         });
     }
