@@ -125,7 +125,9 @@ Some bottom-path corrections are now aligned in direction:
   shader hook boundary, and `ForgeOriginalVoxyMdicSectionRenderer` now builds
   original `quads3.vert` / `quads.frag` terrain and translucent programs
   through the original TAA hook, shader patch hook, and patched-or-normal
-  fallback shape.
+  fallback shape. The Forge pipeline now also owns the original-shaped
+  `NormalRenderPipeline` opaque colour target, SSAO/translucent colour target,
+  framebuffer attachment handoff, and final blit shader source owner.
 - `RenderGenerationService` now uses original `ServiceManager` / `Service` /
   `UnifiedServiceThreadPool` execution, including service-thread config and
   Embeddium builder-thread semaphore sharing.
@@ -139,8 +141,8 @@ P0 gaps:
 
 ```text
 MDICSectionRenderer draw submission not yet active in the original pipeline
-original render-pipeline colour target / final handoff incomplete
-original terrain shader full semantics and shaderpack patch integration incomplete
+original render-pipeline final transform/blit handoff incomplete
+original terrain shader SSAO, environmental fog, and shaderpack patch semantics incomplete
 VoxyRenderSystem lifecycle parity incomplete
 ```
 

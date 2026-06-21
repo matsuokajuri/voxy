@@ -242,10 +242,13 @@ ForgeOriginalVoxyRenderPipeline
 
 This mirrors the original `MDICSectionRenderer` relationship with
 `AbstractRenderPipeline` closely enough for source ownership and compile-time
-contract work. It deliberately keeps `opaqueDrawTargetReady=false` and
-`translucentDrawTargetReady=false` because the original `NormalRenderPipeline`
-colour target handoff, final framebuffer/blit lifecycle, and Oculus-backed
-shaderpack patch semantics are not yet ported. VII progress is therefore not
+contract work. The next VII pass now also ports the original
+`NormalRenderPipeline` target ownership shape: the Voxy-owned depth/stencil
+framebuffer receives the opaque colour attachment, a separate SSAO/translucent
+framebuffer receives the SSAO colour attachment, and the original final blit
+shader source is owned by the pipeline. SSAO compute execution, final
+transform/blit handoff, environmental fog parameters, and Oculus-backed
+shaderpack patch semantics are still not ported. VII progress is therefore not
 renderer readiness and must not enable visible or live terrain draw.
 
 Runtime readback now proves a non-empty MDICViewport render-list and production

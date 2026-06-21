@@ -38,15 +38,32 @@ final class ForgeOriginalVoxyFullscreenBlit {
     private final int programId;
 
     ForgeOriginalVoxyFullscreenBlit(ForgeOriginalVoxyRenderProperties properties, String vertexShaderId, String fragmentShaderId) {
+        this(properties, vertexShaderId, fragmentShaderId, new String[0]);
+    }
+
+    ForgeOriginalVoxyFullscreenBlit(
+            ForgeOriginalVoxyRenderProperties properties,
+            String vertexShaderId,
+            String fragmentShaderId,
+            String... fragmentDefines) {
         this.indexBuffer = new ForgeOriginalVoxyGlBuffer(6L, false);
-        MemoryBuffer quadIndices = generateQuadIndicesByte(1);
-        long ptr = ForgeOriginalVoxyUploadStream.instance().upload(this.indexBuffer.id, 0L, this.indexBuffer.size());
-        quadIndices.cpyTo(ptr);
-        quadIndices.free();
-        ForgeOriginalVoxyUploadStream.instance().commit();
-        this.programId = compileProgram(
-                properties.injectDefines(ForgeOriginalVoxyShaderSource.parse(vertexShaderId)),
-                properties.injectDefines(ForgeOriginalVoxyShaderSource.parse(fragmentShaderId)));
+        try {
+            MemoryBuffer quadIndices = generateQuadIndicesByte(1);
+            try {
+                long ptr = ForgeOriginalVoxyUploadStream.instance().upload(this.indexBuffer.id, 0L, this.indexBuffer.size());
+                quadIndices.cpyTo(ptr);
+            } finally {
+                quadIndices.free();
+            }
+            ForgeOriginalVoxyUploadStream.instance().commit();
+            this.programId = compileProgram(
+                    properties.injectDefines(ForgeOriginalVoxyShaderSource.parse(vertexShaderId)),
+                    injectDefines(properties.injectDefines(ForgeOriginalVoxyShaderSource.parse(fragmentShaderId)), fragmentDefines));
+        } catch (RuntimeException e) {
+            this.indexBuffer.free();
+            glDeleteVertexArrays(this.vertexArrayId);
+            throw e;
+        }
     }
 
     void bind() {
@@ -83,6 +100,21 @@ final class ForgeOriginalVoxyFullscreenBlit {
             ptr += 6L;
         }
         return buffer;
+    }
+
+    private static String injectDefines(String source, String... defines) {
+        if (defines == null || defines.length == 0) {
+            return source;
+        }
+        StringBuilder builder = new StringBuilder();
+        for (String define : defines) {
+            builder.append("#define ").append(define).append('\n');
+        }
+        int split = source.indexOf('\n');
+        if (split < 0) {
+            return source + '\n' + builder;
+        }
+        return source.substring(0, split + 1) + builder + source.substring(split + 1);
     }
 
     private static int compileProgram(String vertexSource, String fragmentSource) {
