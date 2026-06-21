@@ -119,6 +119,10 @@ final class ForgeOriginalVoxyPipelineDepthStage {
         }
     }
 
+    void bindFramebuffer() {
+        glBindFramebuffer(GL_FRAMEBUFFER, this.framebuffer.framebufferId());
+    }
+
     boolean ready() {
         return this.framebuffer.ready() && this.depthSamplerId != 0;
     }

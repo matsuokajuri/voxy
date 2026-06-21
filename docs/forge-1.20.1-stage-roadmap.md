@@ -231,6 +231,23 @@ target and `VoxyRenderSystem` lifecycle are ported, the route still must not be
 counted as `formalDrawPipelineReady`, `formalRendererReady`, or
 `actualRendererDrawEnabled`.
 
+VII is now started at the terrain-shader contract owner level:
+
+```text
+ForgeOriginalVoxyRenderPipeline
+ -> ForgeOriginalVoxyMdicSectionRenderer terrain/translucent shader build
+ -> original quads3.vert / quads.frag source path
+ -> pipeline TAA hook / shader patch hook / patched-or-normal fallback shape
+```
+
+This mirrors the original `MDICSectionRenderer` relationship with
+`AbstractRenderPipeline` closely enough for source ownership and compile-time
+contract work. It deliberately keeps `opaqueDrawTargetReady=false` and
+`translucentDrawTargetReady=false` because the original `NormalRenderPipeline`
+colour target handoff, final framebuffer/blit lifecycle, and Oculus-backed
+shaderpack patch semantics are not yet ported. VII progress is therefore not
+renderer readiness and must not enable visible or live terrain draw.
+
 Runtime readback now proves a non-empty MDICViewport render-list and production
 `cmdgen.comp` output. The latest audit produced `renderListSectionCount=146`,
 `opaqueDrawCount=545`, original draw-count/cull-command layouts, and
@@ -285,6 +302,7 @@ V.1_ORIGINAL_MDIC_VIEWPORT_CMDGEN_INPUT_PARITY
  -> V.3_ORIGINAL_CMDGEN_READBACK_AND_BARRIER_AUDIT
  -> VI_ORIGINAL_MDIC_SECTION_RENDERER_CHAIN
  -> VII_ORIGINAL_TERRAIN_SHADER_CONTRACT_CHAIN
+ -> VIII_ORIGINAL_VISIBLE_RENDERER_OWNER_CHAIN
 ```
 
 Visible preview work must not be treated as progress toward production parity

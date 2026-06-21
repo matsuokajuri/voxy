@@ -57,8 +57,6 @@ import static org.lwjgl.opengl.GL20C.glShaderSource;
 import static org.lwjgl.opengl.GL20C.glUseProgram;
 import static org.lwjgl.opengl.GL20C.glCompileShader;
 import static org.lwjgl.opengl.GL30C.glBindBufferBase;
-import static org.lwjgl.opengl.GL30C.GL_FRAMEBUFFER;
-import static org.lwjgl.opengl.GL30C.glBindFramebuffer;
 import static org.lwjgl.opengl.GL30C.glBindVertexArray;
 import static org.lwjgl.opengl.GL30C.glDeleteVertexArrays;
 import static org.lwjgl.opengl.GL30C.glGenVertexArrays;
@@ -149,24 +147,41 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
     private boolean positionScratchReadbackOk;
     private int lastGlError = GL_NO_ERROR;
     private ForgeOriginalVoxyRenderProperties properties;
+    private ForgeOriginalVoxyRenderPipeline pipeline;
     private String lifecycleState = "CREATED";
     private String lastLifecycleEvent = "created";
     private String lastFailureReason = "none";
 
-    String buildOnRenderThread(ForgeOriginalVoxyRenderProperties properties) {
+    String buildOnRenderThread(ForgeOriginalVoxyRenderPipeline pipeline) {
         try {
             this.freePrograms();
-            this.properties = properties;
-            String vertexSource = properties.injectDefines(ForgeOriginalVoxyShaderSource.parse("voxy:lod/gl46/quads3.vert"));
+            this.pipeline = pipeline;
+            this.properties = pipeline.properties();
+            String vertexSource = this.properties.injectDefines(ForgeOriginalVoxyShaderSource.parse("voxy:lod/gl46/quads3.vert"));
+            String taa = pipeline.taaFunction("taaShift");
+            if (taa != null) {
+                vertexSource += "\n" + taa;
+                vertexSource = withDefines(vertexSource, "TAA_PATCH", 1);
+            }
             vertexSource = injectDirectionalFaceTint(vertexSource);
             String fragmentSource = ForgeOriginalVoxyShaderSource.parse("voxy:lod/gl46/quads.frag");
-            this.terrainProgramId = compileProgram(vertexSource, fragmentSource, "quads");
-            this.translucentTerrainProgramId = compileProgram(
-                    withDefines(vertexSource, "TRANSLUCENT", 1),
-                    withDefines(fragmentSource, "TRANSLUCENT", 1),
+            String opaqueFragmentSource = pipeline.patchOpaqueShader(this, fragmentSource);
+            opaqueFragmentSource = opaqueFragmentSource == null ? fragmentSource : opaqueFragmentSource;
+            this.terrainProgramId = compilePatchedOrNormal(vertexSource, opaqueFragmentSource, fragmentSource, "quads");
+
+            String translucentVertexSource = withDefines(vertexSource, "TRANSLUCENT", 1);
+            String normalTranslucentFragmentSource = withDefines(fragmentSource, "TRANSLUCENT", 1);
+            String translucentFragmentSource = pipeline.patchTranslucentShader(this, fragmentSource);
+            translucentFragmentSource = translucentFragmentSource == null
+                    ? normalTranslucentFragmentSource
+                    : withDefines(translucentFragmentSource, "TRANSLUCENT", 1);
+            this.translucentTerrainProgramId = compilePatchedOrNormal(
+                    translucentVertexSource,
+                    translucentFragmentSource,
+                    normalTranslucentFragmentSource,
                     "quads translucent");
             this.prepProgramId = compileComputeProgram(ForgeOriginalVoxyShaderSource.parse("voxy:lod/gl46/prep.comp"), "prep.comp");
-            String cullVertexSource = properties.injectDefines(ForgeOriginalVoxyShaderSource.parse("voxy:lod/gl46/cull/raster.vert"));
+            String cullVertexSource = this.properties.injectDefines(ForgeOriginalVoxyShaderSource.parse("voxy:lod/gl46/cull/raster.vert"));
             String cullFragmentSource = ForgeOriginalVoxyShaderSource.parse("voxy:lod/gl46/cull/raster.frag");
             this.cullProgramId = compileProgram(cullVertexSource, cullFragmentSource, "cull/raster");
             String cmdgenSource = withDefines(
@@ -221,7 +236,7 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
             ForgeOriginalVoxyMdicViewport viewport,
             ForgeOriginalVoxyBasicSectionGeometryData geometryData,
             ForgeOriginalVoxyModelStore modelStore,
-            int opaqueFramebufferId) {
+            ForgeOriginalVoxyRenderPipeline pipeline) {
         if (geometryData == null || geometryData.sectionCount() == 0) {
             return;
         }
@@ -231,7 +246,7 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
                 viewport,
                 geometryData,
                 modelStore,
-                opaqueFramebufferId,
+                pipeline,
                 this.terrainProgramId,
                 0L,
                 4L * 3L,
@@ -243,7 +258,7 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
             ForgeOriginalVoxyMdicViewport viewport,
             ForgeOriginalVoxyBasicSectionGeometryData geometryData,
             ForgeOriginalVoxyModelStore modelStore,
-            int opaqueFramebufferId) {
+            ForgeOriginalVoxyRenderPipeline pipeline) {
         if (geometryData == null || geometryData.sectionCount() == 0) {
             return;
         }
@@ -251,7 +266,7 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
                 viewport,
                 geometryData,
                 modelStore,
-                opaqueFramebufferId,
+                pipeline,
                 this.terrainProgramId,
                 TEMPORAL_OFFSET * 5L * 4L,
                 4L * 5L,
@@ -263,8 +278,12 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
             ForgeOriginalVoxyMdicViewport viewport,
             ForgeOriginalVoxyBasicSectionGeometryData geometryData,
             ForgeOriginalVoxyModelStore modelStore,
-            int translucentFramebufferId) {
+            ForgeOriginalVoxyRenderPipeline pipeline) {
         if (geometryData == null || geometryData.sectionCount() == 0) {
+            return;
+        }
+        if (!pipeline.translucentDrawTargetReady()) {
+            this.recordFailure("original-mdic-section-renderer-translucent-target-not-ready");
             return;
         }
         glEnable(GL_BLEND);
@@ -274,7 +293,7 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
         glDepthFunc(this.properties.closerEqualDepthCompare());
         glUseProgram(this.translucentTerrainProgramId);
         glBindVertexArray(this.vertexArrayId);
-        glBindFramebuffer(GL_FRAMEBUFFER, translucentFramebufferId);
+        pipeline.setupAndBindTranslucent(viewport);
         this.bindRenderingBuffers(viewport, geometryData, modelStore);
         glMemoryBarrier(GL_COMMAND_BARRIER_BIT | GL_SHADER_STORAGE_BARRIER_BIT);
         glProvokingVertex(GL_FIRST_VERTEX_CONVENTION);
@@ -437,7 +456,7 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
             ForgeOriginalVoxyMdicViewport viewport,
             ForgeOriginalVoxyBasicSectionGeometryData geometryData,
             ForgeOriginalVoxyModelStore modelStore,
-            int framebufferId,
+            ForgeOriginalVoxyRenderPipeline pipeline,
             int programId,
             long indirectOffset,
             long drawCountOffset,
@@ -458,8 +477,8 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
             this.recordFailure("original-mdic-section-renderer-model-store-not-ready");
             return;
         }
-        if (framebufferId == 0) {
-            this.recordFailure("original-mdic-section-renderer-framebuffer-not-ready");
+        if (!pipeline.opaqueDrawTargetReady()) {
+            this.recordFailure("original-mdic-section-renderer-opaque-target-not-ready");
             return;
         }
         glDisable(GL_CULL_FACE);
@@ -468,7 +487,7 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
         glDepthFunc(this.properties.closerEqualDepthCompare());
         glUseProgram(programId);
         glBindVertexArray(this.vertexArrayId);
-        glBindFramebuffer(GL_FRAMEBUFFER, framebufferId);
+        pipeline.setupAndBindOpaque(viewport);
         this.bindRenderingBuffers(viewport, geometryData, modelStore);
         glMemoryBarrier(GL_COMMAND_BARRIER_BIT | GL_SHADER_STORAGE_BARRIER_BIT);
         glProvokingVertex(GL_FIRST_VERTEX_CONVENTION);
@@ -807,6 +826,26 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
             return "1.0";
         }
         return Float.toString(value);
+    }
+
+    private static int compilePatchedOrNormal(
+            String vertexSource,
+            String fragmentSource,
+            String normalFragmentSource,
+            String name) {
+        boolean patched = fragmentSource != normalFragmentSource;
+        try {
+            return compileProgram(
+                    vertexSource,
+                    patched ? withDefines(fragmentSource, "PATCHED_SHADER", 1) : fragmentSource,
+                    name);
+        } catch (RuntimeException e) {
+            if (patched) {
+                VoxyForge.LOGGER.error("Failed to compile original Voxy terrain shader patch; using normal shader path", e);
+                return compilePatchedOrNormal(vertexSource, normalFragmentSource, normalFragmentSource, name);
+            }
+            throw e;
+        }
     }
 
     private static int compileComputeProgram(String source, String name) {

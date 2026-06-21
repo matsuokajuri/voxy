@@ -45,7 +45,7 @@ public final class ForgeOriginalVoxyModelPipeline {
     private ForgeOriginalVoxyRenderDistanceTracker renderDistanceTracker;
     private ForgeOriginalVoxyHierarchicalOcclusionTraverser hierarchicalOcclusionTraverser;
     private ForgeOriginalVoxyMdicSectionRenderer mdicSectionRenderer;
-    private ForgeOriginalVoxyPipelineDepthStage pipelineDepthStage;
+    private ForgeOriginalVoxyRenderPipeline renderPipeline;
     private ForgeOriginalVoxyViewportSelector viewportSelector;
     private Thread processingThread;
     private volatile boolean processingThreadRunning;
@@ -515,9 +515,9 @@ public final class ForgeOriginalVoxyModelPipeline {
             return;
         }
         ForgeOriginalVoxyRenderProperties renderProperties = ForgeOriginalVoxyRenderProperties.getRenderProperties();
-        ForgeOriginalVoxyPipelineDepthStage depthStage;
+        ForgeOriginalVoxyRenderPipeline renderPipeline;
         try {
-            depthStage = new ForgeOriginalVoxyPipelineDepthStage(renderProperties);
+            renderPipeline = new ForgeOriginalVoxyRenderPipeline(renderProperties);
         } catch (RuntimeException e) {
             geometrySync.stopOnRenderThread();
             cleaner.freeOnRenderThread();
@@ -532,7 +532,7 @@ public final class ForgeOriginalVoxyModelPipeline {
                 new ForgeOriginalVoxyHierarchicalOcclusionTraverser(geometrySync, cleaner, renderGeneration);
         String traversalError = hierarchicalOcclusionTraverser.buildOnRenderThread(renderProperties);
         if (!"none".equals(traversalError)) {
-            depthStage.freeOnRenderThread();
+            renderPipeline.freeOnRenderThread();
             hierarchicalOcclusionTraverser.freeOnRenderThread();
             geometrySync.stopOnRenderThread();
             cleaner.freeOnRenderThread();
@@ -544,10 +544,10 @@ public final class ForgeOriginalVoxyModelPipeline {
             return;
         }
         ForgeOriginalVoxyMdicSectionRenderer mdicSectionRenderer = new ForgeOriginalVoxyMdicSectionRenderer();
-        String cmdgenError = mdicSectionRenderer.buildOnRenderThread(renderProperties);
+        String cmdgenError = mdicSectionRenderer.buildOnRenderThread(renderPipeline);
         if (!"none".equals(cmdgenError)) {
             mdicSectionRenderer.freeOnRenderThread();
-            depthStage.freeOnRenderThread();
+            renderPipeline.freeOnRenderThread();
             hierarchicalOcclusionTraverser.freeOnRenderThread();
             geometrySync.stopOnRenderThread();
             cleaner.freeOnRenderThread();
@@ -583,7 +583,7 @@ public final class ForgeOriginalVoxyModelPipeline {
             this.renderDistanceTracker = renderDistanceTracker;
             this.hierarchicalOcclusionTraverser = hierarchicalOcclusionTraverser;
             this.mdicSectionRenderer = mdicSectionRenderer;
-            this.pipelineDepthStage = depthStage;
+            this.renderPipeline = renderPipeline;
             this.viewportSelector = viewportSelector;
             this.ownerReady = true;
             this.mapperBiomeCallbackAttached = true;
@@ -618,7 +618,7 @@ public final class ForgeOriginalVoxyModelPipeline {
             ForgeOriginalVoxyMdicViewport viewport;
             ForgeOriginalVoxyHierarchicalOcclusionTraverser traversal;
             ForgeOriginalVoxyMdicSectionRenderer sectionRenderer;
-            ForgeOriginalVoxyPipelineDepthStage depthStage;
+            ForgeOriginalVoxyRenderPipeline renderPipeline;
             ForgeOriginalVoxyBasicSectionGeometryData geometryData;
             ForgeOriginalVoxyAsyncNodeGeometrySync geometrySync;
             ForgeOriginalVoxyNodeCleaner cleaner;
@@ -630,7 +630,7 @@ public final class ForgeOriginalVoxyModelPipeline {
                 selector = this.viewportSelector;
                 traversal = this.hierarchicalOcclusionTraverser;
                 sectionRenderer = this.mdicSectionRenderer;
-                depthStage = this.pipelineDepthStage;
+                renderPipeline = this.renderPipeline;
                 geometryData = this.basicSectionGeometryData;
                 geometrySync = this.asyncNodeGeometrySync;
                 cleaner = this.nodeCleaner;
@@ -640,7 +640,7 @@ public final class ForgeOriginalVoxyModelPipeline {
             if (minecraft.level == null || minecraft.player == null || matrices == null || camera == null) {
                 return;
             }
-            if (viewport == null || traversal == null || sectionRenderer == null || depthStage == null || geometryData == null || !traversal.ready()) {
+            if (viewport == null || traversal == null || sectionRenderer == null || renderPipeline == null || geometryData == null || !traversal.ready()) {
                 return;
             }
             int drawFramebuffer = glGetInteger(GL_DRAW_FRAMEBUFFER_BINDING);
@@ -674,7 +674,7 @@ public final class ForgeOriginalVoxyModelPipeline {
                     .setScreenSize(width, height)
                     .update();
             viewport.frameId++;
-            int depthTexture = depthStage.setupDepthTexture(drawFramebuffer, width, height, width, height);
+            int depthTexture = renderPipeline.setup(viewport, drawFramebuffer, width, height);
             viewport.buildHizFromSourceDepth(depthTexture, width, height);
             this.runOriginalInnerPrimaryWorkBeforeTraversal(geometrySync, cleaner);
             traversal.doTraversal(viewport);
@@ -753,7 +753,7 @@ public final class ForgeOriginalVoxyModelPipeline {
         ForgeOriginalVoxyRenderDistanceTracker tracker;
         ForgeOriginalVoxyHierarchicalOcclusionTraverser hierarchicalOcclusionTraverser;
         ForgeOriginalVoxyMdicSectionRenderer mdicSectionRenderer;
-        ForgeOriginalVoxyPipelineDepthStage depthStage;
+        ForgeOriginalVoxyRenderPipeline renderPipeline;
         ForgeOriginalVoxyViewportSelector viewportSelector;
         synchronized (this) {
             this.clearRuns++;
@@ -779,7 +779,7 @@ public final class ForgeOriginalVoxyModelPipeline {
             tracker = this.renderDistanceTracker;
             hierarchicalOcclusionTraverser = this.hierarchicalOcclusionTraverser;
             mdicSectionRenderer = this.mdicSectionRenderer;
-            depthStage = this.pipelineDepthStage;
+            renderPipeline = this.renderPipeline;
             viewportSelector = this.viewportSelector;
             this.world = null;
             this.modelStore = null;
@@ -792,7 +792,7 @@ public final class ForgeOriginalVoxyModelPipeline {
             this.renderDistanceTracker = null;
             this.hierarchicalOcclusionTraverser = null;
             this.mdicSectionRenderer = null;
-            this.pipelineDepthStage = null;
+            this.renderPipeline = null;
             this.viewportSelector = null;
         }
         if (callbackWorld != null) {
@@ -808,8 +808,8 @@ public final class ForgeOriginalVoxyModelPipeline {
             if (mdicSectionRenderer != null) {
                 mdicSectionRenderer.freeOnRenderThread();
             }
-            if (depthStage != null) {
-                depthStage.freeOnRenderThread();
+            if (renderPipeline != null) {
+                renderPipeline.freeOnRenderThread();
             }
             if (hierarchicalOcclusionTraverser != null) {
                 hierarchicalOcclusionTraverser.freeOnRenderThread();

@@ -120,7 +120,15 @@ implementation scaffolding for formal MDIC.
    `renderOpaque` / `renderTemporal` / `renderTranslucent` binding methods.
    The active hook still does not submit MDIC terrain draw calls.
 10. Roman VII: bind the original `ModelStore` and terrain shader contract
-    exactly as original Voxy expects.
+    exactly as original Voxy expects. The first VII pass is now implemented at
+    the owner/source-contract level: `ForgeOriginalVoxyRenderPipeline` mirrors
+    the `AbstractRenderPipeline` shader hook boundary, and
+    `ForgeOriginalVoxyMdicSectionRenderer` now builds original
+    `quads3.vert`/`quads.frag` terrain and translucent programs through the
+    original TAA hook, shader patch hook, and patched-or-normal fallback shape.
+    The original `NormalRenderPipeline` colour targets, final target handoff,
+    and Oculus-backed shaderpack patch semantics are still not ported, so the
+    active hook still does not submit MDIC terrain draw calls.
 11. Roman VIII: only then enable controlled renderer draw behind the original
     renderer owner.
 
@@ -130,7 +138,7 @@ Do not enable formal MDIC draw while any of these are true:
 
 ```text
 original render-pipeline target / VoxyRenderSystem lifecycle not yet ported
-original terrain shader semantics incomplete
+original terrain shader draw-target and shaderpack-patch semantics incomplete
 MDICSectionRenderer draw methods not called by active pipeline
 ```
 

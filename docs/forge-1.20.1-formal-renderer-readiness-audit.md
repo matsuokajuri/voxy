@@ -120,6 +120,12 @@ Some bottom-path corrections are now aligned in direction:
   owner now includes the original prefix-sum / `buildtranslucents.comp`
   translucent command-build tail. The active Forge hook still does not submit
   those draw commands to the main renderer.
+- Roman VII has started the original terrain-shader contract chain:
+  `ForgeOriginalVoxyRenderPipeline` owns the `AbstractRenderPipeline`-shaped
+  shader hook boundary, and `ForgeOriginalVoxyMdicSectionRenderer` now builds
+  original `quads3.vert` / `quads.frag` terrain and translucent programs
+  through the original TAA hook, shader patch hook, and patched-or-normal
+  fallback shape.
 - `RenderGenerationService` now uses original `ServiceManager` / `Service` /
   `UnifiedServiceThreadPool` execution, including service-thread config and
   Embeddium builder-thread semaphore sharing.
@@ -133,7 +139,8 @@ P0 gaps:
 
 ```text
 MDICSectionRenderer draw submission not yet active in the original pipeline
-original terrain shader semantics incomplete
+original render-pipeline colour target / final handoff incomplete
+original terrain shader full semantics and shaderpack patch integration incomplete
 VoxyRenderSystem lifecycle parity incomplete
 ```
 
