@@ -619,6 +619,13 @@ semantics.
 - VI build failure cleanup: if shader/program construction fails during `ForgeOriginalVoxyMdicSectionRenderer.buildOnRenderThread(...)`, already-created GL programs are now freed before recording failure.
 - VI/VII GL state cleanup: the Forge hook adapter now restores cull-raster color mask, depth mask, representative-fragment state, and final-blit blend state on exceptional exits. This is limited to adapter-owned state protection while `VoxyRenderSystem` is not yet the outer lifecycle owner.
 
+### VIII preparation audit
+
+- Original source baseline: `VoxyRenderSystem.renderOpaque(...)` delegates the visible renderer to `AbstractRenderPipeline.runPipeline(...)`, which performs `setup`, `renderOpaque`, `innerPrimaryWork`, `buildDrawCalls`, `renderTemporal`, `postOpaquePreperation`, `postOpaquePreTranslucent`, `renderTranslucent`, and `finish` in one frame owner.
+- Current Forge state: `ForgeOriginalVoxyModelPipeline.renderEmbeddiumCutout(...)` already selects/updates the `ForgeOriginalVoxyMdicViewport`, runs depth setup, builds HiZ, runs original HOC traversal, and dispatches production `cmdgen.comp`, but it stops before `MDICSectionRenderer.renderOpaque(...)`, `renderTemporal(...)`, `postOpaquePreTranslucent(...)`, `renderTranslucent(...)`, and `finish(...)`.
+- Required VIII correction: replace the command-generation-only active hook body with an original-shaped visible renderer frame owner that calls the existing VI/VII owners in original order. The Embeddium cutout mixin remains only the Forge platform entry point; the implementation route must not use historical K-era preview renderer code.
+- Remaining non-visual parity blockers after VIII should stay explicit: environmental fog uniforms, Oculus/Iris shaderpack patch bridge, full `VoxyRenderSystem` lifecycle/reload ownership, and movement/update performance parity.
+
 ## Do not do
 
 Do not use:
