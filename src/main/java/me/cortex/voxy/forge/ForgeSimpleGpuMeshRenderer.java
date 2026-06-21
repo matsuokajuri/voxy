@@ -54,6 +54,10 @@ public final class ForgeSimpleGpuMeshRenderer {
             this.lastFrameStats = FrameStats.skipped("disabled");
             return;
         }
+        if (this.instance.getOriginalVoxyModelPipeline().shouldSuppressDeprecatedVisibleRoutes()) {
+            this.lastFrameStats = FrameStats.skipped("formal-original-renderer-start-pending-or-active");
+            return;
+        }
         if (this.instance.getCurrentEngineOptional().isEmpty()) {
             this.lastFrameStats = FrameStats.skipped("engine-missing");
             return;

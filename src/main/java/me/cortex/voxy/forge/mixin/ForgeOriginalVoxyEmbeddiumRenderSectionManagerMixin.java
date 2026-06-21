@@ -32,7 +32,8 @@ public class ForgeOriginalVoxyEmbeddiumRenderSectionManagerMixin {
     private void voxy$ingestOnChunkAdd(int x, int z, CallbackInfo ci) {
         LevelChunk chunk = this.world.getChunkSource().getChunk(x, z, net.minecraft.world.level.chunk.ChunkStatus.FULL, false);
         if (chunk != null) {
-            VoxelIngestService.tryAutoIngestChunk(chunk);
+            boolean updated = VoxelIngestService.tryAutoIngestChunk(chunk);
+            ForgeVoxyInstance.INSTANCE.getChunkIngestManager().recordMixinChunkIngest(updated);
         }
     }
 
@@ -40,7 +41,8 @@ public class ForgeOriginalVoxyEmbeddiumRenderSectionManagerMixin {
     private void voxy$ingestOnChunkRemove(int x, int z, CallbackInfo ci) {
         LevelChunk chunk = this.world.getChunkSource().getChunk(x, z, net.minecraft.world.level.chunk.ChunkStatus.FULL, false);
         if (chunk != null) {
-            VoxelIngestService.tryAutoIngestChunk(chunk);
+            boolean updated = VoxelIngestService.tryAutoIngestChunk(chunk);
+            ForgeVoxyInstance.INSTANCE.getChunkIngestManager().recordMixinChunkIngest(updated);
         }
     }
 
@@ -95,7 +97,7 @@ public class ForgeOriginalVoxyEmbeddiumRenderSectionManagerMixin {
         var sectionPos = SectionPos.of(x, y, z);
         var blockLight = lightEngine.getLayerListener(LightLayer.BLOCK).getDataLayerData(sectionPos);
         var skyLight = lightEngine.getLayerListener(LightLayer.SKY).getDataLayerData(sectionPos);
-        VoxelIngestService.rawIngest(
+        boolean updated = VoxelIngestService.rawIngest(
                 engine,
                 levelSection,
                 x,
@@ -103,5 +105,6 @@ public class ForgeOriginalVoxyEmbeddiumRenderSectionManagerMixin {
                 z,
                 blockLight == null ? null : blockLight.copy(),
                 skyLight == null ? null : skyLight.copy());
+        ForgeVoxyInstance.INSTANCE.getChunkIngestManager().recordMixinSectionIngest(updated);
     }
 }

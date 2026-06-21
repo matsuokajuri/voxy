@@ -188,7 +188,7 @@ final class ForgeOriginalVoxyRenderGenerationService {
             for (int j = 0; j < 32 * 32; j++) {
                 int block = Mapper.getBlockId(auxData[j + (i * 32 * 32)]);
                 if (block != 0 && !this.modelFactory.hasModelForBlockId(block) && seenMissedIds.add(block)) {
-                    this.modelPipeline.requestBlockBake(block);
+                    this.modelPipeline.requestBlockBakeInternal(block);
                     this.modelMissRequestCount++;
                 }
             }
@@ -200,7 +200,7 @@ final class ForgeOriginalVoxyRenderGenerationService {
         for (long state : section._unsafeGetRawDataArray()) {
             int block = Mapper.getBlockId(state);
             if (block != 0 && !this.modelFactory.hasModelForBlockId(block) && seenMissedIds.add(block)) {
-                this.modelPipeline.requestBlockBake(block);
+                this.modelPipeline.requestBlockBakeInternal(block);
                 this.modelMissRequestCount++;
             }
         }
@@ -258,14 +258,15 @@ final class ForgeOriginalVoxyRenderGenerationService {
             BuildTask task,
             WorldSection section,
             ForgeOriginalVoxyIdNotYetComputedException e,
-            IntOpenHashSet seenMissedIds) {
+        IntOpenHashSet seenMissedIds) {
         BuildTask currentTask = task;
+        boolean replacedTaskNeedsModelRequest = false;
         long stamp = this.taskMapLock.writeLock();
         try {
             BuildTask other = this.taskMap.putIfAbsent(task.position, task);
             if (other != null) {
                 this.replacedTaskCount++;
-                this.requestMissingModel(e, seenMissedIds);
+                replacedTaskNeedsModelRequest = true;
                 if (task.hasDoneModelRequestInner) {
                     other.hasDoneModelRequestInner = true;
                 }
@@ -280,6 +281,9 @@ final class ForgeOriginalVoxyRenderGenerationService {
             }
         } finally {
             this.taskMapLock.unlockWrite(stamp);
+        }
+        if (replacedTaskNeedsModelRequest) {
+            this.requestMissingModel(e, seenMissedIds);
         }
 
         if (currentTask == null) {
@@ -333,7 +337,7 @@ final class ForgeOriginalVoxyRenderGenerationService {
 
     private void requestMissingModel(ForgeOriginalVoxyIdNotYetComputedException e, IntOpenHashSet seenMissedIds) {
         if (e.isIdBlockId && !this.modelFactory.hasModelForBlockId(e.id) && seenMissedIds.add(e.id)) {
-            this.modelPipeline.requestBlockBake(e.id);
+            this.modelPipeline.requestBlockBakeInternal(e.id);
             this.modelMissRequestCount++;
         }
     }

@@ -368,6 +368,21 @@ final class ForgeOriginalVoxyAsyncNodeGeometrySync {
         return this.geometryData.geometryCapacityBytes();
     }
 
+    boolean hasWork() {
+        if (this.workCounter.get() != 0 || this.results.get() != null) {
+            return true;
+        }
+        synchronized (this.topLevelNodeLock) {
+            if (!this.topLevelNodeAdds.isEmpty() || !this.topLevelNodeRemoves.isEmpty()) {
+                return true;
+            }
+        }
+        return !this.requestBatchQueue.isEmpty()
+                || !this.childUpdateQueue.isEmpty()
+                || !this.geometryUpdateQueue.isEmpty()
+                || !this.removeBatchQueue.isEmpty();
+    }
+
     int maxNodeCount() {
         return ORIGINAL_MAX_NODE_COUNT;
     }

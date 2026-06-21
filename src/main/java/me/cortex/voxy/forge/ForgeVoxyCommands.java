@@ -9326,7 +9326,7 @@ public final class ForgeVoxyCommands {
         var gpuRenderStats = ForgeVoxyInstance.INSTANCE.getSimpleGpuMeshRenderer().getLastFrameStats();
         var presetStatus = ForgeVoxyRuntimeOverrides.createStatusSnapshot();
         String message = String.format(
-                "Voxy debug pipeline: preset=%s overrides=%s engineConfig=%s engine=%s autoIngest=%s autoBuild=%s render=%s simpleGpu=%s gpuSource=%s sourceRole=%s recommendedSource=%s fallbackSource=%s dim=%s playerChunk=%s ingestQueue=%d ingestedRecords=%d avgIngestMs=%.2f buildQueue=%d builtRecords=%d failedRecords=%d avgBuildMs=%.2f lastBuildMs=%.2f cache=%d/%d vertices=%d quads=%d bytes=%d dimensions=%s layers=%s gpuBuffers=%d/%d gpuPending=%d gpuRendered=%d gpuChunks=%d gpuVertices=%d gpuLimited=%d gpuSkippedNear=%d gpuSkippedLoaded=%d gpuSkippedLoadedState=%d gpuSkippedRenderDistance=%d gpuSkippedFar=%d gpuAvgRenderMs=%.2f gpuMinDistance=%d gpuMaxDistance=%d gpuRenderLoaded=%s gpuSkipMode=%s gpuLoadedMargin=%d gpuKeepCached=%s maxRendered=%d ignoreDepth=%s alpha=%.2f verticalOffset=%.3f stage=%s %s %s",
+                "Voxy debug pipeline: preset=%s overrides=%s engineConfig=%s engine=%s autoIngest=%s autoBuild=%s render=%s simpleGpu=%s gpuSource=%s sourceRole=%s recommendedSource=%s fallbackSource=%s dim=%s playerChunk=%s ingestQueue=%d ingestedRecords=%d mixinChunkAttempts=%d mixinChunkUpdates=%d mixinSectionAttempts=%d mixinSectionUpdates=%d avgIngestMs=%.2f buildQueue=%d builtRecords=%d failedRecords=%d avgBuildMs=%.2f lastBuildMs=%.2f cache=%d/%d vertices=%d quads=%d bytes=%d dimensions=%s layers=%s gpuBuffers=%d/%d gpuPending=%d gpuRendered=%d gpuChunks=%d gpuVertices=%d gpuLimited=%d gpuSkippedNear=%d gpuSkippedLoaded=%d gpuSkippedLoadedState=%d gpuSkippedRenderDistance=%d gpuSkippedFar=%d gpuAvgRenderMs=%.2f gpuMinDistance=%d gpuMaxDistance=%d gpuRenderLoaded=%s gpuSkipMode=%s gpuLoadedMargin=%d gpuKeepCached=%s maxRendered=%d ignoreDepth=%s alpha=%.2f verticalOffset=%.3f stage=%s %s %s",
                 presetStatus.presetName(),
                 presetStatus.hasOverrides(),
                 ForgeVoxyRuntimeOverrides.enabledWorldEngineSkeleton(),
@@ -9343,6 +9343,10 @@ public final class ForgeVoxyCommands {
                 playerChunk,
                 ingestStatus.queuedChunks(),
                 ingestStatus.ingestedChunks(),
+                ingestStatus.mixinChunkIngestAttempts(),
+                ingestStatus.mixinChunkIngestUpdates(),
+                ingestStatus.mixinSectionIngestAttempts(),
+                ingestStatus.mixinSectionIngestUpdates(),
                 ingestStatus.averageMs(),
                 meshBuildStatus.queuedChunks(),
                 meshBuildStatus.builtChunks(),
@@ -10937,12 +10941,16 @@ public final class ForgeVoxyCommands {
         var status = ForgeVoxyInstance.INSTANCE.getChunkIngestManager().createStatusSnapshot();
         String dimension = status.dimension() == null ? "none" : status.dimension();
         String message = String.format(
-                "Voxy ingest: engine=%s auto=%s dimension=%s queued=%d ingested=%d radius=%d maxPerTick=%d cooldown=%d avgMs=%.2f",
+                "Voxy ingest: engine=%s auto=%s dimension=%s queued=%d ingested=%d mixinChunkAttempts=%d mixinChunkUpdates=%d mixinSectionAttempts=%d mixinSectionUpdates=%d radius=%d maxPerTick=%d cooldown=%d avgMs=%.2f",
                 status.enginePresent(),
                 status.autoEnabled(),
                 dimension,
                 status.queuedChunks(),
                 status.ingestedChunks(),
+                status.mixinChunkIngestAttempts(),
+                status.mixinChunkIngestUpdates(),
+                status.mixinSectionIngestAttempts(),
+                status.mixinSectionIngestUpdates(),
                 status.radius(),
                 status.maxChunksPerTick(),
                 status.cooldownTicks(),

@@ -150,6 +150,12 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
     private boolean readbackAuditReady;
     private boolean barrierAuditReady;
     private boolean positionScratchReadbackOk;
+    private boolean opaquePatchedShaderRequested;
+    private boolean opaquePatchedShaderUsed;
+    private boolean opaquePatchedShaderFallbackUsed;
+    private boolean translucentPatchedShaderRequested;
+    private boolean translucentPatchedShaderUsed;
+    private boolean translucentPatchedShaderFallbackUsed;
     private int lastGlError = GL_NO_ERROR;
     private ForgeOriginalVoxyRenderProperties properties;
     private ForgeOriginalVoxyRenderPipeline pipeline;
@@ -172,7 +178,15 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
             String fragmentSource = ForgeOriginalVoxyShaderSource.parse("voxy:lod/gl46/quads.frag");
             String opaqueFragmentSource = pipeline.patchOpaqueShader(this, fragmentSource);
             opaqueFragmentSource = opaqueFragmentSource == null ? fragmentSource : opaqueFragmentSource;
-            this.terrainProgramId = compilePatchedOrNormal(vertexSource, opaqueFragmentSource, fragmentSource, "quads");
+            ShaderProgramBuildResult opaqueShader = compilePatchedOrNormal(
+                    vertexSource,
+                    opaqueFragmentSource,
+                    fragmentSource,
+                    "quads");
+            this.terrainProgramId = opaqueShader.programId();
+            this.opaquePatchedShaderRequested = opaqueShader.patchedRequested();
+            this.opaquePatchedShaderUsed = opaqueShader.patchedUsed();
+            this.opaquePatchedShaderFallbackUsed = opaqueShader.fallbackUsed();
 
             String translucentVertexSource = withDefines(vertexSource, "TRANSLUCENT", 1);
             String normalTranslucentFragmentSource = withDefines(fragmentSource, "TRANSLUCENT", 1);
@@ -180,13 +194,23 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
             translucentFragmentSource = translucentFragmentSource == null
                     ? normalTranslucentFragmentSource
                     : withDefines(translucentFragmentSource, "TRANSLUCENT", 1);
-            this.translucentTerrainProgramId = compilePatchedOrNormal(
+            ShaderProgramBuildResult translucentShader = compilePatchedOrNormal(
                     translucentVertexSource,
                     translucentFragmentSource,
                     normalTranslucentFragmentSource,
                     "quads translucent");
+            this.translucentTerrainProgramId = translucentShader.programId();
+            this.translucentPatchedShaderRequested = translucentShader.patchedRequested();
+            this.translucentPatchedShaderUsed = translucentShader.patchedUsed();
+            this.translucentPatchedShaderFallbackUsed = translucentShader.fallbackUsed();
             this.prepProgramId = compileComputeProgram(ForgeOriginalVoxyShaderSource.parse("voxy:lod/gl46/prep.comp"), "prep.comp");
-            String cullVertexSource = this.properties.injectDefines(ForgeOriginalVoxyShaderSource.parse("voxy:lod/gl46/cull/raster.vert"));
+            String cullVertexSource = ForgeOriginalVoxyShaderSource.parse("voxy:lod/gl46/cull/raster.vert");
+            String cullTaa = pipeline.taaFunction("getTAA");
+            if (cullTaa != null) {
+                cullVertexSource += "\n\n\n\n" + cullTaa;
+                cullVertexSource = withDefines(cullVertexSource, "TAA", 1);
+            }
+            cullVertexSource = this.properties.injectDefines(cullVertexSource);
             String cullFragmentSource = ForgeOriginalVoxyShaderSource.parse("voxy:lod/gl46/cull/raster.frag");
             this.cullProgramId = compileProgram(cullVertexSource, cullFragmentSource, "cull/raster");
             String cmdgenSource = withDefines(
@@ -433,6 +457,12 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
                 false,
                 false,
                 false,
+                this.opaquePatchedShaderRequested,
+                this.opaquePatchedShaderUsed,
+                this.opaquePatchedShaderFallbackUsed,
+                this.translucentPatchedShaderRequested,
+                this.translucentPatchedShaderUsed,
+                this.translucentPatchedShaderFallbackUsed,
                 this.lastGlError,
                 this.lifecycleState,
                 this.lastLifecycleEvent,
@@ -792,6 +822,12 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
             glDeleteProgram(this.translucentGenProgramId);
             this.translucentGenProgramId = 0;
         }
+        this.opaquePatchedShaderRequested = false;
+        this.opaquePatchedShaderUsed = false;
+        this.opaquePatchedShaderFallbackUsed = false;
+        this.translucentPatchedShaderRequested = false;
+        this.translucentPatchedShaderUsed = false;
+        this.translucentPatchedShaderFallbackUsed = false;
     }
 
     private static String withDefines(String source, Object... defines) {
@@ -869,24 +905,33 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
         return Float.toString(value);
     }
 
-    private static int compilePatchedOrNormal(
+    private static ShaderProgramBuildResult compilePatchedOrNormal(
             String vertexSource,
             String fragmentSource,
             String normalFragmentSource,
             String name) {
         boolean patched = fragmentSource != normalFragmentSource;
         try {
-            return compileProgram(
+            int programId = compileProgram(
                     vertexSource,
                     patched ? withDefines(fragmentSource, "PATCHED_SHADER", 1) : fragmentSource,
                     name);
+            return new ShaderProgramBuildResult(programId, patched, patched, false);
         } catch (RuntimeException e) {
             if (patched) {
                 VoxyForge.LOGGER.error("Failed to compile original Voxy terrain shader patch; using normal shader path", e);
-                return compilePatchedOrNormal(vertexSource, normalFragmentSource, normalFragmentSource, name);
+                int programId = compileProgram(vertexSource, normalFragmentSource, name);
+                return new ShaderProgramBuildResult(programId, true, false, true);
             }
             throw e;
         }
+    }
+
+    private record ShaderProgramBuildResult(
+            int programId,
+            boolean patchedRequested,
+            boolean patchedUsed,
+            boolean fallbackUsed) {
     }
 
     private static int compileComputeProgram(String source, String name) {

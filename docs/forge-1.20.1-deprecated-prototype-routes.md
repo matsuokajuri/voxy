@@ -116,19 +116,33 @@ The original model upload path also has committed readback proof and the
 Oculus custom block-state id hook.
 
 Remaining lower-renderer blockers are full integrated `VoxyRenderSystem`
-lifecycle, formal Voxy consumption of the Oculus shaderpack patch/data/binding
-bridge, the shaderpack far-LoD white/bright visual artifact seen in the
-2026-06-21 runtime pass, and movement/update performance parity. Production
+lifecycle, patched shaderpack terrain compile parity, the shaderpack far-LoD
+white/bright visual artifact seen in the 2026-06-21 runtime passes, and
+movement/update performance parity. Production
 `cmdgen.comp`, `MDICSectionRenderer`, the original terrain shader hook
 boundary, render-thread geometry ownership, node ownership, RenderDistanceTracker,
 HiZ, HOC traversal, ViewportSelector, MDICViewport, and the Oculus shaderpack
 patch bridge now belong to the active Roman-route parity path.
 
 The 2026-06-21 real-pack check with `ComplementaryUnbound_r5.8.1.zip` is
-active-route evidence only: it validates Oculus shaderpack loading and world
-entry after Forge-safe constructor hook fixes. It does not flip formal renderer
-readiness, because the full `VoxyRenderSystem` owner still has to start and
-consume that shaderpack pipeline data.
+active-route evidence only: the post-repair pass validates Oculus shaderpack
+loading, Voxy shaderpack sidecar discovery, world entry, formal owner startup,
+Oculus shaderpack pipeline data consumption, and original MDIC draw submission.
+It does not flip formal renderer readiness, because the full `VoxyRenderSystem`
+owner is still incomplete and the patched opaque/translucent shaderpack terrain
+programs currently fall back to the normal shader path.
+
+The follow-up drift audit in
+`docs/forge-1.20.1-deep-runtime-drift-audit-2026-06-21.md` confirms that the
+visible LoD pixels in that run were submitted by `ForgeSimpleGpuMeshRenderer`,
+not by the formal original MDIC renderer. Runtime presets such as `lod`,
+`overlay`, and `gl_heap_readback` therefore remain legacy/debug validation
+routes even when they produce on-screen LoD-like pixels. The simple GPU
+renderer is now suppressed while the formal original model pipeline start is
+requested, queued, or active, but that suppression is only route isolation; it
+does not make the simple GPU renderer part of formal readiness. In the later
+post-repair pass, formal MDIC submission replaced simple-GPU evidence, but the
+shaderpack patched shader fallback remains a degraded active-route blocker.
 
 ## Replacement direction
 

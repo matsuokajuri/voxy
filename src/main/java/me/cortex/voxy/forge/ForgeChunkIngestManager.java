@@ -31,6 +31,10 @@ public final class ForgeChunkIngestManager {
     private double windowElapsedMs;
     private long lastSummaryTick;
     private double lastAverageMs;
+    private long mixinChunkIngestAttempts;
+    private long mixinChunkIngestUpdates;
+    private long mixinSectionIngestAttempts;
+    private long mixinSectionIngestUpdates;
 
     ForgeChunkIngestManager(ForgeVoxyInstance instance) {
         this.instance = instance;
@@ -48,6 +52,10 @@ public final class ForgeChunkIngestManager {
         this.activeDimension = null;
         this.scanCooldown = 0;
         this.lastAverageMs = 0.0;
+        this.mixinChunkIngestAttempts = 0L;
+        this.mixinChunkIngestUpdates = 0L;
+        this.mixinSectionIngestAttempts = 0L;
+        this.mixinSectionIngestUpdates = 0L;
     }
 
     public StatusSnapshot createStatusSnapshot() {
@@ -57,11 +65,29 @@ public final class ForgeChunkIngestManager {
                 this.activeDimension,
                 this.pendingChunks.size(),
                 this.ingestedChunks.size(),
+                this.mixinChunkIngestAttempts,
+                this.mixinChunkIngestUpdates,
+                this.mixinSectionIngestAttempts,
+                this.mixinSectionIngestUpdates,
                 getConfiguredRadius(),
                 getConfiguredMaxChunksPerTick(),
                 getConfiguredCooldownTicks(),
                 this.getAverageMs()
         );
+    }
+
+    public void recordMixinChunkIngest(boolean updated) {
+        this.mixinChunkIngestAttempts++;
+        if (updated) {
+            this.mixinChunkIngestUpdates++;
+        }
+    }
+
+    public void recordMixinSectionIngest(boolean updated) {
+        this.mixinSectionIngestAttempts++;
+        if (updated) {
+            this.mixinSectionIngestUpdates++;
+        }
     }
 
     private void onClientTick(TickEvent.ClientTickEvent event) {
@@ -276,6 +302,10 @@ public final class ForgeChunkIngestManager {
             String dimension,
             int queuedChunks,
             int ingestedChunks,
+            long mixinChunkIngestAttempts,
+            long mixinChunkIngestUpdates,
+            long mixinSectionIngestAttempts,
+            long mixinSectionIngestUpdates,
             int radius,
             int maxChunksPerTick,
             int cooldownTicks,

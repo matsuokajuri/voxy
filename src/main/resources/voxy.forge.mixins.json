@@ -12,6 +12,7 @@
     "ForgeOriginalVoxyOculusIrisRenderingPipelineAccessor",
     "ForgeOriginalVoxyOculusIrisRenderingPipelineMixin",
     "ForgeOriginalVoxyOculusProgramSetMixin",
+    "ForgeOriginalVoxyOculusShaderPackSourceNamesMixin",
     "ForgeOriginalVoxyOculusWorldRenderingSettingsMixin",
     "ForgeOriginalVoxyLevelRendererRenderStateCaptureMixin"
   ],

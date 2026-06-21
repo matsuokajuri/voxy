@@ -7,10 +7,14 @@ import me.cortex.voxy.common.util.MemoryBuffer;
 import me.cortex.voxy.common.world.other.Mapper;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.color.block.BlockColors;
+import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.renderer.block.model.BakedQuad;
+import net.minecraft.client.resources.model.BakedModel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.BlockAndTintGetter;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.ColorResolver;
@@ -23,6 +27,7 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.lighting.LevelLightEngine;
 import net.minecraft.world.level.material.FluidState;
+import net.minecraftforge.client.model.data.ModelData;
 import org.lwjgl.opengl.GL11C;
 import org.lwjgl.system.MemoryUtil;
 
@@ -178,7 +183,7 @@ final class ForgeOriginalVoxyModelFactory {
         while (this.processModelResult(Minecraft.getInstance())) {
             // Drain like original ModelFactory.processAllThings().
         }
-        return this.getInflightCount() != 0;
+        return this.hasInflightWork();
     }
 
     int processUploadsOnRenderThread(int maxUploads) {
@@ -277,8 +282,28 @@ final class ForgeOriginalVoxyModelFactory {
         return this.blockStatesInFlight.size() + this.uploadResults.size() + this.biomeQueue.size() + this.bakeQueue.size();
     }
 
+    boolean areQueuesEmpty() {
+        return !this.hasInflightWork();
+    }
+
+    private boolean hasInflightWork() {
+        this.blockStatesInFlightLock.lock();
+        try {
+            if (!this.blockStatesInFlight.isEmpty()) {
+                return true;
+            }
+        } finally {
+            this.blockStatesInFlightLock.unlock();
+        }
+        return !this.uploadResults.isEmpty() || !this.biomeQueue.isEmpty() || !this.bakeQueue.isEmpty();
+    }
+
     int getBakedCount() {
         return this.modelTexture2id.size();
+    }
+
+    String lastFailureReason() {
+        return this.lastFailureReason;
     }
 
     boolean hasModelForBlockId(int blockId) {
@@ -510,7 +535,7 @@ final class ForgeOriginalVoxyModelFactory {
     }
 
     private TintPlan createTintPlan(Minecraft minecraft, BlockState state, ForgeSoftwareModelTextureBakery.BakeResult softwareBake) {
-        int tintIndex = firstTintIndex(softwareBake);
+        int tintIndex = firstTintIndex(minecraft, state, softwareBake);
         if (tintIndex < 0) {
             return new TintPlan(false, false, -1, -1, -1, null, -1);
         }
@@ -665,7 +690,11 @@ final class ForgeOriginalVoxyModelFactory {
         return this.customBlockStateIdMapping.getInt(state);
     }
 
-    private static int firstTintIndex(ForgeSoftwareModelTextureBakery.BakeResult softwareBake) {
+    private static int firstTintIndex(Minecraft minecraft, BlockState state, ForgeSoftwareModelTextureBakery.BakeResult softwareBake) {
+        int bakedQuadTintIndex = firstBakedQuadTintIndex(minecraft, state);
+        if (bakedQuadTintIndex >= 0) {
+            return bakedQuadTintIndex;
+        }
         int checkMode = softwareBake.layer() == ForgeCpuMeshLayer.SOLID
                 ? ForgeOriginalVoxyTextureUtils.WRITE_CHECK_STENCIL
                 : ForgeOriginalVoxyTextureUtils.WRITE_CHECK_ALPHA;
@@ -678,6 +707,37 @@ final class ForgeOriginalVoxyModelFactory {
             }
         }
         return -1;
+    }
+
+    private static int firstBakedQuadTintIndex(Minecraft minecraft, BlockState state) {
+        try {
+            BakedModel model = minecraft.getBlockRenderer().getBlockModel(state);
+            if (model == null || model.isCustomRenderer()) {
+                return -1;
+            }
+            Iterable<RenderType> renderTypes = model.getRenderTypes(state, RandomSource.create(42L), ModelData.EMPTY);
+            for (RenderType renderType : renderTypes) {
+                for (Direction direction : directionsWithNull()) {
+                    for (BakedQuad quad : getQuads(model, state, direction, renderType)) {
+                        if (quad.isTinted()) {
+                            return quad.getTintIndex();
+                        }
+                    }
+                }
+            }
+        } catch (RuntimeException ignored) {
+            return -1;
+        }
+        return -1;
+    }
+
+    private static List<BakedQuad> getQuads(BakedModel model, BlockState state, Direction direction, RenderType renderType) {
+        List<BakedQuad> quads = model.getQuads(state, direction, RandomSource.create(42L), ModelData.EMPTY, renderType);
+        return quads == null ? List.of() : quads;
+    }
+
+    private static Direction[] directionsWithNull() {
+        return new Direction[]{Direction.DOWN, Direction.UP, Direction.NORTH, Direction.SOUTH, Direction.WEST, Direction.EAST, null};
     }
 
     private static ForgeCpuMeshLayer chooseLayer(

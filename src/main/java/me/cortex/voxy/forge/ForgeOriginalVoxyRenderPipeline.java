@@ -257,6 +257,15 @@ final class ForgeOriginalVoxyRenderPipeline {
         return this.taaFunction(ForgeOriginalVoxyOculusRenderPipelineData.UNIFORM_BINDING_POINT, functionName);
     }
 
+    void bindUniforms() {
+        if (this.oculusShaderUniforms != null) {
+            glBindBufferBase(
+                    GL_UNIFORM_BUFFER,
+                    ForgeOriginalVoxyOculusRenderPipelineData.UNIFORM_BINDING_POINT,
+                    this.oculusShaderUniforms.id);
+        }
+    }
+
     String taaFunction(int uboBindingPoint, String functionName) {
         if (this.oculusPipelineData == null || this.oculusPipelineData.TAA == null) {
             return null;
@@ -506,11 +515,15 @@ final class ForgeOriginalVoxyRenderPipeline {
 
     private void finishOculus(ForgeOriginalVoxyMdicViewport viewport, int sourceFramebuffer, int srcWidth, int srcHeight) {
         if (this.oculusPipelineData.renderToVanillaDepth && srcWidth == viewport.width && srcHeight == viewport.height) {
+            int shaderpackDepthTexture = this.normalTargets.translucentDepthTextureId();
+            if (shaderpackDepthTexture == 0) {
+                shaderpackDepthTexture = this.depthStage.depthTextureId();
+            }
             glColorMask(false, false, false, false);
             try {
                 transformBlitDepth(
                         this.shaderpackDepthBlit,
-                        this.depthStage.depthTextureId(),
+                        shaderpackDepthTexture,
                         sourceFramebuffer,
                         viewport,
                         new Matrix4f(viewport.vanillaProjection).mul(viewport.modelView));

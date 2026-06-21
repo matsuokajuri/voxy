@@ -104,6 +104,8 @@ final class ForgeOriginalVoxyHierarchicalOcclusionTraverser {
     private final int[] idx2topNodeMapping = new int[MAX_QUEUE_SIZE];
     private final int hizSampler = glGenSamplers();
     private int traversalProgramId;
+    private ForgeOriginalVoxyRenderPipeline taaPipeline;
+    private boolean taaInjected;
     private int topNodeCount;
     private long traversalRunCount;
     private long requestBatchForwardCount;
@@ -130,13 +132,23 @@ final class ForgeOriginalVoxyHierarchicalOcclusionTraverser {
         glSamplerParameteri(this.hizSampler, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     }
 
-    String buildOnRenderThread(ForgeOriginalVoxyRenderProperties properties) {
+    String buildOnRenderThread(ForgeOriginalVoxyRenderProperties properties, ForgeOriginalVoxyRenderPipeline pipeline) {
         try {
             if (this.traversalProgramId != 0) {
                 glDeleteProgram(this.traversalProgramId);
                 this.traversalProgramId = 0;
             }
-            String source = properties.injectDefines(ForgeOriginalVoxyShaderSource.parse("voxy:lod/hierarchical/traversal_dev.comp"));
+            this.taaPipeline = null;
+            this.taaInjected = false;
+            String source = ForgeOriginalVoxyShaderSource.parse("voxy:lod/hierarchical/traversal_dev.comp");
+            String taa = pipeline == null ? null : pipeline.taaFunction("getTAA");
+            if (taa != null) {
+                source += "\n\n\n\n" + taa;
+                source = withDefines(source, "TAA", 1);
+                this.taaPipeline = pipeline;
+                this.taaInjected = true;
+            }
+            source = properties.injectDefines(source);
             source = applyOriginalPrintfProcessor(source);
             if (HIERARCHICAL_SHADER_DEBUG) {
                 source = withDefines(source, "DEBUG", 1);
@@ -190,6 +202,9 @@ final class ForgeOriginalVoxyHierarchicalOcclusionTraverser {
         }
         this.uploadUniform(viewport);
         glUseProgram(this.traversalProgramId);
+        if (this.taaInjected && this.taaPipeline != null) {
+            this.taaPipeline.bindUniforms();
+        }
         this.bindings(viewport);
         nglClearNamedBufferSubData(viewport.renderListBufferId(), GL_R32UI, 0L, Integer.BYTES, GL_RED_INTEGER, GL_UNSIGNED_INT, 0L);
         this.traverseInternal();
