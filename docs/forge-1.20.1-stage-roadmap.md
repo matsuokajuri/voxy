@@ -199,17 +199,21 @@ V_ORIGINAL_MDIC_COMMAND_GENERATION_CHAIN
  -> V.1_ORIGINAL_MDIC_VIEWPORT_CMDGEN_INPUT_PARITY
  -> V.2_ORIGINAL_CMDGEN_COMP_OUTPUT_PARITY
  -> V.3_ORIGINAL_CMDGEN_READBACK_AND_BARRIER_AUDIT
+ -> VI_ORIGINAL_MDIC_SECTION_RENDERER_CHAIN
 ```
 
-The Forge route now has `ForgeOriginalVoxyMdicCommandGenerator`, which follows
-the opaque/cutout command-generation side of original
-`MDICSectionRenderer.buildDrawCalls(...)`:
+The Forge route now folds the command-generation owner into
+`ForgeOriginalVoxyMdicSectionRenderer`, matching the original owner boundary
+more closely than the old command-generator-only class. The active chain now
+follows original `MDICSectionRenderer.buildDrawCalls(...)` through:
 
 ```text
 MDICViewport render-list from HOC
  -> production prep.comp
  -> production cull/raster visibility mark
  -> production cmdgen.comp
+ -> prefixsum.comp over translucent distance buckets
+ -> production buildtranslucents.comp
  -> DrawCommand / draw-count / position-scratch readback audit on request
 ```
 
@@ -217,13 +221,15 @@ This owner binds real `BasicSectionGeometryData` metadata/geometry buffers and
 the real `MDICViewport` draw-count, draw-command, visibility, indirect-lookup,
 and position-scratch buffers. It does not use K-era synthetic cmdgen validation
 buffers, preview command buffers, debug MDIC command buffers, or sample-set
-inputs. It still does not submit the generated commands to
-`glMultiDrawElementsIndirectCountARB`, does not call `MDICSectionRenderer`, and
-does not make the renderer ready.
+inputs.
 
-It also does not yet port the translucent tail of original
-`buildDrawCalls(...)`: `prefixsum.comp` and `buildtranslucents.comp` remain
-future renderer-chain parity work, not current Roman V success.
+VI also introduces original-shaped `renderOpaque`, `renderTemporal`, and
+`renderTranslucent` methods with the original model-store, lightmap, shared
+index, indirect draw, and parameter-buffer binding order. These methods are not
+called by the active Forge render hook yet. Until the original render pipeline
+target and `VoxyRenderSystem` lifecycle are ported, the route still must not be
+counted as `formalDrawPipelineReady`, `formalRendererReady`, or
+`actualRendererDrawEnabled`.
 
 Runtime readback now proves a non-empty MDICViewport render-list and production
 `cmdgen.comp` output. The latest audit produced `renderListSectionCount=146`,

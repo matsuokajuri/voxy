@@ -26,5 +26,6 @@ public class ForgeOriginalVoxyLevelRendererRenderStateCaptureMixin {
             Matrix4f projection,
             CallbackInfo ci) {
         ForgeOriginalVoxyRenderStateCapture.captureProjection(projection);
+        ForgeOriginalVoxyRenderStateCapture.captureLightTexture(lightTexture);
     }
 }

@@ -64,7 +64,7 @@ record ForgeOriginalVoxyMdicCommandGenerationStats(
 ) {
     static ForgeOriginalVoxyMdicCommandGenerationStats unavailable(String reason) {
         return new ForgeOriginalVoxyMdicCommandGenerationStats(
-                "V_ORIGINAL_MDIC_COMMAND_GENERATION_CHAIN",
+                "VI_ORIGINAL_MDIC_SECTION_RENDERER_CHAIN",
                 false,
                 false,
                 false,

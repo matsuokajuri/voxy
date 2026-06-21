@@ -7,13 +7,15 @@ The formal Forge MDIC path must be a port/adaptation of original Voxy
 debug command buffers, synthetic cmdgen validators, and K10 visible preview
 resources are deprecated and must not be extended into the renderer.
 
-New MDIC renderer work uses the Roman-round route. The active next round is:
+New MDIC renderer work uses the Roman-round route. The current MDIC command /
+section-renderer owner route is:
 
 ```text
 V_ORIGINAL_MDIC_COMMAND_GENERATION_CHAIN
  -> V.1_ORIGINAL_MDIC_VIEWPORT_CMDGEN_INPUT_PARITY
  -> V.2_ORIGINAL_CMDGEN_COMP_OUTPUT_PARITY
  -> V.3_ORIGINAL_CMDGEN_READBACK_AND_BARRIER_AUDIT
+ -> VI_ORIGINAL_MDIC_SECTION_RENDERER_CHAIN
 ```
 
 ## Forge frontend prerequisites
@@ -109,13 +111,14 @@ implementation scaffolding for formal MDIC.
    active Roman route at the owner/traversal level.
 8. Roman V: port production `prep.comp`, cull-raster visibility input,
    `cmdgen.comp` dispatch contract, output readback, and barrier audit as one
-   coherent multi-step round. Implemented in code through
-   `ForgeOriginalVoxyMdicCommandGenerator`; runtime audit now passes with a
-   non-empty HOC render-list and production `cmdgen.comp` draw-command output
-   for the opaque/cutout command path. The translucent prefix-sum /
-   `buildtranslucents.comp` tail of original `buildDrawCalls(...)` remains
-   unported.
-9. Roman VI: port `MDICSectionRenderer` draw setup and binding order.
+   coherent multi-step round. Implemented against real viewport, visibility,
+   indirect lookup, metadata, and geometry buffers.
+9. Roman VI: fold command generation into
+   `ForgeOriginalVoxyMdicSectionRenderer`, port original terrain/translucent
+   shader program ownership, prefix-sum and `buildtranslucents.comp` command
+   build tail, shared index, lightmap binding adapter, and original-shaped
+   `renderOpaque` / `renderTemporal` / `renderTranslucent` binding methods.
+   The active hook still does not submit MDIC terrain draw calls.
 10. Roman VII: bind the original `ModelStore` and terrain shader contract
     exactly as original Voxy expects.
 11. Roman VIII: only then enable controlled renderer draw behind the original
@@ -126,9 +129,9 @@ implementation scaffolding for formal MDIC.
 Do not enable formal MDIC draw while any of these are true:
 
 ```text
-generated production cmdgen commands not yet submitted by MDICSectionRenderer
-original shader binding contract incomplete
-MDICSectionRenderer not wired
+original render-pipeline target / VoxyRenderSystem lifecycle not yet ported
+original terrain shader semantics incomplete
+MDICSectionRenderer draw methods not called by active pipeline
 ```
 
 ## Validation

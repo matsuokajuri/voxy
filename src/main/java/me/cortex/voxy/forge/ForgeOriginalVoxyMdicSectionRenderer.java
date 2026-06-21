@@ -1,18 +1,27 @@
 package me.cortex.voxy.forge;
 
+import net.minecraft.client.Minecraft;
+import net.minecraft.core.Direction;
 import org.joml.Matrix4f;
+import org.lwjgl.opengl.GL;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
 
+import static org.lwjgl.opengl.ARBIndirectParameters.GL_PARAMETER_BUFFER_ARB;
+import static org.lwjgl.opengl.ARBIndirectParameters.glMultiDrawElementsIndirectCountARB;
+import static org.lwjgl.opengl.GL11C.GL_BLEND;
 import static org.lwjgl.opengl.GL11C.GL_COLOR_WRITEMASK;
 import static org.lwjgl.opengl.GL11C.GL_CULL_FACE;
 import static org.lwjgl.opengl.GL11C.GL_DEPTH_FUNC;
 import static org.lwjgl.opengl.GL11C.GL_DEPTH_TEST;
 import static org.lwjgl.opengl.GL11C.GL_FALSE;
+import static org.lwjgl.opengl.GL11C.GL_FRONT_AND_BACK;
+import static org.lwjgl.opengl.GL11C.GL_LINE;
 import static org.lwjgl.opengl.GL11C.GL_NO_ERROR;
 import static org.lwjgl.opengl.GL11C.GL_TRIANGLES;
 import static org.lwjgl.opengl.GL11C.GL_TRUE;
 import static org.lwjgl.opengl.GL11C.GL_UNSIGNED_BYTE;
+import static org.lwjgl.opengl.GL11C.GL_UNSIGNED_SHORT;
 import static org.lwjgl.opengl.GL11C.glColorMask;
 import static org.lwjgl.opengl.GL11C.glDepthFunc;
 import static org.lwjgl.opengl.GL11C.glDepthMask;
@@ -22,8 +31,14 @@ import static org.lwjgl.opengl.GL11C.glGetBooleanv;
 import static org.lwjgl.opengl.GL11C.glGetError;
 import static org.lwjgl.opengl.GL11C.glGetInteger;
 import static org.lwjgl.opengl.GL11C.glIsEnabled;
+import static org.lwjgl.opengl.GL11C.glPolygonMode;
+import static org.lwjgl.opengl.GL11C.GL_FILL;
 import static org.lwjgl.opengl.GL15C.GL_ELEMENT_ARRAY_BUFFER;
 import static org.lwjgl.opengl.GL15C.glBindBuffer;
+import static org.lwjgl.opengl.GL14C.GL_ONE;
+import static org.lwjgl.opengl.GL14C.GL_ONE_MINUS_SRC_ALPHA;
+import static org.lwjgl.opengl.GL14C.GL_SRC_ALPHA;
+import static org.lwjgl.opengl.GL14C.glBlendFuncSeparate;
 import static org.lwjgl.opengl.GL20C.GL_COMPILE_STATUS;
 import static org.lwjgl.opengl.GL20C.GL_FRAGMENT_SHADER;
 import static org.lwjgl.opengl.GL20C.GL_LINK_STATUS;
@@ -42,10 +57,15 @@ import static org.lwjgl.opengl.GL20C.glShaderSource;
 import static org.lwjgl.opengl.GL20C.glUseProgram;
 import static org.lwjgl.opengl.GL20C.glCompileShader;
 import static org.lwjgl.opengl.GL30C.glBindBufferBase;
+import static org.lwjgl.opengl.GL30C.GL_FRAMEBUFFER;
+import static org.lwjgl.opengl.GL30C.glBindFramebuffer;
 import static org.lwjgl.opengl.GL30C.glBindVertexArray;
 import static org.lwjgl.opengl.GL30C.glDeleteVertexArrays;
 import static org.lwjgl.opengl.GL30C.glGenVertexArrays;
 import static org.lwjgl.opengl.GL31C.GL_UNIFORM_BUFFER;
+import static org.lwjgl.opengl.GL32C.GL_FIRST_VERTEX_CONVENTION;
+import static org.lwjgl.opengl.GL32C.glProvokingVertex;
+import static org.lwjgl.opengl.GL33C.glBindSampler;
 import static org.lwjgl.opengl.GL40C.GL_DRAW_INDIRECT_BUFFER;
 import static org.lwjgl.opengl.GL40C.glDrawElementsIndirect;
 import static org.lwjgl.opengl.GL42C.glMemoryBarrier;
@@ -56,14 +76,16 @@ import static org.lwjgl.opengl.GL43C.GL_SHADER_STORAGE_BARRIER_BIT;
 import static org.lwjgl.opengl.GL43C.GL_SHADER_STORAGE_BUFFER;
 import static org.lwjgl.opengl.GL43C.glDispatchCompute;
 import static org.lwjgl.opengl.GL43C.glDispatchComputeIndirect;
+import static org.lwjgl.opengl.GL45C.glBindTextureUnit;
 import static org.lwjgl.opengl.GL45C.nglGetNamedBufferSubData;
+import static org.lwjgl.opengl.NVRepresentativeFragmentTest.GL_REPRESENTATIVE_FRAGMENT_TEST_NV;
 
-final class ForgeOriginalVoxyMdicCommandGenerator {
-    static final String STAGE = "V_ORIGINAL_MDIC_COMMAND_GENERATION_CHAIN";
+final class ForgeOriginalVoxyMdicSectionRenderer {
+    static final String STAGE = "VI_ORIGINAL_MDIC_SECTION_RENDERER_CHAIN";
     private static final int OPAQUE_DRAW_COUNT = ForgeOriginalVoxyMdicViewport.OPAQUE_DRAW_COUNT;
     private static final int TRANSLUCENT_DRAW_COUNT = ForgeOriginalVoxyMdicViewport.TRANSLUCENT_DRAW_COUNT;
-    private static final int TRANSLUCENT_OFFSET = OPAQUE_DRAW_COUNT + TRANSLUCENT_DRAW_COUNT;
-    private static final int TEMPORAL_OFFSET = TRANSLUCENT_OFFSET;
+    private static final int TRANSLUCENT_OFFSET = OPAQUE_DRAW_COUNT;
+    private static final int TEMPORAL_OFFSET = TRANSLUCENT_OFFSET + TRANSLUCENT_DRAW_COUNT;
     private static final int TRANSLUCENT_WRITE_BASE = 1024;
     private static final int DRAW_COMMAND_WORDS = 5;
     private static final int DRAW_COMMAND_BYTES = DRAW_COMMAND_WORDS * Integer.BYTES;
@@ -77,19 +99,30 @@ final class ForgeOriginalVoxyMdicCommandGenerator {
     private static final int INDIRECT_SECTION_LOOKUP_BINDING = 5;
     private static final int POSITION_SCRATCH_BINDING = 6;
     private static final int TRANSLUCENT_DISTANCE_BUFFER_BINDING = 7;
+    private static final int TRANSLUCENT_INDIRECT_SECTION_LOOKUP_BINDING = 4;
+    private static final int TRANSLUCENT_BUILD_DISTANCE_BUFFER_BINDING = 5;
 
     private final ForgeOriginalVoxyGlBuffer uniformBuffer = new ForgeOriginalVoxyGlBuffer(1024).zero();
     private final ForgeOriginalVoxyGlBuffer distanceCountBuffer =
             new ForgeOriginalVoxyGlBuffer(TRANSLUCENT_WRITE_BASE * 4L + TRANSLUCENT_DRAW_COUNT * 4L).zero();
     private final ForgeOriginalVoxySharedIndexBuffer sharedIndexBuffer = new ForgeOriginalVoxySharedIndexBuffer();
     private final int vertexArrayId = glGenVertexArrays();
+    private int terrainProgramId;
+    private int translucentTerrainProgramId;
     private int prepProgramId;
     private int cullProgramId;
     private int cmdgenProgramId;
+    private int prefixSumProgramId;
+    private int translucentGenProgramId;
     private boolean readbackAuditRequested;
+    private long opaqueRenderCallCount;
+    private long translucentRenderCallCount;
+    private long temporalRenderCallCount;
     private long prepDispatchCount;
     private long cullRasterCount;
     private long cmdgenDispatchCount;
+    private long prefixSumDispatchCount;
+    private long translucentGenDispatchCount;
     private long readbackAuditRuns;
     private long readbackAuditFailures;
     private int renderListSectionCount;
@@ -115,6 +148,7 @@ final class ForgeOriginalVoxyMdicCommandGenerator {
     private boolean barrierAuditReady;
     private boolean positionScratchReadbackOk;
     private int lastGlError = GL_NO_ERROR;
+    private ForgeOriginalVoxyRenderProperties properties;
     private String lifecycleState = "CREATED";
     private String lastLifecycleEvent = "created";
     private String lastFailureReason = "none";
@@ -122,16 +156,37 @@ final class ForgeOriginalVoxyMdicCommandGenerator {
     String buildOnRenderThread(ForgeOriginalVoxyRenderProperties properties) {
         try {
             this.freePrograms();
+            this.properties = properties;
+            String vertexSource = properties.injectDefines(ForgeOriginalVoxyShaderSource.parse("voxy:lod/gl46/quads3.vert"));
+            vertexSource = injectDirectionalFaceTint(vertexSource);
+            String fragmentSource = ForgeOriginalVoxyShaderSource.parse("voxy:lod/gl46/quads.frag");
+            this.terrainProgramId = compileProgram(vertexSource, fragmentSource, "quads");
+            this.translucentTerrainProgramId = compileProgram(
+                    withDefines(vertexSource, "TRANSLUCENT", 1),
+                    withDefines(fragmentSource, "TRANSLUCENT", 1),
+                    "quads translucent");
             this.prepProgramId = compileComputeProgram(ForgeOriginalVoxyShaderSource.parse("voxy:lod/gl46/prep.comp"), "prep.comp");
-            String vertexSource = properties.injectDefines(ForgeOriginalVoxyShaderSource.parse("voxy:lod/gl46/cull/raster.vert"));
-            String fragmentSource = ForgeOriginalVoxyShaderSource.parse("voxy:lod/gl46/cull/raster.frag");
-            this.cullProgramId = compileProgram(vertexSource, fragmentSource, "cull/raster");
+            String cullVertexSource = properties.injectDefines(ForgeOriginalVoxyShaderSource.parse("voxy:lod/gl46/cull/raster.vert"));
+            String cullFragmentSource = ForgeOriginalVoxyShaderSource.parse("voxy:lod/gl46/cull/raster.frag");
+            this.cullProgramId = compileProgram(cullVertexSource, cullFragmentSource, "cull/raster");
             String cmdgenSource = withDefines(
                     ForgeOriginalVoxyShaderSource.parse("voxy:lod/gl46/cmdgen.comp"),
                     "TRANSLUCENT_WRITE_BASE", TRANSLUCENT_WRITE_BASE,
                     "TEMPORAL_OFFSET", TEMPORAL_OFFSET,
                     "TRANSLUCENT_DISTANCE_BUFFER_BINDING", TRANSLUCENT_DISTANCE_BUFFER_BINDING);
             this.cmdgenProgramId = compileComputeProgram(cmdgenSource, "cmdgen.comp");
+            String prefixSumSource = withDefines(
+                    ForgeOriginalVoxyShaderSource.parse(supportsSubgroupPrefixSum()
+                            ? "voxy:util/prefixsum/inital3.comp"
+                            : "voxy:util/prefixsum/simple.comp"),
+                    "IO_BUFFER", 0);
+            this.prefixSumProgramId = compileComputeProgram(prefixSumSource, "prefixsum");
+            String translucentGenSource = withDefines(
+                    ForgeOriginalVoxyShaderSource.parse("voxy:lod/gl46/buildtranslucents.comp"),
+                    "TRANSLUCENT_WRITE_BASE", TRANSLUCENT_WRITE_BASE,
+                    "TRANSLUCENT_DISTANCE_BUFFER_BINDING", TRANSLUCENT_BUILD_DISTANCE_BUFFER_BINDING,
+                    "TRANSLUCENT_OFFSET", TRANSLUCENT_OFFSET);
+            this.translucentGenProgramId = compileComputeProgram(translucentGenSource, "buildtranslucents.comp");
             this.lifecycleState = "READY";
             this.lastLifecycleEvent = "build-on-render-thread";
             this.lastFailureReason = "none";
@@ -149,13 +204,95 @@ final class ForgeOriginalVoxyMdicCommandGenerator {
     }
 
     boolean ready() {
-        return this.prepProgramId != 0
+        return this.terrainProgramId != 0
+                && this.translucentTerrainProgramId != 0
+                && this.prepProgramId != 0
                 && this.cullProgramId != 0
                 && this.cmdgenProgramId != 0
+                && this.prefixSumProgramId != 0
+                && this.translucentGenProgramId != 0
                 && this.uniformBuffer.id != 0
                 && this.distanceCountBuffer.id != 0
                 && this.sharedIndexBuffer.ready()
                 && this.vertexArrayId != 0;
+    }
+
+    void renderOpaque(
+            ForgeOriginalVoxyMdicViewport viewport,
+            ForgeOriginalVoxyBasicSectionGeometryData geometryData,
+            ForgeOriginalVoxyModelStore modelStore,
+            int opaqueFramebufferId) {
+        if (geometryData == null || geometryData.sectionCount() == 0) {
+            return;
+        }
+        this.uploadUniformBuffer(viewport);
+        int maxDrawCount = Math.min((int) (geometryData.sectionCount() * 4.4D + 128), OPAQUE_DRAW_COUNT);
+        this.renderTerrain(
+                viewport,
+                geometryData,
+                modelStore,
+                opaqueFramebufferId,
+                this.terrainProgramId,
+                0L,
+                4L * 3L,
+                maxDrawCount);
+        this.opaqueRenderCallCount++;
+    }
+
+    void renderTemporal(
+            ForgeOriginalVoxyMdicViewport viewport,
+            ForgeOriginalVoxyBasicSectionGeometryData geometryData,
+            ForgeOriginalVoxyModelStore modelStore,
+            int opaqueFramebufferId) {
+        if (geometryData == null || geometryData.sectionCount() == 0) {
+            return;
+        }
+        this.renderTerrain(
+                viewport,
+                geometryData,
+                modelStore,
+                opaqueFramebufferId,
+                this.terrainProgramId,
+                TEMPORAL_OFFSET * 5L * 4L,
+                4L * 5L,
+                Math.min(geometryData.sectionCount(), ForgeOriginalVoxyMdicViewport.TEMPORAL_DRAW_COUNT));
+        this.temporalRenderCallCount++;
+    }
+
+    void renderTranslucent(
+            ForgeOriginalVoxyMdicViewport viewport,
+            ForgeOriginalVoxyBasicSectionGeometryData geometryData,
+            ForgeOriginalVoxyModelStore modelStore,
+            int translucentFramebufferId) {
+        if (geometryData == null || geometryData.sectionCount() == 0) {
+            return;
+        }
+        glEnable(GL_BLEND);
+        glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+        glDisable(GL_CULL_FACE);
+        glEnable(GL_DEPTH_TEST);
+        glDepthFunc(this.properties.closerEqualDepthCompare());
+        glUseProgram(this.translucentTerrainProgramId);
+        glBindVertexArray(this.vertexArrayId);
+        glBindFramebuffer(GL_FRAMEBUFFER, translucentFramebufferId);
+        this.bindRenderingBuffers(viewport, geometryData, modelStore);
+        glMemoryBarrier(GL_COMMAND_BARRIER_BIT | GL_SHADER_STORAGE_BARRIER_BIT);
+        glProvokingVertex(GL_FIRST_VERTEX_CONVENTION);
+        glMultiDrawElementsIndirectCountARB(
+                GL_TRIANGLES,
+                GL_UNSIGNED_SHORT,
+                TRANSLUCENT_OFFSET * 5L * 4L,
+                4L * 4L,
+                Math.min(geometryData.sectionCount(), TRANSLUCENT_DRAW_COUNT),
+                0);
+        glEnable(GL_CULL_FACE);
+        glBindVertexArray(0);
+        glBindSampler(0, 0);
+        glBindTextureUnit(0, 0);
+        glBindSampler(1, 0);
+        glBindTextureUnit(1, 0);
+        glDisable(GL_BLEND);
+        this.translucentRenderCallCount++;
     }
 
     void buildDrawCalls(
@@ -179,6 +316,7 @@ final class ForgeOriginalVoxyMdicCommandGenerator {
             this.dispatchPrep(viewport);
             this.rasterCullVisibility(viewport, geometryData, properties);
             this.dispatchCmdgen(viewport, geometryData);
+            this.dispatchTranslucentCommandGeneration(viewport, geometryData);
             if (this.readbackAuditRequested) {
                 this.readbackAuditRequested = false;
                 this.readbackAudit(viewport);
@@ -279,6 +417,77 @@ final class ForgeOriginalVoxyMdicCommandGenerator {
         this.lastLifecycleEvent = "free-on-render-thread";
     }
 
+    private void bindRenderingBuffers(
+            ForgeOriginalVoxyMdicViewport viewport,
+            ForgeOriginalVoxyBasicSectionGeometryData geometryData,
+            ForgeOriginalVoxyModelStore modelStore) {
+        glBindBufferBase(GL_UNIFORM_BUFFER, 0, this.uniformBuffer.id);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, geometryData.geometryBufferId());
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, geometryData.metadataBufferId());
+        modelStore.bind(3, 4, 0);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 5, viewport.positionScratchBuffer.id);
+        bindLightmap(1);
+        glBindTextureUnit(2, viewport.depthBoundingTextureId());
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, this.sharedIndexBuffer.id());
+        glBindBuffer(GL_DRAW_INDIRECT_BUFFER, viewport.drawCallBuffer.id);
+        glBindBuffer(GL_PARAMETER_BUFFER_ARB, viewport.drawCountCallBuffer.id);
+    }
+
+    private void renderTerrain(
+            ForgeOriginalVoxyMdicViewport viewport,
+            ForgeOriginalVoxyBasicSectionGeometryData geometryData,
+            ForgeOriginalVoxyModelStore modelStore,
+            int framebufferId,
+            int programId,
+            long indirectOffset,
+            long drawCountOffset,
+            int maxDrawCount) {
+        if (!this.ready()) {
+            this.recordFailure("original-mdic-section-renderer-not-ready");
+            return;
+        }
+        if (viewport == null || !viewport.ready()) {
+            this.recordFailure("original-mdic-section-renderer-viewport-not-ready");
+            return;
+        }
+        if (geometryData == null || geometryData.geometryBufferId() == 0 || geometryData.metadataBufferId() == 0) {
+            this.recordFailure("original-mdic-section-renderer-geometry-not-ready");
+            return;
+        }
+        if (modelStore == null) {
+            this.recordFailure("original-mdic-section-renderer-model-store-not-ready");
+            return;
+        }
+        if (framebufferId == 0) {
+            this.recordFailure("original-mdic-section-renderer-framebuffer-not-ready");
+            return;
+        }
+        glDisable(GL_CULL_FACE);
+        glDisable(GL_BLEND);
+        glEnable(GL_DEPTH_TEST);
+        glDepthFunc(this.properties.closerEqualDepthCompare());
+        glUseProgram(programId);
+        glBindVertexArray(this.vertexArrayId);
+        glBindFramebuffer(GL_FRAMEBUFFER, framebufferId);
+        this.bindRenderingBuffers(viewport, geometryData, modelStore);
+        glMemoryBarrier(GL_COMMAND_BARRIER_BIT | GL_SHADER_STORAGE_BARRIER_BIT);
+        glProvokingVertex(GL_FIRST_VERTEX_CONVENTION);
+        glMultiDrawElementsIndirectCountARB(
+                GL_TRIANGLES,
+                GL_UNSIGNED_SHORT,
+                indirectOffset,
+                drawCountOffset,
+                maxDrawCount,
+                0);
+        glEnable(GL_CULL_FACE);
+        glBindVertexArray(0);
+        glBindSampler(0, 0);
+        glBindTextureUnit(0, 0);
+        glBindSampler(1, 0);
+        glBindTextureUnit(1, 0);
+        this.lastGlError = glGetError();
+    }
+
     private void uploadUniformBuffer(ForgeOriginalVoxyMdicViewport viewport) {
         long ptr = ForgeOriginalVoxyUploadStream.instance().upload(this.uniformBuffer.id, 0L, 1024L);
 
@@ -329,12 +538,18 @@ final class ForgeOriginalVoxyMdicCommandGenerator {
             glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, viewport.indirectLookupBuffer.id);
             glBindBuffer(GL_DRAW_INDIRECT_BUFFER, viewport.drawCountCallBuffer.id);
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, this.sharedIndexBuffer.id());
+            if (representativeFragmentTestSupported()) {
+                glEnable(GL_REPRESENTATIVE_FRAGMENT_TEST_NV);
+            }
             glEnable(GL_DEPTH_TEST);
             glDepthFunc(properties.closerEqualDepthCompare());
             glColorMask(false, false, false, false);
             glDepthMask(false);
             glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT | GL_COMMAND_BARRIER_BIT);
             glDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_BYTE, CULL_COMMAND_OFFSET_BYTES);
+            if (representativeFragmentTestSupported()) {
+                glDisable(GL_REPRESENTATIVE_FRAGMENT_TEST_NV);
+            }
             glDepthMask(true);
             glColorMask(
                     colorMask.get(0) != 0,
@@ -381,6 +596,32 @@ final class ForgeOriginalVoxyMdicCommandGenerator {
         glUseProgram(0);
         this.barrierAuditReady = true;
         this.cmdgenDispatchCount++;
+    }
+
+    private void dispatchTranslucentCommandGeneration(
+            ForgeOriginalVoxyMdicViewport viewport,
+            ForgeOriginalVoxyBasicSectionGeometryData geometryData) {
+        glUseProgram(this.prefixSumProgramId);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, this.distanceCountBuffer.id);
+        glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+        glDispatchCompute(1, 1, 1);
+        glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+        this.prefixSumDispatchCount++;
+
+        glUseProgram(this.translucentGenProgramId);
+        glBindBufferBase(GL_UNIFORM_BUFFER, 0, this.uniformBuffer.id);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, DRAW_BUFFER_BINDING, viewport.drawCallBuffer.id);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, DRAW_COUNT_BUFFER_BINDING, viewport.drawCountCallBuffer.id);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, SECTION_METADATA_BUFFER_BINDING, geometryData.metadataBufferId());
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, TRANSLUCENT_INDIRECT_SECTION_LOOKUP_BINDING, viewport.indirectLookupBuffer.id);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, TRANSLUCENT_BUILD_DISTANCE_BUFFER_BINDING, this.distanceCountBuffer.id);
+        glBindBuffer(GL_DISPATCH_INDIRECT_BUFFER, viewport.drawCountCallBuffer.id);
+        glMemoryBarrier(GL_COMMAND_BARRIER_BIT | GL_SHADER_STORAGE_BARRIER_BIT);
+        glDispatchComputeIndirect(0L);
+        glMemoryBarrier(GL_COMMAND_BARRIER_BIT | GL_SHADER_STORAGE_BARRIER_BIT);
+        glBindBuffer(GL_DISPATCH_INDIRECT_BUFFER, 0);
+        glUseProgram(0);
+        this.translucentGenDispatchCount++;
     }
 
     private void readbackAudit(ForgeOriginalVoxyMdicViewport viewport) {
@@ -463,6 +704,14 @@ final class ForgeOriginalVoxyMdicCommandGenerator {
     }
 
     private void freePrograms() {
+        if (this.terrainProgramId != 0) {
+            glDeleteProgram(this.terrainProgramId);
+            this.terrainProgramId = 0;
+        }
+        if (this.translucentTerrainProgramId != 0) {
+            glDeleteProgram(this.translucentTerrainProgramId);
+            this.translucentTerrainProgramId = 0;
+        }
         if (this.prepProgramId != 0) {
             glDeleteProgram(this.prepProgramId);
             this.prepProgramId = 0;
@@ -475,6 +724,14 @@ final class ForgeOriginalVoxyMdicCommandGenerator {
             glDeleteProgram(this.cmdgenProgramId);
             this.cmdgenProgramId = 0;
         }
+        if (this.prefixSumProgramId != 0) {
+            glDeleteProgram(this.prefixSumProgramId);
+            this.prefixSumProgramId = 0;
+        }
+        if (this.translucentGenProgramId != 0) {
+            glDeleteProgram(this.translucentGenProgramId);
+            this.translucentGenProgramId = 0;
+        }
     }
 
     private static String withDefines(String source, Object... defines) {
@@ -486,6 +743,70 @@ final class ForgeOriginalVoxyMdicCommandGenerator {
         }
         builder.append(source.substring(split + 1));
         return builder.toString();
+    }
+
+    private static String injectDirectionalFaceTint(String source) {
+        float noShade = 1.0F;
+        float up = 1.0F;
+        float down = 1.0F;
+        float zAxis = 1.0F;
+        float xAxis = 1.0F;
+        var level = Minecraft.getInstance().level;
+        if (level != null) {
+            noShade = level.getShade(Direction.UP, false);
+            up = level.getShade(Direction.UP, false);
+            down = level.getShade(Direction.DOWN, true);
+            zAxis = level.getShade(Direction.NORTH, true);
+            xAxis = level.getShade(Direction.EAST, true);
+        }
+        return withDefines(
+                source,
+                "NO_SHADE_FACE_TINT", floatLiteral(noShade),
+                "UP_FACE_TINT", floatLiteral(up),
+                "DOWN_FACE_TINT", floatLiteral(down),
+                "Z_AXIS_FACE_TINT", floatLiteral(zAxis),
+                "X_AXIS_FACE_TINT", floatLiteral(xAxis));
+    }
+
+    private static void bindLightmap(int lightingIndex) {
+        glBindSampler(lightingIndex, 0);
+        glBindTextureUnit(lightingIndex, ForgeOriginalVoxyRenderStateCapture.lightTextureId());
+    }
+
+    private static boolean representativeFragmentTestSupported() {
+        return GL.getCapabilities().GL_NV_representative_fragment_test;
+    }
+
+    private static boolean supportsSubgroupPrefixSum() {
+        if (!GL.getCapabilities().GL_KHR_shader_subgroup) {
+            return false;
+        }
+        int shader = 0;
+        try {
+            shader = compileShader(GL_COMPUTE_SHADER, """
+                    #version 430
+                    #extension GL_KHR_shader_subgroup_basic : require
+                    #extension GL_KHR_shader_subgroup_arithmetic : require
+                    layout(local_size_x=32) in;
+                    void main() {
+                        uint value = subgroupExclusiveAdd(gl_LocalInvocationIndex);
+                    }
+                    """, "subgroup-prefix-sum-probe");
+            return true;
+        } catch (RuntimeException ignored) {
+            return false;
+        } finally {
+            if (shader != 0) {
+                glDeleteShader(shader);
+            }
+        }
+    }
+
+    private static String floatLiteral(float value) {
+        if (Float.isNaN(value) || Float.isInfinite(value)) {
+            return "1.0";
+        }
+        return Float.toString(value);
     }
 
     private static int compileComputeProgram(String source, String name) {

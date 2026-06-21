@@ -124,6 +124,10 @@ final class ForgeOriginalVoxyMdicViewport {
         return this.hiZBuffer.textureId();
     }
 
+    int depthBoundingTextureId() {
+        return this.depthBoundingBuffer.depthTextureId();
+    }
+
     int packedHizLevels() {
         return this.hiZBuffer.packedLevels();
     }

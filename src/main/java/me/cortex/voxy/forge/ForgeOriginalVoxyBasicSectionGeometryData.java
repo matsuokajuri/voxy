@@ -113,6 +113,10 @@ final class ForgeOriginalVoxyBasicSectionGeometryData {
         this.currentSectionCount = count;
     }
 
+    int sectionCount() {
+        return this.currentSectionCount;
+    }
+
     int metadataBufferId() {
         return this.sectionMetadataBufferId;
     }

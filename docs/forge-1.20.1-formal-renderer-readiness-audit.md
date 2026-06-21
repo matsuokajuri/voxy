@@ -113,12 +113,13 @@ Some bottom-path corrections are now aligned in direction:
 - Forge-local original-parity `ViewportSelector`, `MDICViewport`, HiZ owner,
   original depth/stencil setup, and `HierarchicalOcclusionTraverser` owner now
   have runtime proof for real HiZ traversal from a Voxy-owned depth framebuffer.
-- Roman V production command-generation readback now passes without debug
-  command buffers for the opaque/cutout command path: HOC produced a non-empty
-  render-list, `cmdgen.comp` produced opaque draw commands, and
-  position-scratch readback matched the original layout. The original
-  translucent prefix-sum / `buildtranslucents.comp` tail is still unported and
-  must not be counted as `MDICSectionRenderer.buildDrawCalls(...)` parity.
+- Roman V/VI production command-generation readback now passes without debug
+  command buffers for the original-shaped `MDICSectionRenderer` owner path:
+  HOC produced a non-empty render-list, `cmdgen.comp` produced opaque draw
+  commands, position-scratch readback matched the original layout, and the
+  owner now includes the original prefix-sum / `buildtranslucents.comp`
+  translucent command-build tail. The active Forge hook still does not submit
+  those draw commands to the main renderer.
 - `RenderGenerationService` now uses original `ServiceManager` / `Service` /
   `UnifiedServiceThreadPool` execution, including service-thread config and
   Embeddium builder-thread semaphore sharing.
@@ -131,8 +132,8 @@ These are progress toward parity, not renderer readiness.
 P0 gaps:
 
 ```text
-production cmdgen.comp draw submission incomplete
-MDICSectionRenderer parity incomplete
+MDICSectionRenderer draw submission not yet active in the original pipeline
+original terrain shader semantics incomplete
 VoxyRenderSystem lifecycle parity incomplete
 ```
 
