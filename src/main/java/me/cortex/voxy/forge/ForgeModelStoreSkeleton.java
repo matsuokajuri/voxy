@@ -106,13 +106,13 @@ final class ForgeModelStoreSkeleton {
                 ForgeModelStoreLayout.LAYOUT_VERSION,
                 ForgeModelStoreLayout.FORMAL_LAYOUT_COMPATIBLE,
                 ForgeModelStoreLayout.LAYOUT_VERSION,
-                ForgeModelStoreFormalLayout.LAYOUT_VERSION,
-                ForgeModelStoreFormalLayout.MODEL_RECORD_BYTES,
-                ForgeModelStoreFormalLayout.FORMAL_LAYOUT_KNOWN,
-                ForgeModelStoreFormalLayout.FIELD_MAPPING_READY,
-                ForgeModelStoreFormalLayout.FACE_DATA_MAPPING_READY,
-                ForgeModelStoreFormalLayout.ATLAS_UV_MAPPING_READY,
-                ForgeModelStoreFormalLayout.MATERIAL_MAPPING_READY,
+                ForgeOriginalVoxyModelStoreLayoutSpec.LAYOUT_VERSION,
+                ForgeOriginalVoxyModelStoreLayoutSpec.MODEL_RECORD_BYTES,
+                ForgeOriginalVoxyModelStoreLayoutSpec.FORMAL_LAYOUT_KNOWN,
+                ForgeOriginalVoxyModelStoreLayoutSpec.FIELD_MAPPING_READY,
+                ForgeOriginalVoxyModelStoreLayoutSpec.FACE_DATA_MAPPING_READY,
+                ForgeOriginalVoxyModelStoreLayoutSpec.ATLAS_UV_MAPPING_READY,
+                ForgeOriginalVoxyModelStoreLayoutSpec.MATERIAL_MAPPING_READY,
                 this.buildRuns,
                 this.clearRuns,
                 this.lastBuildError,
@@ -158,26 +158,6 @@ final class ForgeModelStoreSkeleton {
                 false,
                 false,
                 false
-        );
-    }
-
-    String dumpSample() {
-        ForgeModelStoreStats status = this.createStatusSnapshot();
-        if (status.sampleModelId() < 0) {
-            return "Voxy placeholder ModelStore sample: none. Run /voxy model_bridge_check then /voxy model_store_skeleton_build first.";
-        }
-        return String.format(
-                "Voxy placeholder ModelStore sample: modelId=%d blockStateId=%d blockState=\"%s\" placeholder=%s hasFaceData=%s hasAtlasUv=%s hasTexture=%s hasRealModelMetadata=%s layoutVersion=%s formalLayoutCompatible=%s",
-                status.sampleModelId(),
-                status.sampleBlockStateId(),
-                status.sampleBlockState(),
-                status.samplePlaceholder(),
-                status.sampleHasFaceData(),
-                status.sampleHasAtlasUv(),
-                status.sampleHasTexture(),
-                status.sampleHasRealModelMetadata(),
-                status.layoutVersion(),
-                status.formalLayoutCompatible()
         );
     }
 

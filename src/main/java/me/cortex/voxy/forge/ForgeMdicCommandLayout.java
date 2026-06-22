@@ -1,7 +1,7 @@
 package me.cortex.voxy.forge;
 
 final class ForgeMdicCommandLayout {
-    static final String STAGE = "G6_5_VISIBILITY_AWARE_MDIC_DEBUG_DRAW";
+    static final String STAGE = "ORIGINAL_VOXY_MDIC_COMMAND_LAYOUT";
     static final String LAYOUT_VERSION = "G6_4_MDIC_BUCKET_FACE_MASK_COMMAND_V1";
     static final int WORD_SECTION_ID = 0;
     static final int WORD_GEOMETRY_PTR = 1;
@@ -20,7 +20,7 @@ final class ForgeMdicCommandLayout {
     static final int WORDS = WORDS_PER_COMMAND;
     static final int BYTES = BYTES_PER_COMMAND;
 
-    static final int FLAG_DEBUG_SKELETON = 1;
+    static final int FLAG_SECTION_COMMAND = 1;
     static final int FLAG_BUCKET_COMMAND = 1 << 1;
     static final int FLAG_FACE_MASK_ACCEPTED = 1 << 2;
 

@@ -413,10 +413,10 @@ final class ForgeSoftwareModelTextureBakery {
     }
 
     static byte[] rgbaBytes(ForgeOriginalVoxyColourDepthTextureData face) {
-        byte[] pixels = new byte[ForgeModelAtlasPixelSample.BYTES_PER_FACE];
+        byte[] pixels = new byte[ForgeModelAtlasPixelFormat.BYTES_PER_FACE];
         for (int i = 0; i < Math.min(face.colour().length, FACE_PIXELS); i++) {
             int pixel = face.colour()[i];
-            int offset = i * ForgeModelAtlasPixelSample.BYTES_PER_PIXEL;
+            int offset = i * ForgeModelAtlasPixelFormat.BYTES_PER_PIXEL;
             pixels[offset] = (byte) (pixel & 0xFF);
             pixels[offset + 1] = (byte) ((pixel >>> 8) & 0xFF);
             pixels[offset + 2] = (byte) ((pixel >>> 16) & 0xFF);

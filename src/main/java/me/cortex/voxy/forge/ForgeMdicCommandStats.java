@@ -121,29 +121,7 @@ record ForgeMdicCommandStats(
         long lastAuditedRecords,
         long lastAuditedBytes,
         long lastAuditHeapGeneration,
-        String lastAuditDimension,
-        long stressRuns,
-        long stressFailures,
-        String lastStressError,
-        double lastStressDurationMs,
-        boolean lastStressPlanOk,
-        boolean lastStressBuildOk,
-        boolean lastStressAuditOk,
-        boolean lastStressClearOk,
-        boolean lastStressHeapClearOk,
-        boolean lastStressRebuildOk,
-        boolean lastStressReauditOk,
-        boolean lastStressSourceRegressionOk,
-        boolean lastStressBucketAwareOk,
-        boolean lastStressBucketAuditOk,
-        boolean lastStressDirectionalFaceMaskOk,
-        boolean lastStressFaceMaskAuditOk,
-        boolean lastStressVisibilityPlanOk,
-        boolean lastStressSelectionAuditOk,
-        boolean lastStressFrustumFallbackOk,
-        int lastStressCommandCount,
-        long lastStressCommandRecords,
-        int lastStressInvalidCommands
+        String lastAuditDimension
 ) {
     int commandSections() {
         return this.sectionCount;

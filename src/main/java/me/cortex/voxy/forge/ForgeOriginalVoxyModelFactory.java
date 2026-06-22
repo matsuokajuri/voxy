@@ -45,10 +45,12 @@ import java.util.concurrent.locks.ReentrantLock;
 final class ForgeOriginalVoxyModelFactory {
     private static final int MAX_BLOCK_STATE_IDS = 1 << 20;
     private static final int MAX_MODEL_IDS = 1 << 16;
-    private static final int MODEL_SIZE = ForgeModelStoreFormalLayout.MODEL_RECORD_BYTES;
+    private static final int MODEL_SIZE = ForgeOriginalVoxyModelStoreLayoutSpec.MODEL_RECORD_BYTES;
     private static final Direction[] DIRECTIONS = Direction.values();
-    private static final byte[] EMPTY_FACE_PIXELS = new byte[ForgeModelAtlasPixelSample.BYTES_PER_FACE];
+    private static final byte[] EMPTY_FACE_PIXELS = new byte[ForgeModelAtlasPixelFormat.BYTES_PER_FACE];
     private static final Field STAIR_BASE_STATE_FIELD = findStairBaseStateField();
+    private static final boolean AUDIT_SHADERPACK = Boolean.getBoolean("voxy.forge.auditShaderpack");
+    private static final int MAX_SHADERPACK_MODEL_AUDITS = 48;
 
     private final Mapper mapper;
     private final ForgeOriginalVoxyModelStore store;
@@ -61,7 +63,7 @@ final class ForgeOriginalVoxyModelFactory {
     private final ReentrantLock blockStatesInFlightLock = new ReentrantLock();
     private final IntOpenHashSet blockStatesInFlight = new IntOpenHashSet(6000);
     private final Map<ModelEntry, Integer> modelTexture2id = new HashMap<>();
-    private final Map<Integer, ForgeFormalUploadedModelSummary> uploadedByBlockState = new HashMap<>();
+    private final Map<Integer, ForgeOriginalUploadedModelSummary> uploadedByBlockState = new HashMap<>();
     private final List<Biome> biomes = new ArrayList<>();
     private final List<BiomeModel> modelsRequiringBiomeColours = new ArrayList<>();
     private final long[] metadataCache = new long[MAX_MODEL_IDS];
@@ -87,6 +89,7 @@ final class ForgeOriginalVoxyModelFactory {
     private int modelStoreReadbackAuditRuns;
     private int modelStoreReadbackAuditFailures;
     private int lastAuditedModelId;
+    private int shaderpackModelAuditRuns;
     private boolean customBlockStateIdMappingReady;
     private boolean customBlockStateIdMappingPresent;
     private String customBlockStateIdMappingSource = "none";
@@ -410,7 +413,7 @@ final class ForgeOriginalVoxyModelFactory {
             this.lastDuplicateModelId = duplicate;
             this.dedupeHitCount++;
             this.completedModelCount++;
-            this.uploadedByBlockState.put(bake.blockId(), new ForgeFormalUploadedModelSummary(
+            this.uploadedByBlockState.put(bake.blockId(), new ForgeOriginalUploadedModelSummary(
                     bake.blockId(),
                     bake.state().toString(),
                     duplicate,
@@ -435,6 +438,7 @@ final class ForgeOriginalVoxyModelFactory {
 
         tint = this.finalizeTintForNewModel(minecraft, modelId, bake.state(), tint);
         RecordBuild build = this.buildRecord(bake.state(), softwareBake, tint, fluidModelId, modelId);
+        this.auditShaderpackModelInput(bake.blockId(), bake.state(), modelId, softwareBake, fluidModelId, build);
         this.modelTexture2id.put(entry, modelId);
         this.metadataCache[modelId] = build.voxyMetadata();
         if (bake.state().getBlock() instanceof LiquidBlock) {
@@ -447,7 +451,7 @@ final class ForgeOriginalVoxyModelFactory {
         this.lastUploadedModelId = modelId;
         this.dedupeMissCount++;
         this.completedModelCount++;
-        this.uploadedByBlockState.put(bake.blockId(), new ForgeFormalUploadedModelSummary(
+        this.uploadedByBlockState.put(bake.blockId(), new ForgeOriginalUploadedModelSummary(
                 bake.blockId(),
                 bake.state().toString(),
                 modelId,
@@ -461,6 +465,30 @@ final class ForgeOriginalVoxyModelFactory {
         this.removeInFlight(bake.blockId());
         this.lastFailureReason = "none";
         return true;
+    }
+
+    private void auditShaderpackModelInput(
+            int blockStateId,
+            BlockState state,
+            int modelId,
+            ForgeSoftwareModelTextureBakery.BakeResult softwareBake,
+            int fluidModelId,
+            RecordBuild build) {
+        if (!AUDIT_SHADERPACK || this.shaderpackModelAuditRuns >= MAX_SHADERPACK_MODEL_AUDITS) {
+            return;
+        }
+        this.shaderpackModelAuditRuns++;
+        VoxyForge.LOGGER.info(
+                "Original Voxy model shaderpack audit: run={} blockStateId={} modelId={} customId={} layer={} isFluid={} containsFluid={} fluidModelId={} state={}",
+                this.shaderpackModelAuditRuns,
+                blockStateId,
+                modelId,
+                build.words()[ForgeOriginalVoxyModelStoreLayoutSpec.WORD_CUSTOM_ID],
+                softwareBake.layer(),
+                state.getBlock() instanceof LiquidBlock,
+                !(state.getBlock() instanceof LiquidBlock) && !state.getFluidState().isEmpty(),
+                fluidModelId,
+                state);
     }
 
     private int resolveClientFluidModelId(BlockState state) {
@@ -486,9 +514,9 @@ final class ForgeOriginalVoxyModelFactory {
         int checkMode = layer == ForgeCpuMeshLayer.SOLID
                 ? ForgeOriginalVoxyTextureUtils.WRITE_CHECK_STENCIL
                 : ForgeOriginalVoxyTextureUtils.WRITE_CHECK_ALPHA;
-        int[] words = new int[ForgeModelStoreFormalLayout.MODEL_RECORD_WORDS];
+        int[] words = new int[ForgeOriginalVoxyModelStoreLayoutSpec.MODEL_RECORD_WORDS];
         Arrays.fill(words, 0);
-        Arrays.fill(words, 0, ForgeModelStoreFormalLayout.FACE_DATA_WORDS, -1);
+        Arrays.fill(words, 0, ForgeOriginalVoxyModelStoreLayoutSpec.FACE_DATA_WORDS, -1);
         FaceUpload[] faces = new FaceUpload[ForgeModelAtlasLayout.FACE_COUNT];
         int writtenFaces = 0;
         String primarySprite = "none";
@@ -505,7 +533,7 @@ final class ForgeOriginalVoxyModelFactory {
             float depth = computeSoftwareDepth(texture, layer);
             int[] bounds = ForgeOriginalVoxyTextureUtils.computeBounds(texture, checkMode);
             int faceData = encodeSoftwareFaceData(texture, layer, depth, bounds, writtenPixels, tint.hasTint());
-            faces[faceIndex] = new FaceUpload(faceIndex, direction.getName(), pixels, ForgeModelAtlasPixelSample.checksum(pixels), faceData, writtenPixels, depth, coversFullBlock(bounds));
+            faces[faceIndex] = new FaceUpload(faceIndex, direction.getName(), pixels, ForgeModelAtlasPixelFormat.checksum(pixels), faceData, writtenPixels, depth, coversFullBlock(bounds));
             words[faceIndex] = faceData;
             if (faceData >= 0) {
                 writtenFaces++;
@@ -521,9 +549,9 @@ final class ForgeOriginalVoxyModelFactory {
         flags |= tint.biomeDependent() ? 2 : 0;
         flags |= layer == ForgeCpuMeshLayer.TRANSLUCENT ? 4 : 0;
         flags |= (softwareBake.flags() & 1) != 0 ? 8 : 0;
-        words[ForgeModelStoreFormalLayout.WORD_FLAGS_A] = flags;
-        words[ForgeModelStoreFormalLayout.WORD_COLOUR_TINT] = tint.recordColourTint();
-        words[ForgeModelStoreFormalLayout.WORD_CUSTOM_ID] = this.customBlockStateId(state);
+        words[ForgeOriginalVoxyModelStoreLayoutSpec.WORD_FLAGS_A] = flags;
+        words[ForgeOriginalVoxyModelStoreLayoutSpec.WORD_COLOUR_TINT] = tint.recordColourTint();
+        words[ForgeOriginalVoxyModelStoreLayoutSpec.WORD_CUSTOM_ID] = this.customBlockStateId(state);
         MemoryBuffer mipChain = ForgeOriginalVoxyMipGen.putTexturesBuffer((softwareBake.flags() & 2) != 0, softwareBake.textures());
         return new RecordBuild(
                 words,
@@ -972,7 +1000,7 @@ final class ForgeOriginalVoxyModelFactory {
     ) {
         boolean isFluid = state.getBlock() instanceof LiquidBlock;
         boolean containsFluid = !isFluid && !state.getFluidState().isEmpty() && fluidModelId != -1;
-        boolean translucent = layer == ForgeCpuMeshLayer.TRANSLUCENT || isFluid;
+        boolean translucent = layer == ForgeCpuMeshLayer.TRANSLUCENT;
         boolean doubleSided = needsDoubleSidedQuads(faces);
         boolean cullsSame = cullsSame(state);
         boolean fullyOpaque = true;
@@ -1092,7 +1120,7 @@ final class ForgeOriginalVoxyModelFactory {
 
     private record FaceUpload(int faceIndex, String direction, byte[] pixels, String checksum, int faceDataWord, int writtenPixels, float depth, boolean faceCoversFullBlock) {
         static FaceUpload empty(int faceIndex, String direction) {
-            return new FaceUpload(faceIndex, direction, EMPTY_FACE_PIXELS.clone(), ForgeModelAtlasPixelSample.checksum(EMPTY_FACE_PIXELS), -1, 0, -1.0F, false);
+            return new FaceUpload(faceIndex, direction, EMPTY_FACE_PIXELS.clone(), ForgeModelAtlasPixelFormat.checksum(EMPTY_FACE_PIXELS), -1, 0, -1.0F, false);
         }
     }
 

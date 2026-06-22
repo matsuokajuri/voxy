@@ -7,7 +7,6 @@ import java.util.Iterator;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
-import java.util.Set;
 import java.util.List;
 import java.util.Map;
 
@@ -148,21 +147,6 @@ public final class ForgeVoxyGeometryCache {
             snapshot.add(section);
         }
         return new RenderSnapshot(snapshot, skippedByDimension, skippedReleased, limitedEntries);
-    }
-
-    public synchronized Set<ForgeCpuMeshCache.Key> createKeySnapshot(String dimension) {
-        this.trimToLimit();
-        var keys = new HashSet<ForgeCpuMeshCache.Key>();
-        for (ForgeVoxyBuiltSection section : this.entries.values()) {
-            if (!section.dimension().equals(dimension)) {
-                continue;
-            }
-            if (section.isClosed() || section.isEmpty()) {
-                continue;
-            }
-            keys.add(ForgeGpuMeshBuffer.keyFromBuiltSection(section));
-        }
-        return keys;
     }
 
     public synchronized StatusSnapshot createStatusSnapshot() {

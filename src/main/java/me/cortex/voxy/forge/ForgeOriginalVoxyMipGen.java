@@ -16,7 +16,7 @@ final class ForgeOriginalVoxyMipGen {
     static final long ORIGINAL_MODEL_TEXTURE_BUFFER_BYTES = (long) ForgeModelAtlasLayout.FACES_PER_MODEL_Y
             * ForgeModelAtlasLayout.FACES_PER_MODEL_X
             * computeSizeWithMips(MODEL_TEXTURE_SIZE)
-            * ForgeModelAtlasPixelSample.BYTES_PER_PIXEL;
+            * ForgeModelAtlasPixelFormat.BYTES_PER_PIXEL;
 
     private static final short[] SCRATCH = new short[MODEL_TEXTURE_SIZE * MODEL_TEXTURE_SIZE];
     private static final ByteArrayFIFOQueue QUEUE = new ByteArrayFIFOQueue(MODEL_TEXTURE_SIZE * MODEL_TEXTURE_SIZE);
@@ -101,7 +101,7 @@ final class ForgeOriginalVoxyMipGen {
             boolean anyTransparent = false;
             for (int colour : textures[face].colour()) {
                 int offset = ((y + (pixel >> LAYERS)) * MODEL_TILE_WIDTH
-                        + ((pixel & (MODEL_TEXTURE_SIZE - 1)) + x)) * ForgeModelAtlasPixelSample.BYTES_PER_PIXEL;
+                        + ((pixel & (MODEL_TEXTURE_SIZE - 1)) + x)) * ForgeModelAtlasPixelFormat.BYTES_PER_PIXEL;
                 MemoryUtil.memPutInt(addr + offset, colour);
                 anyTransparent |= (colour & 0xFF000000) == 0;
                 pixel++;
@@ -118,19 +118,19 @@ final class ForgeOriginalVoxyMipGen {
             long sourceAddr = destAddr;
             destAddr += ((long) MODEL_TEXTURE_SIZE * MODEL_TEXTURE_SIZE * ForgeModelAtlasLayout.FACES_PER_MODEL_X
                     * ForgeModelAtlasLayout.FACES_PER_MODEL_Y
-                    * ForgeModelAtlasPixelSample.BYTES_PER_PIXEL) >> (level << 1);
+                    * ForgeModelAtlasPixelFormat.BYTES_PER_PIXEL) >> (level << 1);
             int width = MODEL_TILE_WIDTH >> (level + 1);
             int sourceWidth = MODEL_TILE_WIDTH >> level;
             int height = MODEL_TILE_HEIGHT >> (level + 1);
             for (int px = 0; px < width; px++) {
                 for (int py = 0; py < height; py++) {
-                    long base = sourceAddr + (px * 2L + py * 2L * sourceWidth) * ForgeModelAtlasPixelSample.BYTES_PER_PIXEL;
+                    long base = sourceAddr + (px * 2L + py * 2L * sourceWidth) * ForgeModelAtlasPixelFormat.BYTES_PER_PIXEL;
                     int c00 = MemoryUtil.memGetInt(base);
-                    int c01 = MemoryUtil.memGetInt(base + (long) sourceWidth * ForgeModelAtlasPixelSample.BYTES_PER_PIXEL);
-                    int c10 = MemoryUtil.memGetInt(base + ForgeModelAtlasPixelSample.BYTES_PER_PIXEL);
-                    int c11 = MemoryUtil.memGetInt(base + ((long) sourceWidth + 1L) * ForgeModelAtlasPixelSample.BYTES_PER_PIXEL);
+                    int c01 = MemoryUtil.memGetInt(base + (long) sourceWidth * ForgeModelAtlasPixelFormat.BYTES_PER_PIXEL);
+                    int c10 = MemoryUtil.memGetInt(base + ForgeModelAtlasPixelFormat.BYTES_PER_PIXEL);
+                    int c11 = MemoryUtil.memGetInt(base + ((long) sourceWidth + 1L) * ForgeModelAtlasPixelFormat.BYTES_PER_PIXEL);
                     MemoryUtil.memPutInt(
-                            destAddr + (px + py * (long) width) * ForgeModelAtlasPixelSample.BYTES_PER_PIXEL,
+                            destAddr + (px + py * (long) width) * ForgeModelAtlasPixelFormat.BYTES_PER_PIXEL,
                             ForgeOriginalVoxyTextureUtils.mipColours(darkened, c00, c01, c10, c11));
                 }
             }
@@ -194,12 +194,12 @@ final class ForgeOriginalVoxyMipGen {
             }
             int tileX = (face >> 1) * MODEL_TEXTURE_SIZE;
             int tileY = (face & 1) * MODEL_TEXTURE_SIZE;
-            long faceAddr = baseAddr + (long) (tileX + tileY * MODEL_TILE_WIDTH) * ForgeModelAtlasPixelSample.BYTES_PER_PIXEL;
+            long faceAddr = baseAddr + (long) (tileX + tileY * MODEL_TILE_WIDTH) * ForgeModelAtlasPixelFormat.BYTES_PER_PIXEL;
             Arrays.fill(SCRATCH, (short) -1);
             QUEUE.clear();
             for (int y = 0; y < MODEL_TEXTURE_SIZE; y++) {
                 for (int x = 0; x < MODEL_TEXTURE_SIZE; x++) {
-                    int colour = MemoryUtil.memGetInt(faceAddr + (long) (x + y * MODEL_TILE_WIDTH) * ForgeModelAtlasPixelSample.BYTES_PER_PIXEL);
+                    int colour = MemoryUtil.memGetInt(faceAddr + (long) (x + y * MODEL_TILE_WIDTH) * ForgeModelAtlasPixelFormat.BYTES_PER_PIXEL);
                     if ((colour & 0xFF000000) != 0) {
                         int pos = x + y * MODEL_TEXTURE_SIZE;
                         SCRATCH[pos] = (short) pos;
@@ -231,8 +231,8 @@ final class ForgeOriginalVoxyMipGen {
             for (int i = 0; i < MODEL_TEXTURE_SIZE * MODEL_TEXTURE_SIZE; i++) {
                 int d = Short.toUnsignedInt(SCRATCH[i]);
                 if ((d & 0xFF00) != 0) {
-                    int colour = MemoryUtil.memGetInt(baseAddr + getOffset(tileX, tileY, d & 0xFF) * ForgeModelAtlasPixelSample.BYTES_PER_PIXEL) & 0x00FFFFFF;
-                    MemoryUtil.memPutInt(baseAddr + getOffset(tileX, tileY, i) * ForgeModelAtlasPixelSample.BYTES_PER_PIXEL, colour);
+                    int colour = MemoryUtil.memGetInt(baseAddr + getOffset(tileX, tileY, d & 0xFF) * ForgeModelAtlasPixelFormat.BYTES_PER_PIXEL) & 0x00FFFFFF;
+                    MemoryUtil.memPutInt(baseAddr + getOffset(tileX, tileY, i) * ForgeModelAtlasPixelFormat.BYTES_PER_PIXEL, colour);
                 }
             }
         }
@@ -245,10 +245,10 @@ final class ForgeOriginalVoxyMipGen {
     }
 
     private static byte[] toRgbaBytes(int[] pixels) {
-        byte[] out = new byte[pixels.length * ForgeModelAtlasPixelSample.BYTES_PER_PIXEL];
+        byte[] out = new byte[pixels.length * ForgeModelAtlasPixelFormat.BYTES_PER_PIXEL];
         for (int i = 0; i < pixels.length; i++) {
             int pixel = pixels[i];
-            int offset = i * ForgeModelAtlasPixelSample.BYTES_PER_PIXEL;
+            int offset = i * ForgeModelAtlasPixelFormat.BYTES_PER_PIXEL;
             out[offset] = (byte) (pixel & 0xFF);
             out[offset + 1] = (byte) ((pixel >>> 8) & 0xFF);
             out[offset + 2] = (byte) ((pixel >>> 16) & 0xFF);
@@ -260,7 +260,7 @@ final class ForgeOriginalVoxyMipGen {
     private static long uploadedMipChainBytes() {
         long bytes = 0L;
         for (int level = 0; level < LAYERS; level++) {
-            bytes += ((long) MODEL_TILE_WIDTH * MODEL_TILE_HEIGHT * ForgeModelAtlasPixelSample.BYTES_PER_PIXEL) >> (level << 1);
+            bytes += ((long) MODEL_TILE_WIDTH * MODEL_TILE_HEIGHT * ForgeModelAtlasPixelFormat.BYTES_PER_PIXEL) >> (level << 1);
         }
         return bytes;
     }

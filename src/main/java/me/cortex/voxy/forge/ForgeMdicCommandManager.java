@@ -1,7 +1,6 @@
 package me.cortex.voxy.forge;
 
 import com.mojang.blaze3d.systems.RenderSystem;
-import me.cortex.voxy.config.SimpleGpuMeshSource;
 import net.minecraft.client.Minecraft;
 
 final class ForgeMdicCommandManager {
@@ -38,28 +37,6 @@ final class ForgeMdicCommandManager {
     private long lastAuditedBytes;
     private long lastAuditHeapGeneration = -1L;
     private String lastAuditDimension = "none";
-    private long stressRuns;
-    private long stressFailures;
-    private String lastStressError = "none";
-    private double lastStressDurationMs;
-    private boolean lastStressPlanOk;
-    private boolean lastStressBuildOk;
-    private boolean lastStressAuditOk;
-    private boolean lastStressClearOk;
-    private boolean lastStressHeapClearOk;
-    private boolean lastStressRebuildOk;
-    private boolean lastStressReauditOk;
-    private boolean lastStressSourceRegressionOk;
-    private boolean lastStressBucketAwareOk;
-    private boolean lastStressBucketAuditOk;
-    private boolean lastStressDirectionalFaceMaskOk;
-    private boolean lastStressFaceMaskAuditOk;
-    private boolean lastStressVisibilityPlanOk;
-    private boolean lastStressSelectionAuditOk;
-    private boolean lastStressFrustumFallbackOk;
-    private int lastStressCommandCount;
-    private long lastStressCommandRecords;
-    private int lastStressInvalidCommands;
 
     ForgeMdicCommandManager(ForgeVoxyInstance instance) {
         this.instance = instance;
@@ -96,7 +73,7 @@ final class ForgeMdicCommandManager {
             this.lastBuildBufferDurationMs = elapsedMs(start);
             return false;
         }
-        ForgeGpuGeometryHeap heap = this.instance.getGpuGeometryUploadManager().getHeapForDebugReadback();
+        ForgeGpuGeometryHeap heap = this.instance.getGpuGeometryUploadManager().getHeapForMdicCommandGeneration();
         if (heap == null || !heap.isCreated()) {
             this.lastError = "heap-not-created";
             this.lastBuildBufferDurationMs = elapsedMs(start);
@@ -179,249 +156,8 @@ final class ForgeMdicCommandManager {
         this.lastAuditDimension = "none";
     }
 
-    void clearStressStats() {
-        this.stressRuns = 0L;
-        this.stressFailures = 0L;
-        this.lastStressError = "none";
-        this.lastStressDurationMs = 0.0D;
-        this.lastStressPlanOk = false;
-        this.lastStressBuildOk = false;
-        this.lastStressAuditOk = false;
-        this.lastStressClearOk = false;
-        this.lastStressHeapClearOk = false;
-        this.lastStressRebuildOk = false;
-        this.lastStressReauditOk = false;
-        this.lastStressSourceRegressionOk = false;
-        this.lastStressBucketAwareOk = false;
-        this.lastStressBucketAuditOk = false;
-        this.lastStressDirectionalFaceMaskOk = false;
-        this.lastStressFaceMaskAuditOk = false;
-        this.lastStressVisibilityPlanOk = false;
-        this.lastStressSelectionAuditOk = false;
-        this.lastStressFrustumFallbackOk = false;
-        this.lastStressCommandCount = 0;
-        this.lastStressCommandRecords = 0L;
-        this.lastStressInvalidCommands = 0;
-    }
-
-    ForgeMdicCommandStats stressOnce() {
-        this.stressRuns++;
-        long start = System.nanoTime();
-        this.lastStressError = "running";
-        this.lastStressPlanOk = false;
-        this.lastStressBuildOk = false;
-        this.lastStressAuditOk = false;
-        this.lastStressClearOk = false;
-        this.lastStressHeapClearOk = false;
-        this.lastStressRebuildOk = false;
-        this.lastStressReauditOk = false;
-        this.lastStressSourceRegressionOk = false;
-        this.lastStressBucketAwareOk = false;
-        this.lastStressBucketAuditOk = false;
-        this.lastStressDirectionalFaceMaskOk = false;
-        this.lastStressFaceMaskAuditOk = false;
-        this.lastStressVisibilityPlanOk = false;
-        this.lastStressSelectionAuditOk = false;
-        this.lastStressFrustumFallbackOk = false;
-        this.lastStressCommandCount = 0;
-        this.lastStressCommandRecords = 0L;
-        this.lastStressInvalidCommands = 0;
-
-        String error = "none";
-        try {
-            if (!RenderSystem.isOnRenderThread()) {
-                error = "not-render-thread";
-            } else {
-                ForgeGpuGeometryUploadManager uploadManager = this.instance.getGpuGeometryUploadManager();
-                ForgeVoxyRuntimeOverrides.applyMdicSkeletonPreset();
-                this.instance.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
-                uploadManager.processForDebugCommand(6);
-
-                ForgeMdicCommandPlanner.PlanResult firstPlan = this.planSample();
-                this.lastStressPlanOk = firstPlan.success();
-                this.lastStressBuildOk = this.lastStressPlanOk && this.buildBuffer();
-                ForgeMdicCommandAuditResult firstAudit = this.audit();
-                this.lastStressAuditOk = this.lastStressBuildOk && firstAudit.success();
-                this.lastStressBucketAwareOk = firstPlan.success()
-                        && this.commandList.bucketAware()
-                        && this.commandList.bucketCommands() > 0
-                        && this.commandList.sectionCommands() == 0;
-                this.lastStressBucketAuditOk = this.lastStressAuditOk
-                        && firstAudit.invalidBucketMaskCommands() == 0
-                        && firstAudit.invalidBucketRangeCommands() == 0
-                        && firstAudit.invalidBucketOffsetCommands() == 0;
-                this.lastStressDirectionalFaceMaskOk = firstPlan.success()
-                        && this.commandList.directionalFaceMask()
-                        && (this.commandList.faceMaskCommandsAccepted() > 0 || this.commandList.faceMaskCommandsRejected() > 0 || !"none".equals(this.commandList.faceMaskFallbackReason()));
-                this.lastStressFaceMaskAuditOk = this.lastStressAuditOk
-                        && firstAudit.faceMaskAuditOk()
-                        && firstAudit.invalidFaceMaskCommands() == 0;
-                this.lastStressVisibilityPlanOk = firstPlan.success() && visibilityPlanOk(this.commandList);
-                this.lastStressSelectionAuditOk = this.lastStressAuditOk
-                        && firstAudit.selectionAuditOk()
-                        && firstAudit.invalidSelectionCommands() == 0
-                        && firstAudit.invalidRadiusCommands() == 0
-                        && firstAudit.invalidFrustumCommands() == 0;
-                this.lastStressFrustumFallbackOk = frustumFallbackOk(this.commandList);
-                if (!this.lastStressPlanOk && "none".equals(error)) {
-                    error = "first-plan=" + firstPlan.error();
-                } else if (!this.lastStressBuildOk && "none".equals(error)) {
-                    error = "first-build=" + this.lastError;
-                } else if (!this.lastStressAuditOk && "none".equals(error)) {
-                    error = "first-audit=" + firstAudit.error();
-                } else if (!this.lastStressBucketAwareOk && "none".equals(error)) {
-                    error = "first-bucket-aware-plan-failed";
-                } else if (!this.lastStressBucketAuditOk && "none".equals(error)) {
-                    error = "first-bucket-audit-failed";
-                } else if (!this.lastStressDirectionalFaceMaskOk && "none".equals(error)) {
-                    error = "first-directional-face-mask-plan-failed";
-                } else if (!this.lastStressFaceMaskAuditOk && "none".equals(error)) {
-                    error = "first-face-mask-audit-failed";
-                } else if (!this.lastStressVisibilityPlanOk && "none".equals(error)) {
-                    error = "first-visibility-plan-failed";
-                } else if (!this.lastStressSelectionAuditOk && "none".equals(error)) {
-                    error = "first-selection-audit-failed";
-                } else if (!this.lastStressFrustumFallbackOk && "none".equals(error)) {
-                    error = "first-frustum-fallback-failed";
-                }
-
-                this.lastStressCommandCount = this.commandList.commandCount();
-                this.lastStressCommandRecords = this.commandList.recordCount();
-                this.lastStressInvalidCommands = firstAudit.invalidCommands();
-
-                this.clear();
-                ForgeMdicCommandStats cleared = this.createStatusSnapshot();
-                this.lastStressClearOk = !cleared.commandListValid() && !cleared.commandBufferCreated() && cleared.auditRuns() == 0;
-                if (!this.lastStressClearOk && "none".equals(error)) {
-                    error = "clear-did-not-reset-mdic-state";
-                }
-
-                ForgeMdicCommandPlanner.PlanResult secondPlan = this.planSample();
-                boolean secondBuild = secondPlan.success() && this.buildBuffer();
-                ForgeMdicCommandAuditResult secondAudit = this.audit();
-                boolean secondRebuildOk = secondPlan.success() && secondBuild;
-                boolean secondAuditOk = secondBuild && secondAudit.success();
-                if (!secondRebuildOk && "none".equals(error)) {
-                    error = "second-rebuild=" + (secondPlan.success() ? this.lastError : secondPlan.error());
-                } else if (!secondAuditOk && "none".equals(error)) {
-                    error = "second-audit=" + secondAudit.error();
-                }
-
-                uploadManager.clear();
-                ForgeMdicCommandStats afterHeapClear = this.createStatusSnapshot();
-                this.lastStressHeapClearOk = !afterHeapClear.commandListValid()
-                        && !afterHeapClear.commandBufferCreated()
-                        && ("HEAP_MISSING".equals(afterHeapClear.lastStaleReason()) || "COMMAND_LIST_MISSING".equals(afterHeapClear.lastStaleReason()));
-                if (!this.lastStressHeapClearOk && "none".equals(error)) {
-                    error = "heap-clear-did-not-reset-mdic-state";
-                }
-
-                ForgeVoxyRuntimeOverrides.setGeometryGpuUpload(true);
-                uploadManager.processForDebugCommand(8);
-                ForgeMdicCommandPlanner.PlanResult thirdPlan = this.planSample();
-                boolean thirdBuild = thirdPlan.success() && this.buildBuffer();
-                ForgeMdicCommandAuditResult thirdAudit = this.audit();
-                boolean thirdRebuildOk = thirdPlan.success() && thirdBuild;
-                boolean thirdAuditOk = thirdBuild && thirdAudit.success();
-                this.lastStressRebuildOk = secondRebuildOk && thirdRebuildOk;
-                this.lastStressReauditOk = secondAuditOk && thirdAuditOk;
-                this.lastStressBucketAwareOk = this.lastStressBucketAwareOk
-                        && thirdPlan.success()
-                        && this.commandList.bucketAware()
-                        && this.commandList.bucketCommands() > 0
-                        && this.commandList.sectionCommands() == 0;
-                this.lastStressBucketAuditOk = this.lastStressBucketAuditOk
-                        && thirdAudit.success()
-                        && thirdAudit.invalidBucketMaskCommands() == 0
-                        && thirdAudit.invalidBucketRangeCommands() == 0
-                        && thirdAudit.invalidBucketOffsetCommands() == 0;
-                this.lastStressDirectionalFaceMaskOk = this.lastStressDirectionalFaceMaskOk
-                        && thirdPlan.success()
-                        && this.commandList.directionalFaceMask()
-                        && (this.commandList.faceMaskCommandsAccepted() > 0 || this.commandList.faceMaskCommandsRejected() > 0 || !"none".equals(this.commandList.faceMaskFallbackReason()));
-                this.lastStressFaceMaskAuditOk = this.lastStressFaceMaskAuditOk
-                        && thirdAudit.success()
-                        && thirdAudit.faceMaskAuditOk()
-                        && thirdAudit.invalidFaceMaskCommands() == 0;
-                this.lastStressVisibilityPlanOk = this.lastStressVisibilityPlanOk
-                        && thirdPlan.success()
-                        && visibilityPlanOk(this.commandList);
-                this.lastStressSelectionAuditOk = this.lastStressSelectionAuditOk
-                        && thirdAudit.success()
-                        && thirdAudit.selectionAuditOk()
-                        && thirdAudit.invalidSelectionCommands() == 0
-                        && thirdAudit.invalidRadiusCommands() == 0
-                        && thirdAudit.invalidFrustumCommands() == 0;
-                this.lastStressFrustumFallbackOk = this.lastStressFrustumFallbackOk && frustumFallbackOk(this.commandList);
-                if (!thirdRebuildOk && "none".equals(error)) {
-                    error = "post-heap-rebuild=" + (thirdPlan.success() ? this.lastError : thirdPlan.error());
-                } else if (!thirdAuditOk && "none".equals(error)) {
-                    error = "post-heap-audit=" + thirdAudit.error();
-                } else if (!this.lastStressBucketAwareOk && "none".equals(error)) {
-                    error = "post-heap-bucket-aware-plan-failed";
-                } else if (!this.lastStressBucketAuditOk && "none".equals(error)) {
-                    error = "post-heap-bucket-audit-failed";
-                } else if (!this.lastStressDirectionalFaceMaskOk && "none".equals(error)) {
-                    error = "post-heap-directional-face-mask-plan-failed";
-                } else if (!this.lastStressFaceMaskAuditOk && "none".equals(error)) {
-                    error = "post-heap-face-mask-audit-failed";
-                } else if (!this.lastStressVisibilityPlanOk && "none".equals(error)) {
-                    error = "post-heap-visibility-plan-failed";
-                } else if (!this.lastStressSelectionAuditOk && "none".equals(error)) {
-                    error = "post-heap-selection-audit-failed";
-                } else if (!this.lastStressFrustumFallbackOk && "none".equals(error)) {
-                    error = "post-heap-frustum-fallback-failed";
-                }
-
-                this.lastStressCommandCount = this.commandList.commandCount();
-                this.lastStressCommandRecords = this.commandList.recordCount();
-                this.lastStressInvalidCommands = thirdAudit.invalidCommands();
-
-                ForgeVoxyRuntimeOverrides.applyLodBuiltSectionPreset();
-                this.instance.getGpuMeshUploadManager().clear();
-                boolean builtSectionSourceOk = ForgeGpuMeshUploadManager.getConfiguredSource() == SimpleGpuMeshSource.BUILT_SECTION;
-                ForgeVoxyRuntimeOverrides.applyGlHeapReadbackPreset();
-                this.instance.getGpuMeshUploadManager().clear();
-                boolean glHeapSourceOk = ForgeGpuMeshUploadManager.getConfiguredSource() == SimpleGpuMeshSource.GL_HEAP_READBACK;
-                this.lastStressSourceRegressionOk = builtSectionSourceOk && glHeapSourceOk;
-                if (!this.lastStressSourceRegressionOk && "none".equals(error)) {
-                    error = "source-regression-failed";
-                }
-
-                ForgeVoxyRuntimeOverrides.applyMdicSkeletonPreset();
-                this.instance.ensureActiveWorldSkeletonForCurrentWorldIfAllowed();
-                uploadManager.processForDebugCommand(4);
-            }
-        } catch (RuntimeException e) {
-            error = e.getClass().getSimpleName() + ": " + e.getMessage();
-        }
-
-        boolean success = "none".equals(error)
-                && this.lastStressPlanOk
-                && this.lastStressBuildOk
-                && this.lastStressAuditOk
-                && this.lastStressClearOk
-                && this.lastStressHeapClearOk
-                && this.lastStressRebuildOk
-                && this.lastStressReauditOk
-                && this.lastStressSourceRegressionOk
-                && this.lastStressBucketAwareOk
-                && this.lastStressBucketAuditOk
-                && this.lastStressDirectionalFaceMaskOk
-                && this.lastStressFaceMaskAuditOk
-                && this.lastStressVisibilityPlanOk
-                && this.lastStressSelectionAuditOk
-                && this.lastStressFrustumFallbackOk;
-        this.lastStressDurationMs = elapsedMs(start);
-        this.lastStressError = success ? "none" : error;
-        if (!success) {
-            this.stressFailures++;
-        }
-        return this.createStatusSnapshot();
-    }
-
     ForgeMdicCommandStats createStatusSnapshot() {
-        ForgeGpuGeometryHeap heap = this.instance.getGpuGeometryUploadManager().getHeapForDebugReadback();
+        ForgeGpuGeometryHeap heap = this.instance.getGpuGeometryUploadManager().getHeapForMdicCommandGeneration();
         boolean heapCreated = heap != null && heap.isCreated();
         long currentGeneration = heapCreated ? heap.generation() : -1L;
         boolean commandListValid = this.commandList.isValid();
@@ -565,62 +301,8 @@ final class ForgeMdicCommandManager {
                 this.lastAuditedRecords,
                 this.lastAuditedBytes,
                 this.lastAuditHeapGeneration,
-                this.lastAuditDimension,
-                this.stressRuns,
-                this.stressFailures,
-                this.lastStressError,
-                this.lastStressDurationMs,
-                this.lastStressPlanOk,
-                this.lastStressBuildOk,
-                this.lastStressAuditOk,
-                this.lastStressClearOk,
-                this.lastStressHeapClearOk,
-                this.lastStressRebuildOk,
-                this.lastStressReauditOk,
-                this.lastStressSourceRegressionOk,
-                this.lastStressBucketAwareOk,
-                this.lastStressBucketAuditOk,
-                this.lastStressDirectionalFaceMaskOk,
-                this.lastStressFaceMaskAuditOk,
-                this.lastStressVisibilityPlanOk,
-                this.lastStressSelectionAuditOk,
-                this.lastStressFrustumFallbackOk,
-                this.lastStressCommandCount,
-                this.lastStressCommandRecords,
-                this.lastStressInvalidCommands
+                this.lastAuditDimension
         );
-    }
-
-    ForgeMdicCommandList commandListForDebugDraw() {
-        return this.commandList;
-    }
-
-    ForgeMdicCommandBuffer commandBufferForDebugDraw() {
-        return this.commandBuffer;
-    }
-
-    private static boolean visibilityPlanOk(ForgeMdicCommandList commandList) {
-        return commandList != null
-                && commandList.isValid()
-                && commandList.planCandidateSections() > 0
-                && commandList.planAcceptedSections() > 0
-                && commandList.commandCount() > 0
-                && !"none".equals(commandList.effectiveSelectionMode());
-    }
-
-    private static boolean frustumFallbackOk(ForgeMdicCommandList commandList) {
-        if (commandList == null || !commandList.isValid()) {
-            return false;
-        }
-        if (commandList.frustumAvailable()) {
-            return "FRUSTUM_RADIUS".equals(commandList.effectiveSelectionMode());
-        }
-        String reason = commandList.selectionFallbackReason();
-        if ("AUTO".equals(commandList.selectionMode()) || "FRUSTUM_RADIUS".equals(commandList.selectionMode())) {
-            return "RADIUS".equals(commandList.effectiveSelectionMode())
-                    && ("FRUSTUM_UNAVAILABLE".equals(reason) || "FRUSTUM_DISABLED".equals(reason));
-        }
-        return true;
     }
 
     private String staleReason(boolean heapCreated, long currentGeneration, String currentDimension, boolean commandListValid, boolean listStale, boolean bufferStale) {
@@ -646,7 +328,7 @@ final class ForgeMdicCommandManager {
     }
 
     private ForgeMdicCommandAuditResult compareCommandBuffer(long start) {
-        ForgeGpuGeometryHeap heap = this.instance.getGpuGeometryUploadManager().getHeapForDebugReadback();
+        ForgeGpuGeometryHeap heap = this.instance.getGpuGeometryUploadManager().getHeapForMdicCommandGeneration();
         if (heap == null || !heap.isCreated()) {
             return ForgeMdicCommandAuditResult.failure("heap-not-created", elapsedMs(start));
         }
@@ -827,7 +509,7 @@ final class ForgeMdicCommandManager {
             return FaceMaskValidation.ok();
         }
         int bucket = command.bucketIndex();
-        if (bucket < 2 || bucket >= ForgeGpuGeometryDecodedMetadata.BUCKET_COUNT) {
+        if (bucket < 2 || bucket >= ForgeGpuGeometryMetadataView.BUCKET_COUNT) {
             return FaceMaskValidation.ok();
         }
         return command.isFaceMaskAccepted() ? FaceMaskValidation.ok() : new FaceMaskValidation(1);
@@ -862,7 +544,7 @@ final class ForgeMdicCommandManager {
         if (bucket == 1) {
             return ForgeMdicCommandConfig.includeDoubleSided();
         }
-        return bucket >= 2 && bucket < ForgeGpuGeometryDecodedMetadata.BUCKET_COUNT && ForgeMdicCommandConfig.includeDirectional();
+        return bucket >= 2 && bucket < ForgeGpuGeometryMetadataView.BUCKET_COUNT && ForgeMdicCommandConfig.includeDirectional();
     }
 
     private void recordAuditResult(ForgeMdicCommandAuditResult result) {

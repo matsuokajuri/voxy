@@ -68,33 +68,90 @@ giant all-in-one command files as the home for new parity work
 debug pipeline clear commands as lifecycle substitutes
 ```
 
-## Not deleted yet
+## Cleanup status, 2026-06-22
 
-These routes are not all physically deleted yet because command registration,
-status aggregation, and historical stage audits still reference them. Removing
-them must be done in controlled batches that keep the project compiling.
+The 2026-06-22 cleanup pass physically removed the listed debug, preview,
+sample-set, direct-GL, textured-readback, visible-LoD-preview, K-stage formal
+owner, and offscreen-validation route families from active source.
 
-Until removed, they are explicitly deprecated and must remain isolated from the
-new formal parity route.
+The step-by-step deletion record is:
+
+```text
+docs/forge-1.20.1-debug-preview-cleanup-2026-06-22.md
+```
+
+Shared data/layout helpers that were still active were renamed away from old
+Sample/Formal route names during the same cleanup pass:
+
+```text
+ForgeModelAtlasLayout
+ForgeModelAtlasPixelFormat
+ForgeOriginalUploadedModelSummary
+ForgeOriginalVoxyModelStoreLayoutSpec
+```
+
+These retained helpers are active original-Voxy model/atlas layout utilities,
+not preview owners or debug renderers.
 
 ## Command surface status
 
-`ForgeVoxyCommands` is now treated as a legacy monolithic command surface. It
-still exists because many historical status, clear, and QA handlers reference
-prototype objects that have not yet been safely removed from `ForgeVoxyInstance`.
-
-New original-Voxy parity work must not add more branches to that file. The
-retirement direction is:
+`ForgeVoxyCommands` is no longer the legacy monolithic command surface. It now
+only registers the parity command surface:
 
 ```text
-split current-route commands into focused parity registrars
- -> move legacy debug/prototype commands behind an explicit legacy surface
- -> remove command handlers once their backing prototype objects are deleted
- -> delete the old monolithic command file
+ForgeVoxyCommands
+ -> ForgeVoxyParityCommands
 ```
 
-The command `/voxy parity_route_status` exists only to make this boundary
-visible while the old command surface is still compiled.
+The old debug/prototype/preview/preset/formal-owner command registrars were
+deleted. New original-Voxy parity work must stay in focused parity surfaces and
+must not recreate the old monolithic handler pattern.
+
+## Follow-up cleanup result, 2026-06-22
+
+The follow-up cleanup removed or isolated the deprecated surfaces that the first
+cleanup pass still left compiled:
+
+```text
+ForgeVoxyRuntimeOverrides legacy preset/override methods
+ForgeVoxyConfig keys for removed debug/preview routes
+ForgeGpuGeometryVisualization* GL-heap visualization sample route
+ForgeGpuGeometryReadbackMesh* GL-heap readback mesh sample route
+ForgeGpuMeshUploadManager / ForgeGpuMeshCache / SimpleGpuMesh* simple-GPU preview route
+ForgeMdicCommandManager stress/debug-only helpers
+ForgeMdicCommandLayout historical DEBUG_DRAW stage label
+ForgeModelBridgeResourceReloadTracker texturedMdicDebugStale flag
+ForgeVoxyInstance stale debug-pipeline log wording
+ForgeModelBridgeReadiness / ForgeBakedModelBridge diagnostic owners
+ForgeModelStoreSkeleton.dumpSample
+ForgeVoxyQuadEncoder.packPreviewRecord
+ForgeRealModelStoreFaceSample
+ForgeModelAtlasPixelSample active-utility name
+ForgeFormalUploadedModelSummary active-cache name
+ForgeModelStoreFormalLayout active-layout name
+ForgeMdicCommandBuffer.bufferIdForDebugRenderer
+ForgeGpuGeometryHeap.geometryBufferIdForDirectRenderer
+ForgeGpuGeometryUploadManager validateSample/auditSample manual helper route
+ForgeGpuGeometryDecodedMetadata active metadata-view name
+ForgeMdicCommandPlanner.createFaceMaskPlanForAudit
+```
+
+The simple-GPU / GL-heap visualization / readback-mesh / MDIC debug draw route
+families no longer have active Forge source files or config/runtime switches.
+The retained low-level CPU geometry helpers are current original-Voxy
+model/geometry staging code, not the deleted simple-GPU preview renderer.
+
+Remaining naming debt:
+
+```text
+ForgeModelStoreStats still carries several status-field names from the old
+formal/readiness vocabulary. These are status interface names only; they should
+be renamed in a separate focused cleanup so active model-store layout behavior is
+not changed while prototype code is being removed.
+
+Oculus/Iris Samplers files still match naive "sample" filename scans because
+sampler is the shaderpack API term. They are active shaderpack bridge code.
+```
 
 ## Current non-deprecated parity entry
 
@@ -152,7 +209,7 @@ the Forge-only synchronous WorldEngine save callback that saved immediately and
 returned false
 
 the Embeddium single-section raw light ingest path that bypassed the
-chunk-aware lighting fallback
+chunk-aware light-layer handling
 ```
 
 The replacement path is active-route parity work, not a new prototype route:
@@ -161,6 +218,13 @@ ownership shape, and single-section Embeddium updates now reuse
 `VoxelIngestService.ingestChunkSectionWithStats(...)`. Active Forge worlds are
 also detached before delayed idle free, matching the original `WorldEngine`
 idle-cleanup rule more closely than the old immediate skeleton close.
+
+The follow-up LoD darkness repair also removes the Forge-only
+`Level.getBrightness(...)` fallback from the active ingest path. A short-lived
+attempt to use Embeddium clone-section missing-light defaults is documented as
+incorrect for persistent Voxy LoD data. The active route now defers non-air
+sections in sky-lit dimensions when the real sky `DataLayer` is absent, and
+keeps the chunk eligible for later retry instead of writing guessed lighting.
 
 ## Replacement direction
 

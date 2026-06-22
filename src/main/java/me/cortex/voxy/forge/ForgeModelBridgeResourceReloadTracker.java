@@ -19,26 +19,8 @@ final class ForgeModelBridgeResourceReloadTracker {
     private boolean reloadCleanupOnRenderThread;
     private boolean reloadCleanupCompleted;
     private long reloadCleanupFailures;
-    private boolean modelBridgeInvalidatedOnReload;
-    private boolean placeholderBuffersInvalidatedOnReload;
-    private boolean placeholderBuffersStale;
-    private boolean realModelStoreStale;
-    private boolean textureAtlasStale;
-    private boolean formalShaderInputsStale;
-    private boolean bakedModelSamplesStale;
-    private boolean spriteSamplesStale;
-    private boolean lastReloadInvalidatedBakedModelSamples;
-    private boolean realModelRecordSampleStale;
-    private boolean lastReloadInvalidatedRealModelRecordSample;
-    private boolean sampleSetStale;
-    private boolean atlasSkeletonStale;
-    private boolean lastReloadInvalidatedAtlasSkeleton;
-    private boolean atlasPixelsStale;
-    private boolean lastReloadInvalidatedAtlasPixels;
-    private boolean formalShaderInputBridgeStale;
-    private boolean texturedDebugQuadStale;
-    private boolean texturedReadbackStale;
-    private boolean texturedMdicDebugStale;
+    private boolean modelStoreSkeletonStale;
+    private boolean originalVoxyPipelineReloadMarked;
     private String lastReloadReason = "none";
 
     ForgeModelBridgeResourceReloadTracker(ForgeVoxyInstance instance) {
@@ -71,63 +53,13 @@ final class ForgeModelBridgeResourceReloadTracker {
         this.reloadCleanupOnRenderThread = RenderSystem.isOnRenderThread();
         this.reloadCleanupScheduled = !this.reloadCleanupOnRenderThread;
         this.reloadCleanupCompleted = false;
-        this.modelBridgeInvalidatedOnReload = true;
-        this.placeholderBuffersInvalidatedOnReload = true;
-        this.placeholderBuffersStale = true;
-        this.realModelStoreStale = true;
-        this.textureAtlasStale = true;
-        this.formalShaderInputsStale = true;
-        this.bakedModelSamplesStale = true;
-        this.spriteSamplesStale = true;
-        this.lastReloadInvalidatedBakedModelSamples = true;
-        this.realModelRecordSampleStale = true;
-        this.lastReloadInvalidatedRealModelRecordSample = true;
-        this.sampleSetStale = true;
-        this.atlasSkeletonStale = true;
-        this.lastReloadInvalidatedAtlasSkeleton = true;
-        this.atlasPixelsStale = true;
-        this.lastReloadInvalidatedAtlasPixels = true;
-        this.formalShaderInputBridgeStale = true;
-        this.texturedDebugQuadStale = true;
-        this.texturedReadbackStale = true;
-        this.texturedMdicDebugStale = true;
+        this.modelStoreSkeletonStale = true;
+        this.originalVoxyPipelineReloadMarked = true;
         this.lastReloadReason = reason == null || reason.isBlank() ? (real ? "forge-client-resource-reload" : "command-simulated-resource-reload") : reason;
         String staleReason = real ? "resource-reload-event" : "resource-reload-simulated";
         try {
-            this.instance.getModelBridgeReadiness().clear();
             this.instance.getModelStoreSkeleton().markStale(staleReason);
-            this.instance.getBakedModelBridge().markStale(staleReason);
-            this.instance.getRealModelStoreSample().markStale(staleReason);
-            this.instance.getModelSampleSet().markStale(staleReason);
-            this.instance.getModelAtlasSkeleton().markStale(staleReason);
-            this.instance.getModelAtlasPixelUploader().markStale(staleReason);
-            this.instance.getModelAtlasSampleSetUploader().markStale(staleReason);
-            this.instance.getFormalShaderInputBridge().markStale(staleReason);
-            this.instance.getFormalModelStore().markResourceReload();
-            this.instance.getFormalModelFactory().markResourceReload();
-            this.instance.getOneBlockFormalBakeUpload().markResourceReload();
-            this.instance.getMultiBlockFormalBakeUpload().markResourceReload();
-            this.instance.getFormalModelBakeryLifecycle().markResourceReload();
-            this.instance.getFormalShaderInputConsumer().markResourceReload();
-            this.instance.getFormalShaderProgramValidator().markResourceReload();
-            this.instance.getFormalTexturedShaderPreview().markResourceReload();
-            this.instance.getFormalPackedQuadPreview().markResourceReload();
-            this.instance.getFormalTerrainPackedRecordBridge().markResourceReload();
-            this.instance.getFormalTerrainRendererOwner().markResourceReload();
-            this.instance.getFormalMdicViewportOwner().markResourceReload();
-            this.instance.getFormalCommandGenerationOwner().markResourceReload();
-            this.instance.getFormalVisibilityOwner().markResourceReload();
-            this.instance.getFormalCmdgenGpuValidator().markResourceReload();
-            this.instance.getFormalCmdgenRealSectionDryRun().markResourceReload();
-            this.instance.getFormalIsolatedMdicDrawSmokeTest().markResourceReload();
-            this.instance.getFormalModelIdSectionGeometryPath().markResourceReload();
-            this.instance.getFormalTerrainShaderIntegration().markResourceReload();
-            this.instance.getFormalVisibleLodPreview().markResourceReload();
-            this.instance.getFormalRendererManager().markResourceReload();
             this.instance.getOriginalVoxyModelPipeline().markResourceReload();
-            this.instance.getTexturedDebugQuadRenderer().markStale(staleReason);
-            this.instance.getTexturedReadbackRenderer().markStale(staleReason);
-            this.instance.getTexturedMdicDebugRenderer().markStale(staleReason);
             this.reloadCleanupCompleted = true;
         } catch (RuntimeException e) {
             this.reloadCleanupFailures++;
@@ -154,26 +86,8 @@ final class ForgeModelBridgeResourceReloadTracker {
                 this.reloadCleanupOnRenderThread,
                 this.reloadCleanupCompleted,
                 this.reloadCleanupFailures,
-                this.modelBridgeInvalidatedOnReload,
-                this.placeholderBuffersInvalidatedOnReload,
-                this.placeholderBuffersStale,
-                this.realModelStoreStale,
-                this.textureAtlasStale,
-                this.formalShaderInputsStale,
-                this.bakedModelSamplesStale,
-                this.spriteSamplesStale,
-                this.lastReloadInvalidatedBakedModelSamples,
-                this.realModelRecordSampleStale,
-                this.lastReloadInvalidatedRealModelRecordSample,
-                this.sampleSetStale,
-                this.atlasSkeletonStale,
-                this.lastReloadInvalidatedAtlasSkeleton,
-                this.atlasPixelsStale,
-                this.lastReloadInvalidatedAtlasPixels,
-                this.formalShaderInputBridgeStale,
-                this.texturedDebugQuadStale,
-                this.texturedReadbackStale,
-                this.texturedMdicDebugStale,
+                this.modelStoreSkeletonStale,
+                this.originalVoxyPipelineReloadMarked,
                 this.lastReloadReason
         );
     }
@@ -194,26 +108,8 @@ final class ForgeModelBridgeResourceReloadTracker {
         this.reloadCleanupOnRenderThread = false;
         this.reloadCleanupCompleted = false;
         this.reloadCleanupFailures = 0L;
-        this.modelBridgeInvalidatedOnReload = false;
-        this.placeholderBuffersInvalidatedOnReload = false;
-        this.placeholderBuffersStale = false;
-        this.realModelStoreStale = false;
-        this.textureAtlasStale = false;
-        this.formalShaderInputsStale = false;
-        this.bakedModelSamplesStale = false;
-        this.spriteSamplesStale = false;
-        this.lastReloadInvalidatedBakedModelSamples = false;
-        this.realModelRecordSampleStale = false;
-        this.lastReloadInvalidatedRealModelRecordSample = false;
-        this.sampleSetStale = false;
-        this.atlasSkeletonStale = false;
-        this.lastReloadInvalidatedAtlasSkeleton = false;
-        this.atlasPixelsStale = false;
-        this.lastReloadInvalidatedAtlasPixels = false;
-        this.formalShaderInputBridgeStale = false;
-        this.texturedDebugQuadStale = false;
-        this.texturedReadbackStale = false;
-        this.texturedMdicDebugStale = false;
+        this.modelStoreSkeletonStale = false;
+        this.originalVoxyPipelineReloadMarked = false;
         this.lastReloadReason = "none";
     }
 }

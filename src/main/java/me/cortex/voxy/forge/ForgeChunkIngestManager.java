@@ -30,6 +30,7 @@ public final class ForgeChunkIngestManager {
     private int windowStorageWrites;
     private int windowMissingBlockLightSections;
     private int windowMissingSkyLightSections;
+    private int windowDeferredLightSections;
     private double windowElapsedMs;
     private long lastSummaryTick;
     private double lastAverageMs;
@@ -206,7 +207,9 @@ public final class ForgeChunkIngestManager {
             stats = stats.withStorageWrites(storageWrites);
             double elapsedMs = (System.nanoTime() - start) / 1_000_000.0;
 
-            this.ingestedChunks.add(key);
+            if (!stats.deferred()) {
+                this.ingestedChunks.add(key);
+            }
             this.windowChunks++;
             this.windowConvertedSections += stats.convertedSections();
             this.windowNonAirSections += stats.nonAirSections();
@@ -214,6 +217,7 @@ public final class ForgeChunkIngestManager {
             this.windowStorageWrites += stats.storageWrites();
             this.windowMissingBlockLightSections += stats.missingBlockLightSections();
             this.windowMissingSkyLightSections += stats.missingSkyLightSections();
+            this.windowDeferredLightSections += stats.deferredLightSections();
             this.windowElapsedMs += elapsedMs;
         } catch (Exception e) {
             this.ingestedChunks.add(key);
@@ -228,7 +232,7 @@ public final class ForgeChunkIngestManager {
 
         double averageMs = this.windowElapsedMs / this.windowChunks;
         VoxyForge.LOGGER.info(
-                "Voxy auto ingest {}: queued={} ingested={} converted={} nonAirSections={} nonAirVoxels={} storageWrites={} missingBlockLightSections={} missingSkyLightSections={} avgMs={}",
+                "Voxy auto ingest {}: queued={} attempted={} converted={} nonAirSections={} nonAirVoxels={} storageWrites={} missingBlockLightSections={} missingSkyLightSections={} deferredLightSections={} avgMs={}",
                 dimension,
                 this.pendingChunks.size(),
                 this.windowChunks,
@@ -238,6 +242,7 @@ public final class ForgeChunkIngestManager {
                 this.windowStorageWrites,
                 this.windowMissingBlockLightSections,
                 this.windowMissingSkyLightSections,
+                this.windowDeferredLightSections,
                 String.format("%.2f", averageMs)
         );
         this.resetWindow();
@@ -253,6 +258,7 @@ public final class ForgeChunkIngestManager {
         this.windowStorageWrites = 0;
         this.windowMissingBlockLightSections = 0;
         this.windowMissingSkyLightSections = 0;
+        this.windowDeferredLightSections = 0;
         this.windowElapsedMs = 0.0;
         this.lastSummaryTick = this.tickCounter;
     }

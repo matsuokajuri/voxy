@@ -8,30 +8,30 @@ final class ForgeModelStoreLayoutAuditor {
     ForgeModelStoreLayoutAuditResult audit() {
         this.layoutAuditRuns++;
         long start = System.nanoTime();
-        boolean recordBytesMatch = ForgeModelStoreFormalLayout.MODEL_RECORD_BYTES == ForgeModelStoreLayout.BYTES;
+        boolean recordBytesMatch = ForgeOriginalVoxyModelStoreLayoutSpec.MODEL_RECORD_BYTES == ForgeModelStoreLayout.BYTES;
         boolean success = recordBytesMatch
-                && ForgeModelStoreFormalLayout.FORMAL_LAYOUT_KNOWN
-                && ForgeModelStoreFormalLayout.FACE_DATA_LAYOUT_KNOWN
-                && ForgeModelStoreFormalLayout.FLAGS_LAYOUT_KNOWN
-                && ForgeModelStoreFormalLayout.COLOUR_TINT_LAYOUT_KNOWN
-                && ForgeModelStoreFormalLayout.CUSTOM_ID_LAYOUT_KNOWN;
+                && ForgeOriginalVoxyModelStoreLayoutSpec.FORMAL_LAYOUT_KNOWN
+                && ForgeOriginalVoxyModelStoreLayoutSpec.FACE_DATA_LAYOUT_KNOWN
+                && ForgeOriginalVoxyModelStoreLayoutSpec.FLAGS_LAYOUT_KNOWN
+                && ForgeOriginalVoxyModelStoreLayoutSpec.COLOUR_TINT_LAYOUT_KNOWN
+                && ForgeOriginalVoxyModelStoreLayoutSpec.CUSTOM_ID_LAYOUT_KNOWN;
         ForgeModelStoreLayoutAuditResult result = new ForgeModelStoreLayoutAuditResult(
                 success,
                 success ? "none" : "layout-field-mapping-incomplete",
                 elapsedMs(start),
-                ForgeModelStoreFormalLayout.LAYOUT_VERSION,
-                ForgeModelStoreFormalLayout.MODEL_RECORD_BYTES,
+                ForgeOriginalVoxyModelStoreLayoutSpec.LAYOUT_VERSION,
+                ForgeOriginalVoxyModelStoreLayoutSpec.MODEL_RECORD_BYTES,
                 ForgeModelStoreLayout.BYTES,
-                ForgeModelStoreFormalLayout.FORMAL_LAYOUT_KNOWN,
-                ForgeModelStoreFormalLayout.knownFieldCount(),
-                ForgeModelStoreFormalLayout.unknownFieldCount(),
-                ForgeModelStoreFormalLayout.FACE_DATA_LAYOUT_KNOWN,
-                ForgeModelStoreFormalLayout.FLAGS_LAYOUT_KNOWN,
-                ForgeModelStoreFormalLayout.COLOUR_TINT_LAYOUT_KNOWN,
-                ForgeModelStoreFormalLayout.CUSTOM_ID_LAYOUT_KNOWN,
-                ForgeModelStoreFormalLayout.ATLAS_UV_LAYOUT_KNOWN,
-                ForgeModelStoreFormalLayout.MATERIAL_LAYOUT_KNOWN,
-                ForgeModelStoreFormalLayout.FIELD_MAPPING_READY,
+                ForgeOriginalVoxyModelStoreLayoutSpec.FORMAL_LAYOUT_KNOWN,
+                ForgeOriginalVoxyModelStoreLayoutSpec.knownFieldCount(),
+                ForgeOriginalVoxyModelStoreLayoutSpec.unknownFieldCount(),
+                ForgeOriginalVoxyModelStoreLayoutSpec.FACE_DATA_LAYOUT_KNOWN,
+                ForgeOriginalVoxyModelStoreLayoutSpec.FLAGS_LAYOUT_KNOWN,
+                ForgeOriginalVoxyModelStoreLayoutSpec.COLOUR_TINT_LAYOUT_KNOWN,
+                ForgeOriginalVoxyModelStoreLayoutSpec.CUSTOM_ID_LAYOUT_KNOWN,
+                ForgeOriginalVoxyModelStoreLayoutSpec.ATLAS_UV_LAYOUT_KNOWN,
+                ForgeOriginalVoxyModelStoreLayoutSpec.MATERIAL_LAYOUT_KNOWN,
+                ForgeOriginalVoxyModelStoreLayoutSpec.FIELD_MAPPING_READY,
                 false,
                 "placeholder has modelId/blockStateId/debug-colour only; formal record needs faceData[6], flagsA, colourTint, customId, atlas tile ownership, and real tint/UV data"
         );

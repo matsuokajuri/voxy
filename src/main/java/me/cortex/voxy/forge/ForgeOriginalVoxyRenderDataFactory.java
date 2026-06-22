@@ -17,6 +17,9 @@ final class ForgeOriginalVoxyRenderDataFactory {
     private static final boolean DISABLE_CULL_SAME_OCCLUDES = false;//TODO: FIX TRANSLUCENTS (e.g. stained glass) breaking on chunk boarders with this set to false (it might be something else????)
 
     private static final boolean VERIFY_MESHING = Boolean.getBoolean("voxy.verifyMeshing");
+    private static final boolean AUDIT_LIGHTING = Boolean.getBoolean("voxy.forge.auditLighting");
+    private static final int MAX_LIGHTING_AUDITS = 12;
+    private static int lightingAuditRuns;
 
     //TODO: MAKE a render cache that caches each WorldSection directional face generation, cause then can just pull that directly
     // instead of needing to regen the entire thing
@@ -1770,6 +1773,7 @@ final class ForgeOriginalVoxyRenderDataFactory {
             UnsafeUtil.memcpy(this.quadBufferPtr + (buffer*(8*(1<<16))), ptr + coff*8L, (size* 8L));
             coff += size;
         }
+        auditQuadLighting(section, buff.address, this.quadCount);
 
 
 
@@ -1793,6 +1797,45 @@ final class ForgeOriginalVoxyRenderDataFactory {
         }
 
         return new ForgeOriginalVoxyBuiltSection(section.key, section.getNonEmptyChildren(), aabb, buff, offsets, occupancy);
+    }
+
+    private static synchronized void auditQuadLighting(WorldSection section, long quadPtr, int quadCount) {
+        if (!AUDIT_LIGHTING || lightingAuditRuns >= MAX_LIGHTING_AUDITS || quadCount == 0) {
+            return;
+        }
+        int minSky = 15;
+        int maxSky = 0;
+        int minBlock = 15;
+        int maxBlock = 0;
+        long sumSky = 0L;
+        long sumBlock = 0L;
+        int sampleCount = Math.min(quadCount, 512);
+        for (int i = 0; i < sampleCount; i++) {
+            long quad = MemoryUtil.memGetLong(quadPtr + i * 8L);
+            int light = (int) ((quad >>> 55) & 0xFF);
+            int sky = light & 0x0F;
+            int block = (light >>> 4) & 0x0F;
+            minSky = Math.min(minSky, sky);
+            maxSky = Math.max(maxSky, sky);
+            minBlock = Math.min(minBlock, block);
+            maxBlock = Math.max(maxBlock, block);
+            sumSky += sky;
+            sumBlock += block;
+        }
+        lightingAuditRuns++;
+        VoxyForge.LOGGER.info(
+                "Original Voxy quad lighting audit: run={} section={} lvl={} quads={} sampled={} skyMin={} skyMax={} skyAvg={} blockMin={} blockMax={} blockAvg={}",
+                lightingAuditRuns,
+                WorldEngine.pprintPos(section.key),
+                section.lvl,
+                quadCount,
+                sampleCount,
+                minSky,
+                maxSky,
+                String.format("%.2f", (double) sumSky / sampleCount),
+                minBlock,
+                maxBlock,
+                String.format("%.2f", (double) sumBlock / sampleCount));
     }
 
     private static int expandBits(int value, int mask) {

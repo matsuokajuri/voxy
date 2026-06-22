@@ -130,10 +130,6 @@ final class ForgeMdicCommandBuffer {
         return this.bufferId != 0;
     }
 
-    int bufferIdForDebugRenderer() {
-        return this.bufferId;
-    }
-
     long bytes() {
         return this.bytes;
     }

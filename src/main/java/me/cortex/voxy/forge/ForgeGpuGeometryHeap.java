@@ -32,10 +32,6 @@ public final class ForgeGpuGeometryHeap {
         return this.metadataCapacityBytes;
     }
 
-    int geometryBufferIdForDirectRenderer() {
-        return this.geometryBufferId;
-    }
-
     long generation() {
         return this.generation;
     }

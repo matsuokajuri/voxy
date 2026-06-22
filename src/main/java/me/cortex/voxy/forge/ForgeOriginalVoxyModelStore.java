@@ -156,7 +156,7 @@ final class ForgeOriginalVoxyModelStore {
             MemoryUtil.memPutInt(
                     ForgeOriginalVoxyUploadStream.instance().upload(
                             this.modelBufferId,
-                            ((long) modelId * MODEL_SIZE) + ForgeModelStoreFormalLayout.WORD_COLOUR_TINT * (long) Integer.BYTES,
+                            ((long) modelId * MODEL_SIZE) + ForgeOriginalVoxyModelStoreLayoutSpec.WORD_COLOUR_TINT * (long) Integer.BYTES,
                             Integer.BYTES),
                     biomeIndex);
         }
@@ -181,7 +181,7 @@ final class ForgeOriginalVoxyModelStore {
             int width = (ForgeModelAtlasLayout.MODEL_TEXTURE_SIZE * ForgeModelAtlasLayout.FACES_PER_MODEL_X) >> level;
             int height = (ForgeModelAtlasLayout.MODEL_TEXTURE_SIZE * ForgeModelAtlasLayout.FACES_PER_MODEL_Y) >> level;
             nglTextureSubImage2D(this.texturesId, level, x >> level, y >> level, width, height, GL11C.GL_RGBA, GL11C.GL_UNSIGNED_BYTE, cAddr);
-            cAddr += (long) width * height * ForgeModelAtlasPixelSample.BYTES_PER_PIXEL;
+            cAddr += (long) width * height * ForgeModelAtlasPixelFormat.BYTES_PER_PIXEL;
         }
         return this.glErrorOrNone("original-model-texture-upload");
     }
@@ -244,7 +244,7 @@ final class ForgeOriginalVoxyModelStore {
             for (int level = 0; level < ForgeOriginalVoxyMipGen.LAYERS; level++) {
                 int width = (ForgeModelAtlasLayout.MODEL_TEXTURE_SIZE * ForgeModelAtlasLayout.FACES_PER_MODEL_X) >> level;
                 int height = (ForgeModelAtlasLayout.MODEL_TEXTURE_SIZE * ForgeModelAtlasLayout.FACES_PER_MODEL_Y) >> level;
-                int levelBytes = width * height * ForgeModelAtlasPixelSample.BYTES_PER_PIXEL;
+                int levelBytes = width * height * ForgeModelAtlasPixelFormat.BYTES_PER_PIXEL;
                 GL45C.nglGetTextureSubImage(
                         this.texturesId,
                         level,

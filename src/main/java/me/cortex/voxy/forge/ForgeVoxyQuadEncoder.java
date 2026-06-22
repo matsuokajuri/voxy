@@ -185,10 +185,6 @@ public final class ForgeVoxyQuadEncoder {
         return cleared | ((long) safeModelId << MODEL_ID_SHIFT);
     }
 
-    static long packPreviewRecord(int face, int localX, int localY, int localZ, int length, int width, int modelId, int biomeId, int light) {
-        return packRecord(face, localX, localY, localZ, length, width, modelId, biomeId, light);
-    }
-
     private static long packRecord(int face, int localX, int localY, int localZ, int length, int width, int modelId, int biomeId, int light) {
         length = Math.max(1, Math.min(MAX_ORIGINAL_QUAD_SPAN, length));
         width = Math.max(1, Math.min(MAX_ORIGINAL_QUAD_SPAN, width));

@@ -9,7 +9,7 @@ import java.util.Map;
 import java.util.Set;
 
 final class ForgeMdicCommandList {
-    private static final ForgeMdicCommandList EMPTY = new ForgeMdicCommandList(Collections.emptyList(), -1L, "none", 0L, 0, "none", 0, 0, 0, 0, false, false, false, false, false, false, "none", 0, 0, 0, 0, 0, 0, new int[ForgeGpuGeometryDecodedMetadata.BUCKET_COUNT], 0, 0, 0, "none", "none", false, 0.0D, "none", "none", "none", 0, 0, 0, 0, 0, 0.0D, 0.0D, 0, 0, 0, 0);
+    private static final ForgeMdicCommandList EMPTY = new ForgeMdicCommandList(Collections.emptyList(), -1L, "none", 0L, 0, "none", 0, 0, 0, 0, false, false, false, false, false, false, "none", 0, 0, 0, 0, 0, 0, new int[ForgeGpuGeometryMetadataView.BUCKET_COUNT], 0, 0, 0, "none", "none", false, 0.0D, "none", "none", "none", 0, 0, 0, 0, 0, 0.0D, 0.0D, 0, 0, 0, 0);
 
     private final List<ForgeMdicCommand> commands;
     private final long heapGeneration;
@@ -178,7 +178,7 @@ final class ForgeMdicCommandList {
         Map<Integer, Integer> commandsBySection = new HashMap<>();
         int bucketCommandCount = 0;
         int sectionCommandCount = 0;
-        int[] bucketCounts = new int[ForgeGpuGeometryDecodedMetadata.BUCKET_COUNT];
+        int[] bucketCounts = new int[ForgeGpuGeometryMetadataView.BUCKET_COUNT];
         for (ForgeMdicCommand command : this.commands) {
             int records = Math.max(0, command.recordCount());
             minRecords = Math.min(minRecords, records);
@@ -231,7 +231,7 @@ final class ForgeMdicCommandList {
     }
 
     static ForgeMdicCommandList of(List<ForgeMdicCommand> commands, long heapGeneration, String dimensionId, long recordCount, String selectionMode, int skippedSections, long skippedRecords, int planCandidateSections, int planAcceptedSections) {
-        return of(commands, heapGeneration, dimensionId, recordCount, selectionMode, skippedSections, skippedRecords, planCandidateSections, planAcceptedSections, false, false, false, false, false, false, "none", 0, 0, 0, 0, 0, 0, new int[ForgeGpuGeometryDecodedMetadata.BUCKET_COUNT], 0, 0, 0, selectionMode, "none", false, 0.0D, "none", "none", "none", 0, 0, 0, 0, 0, 0.0D, 0.0D, 0, 0, 0, 0);
+        return of(commands, heapGeneration, dimensionId, recordCount, selectionMode, skippedSections, skippedRecords, planCandidateSections, planAcceptedSections, false, false, false, false, false, false, "none", 0, 0, 0, 0, 0, 0, new int[ForgeGpuGeometryMetadataView.BUCKET_COUNT], 0, 0, 0, selectionMode, "none", false, 0.0D, "none", "none", "none", 0, 0, 0, 0, 0, 0.0D, 0.0D, 0, 0, 0, 0);
     }
 
     static ForgeMdicCommandList of(
@@ -287,7 +287,7 @@ final class ForgeMdicCommandList {
     }
 
     private static int[] sanitizeBucketArray(int[] source) {
-        int[] result = new int[ForgeGpuGeometryDecodedMetadata.BUCKET_COUNT];
+        int[] result = new int[ForgeGpuGeometryMetadataView.BUCKET_COUNT];
         if (source == null) {
             return result;
         }

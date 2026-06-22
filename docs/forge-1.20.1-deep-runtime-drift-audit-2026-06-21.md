@@ -195,7 +195,7 @@ Oculus shaderpack sidecar source discovery now includes voxy.json, voxy_opaque.g
 The original SectionSavingService is now compiled and used as the WorldEngine save callback; the Forge synchronous save-and-return-false callback is retired.
 The formal model pipeline now acquires the active WorldEngine while attached and releases it during render-thread cleanup, matching the original VoxyRenderSystem world reference ownership shape more closely.
 Forge active-world close now detaches the world and delays actual WorldEngine.free() until WorldEngine.isWorldIdle(), avoiding a race between render-thread releaseRef/save-queue refs and immediate skeleton free.
-Embeddium realtime section-update ingest now calls VoxelIngestService.ingestChunkSectionWithStats(...), so missing DataLayers use the same level-brightness fallback and missing-light accounting as chunk ingest.
+Embeddium realtime section-update ingest now calls VoxelIngestService.ingestChunkSectionWithStats(...), so missing DataLayers use the same missing-light accounting as chunk ingest. The later LoD darkness repair removed the Forge-only level-brightness fallback entirely; non-air sections in sky-lit dimensions are now deferred when the real sky DataLayer is absent.
 ```
 
 Remaining blockers after the repair are narrower:
@@ -280,6 +280,56 @@ timing, not final original Voxy shaderpack parity.
 
 After the 2026-06-22 section-light repair, persistent black/white far-LoD
 artifacts should no longer be attributed to the old raw single-section DataLayer
-path without new evidence. The next audit target is the shaderpack
-patched-terrain compile/binding blocker, full lifecycle ownership, or another
-measured GL/resource state gap.
+path without new evidence. The next audit target is the generic shaderpack
+terrain contract, full lifecycle ownership, or another measured GL/resource
+state gap.
+
+## 2026-06-22 black LoD plan update
+
+The active black-LoD repair plan is tracked in:
+
+```text
+docs/forge-1.20.1-black-lod-bugfix-plan-2026-06-22.md
+```
+
+The latest investigation updates this audit's earlier shaderpack blocker
+language. The current evidence no longer supports treating the bug as merely
+"patched shader compile fallback":
+
+```text
+opaquePatchedShaderRequested=true
+opaquePatchedShaderUsed=true
+opaquePatchedShaderFallbackUsed=false
+translucentPatchedShaderRequested=true
+translucentPatchedShaderUsed=true
+translucentPatchedShaderFallbackUsed=false
+custom block-state ids are present for common terrain blocks
+MDIC readback can show opaque draw commands
+time-of-day changes still affect perceived LoD brightness, so the light path is not simply absent
+```
+
+The current unresolved symptom is:
+
+```text
+far LoD terrain remains globally too dark under shaderpack
+water/fluid LoD remains incorrect, but is now tracked as a secondary issue
+new-world entry recently exited with code 1 and needs a targeted crash/log check after the black LoD path is stable
+```
+
+The next repair pass must not hard-code Complementary behavior. Complementary is
+only the current runtime reproducer. The correction target is the original Voxy
+Iris/Oculus shaderpack contract:
+
+```text
+voxy.json target ids
+ -> RenderTargets main/alt texture selection
+ -> Voxy framebuffer attachment and glDrawBuffers order
+ -> patched voxy_emitFragment(...) outputs
+ -> lightmap sampler / uv contract
+ -> shaderpack material customId contract
+```
+
+Runtime testing should be limited to one controlled pass after static source
+comparison or a bounded generic audit identifies the exact contract point to
+observe. Repeated client runs without new evidence are explicitly out of scope
+for the next pass.

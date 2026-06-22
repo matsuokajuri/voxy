@@ -37,53 +37,11 @@ public final class ForgeVoxyInstance {
     private final ForgeVoxyGeometryCache voxyGeometryCache = new ForgeVoxyGeometryCache();
     private final ForgeSectionGeometryManager sectionGeometryManager = new ForgeSectionGeometryManager();
     private final ForgeSectionGeometryConsumeManager sectionGeometryConsumeManager = new ForgeSectionGeometryConsumeManager(this);
-    private final ForgeDebugMeshRenderer debugMeshRenderer = new ForgeDebugMeshRenderer(this);
-    private final ForgeGpuMeshCache gpuMeshCache = new ForgeGpuMeshCache();
-    private final ForgeGpuMeshUploadManager gpuMeshUploadManager = new ForgeGpuMeshUploadManager(this);
-    private final ForgeGpuGeometryVisualizationCache gpuGeometryVisualizationCache = new ForgeGpuGeometryVisualizationCache();
-    private final ForgeGpuGeometryReadbackMeshCache gpuGeometryReadbackMeshCache = new ForgeGpuGeometryReadbackMeshCache();
-    private final ForgeGpuGeometryReadbackMeshRefreshManager gpuGeometryReadbackMeshRefreshManager = new ForgeGpuGeometryReadbackMeshRefreshManager(this);
-    private final ForgeGpuGeometryReadbackDebugRenderer gpuGeometryReadbackDebugRenderer = new ForgeGpuGeometryReadbackDebugRenderer(this);
     private final ForgeGpuGeometryUploadManager gpuGeometryUploadManager = new ForgeGpuGeometryUploadManager(this);
-    private final ForgeSimpleGpuMeshRenderer simpleGpuMeshRenderer = new ForgeSimpleGpuMeshRenderer(this);
-    private final ForgeDirectGpuGeometryRenderer directGpuGeometryRenderer = new ForgeDirectGpuGeometryRenderer(this);
     private final ForgeMdicCommandManager mdicCommandManager = new ForgeMdicCommandManager(this);
-    private final ForgeMdicDebugRenderer mdicDebugRenderer = new ForgeMdicDebugRenderer(this);
-    private final ForgeModelBridgeReadiness modelBridgeReadiness = new ForgeModelBridgeReadiness(this);
     private final ForgeModelStoreSkeleton modelStoreSkeleton = new ForgeModelStoreSkeleton(this);
     private final ForgeModelStoreLayoutAuditor modelStoreLayoutAuditor = new ForgeModelStoreLayoutAuditor();
     private final ForgeModelBridgeResourceReloadTracker modelBridgeResourceReloadTracker = new ForgeModelBridgeResourceReloadTracker(this);
-    private final ForgeBakedModelBridge bakedModelBridge = new ForgeBakedModelBridge(this);
-    private final ForgeRealModelStoreSample realModelStoreSample = new ForgeRealModelStoreSample(this);
-    private final ForgeModelSampleSet modelSampleSet = new ForgeModelSampleSet(this);
-    private final ForgeModelAtlasSkeleton modelAtlasSkeleton = new ForgeModelAtlasSkeleton(this);
-    private final ForgeModelAtlasPixelUploader modelAtlasPixelUploader = new ForgeModelAtlasPixelUploader(this);
-    private final ForgeModelAtlasSampleSetUploader modelAtlasSampleSetUploader = new ForgeModelAtlasSampleSetUploader(this);
-    private final ForgeFormalShaderInputBridge formalShaderInputBridge = new ForgeFormalShaderInputBridge(this);
-    private final ForgeFormalModelStore formalModelStore = new ForgeFormalModelStore();
-    private final ForgeFormalModelFactory formalModelFactory = new ForgeFormalModelFactory(this);
-    private final ForgeOneBlockFormalBakeUpload oneBlockFormalBakeUpload = new ForgeOneBlockFormalBakeUpload(this);
-    private final ForgeMultiBlockFormalBakeUpload multiBlockFormalBakeUpload = new ForgeMultiBlockFormalBakeUpload(this);
-    private final ForgeFormalModelBakeryLifecycle formalModelBakeryLifecycle = new ForgeFormalModelBakeryLifecycle(this);
-    private final ForgeFormalShaderInputConsumer formalShaderInputConsumer = new ForgeFormalShaderInputConsumer(this);
-    private final ForgeFormalShaderProgramValidator formalShaderProgramValidator = new ForgeFormalShaderProgramValidator(this);
-    private final ForgeFormalTexturedShaderPreview formalTexturedShaderPreview = new ForgeFormalTexturedShaderPreview(this);
-    private final ForgeFormalPackedQuadPreview formalPackedQuadPreview = new ForgeFormalPackedQuadPreview(this);
-    private final ForgeFormalTerrainPackedRecordBridge formalTerrainPackedRecordBridge = new ForgeFormalTerrainPackedRecordBridge(this);
-    private final ForgeFormalTerrainRendererOwner formalTerrainRendererOwner = new ForgeFormalTerrainRendererOwner(this);
-    private final ForgeFormalMdicViewportOwner formalMdicViewportOwner = new ForgeFormalMdicViewportOwner(this);
-    private final ForgeFormalCommandGenerationOwner formalCommandGenerationOwner = new ForgeFormalCommandGenerationOwner(this);
-    private final ForgeFormalVisibilityOwner formalVisibilityOwner = new ForgeFormalVisibilityOwner(this);
-    private final ForgeFormalCmdgenGpuValidator formalCmdgenGpuValidator = new ForgeFormalCmdgenGpuValidator(this);
-    private final ForgeFormalCmdgenRealSectionDryRun formalCmdgenRealSectionDryRun = new ForgeFormalCmdgenRealSectionDryRun(this);
-    private final ForgeFormalIsolatedMdicDrawSmokeTest formalIsolatedMdicDrawSmokeTest = new ForgeFormalIsolatedMdicDrawSmokeTest(this);
-    private final ForgeFormalModelIdSectionGeometryPath formalModelIdSectionGeometryPath = new ForgeFormalModelIdSectionGeometryPath(this);
-    private final ForgeFormalTerrainShaderIntegration formalTerrainShaderIntegration = new ForgeFormalTerrainShaderIntegration(this);
-    private final ForgeFormalVisibleLodPreview formalVisibleLodPreview = new ForgeFormalVisibleLodPreview(this);
-    private final ForgeFormalRendererManager formalRendererManager = new ForgeFormalRendererManager(this);
-    private final ForgeTexturedDebugQuadRenderer texturedDebugQuadRenderer = new ForgeTexturedDebugQuadRenderer(this);
-    private final ForgeTexturedReadbackRenderer texturedReadbackRenderer = new ForgeTexturedReadbackRenderer(this);
-    private final ForgeTexturedMdicDebugRenderer texturedMdicDebugRenderer = new ForgeTexturedMdicDebugRenderer(this);
     private final AtomicInteger storageWriteCount = new AtomicInteger();
     private String activeClientDimension;
 
@@ -100,18 +58,7 @@ public final class ForgeVoxyInstance {
         this.cpuMeshBuildManager.register();
         this.builtSectionBuildManager.register();
         this.sectionGeometryConsumeManager.register();
-        this.debugMeshRenderer.register();
-        this.gpuMeshUploadManager.register();
-        this.gpuGeometryReadbackDebugRenderer.register();
         this.gpuGeometryUploadManager.register();
-        this.gpuGeometryReadbackMeshRefreshManager.register();
-        this.simpleGpuMeshRenderer.register();
-        this.directGpuGeometryRenderer.register();
-        this.mdicDebugRenderer.register();
-        this.texturedDebugQuadRenderer.register();
-        this.texturedReadbackRenderer.register();
-        this.texturedMdicDebugRenderer.register();
-        this.formalVisibleLodPreview.register();
     }
 
     public WorldEngine getActiveWorld() {
@@ -176,56 +123,12 @@ public final class ForgeVoxyInstance {
         return this.sectionGeometryConsumeManager;
     }
 
-    public ForgeDebugMeshRenderer getDebugMeshRenderer() {
-        return this.debugMeshRenderer;
-    }
-
-    public ForgeGpuMeshCache getGpuMeshCache() {
-        return this.gpuMeshCache;
-    }
-
-    public ForgeGpuMeshUploadManager getGpuMeshUploadManager() {
-        return this.gpuMeshUploadManager;
-    }
-
     public ForgeGpuGeometryUploadManager getGpuGeometryUploadManager() {
         return this.gpuGeometryUploadManager;
     }
 
-    public ForgeGpuGeometryVisualizationCache getGpuGeometryVisualizationCache() {
-        return this.gpuGeometryVisualizationCache;
-    }
-
-    public ForgeGpuGeometryReadbackMeshCache getGpuGeometryReadbackMeshCache() {
-        return this.gpuGeometryReadbackMeshCache;
-    }
-
-    public ForgeGpuGeometryReadbackMeshRefreshManager getGpuGeometryReadbackMeshRefreshManager() {
-        return this.gpuGeometryReadbackMeshRefreshManager;
-    }
-
-    public ForgeGpuGeometryReadbackDebugRenderer getGpuGeometryReadbackDebugRenderer() {
-        return this.gpuGeometryReadbackDebugRenderer;
-    }
-
-    public ForgeSimpleGpuMeshRenderer getSimpleGpuMeshRenderer() {
-        return this.simpleGpuMeshRenderer;
-    }
-
-    public ForgeDirectGpuGeometryRenderer getDirectGpuGeometryRenderer() {
-        return this.directGpuGeometryRenderer;
-    }
-
     public ForgeMdicCommandManager getMdicCommandManager() {
         return this.mdicCommandManager;
-    }
-
-    public ForgeMdicDebugRenderer getMdicDebugRenderer() {
-        return this.mdicDebugRenderer;
-    }
-
-    public ForgeModelBridgeReadiness getModelBridgeReadiness() {
-        return this.modelBridgeReadiness;
     }
 
     public ForgeModelStoreSkeleton getModelStoreSkeleton() {
@@ -238,130 +141,6 @@ public final class ForgeVoxyInstance {
 
     public ForgeModelBridgeResourceReloadTracker getModelBridgeResourceReloadTracker() {
         return this.modelBridgeResourceReloadTracker;
-    }
-
-    public ForgeBakedModelBridge getBakedModelBridge() {
-        return this.bakedModelBridge;
-    }
-
-    public ForgeRealModelStoreSample getRealModelStoreSample() {
-        return this.realModelStoreSample;
-    }
-
-    public ForgeModelSampleSet getModelSampleSet() {
-        return this.modelSampleSet;
-    }
-
-    public ForgeModelAtlasSkeleton getModelAtlasSkeleton() {
-        return this.modelAtlasSkeleton;
-    }
-
-    public ForgeModelAtlasPixelUploader getModelAtlasPixelUploader() {
-        return this.modelAtlasPixelUploader;
-    }
-
-    public ForgeModelAtlasSampleSetUploader getModelAtlasSampleSetUploader() {
-        return this.modelAtlasSampleSetUploader;
-    }
-
-    public ForgeFormalShaderInputBridge getFormalShaderInputBridge() {
-        return this.formalShaderInputBridge;
-    }
-
-    public ForgeFormalModelStore getFormalModelStore() {
-        return this.formalModelStore;
-    }
-
-    public ForgeFormalModelFactory getFormalModelFactory() {
-        return this.formalModelFactory;
-    }
-
-    public ForgeOneBlockFormalBakeUpload getOneBlockFormalBakeUpload() {
-        return this.oneBlockFormalBakeUpload;
-    }
-
-    public ForgeMultiBlockFormalBakeUpload getMultiBlockFormalBakeUpload() {
-        return this.multiBlockFormalBakeUpload;
-    }
-
-    public ForgeFormalModelBakeryLifecycle getFormalModelBakeryLifecycle() {
-        return this.formalModelBakeryLifecycle;
-    }
-
-    public ForgeFormalShaderInputConsumer getFormalShaderInputConsumer() {
-        return this.formalShaderInputConsumer;
-    }
-
-    public ForgeFormalShaderProgramValidator getFormalShaderProgramValidator() {
-        return this.formalShaderProgramValidator;
-    }
-
-    public ForgeFormalTexturedShaderPreview getFormalTexturedShaderPreview() {
-        return this.formalTexturedShaderPreview;
-    }
-
-    public ForgeFormalPackedQuadPreview getFormalPackedQuadPreview() {
-        return this.formalPackedQuadPreview;
-    }
-
-    public ForgeFormalTerrainPackedRecordBridge getFormalTerrainPackedRecordBridge() {
-        return this.formalTerrainPackedRecordBridge;
-    }
-
-    public ForgeFormalTerrainRendererOwner getFormalTerrainRendererOwner() {
-        return this.formalTerrainRendererOwner;
-    }
-
-    public ForgeFormalMdicViewportOwner getFormalMdicViewportOwner() {
-        return this.formalMdicViewportOwner;
-    }
-
-    public ForgeFormalCommandGenerationOwner getFormalCommandGenerationOwner() {
-        return this.formalCommandGenerationOwner;
-    }
-
-    public ForgeFormalVisibilityOwner getFormalVisibilityOwner() {
-        return this.formalVisibilityOwner;
-    }
-
-    public ForgeFormalCmdgenGpuValidator getFormalCmdgenGpuValidator() {
-        return this.formalCmdgenGpuValidator;
-    }
-
-    public ForgeFormalCmdgenRealSectionDryRun getFormalCmdgenRealSectionDryRun() {
-        return this.formalCmdgenRealSectionDryRun;
-    }
-
-    public ForgeFormalIsolatedMdicDrawSmokeTest getFormalIsolatedMdicDrawSmokeTest() {
-        return this.formalIsolatedMdicDrawSmokeTest;
-    }
-
-    public ForgeFormalModelIdSectionGeometryPath getFormalModelIdSectionGeometryPath() {
-        return this.formalModelIdSectionGeometryPath;
-    }
-
-    public ForgeFormalTerrainShaderIntegration getFormalTerrainShaderIntegration() {
-        return this.formalTerrainShaderIntegration;
-    }
-
-    public ForgeFormalVisibleLodPreview getFormalVisibleLodPreview() {
-        return this.formalVisibleLodPreview;
-    }
-
-    public ForgeFormalRendererManager getFormalRendererManager() {
-        return this.formalRendererManager;
-    }
-
-    public ForgeTexturedDebugQuadRenderer getTexturedDebugQuadRenderer() {
-        return this.texturedDebugQuadRenderer;
-    }
-
-    public ForgeTexturedReadbackRenderer getTexturedReadbackRenderer() {
-        return this.texturedReadbackRenderer;
-    }
-
-    public ForgeTexturedMdicDebugRenderer getTexturedMdicDebugRenderer() {
-        return this.texturedMdicDebugRenderer;
     }
 
     private void onRegisterClientCommands(RegisterClientCommandsEvent event) {
@@ -401,61 +180,15 @@ public final class ForgeVoxyInstance {
         this.cpuMeshCache.setActiveDimension(dimension);
         this.voxyGeometryCache.setActiveDimension(dimension);
         this.sectionGeometryConsumeManager.clear();
-        this.gpuMeshUploadManager.clear();
         this.gpuGeometryUploadManager.clear();
-        this.gpuGeometryVisualizationCache.clear();
-        this.gpuGeometryReadbackMeshCache.clear();
-        this.gpuGeometryReadbackMeshRefreshManager.clear();
-        this.gpuGeometryReadbackDebugRenderer.clearStats();
-        this.directGpuGeometryRenderer.clear();
         this.mdicCommandManager.clear();
-        this.mdicDebugRenderer.clear();
-        this.modelBridgeReadiness.clear();
         this.modelStoreSkeleton.clear();
         this.modelStoreLayoutAuditor.clear();
         this.modelBridgeResourceReloadTracker.clear();
-        this.bakedModelBridge.clear();
-        this.realModelStoreSample.clear();
-        this.modelSampleSet.clear();
-        this.modelAtlasSkeleton.clear();
-        this.modelAtlasPixelUploader.clear();
-        this.modelAtlasSampleSetUploader.clear();
-        this.formalShaderInputBridge.clear();
-        this.formalModelStore.markDimensionSwitch();
-        this.formalModelFactory.markDimensionSwitch();
-        this.oneBlockFormalBakeUpload.markDimensionSwitch();
-        this.multiBlockFormalBakeUpload.markDimensionSwitch();
-        this.formalModelBakeryLifecycle.markDimensionSwitch();
-        this.formalShaderInputConsumer.markDimensionSwitch();
-        this.formalShaderProgramValidator.markDimensionSwitch();
-        this.formalTexturedShaderPreview.markDimensionSwitch();
-        this.formalPackedQuadPreview.markDimensionSwitch();
-        this.formalTerrainPackedRecordBridge.markDimensionSwitch();
-        this.formalTerrainRendererOwner.markDimensionSwitch();
-        this.formalMdicViewportOwner.markDimensionSwitch();
-        this.formalCommandGenerationOwner.markDimensionSwitch();
-        this.formalVisibilityOwner.markDimensionSwitch();
-        this.formalCmdgenGpuValidator.markDimensionSwitch();
-        this.formalCmdgenRealSectionDryRun.markDimensionSwitch();
-        this.formalIsolatedMdicDrawSmokeTest.markDimensionSwitch();
-        this.formalModelIdSectionGeometryPath.markDimensionSwitch();
-        this.formalTerrainShaderIntegration.markDimensionSwitch();
-        this.formalVisibleLodPreview.markDimensionSwitch();
-        this.formalRendererManager.markDimensionSwitch();
         this.originalVoxyModelPipeline.markDimensionSwitch();
-        this.texturedDebugQuadRenderer.clear();
-        this.texturedReadbackRenderer.clear();
-        this.texturedMdicDebugRenderer.clear();
-        this.gpuMeshCache.setActiveDimension(dimension);
         this.closeActiveWorld();
         this.ensureOriginalVoxyActiveWorldForCurrentWorld();
-        if (ForgeGpuGeometryReadbackMeshRefreshManager.refreshOnDimensionChange()) {
-            this.gpuGeometryReadbackMeshRefreshManager.requestRefresh(ForgeGpuGeometryReadbackMeshRefreshManager.REASON_DIMENSION_CHANGE);
-        }
-        if (ForgeDirectGpuGeometryRendererConfig.autoPlanOnDimensionChange()) {
-            this.directGpuGeometryRenderer.requestAutoPlan(ForgeDirectGpuGeometryRenderer.REASON_DIMENSION_CHANGE);
-        }
-        VoxyForge.LOGGER.info("Cleared Voxy debug pipeline state after client dimension switch to {}.", dimension);
+        VoxyForge.LOGGER.info("Cleared Voxy parity pipeline state after client dimension switch to {}.", dimension);
     }
 
     private void onClientLogin(ClientPlayerNetworkEvent.LoggingIn event) {
@@ -516,52 +249,12 @@ public final class ForgeVoxyInstance {
         this.cpuMeshCache.clear();
         this.voxyGeometryCache.clear();
         this.sectionGeometryConsumeManager.clear();
-        this.gpuMeshUploadManager.clear();
         this.gpuGeometryUploadManager.clear();
-        this.gpuGeometryVisualizationCache.clear();
-        this.gpuGeometryReadbackMeshCache.clear();
-        this.gpuGeometryReadbackMeshRefreshManager.clear();
-        this.gpuGeometryReadbackDebugRenderer.clearStats();
-        this.directGpuGeometryRenderer.clear();
         this.mdicCommandManager.clear();
-        this.mdicDebugRenderer.clear();
-        this.modelBridgeReadiness.clear();
         this.modelStoreSkeleton.clear();
         this.modelStoreLayoutAuditor.clear();
         this.modelBridgeResourceReloadTracker.clear();
-        this.bakedModelBridge.clear();
-        this.realModelStoreSample.clear();
-        this.modelSampleSet.clear();
-        this.modelAtlasSkeleton.clear();
-        this.modelAtlasPixelUploader.clear();
-        this.modelAtlasSampleSetUploader.clear();
-        this.formalShaderInputBridge.clear();
-        this.formalModelStore.markWorldUnload();
-        this.formalModelFactory.markWorldUnload();
-        this.oneBlockFormalBakeUpload.markWorldUnload();
-        this.multiBlockFormalBakeUpload.markWorldUnload();
-        this.formalModelBakeryLifecycle.markWorldUnload();
-        this.formalShaderInputConsumer.markWorldUnload();
-        this.formalShaderProgramValidator.markWorldUnload();
-        this.formalTexturedShaderPreview.markWorldUnload();
-        this.formalPackedQuadPreview.markWorldUnload();
-        this.formalTerrainPackedRecordBridge.markWorldUnload();
-        this.formalTerrainRendererOwner.markWorldUnload();
-        this.formalMdicViewportOwner.markWorldUnload();
-        this.formalCommandGenerationOwner.markWorldUnload();
-        this.formalVisibilityOwner.markWorldUnload();
-        this.formalCmdgenGpuValidator.markWorldUnload();
-        this.formalCmdgenRealSectionDryRun.markWorldUnload();
-        this.formalIsolatedMdicDrawSmokeTest.markWorldUnload();
-        this.formalModelIdSectionGeometryPath.markWorldUnload();
-        this.formalTerrainShaderIntegration.markWorldUnload();
-        this.formalVisibleLodPreview.markWorldUnload();
-        this.formalRendererManager.markWorldUnload();
         this.originalVoxyModelPipeline.markWorldUnload();
-        this.texturedDebugQuadRenderer.clear();
-        this.texturedReadbackRenderer.clear();
-        this.texturedMdicDebugRenderer.clear();
-        this.gpuMeshCache.clear();
         this.activeClientDimension = null;
         this.closeActiveWorld();
     }

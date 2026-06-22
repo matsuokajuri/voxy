@@ -110,6 +110,7 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
     private static final int READBACK_SAMPLE_SECTIONS = 4;
     private static final int SECTION_META_WORDS = 8;
     private static final int MAX_AUTO_READBACK_AUDITS = 8;
+    private static final boolean AUDIT_SHADERPACK = Boolean.getBoolean("voxy.forge.auditShaderpack");
     private static final int DRAW_BUFFER_BINDING = 1;
     private static final int DRAW_COUNT_BUFFER_BINDING = 2;
     private static final int SECTION_METADATA_BUFFER_BINDING = 3;
@@ -220,6 +221,16 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
             this.translucentPatchedShaderRequested = translucentShader.patchedRequested();
             this.translucentPatchedShaderUsed = translucentShader.patchedUsed();
             this.translucentPatchedShaderFallbackUsed = translucentShader.fallbackUsed();
+            if (AUDIT_SHADERPACK) {
+                VoxyForge.LOGGER.info(
+                        "Original Voxy shaderpack terrain audit: opaquePatch requested={} used={} fallback={} translucentPatch requested={} used={} fallback={}",
+                        this.opaquePatchedShaderRequested,
+                        this.opaquePatchedShaderUsed,
+                        this.opaquePatchedShaderFallbackUsed,
+                        this.translucentPatchedShaderRequested,
+                        this.translucentPatchedShaderUsed,
+                        this.translucentPatchedShaderFallbackUsed);
+            }
             this.prepProgramId = compileComputeProgram(ForgeOriginalVoxyShaderSource.parse("voxy:lod/gl46/prep.comp"), "prep.comp");
             String cullVertexSource = ForgeOriginalVoxyShaderSource.parse("voxy:lod/gl46/cull/raster.vert");
             String cullTaa = pipeline.taaFunction("getTAA");
@@ -401,6 +412,12 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
             this.rasterCullVisibility(viewport, geometryData, properties);
             this.dispatchCmdgen(viewport, geometryData);
             this.dispatchTranslucentCommandGeneration(viewport, geometryData);
+            if (AUDIT_SHADERPACK
+                    && geometryData.sectionCount() > 0
+                    && !this.readbackAuditReady
+                    && this.readbackAuditRuns < MAX_AUTO_READBACK_AUDITS) {
+                this.readbackAuditRequested = true;
+            }
             if (this.readbackAuditRequested && this.readbackAuditRuns < MAX_AUTO_READBACK_AUDITS) {
                 this.readbackAuditRequested = false;
                 this.readbackAudit(viewport, geometryData);
@@ -888,7 +905,7 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
             this.lastFailureReason = "none";
         }
         VoxyForge.LOGGER.info(
-                "Original MDIC readback audit: ready={} geometrySections={} renderList={} dispatch={}x{}x{} opaque={} translucent={} temporal={} cullCommand=count:{} instances:{} firstIndex:{} firstDraw=count:{} instances:{} firstIndex:{} baseVertex:{} baseInstance:{} positionScratch=[{},{}] glError={}",
+                "Original MDIC readback audit: ready={} geometrySections={} renderList={} dispatch={}x{}x{} opaque={} translucent={} temporal={} opaquePatchUsed={} translucentPatchUsed={} opaqueFallback={} translucentFallback={} cullCommand=count:{} instances:{} firstIndex:{} firstDraw=count:{} instances:{} firstIndex:{} baseVertex:{} baseInstance:{} positionScratch=[{},{}] glError={}",
                 this.readbackAuditReady,
                 geometrySections,
                 this.renderListSectionCount,
@@ -898,6 +915,10 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
                 this.opaqueDrawCount,
                 this.translucentDrawCount,
                 this.temporalOpaqueDrawCount,
+                this.opaquePatchedShaderUsed,
+                this.translucentPatchedShaderUsed,
+                this.opaquePatchedShaderFallbackUsed,
+                this.translucentPatchedShaderFallbackUsed,
                 this.cullCommandCount,
                 this.cullCommandInstanceCount,
                 this.cullCommandFirstIndex,

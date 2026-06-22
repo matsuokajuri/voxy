@@ -19,13 +19,6 @@ public record ForgeGpuGeometryStats(
         double averageUploadMs,
         int releasedBuffers,
         long clearCount,
-        long validationRuns,
-        long validationFailures,
-        String lastValidationError,
-        int lastValidationSectionId,
-        int lastValidationGeometryPtr,
-        boolean lastMetadataMatch,
-        boolean lastGeometryMatch,
         boolean renderThreadOnly
 ) {
     public static ForgeGpuGeometryStats disabled() {
@@ -60,13 +53,6 @@ public record ForgeGpuGeometryStats(
                 0.0D,
                 0,
                 0,
-                0,
-                0,
-                "none",
-                -1,
-                -1,
-                false,
-                false,
                 true
         );
     }

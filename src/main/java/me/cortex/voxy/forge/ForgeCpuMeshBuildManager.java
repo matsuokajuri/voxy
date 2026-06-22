@@ -289,8 +289,7 @@ public final class ForgeCpuMeshBuildManager {
     }
 
     private static int getRecordRetentionRadius(int activeRadius) {
-        int renderRadius = Math.min(8, Math.max(0, ForgeVoxyConfig.DEBUG_MESH_RENDER_DISTANCE_CHUNKS.get()));
-        return Math.max(8, Math.max(activeRadius, renderRadius) + 8);
+        return Math.max(8, activeRadius + 8);
     }
 
     private static boolean isWithinChunkRadius(long key, int centerX, int centerZ, int radius) {

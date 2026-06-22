@@ -24,7 +24,7 @@ final class ForgeMdicCommandPlanner {
         }
 
         ForgeGpuGeometryUploadManager uploadManager = instance.getGpuGeometryUploadManager();
-        ForgeGpuGeometryHeap heap = uploadManager.getHeapForDebugReadback();
+        ForgeGpuGeometryHeap heap = uploadManager.getHeapForMdicCommandGeneration();
         if (heap == null || !heap.isCreated()) {
             return failure(start, "HEAP_MISSING", "heap-not-created", 0, 0);
         }
@@ -56,7 +56,7 @@ final class ForgeMdicCommandPlanner {
         int insideSectionFallbacks = 0;
         int missingCameraFallbacks = 0;
         int missingAabbFallbacks = 0;
-        int[] bucketRejectedByFaceMask = new int[ForgeGpuGeometryDecodedMetadata.BUCKET_COUNT];
+        int[] bucketRejectedByFaceMask = new int[ForgeGpuGeometryMetadataView.BUCKET_COUNT];
         String faceMaskFallbackReason = "none";
         String lastError = "none";
 
@@ -78,7 +78,7 @@ final class ForgeMdicCommandPlanner {
             inspected++;
             try {
                 int[] words = heap.readbackMetadata(sectionId);
-                ForgeGpuGeometryDecodedMetadata metadata = ForgeGpuGeometryDecodedMetadata.decode(words);
+                ForgeGpuGeometryMetadataView metadata = ForgeGpuGeometryMetadataView.decode(words);
                 String validation = metadata.validate(heap, instance.getSectionGeometryManager(), sectionId, words);
                 if (!"none".equals(validation)) {
                     invalidMetadata++;
@@ -291,7 +291,7 @@ final class ForgeMdicCommandPlanner {
         int insideSectionFallbacks = 0;
         int missingCameraFallbacks = 0;
         int missingAabbFallbacks = 0;
-        int[] bucketRejectedByFaceMask = new int[ForgeGpuGeometryDecodedMetadata.BUCKET_COUNT];
+        int[] bucketRejectedByFaceMask = new int[ForgeGpuGeometryMetadataView.BUCKET_COUNT];
         String faceMaskFallbackReason = "none";
         long skippedRecords = 0L;
         FaceMaskPlan faceMaskPlan = directionalFaceMask
@@ -307,9 +307,9 @@ final class ForgeMdicCommandPlanner {
             missingAabbFallbacks++;
         }
         faceMaskFallbackReason = faceMaskPlan.fallbackReason();
-        for (int bucket = 0; bucket < ForgeGpuGeometryDecodedMetadata.BUCKET_COUNT; bucket++) {
+        for (int bucket = 0; bucket < ForgeGpuGeometryMetadataView.BUCKET_COUNT; bucket++) {
             int start = candidate.metadata().offsets()[bucket];
-            int end = bucket == ForgeGpuGeometryDecodedMetadata.BUCKET_COUNT - 1
+            int end = bucket == ForgeGpuGeometryMetadataView.BUCKET_COUNT - 1
                     ? candidate.metadata().itemCount()
                     : candidate.metadata().offsets()[bucket + 1];
             int bucketRecords = Math.max(0, end - start);
@@ -359,11 +359,7 @@ final class ForgeMdicCommandPlanner {
         return includeDirectional;
     }
 
-    static FaceMaskPlan createFaceMaskPlanForAudit(ForgeGpuGeometryDecodedMetadata metadata) {
-        return createFaceMaskPlan(metadata, ForgeMdicVisibilityTracker.capture(Minecraft.getInstance(), ForgeMdicCommandConfig.useFrustum()), ForgeMdicCommandConfig.directionalFaceMaskFallbackAllWhenInside());
-    }
-
-    private static FaceMaskPlan createFaceMaskPlan(ForgeGpuGeometryDecodedMetadata metadata, ForgeMdicVisibilitySnapshot visibility, boolean fallbackAllWhenInside) {
+    private static FaceMaskPlan createFaceMaskPlan(ForgeGpuGeometryMetadataView metadata, ForgeMdicVisibilitySnapshot visibility, boolean fallbackAllWhenInside) {
         int allDirectional = 0xFC;
         if (visibility == null || !visibility.cameraAvailable()) {
             return new FaceMaskPlan(allDirectional, "MISSING_CAMERA", true, false, true, false, false);
@@ -429,19 +425,19 @@ final class ForgeMdicCommandPlanner {
         return "mixed";
     }
 
-    private static ForgeMdicCommand createSectionCommand(int sectionId, ForgeGpuGeometryDecodedMetadata metadata, int recordCount, int generation) {
-        return createCommand(sectionId, metadata, 0, Math.max(0, recordCount), bucketMask(metadata), generation, ForgeMdicCommandLayout.FLAG_DEBUG_SKELETON);
+    private static ForgeMdicCommand createSectionCommand(int sectionId, ForgeGpuGeometryMetadataView metadata, int recordCount, int generation) {
+        return createCommand(sectionId, metadata, 0, Math.max(0, recordCount), bucketMask(metadata), generation, ForgeMdicCommandLayout.FLAG_SECTION_COMMAND);
     }
 
-    private static ForgeMdicCommand createBucketCommand(int sectionId, ForgeGpuGeometryDecodedMetadata metadata, int recordStart, int recordCount, int bucket, int generation, boolean faceMaskAccepted) {
-        int flags = ForgeMdicCommandLayout.FLAG_DEBUG_SKELETON | ForgeMdicCommandLayout.FLAG_BUCKET_COMMAND;
+    private static ForgeMdicCommand createBucketCommand(int sectionId, ForgeGpuGeometryMetadataView metadata, int recordStart, int recordCount, int bucket, int generation, boolean faceMaskAccepted) {
+        int flags = ForgeMdicCommandLayout.FLAG_SECTION_COMMAND | ForgeMdicCommandLayout.FLAG_BUCKET_COMMAND;
         if (faceMaskAccepted) {
             flags |= ForgeMdicCommandLayout.FLAG_FACE_MASK_ACCEPTED;
         }
         return createCommand(sectionId, metadata, recordStart, Math.max(0, recordCount), 1 << bucket, generation, flags);
     }
 
-    private static ForgeMdicCommand createCommand(int sectionId, ForgeGpuGeometryDecodedMetadata metadata, int recordStart, int recordCount, int bucketMask, int generation, int flags) {
+    private static ForgeMdicCommand createCommand(int sectionId, ForgeGpuGeometryMetadataView metadata, int recordStart, int recordCount, int bucketMask, int generation, int flags) {
         int level = Math.max(0, WorldEngine.getLevel(metadata.position()));
         int scale = 1 << Math.min(12, level);
         float originX = WorldEngine.getX(metadata.position()) * (float) SECTION_SIZE * scale;
@@ -463,11 +459,11 @@ final class ForgeMdicCommandPlanner {
         );
     }
 
-    private static int bucketMask(ForgeGpuGeometryDecodedMetadata metadata) {
+    private static int bucketMask(ForgeGpuGeometryMetadataView metadata) {
         int mask = 0;
-        for (int bucket = 0; bucket < ForgeGpuGeometryDecodedMetadata.BUCKET_COUNT; bucket++) {
+        for (int bucket = 0; bucket < ForgeGpuGeometryMetadataView.BUCKET_COUNT; bucket++) {
             int start = metadata.offsets()[bucket];
-            int end = bucket == ForgeGpuGeometryDecodedMetadata.BUCKET_COUNT - 1
+            int end = bucket == ForgeGpuGeometryMetadataView.BUCKET_COUNT - 1
                     ? metadata.itemCount()
                     : metadata.offsets()[bucket + 1];
             if (end > start) {
@@ -573,7 +569,7 @@ final class ForgeMdicCommandPlanner {
     ) {
     }
 
-    private record Candidate(int sectionId, ForgeGpuGeometryDecodedMetadata metadata, double distanceSquared, double distanceChunks) {
+    private record Candidate(int sectionId, ForgeGpuGeometryMetadataView metadata, double distanceSquared, double distanceChunks) {
     }
 
     private record SelectionResolution(ForgeMdicCommandSelectionMode requestedMode, ForgeMdicCommandSelectionMode effectiveMode, String fallbackReason, boolean shouldSortByDistance) {
@@ -603,12 +599,12 @@ final class ForgeMdicCommandPlanner {
         }
 
         boolean allows(int bucket) {
-            return bucket < 2 || bucket >= ForgeGpuGeometryDecodedMetadata.BUCKET_COUNT || (this.directionalMask & (1 << bucket)) != 0;
+            return bucket < 2 || bucket >= ForgeGpuGeometryMetadataView.BUCKET_COUNT || (this.directionalMask & (1 << bucket)) != 0;
         }
     }
 
     private record SectionAabb(boolean valid, double minX, double minY, double minZ, double maxX, double maxY, double maxZ) {
-        static SectionAabb from(ForgeGpuGeometryDecodedMetadata metadata) {
+        static SectionAabb from(ForgeGpuGeometryMetadataView metadata) {
             int packed = metadata.aabb();
             if (packed < 0) {
                 return new SectionAabb(false, 0.0D, 0.0D, 0.0D, 0.0D, 0.0D, 0.0D);

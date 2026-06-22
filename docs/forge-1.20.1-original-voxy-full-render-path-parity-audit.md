@@ -803,7 +803,7 @@ the original SectionSavingService queue.
 
 ForgeOriginalVoxyEmbeddiumRenderSectionManagerMixin rewrote single sections by
 passing raw DataLayer values directly into rawIngest, bypassing the chunk-aware
-lighting fallback added for chunk ingest.
+light-layer handling added for chunk ingest.
 ```
 
 Both are fixed in the active Roman X route:
@@ -820,10 +820,21 @@ SectionStorage write accounting now wraps the real storage delegate instead of
 being coupled to the old synchronous callback.
 VoxelIngestService.ingestChunkSectionWithStats(...) now mirrors the chunk ingest
 path, including live-engine validation, section-index validation, DataLayer
-copying, missing-light accounting, and level brightness fallback.
+copying, missing-light accounting, and shared light-layer handling.
 Embeddium section-update ingest now calls the same chunk-aware section path
 instead of writing raw section light directly.
 ```
+
+A later visual check showed all LoD sections rendering as if their light level
+was zero. A focused comparison traced the Forge divergence to
+`VoxelIngestService.createLightingSupplier(...)`: the Forge port used
+`Level.getBrightness(...)` when a chunk light `DataLayer` was absent. That is
+not original Voxy data flow. An attempted Embeddium-clone-style default
+sky-light substitution also made the visual output worse because Voxy stores
+lighting into persistent LoD section data, not into an ephemeral chunk-render
+clone. The active fix removes both substitutes: in sky-lit dimensions, non-air
+sections with a missing sky `DataLayer` are now deferred and not inserted into
+`WorldEngine` until real light data is available.
 
 Validation after these fixes:
 
@@ -837,12 +848,15 @@ auto ingest: storage writes now come from the original save service path
 ```
 
 The high missing block/sky DataLayer counts seen during chunk ingest remain
-important runtime evidence, but they are now handled by the same fallback path
-for both chunk-scan ingest and Embeddium section-update ingest. If black or
-white far-LoD artifacts still persist after this fix, the next comparison point
-is no longer the old raw section-light path; it is the remaining shaderpack
+important runtime evidence. They are now reported with
+`deferredLightSections`, and chunks containing deferred sections are not marked
+as fully ingested by `ForgeChunkIngestManager`, so later scans can retry them.
+If black or white far-LoD artifacts still persist after this fix, the next
+comparison point is no longer the old raw section-light path or the
+`Level.getBrightness(...)` fallback; it is the remaining shaderpack
 patched-terrain compile/binding blocker, full outer `VoxyRenderSystem`
-lifecycle ownership, or a newly observed platform-specific state gap.
+lifecycle ownership, lightmap texture binding state, deprecated CPU/simple
+route contamination, or a newly observed platform-specific state gap.
 
 This addendum still does not flip readiness:
 
@@ -869,11 +883,105 @@ adapter shader as production terrain shader
 
 ## Current next work
 
+The active runtime bug is now tracked separately in:
+
+```text
+docs/forge-1.20.1-black-lod-bugfix-plan-2026-06-22.md
+```
+
+The latest black-LoD investigation changes the next-work focus from
+"make shaderpack patches compile" to "verify the complete shaderpack terrain
+contract." The most recent shaderpack audit evidence showed:
+
+```text
+opaquePatchedShaderRequested=true
+opaquePatchedShaderUsed=true
+opaquePatchedShaderFallbackUsed=false
+translucentPatchedShaderRequested=true
+translucentPatchedShaderUsed=true
+translucentPatchedShaderFallbackUsed=false
+custom block-state ids populated for common blocks
+MDIC command generation can produce opaque draw commands
+```
+
+This means black LoD must not be treated as a Complementary-specific brightness
+problem or as a compile-fallback problem without new evidence. The next pass
+must compare original IrisVoxy against Forge/Oculus for the generic shaderpack
+contract:
+
+```text
+voxy.json draw target ids
+ -> main/alt target texture selection
+ -> framebuffer attachment order
+ -> glDrawBuffers order
+ -> patched VoxyFragmentParameters
+ -> lightmap uv / sampler binding
+ -> custom block-state material id
+ -> shaderpack G-buffer outputs
+```
+
 Continue with bottom-up parity:
 
 ```text
-compare original Iris shader patch uniform/sampler namespace against Forge/Oculus 1.20.1
- -> make patched opaque/translucent terrain programs compile without fallback
+compare original Iris shaderpack draw-target and patch-output contract against Forge/Oculus 1.20.1
+ -> fix the first proven draw-target / G-buffer / lightmap / material-id drift
  -> validate movement/update performance under the original-shaped owner and real shaderpack patch
  -> continue replacing the Embeddium hook adapter with full VoxyRenderSystem lifecycle ownership
+```
+
+## 2026-06-23 post-cleanup integrity audit
+
+After the deprecated debug/preview/prototype cleanup, the active Forge route was
+re-scanned against the original Voxy owner chain with CodeGraph.
+
+Audited active chain:
+
+```text
+ForgeVoxyInstance
+ -> ForgeOriginalVoxyModelPipeline
+ -> ForgeOriginalVoxyModelFactory / ForgeOriginalVoxyModelStore
+ -> ForgeOriginalVoxyRenderGenerationService
+ -> ForgeOriginalVoxyRenderDataFactory
+ -> ForgeOriginalVoxyBasicAsyncGeometryManager
+ -> ForgeOriginalVoxyBasicSectionGeometryData
+ -> ForgeOriginalVoxyRenderDistanceTracker
+ -> ForgeOriginalVoxyHierarchicalOcclusionTraverser
+ -> ForgeOriginalVoxyMdicViewport
+ -> ForgeOriginalVoxyMdicSectionRenderer
+ -> ForgeOriginalVoxyOculus* shaderpack bridge
+```
+
+Comparison result:
+
+```text
+The cleanup did not reintroduce a preview/simple/debug renderer into the active
+path.
+
+The active model, render-generation, geometry, MDIC, HOC/viewport, and Oculus
+shaderpack bridge owners still map to the original Voxy owner chain.
+
+The remaining `Sampler` filenames are Oculus/Iris shaderpack sampler API
+integration, not the removed sample-set route.
+
+The remaining readback/audit fields in the original MDIC/model-store path are
+diagnostic parity checks for active original-shaped buffers, not deleted renderer
+owners.
+```
+
+Validation:
+
+```text
+deleted prototype class/method scan: no hits
+deleted config/runtime switch scan: no hits
+Forge/config suspicious filename scan: only Oculus/Iris Samplers files
+gradlew classes: passed
+```
+
+No readiness flags are changed by this audit:
+
+```text
+formalRendererReady=false
+actualRendererDrawEnabled=false
+formalDrawPipelineReady=false
+earlyUsableLodRendererReady=false
 ```

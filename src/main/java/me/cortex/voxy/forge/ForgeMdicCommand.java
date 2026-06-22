@@ -33,7 +33,7 @@ record ForgeMdicCommand(
             return -1;
         }
         int index = Integer.numberOfTrailingZeros(this.bucketMask);
-        return index >= 0 && index < ForgeGpuGeometryDecodedMetadata.BUCKET_COUNT ? index : -1;
+        return index >= 0 && index < ForgeGpuGeometryMetadataView.BUCKET_COUNT ? index : -1;
     }
 
     int[] toWords() {
