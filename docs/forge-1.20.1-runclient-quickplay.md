@@ -2,19 +2,20 @@
 
 ## Purpose
 
-QA1 is a test-harness reliability task. It does not advance H-stage renderer
-functionality and does not change renderer code.
+This is a runtime-validation helper for the current Roman-round original Voxy
+parity route. It is not a formal renderer path, not a preview route, and not a
+manual QA success criterion by itself.
 
-The goal is for:
+Use it only when a defect requires real Minecraft, Forge, Embeddium, Oculus,
+resource, GL, or visual-output validation.
+
+## Default command
+
+Run client validation through RTK:
 
 ```powershell
-.\gradlew runClient
+rtk test .\gradlew runClient
 ```
-
-to enter the local singleplayer test world directly so validation starts from a
-known in-world state.
-
-## Current configuration
 
 The ForgeGradle client run config in `build.gradle` passes:
 
@@ -28,60 +29,85 @@ The default world folder is:
 新的世界
 ```
 
-This is the actual folder currently present under:
+That value must match a save folder id under:
 
 ```text
-run/saves/新的世界
+run/saves/
 ```
 
 Minecraft 1.20.1 parses `--quickPlaySingleplayer` in
 `net.minecraft.client.main.Main`, stores it in
 `GameConfig.QuickPlayData.singleplayer`, and
 `net.minecraft.client.quickplay.QuickPlay.joinSingleplayerWorld` passes that
-string to `levelExists(...)` and `loadLevel(...)`. That means the argument must
+string to `levelExists(...)` and `loadLevel(...)`. The argument therefore must
 match the save folder id, not just the display name.
 
 To use an ASCII test world in a local checkout, launch with:
 
 ```powershell
-.\gradlew runClient -PvoxyQuickPlayWorld=voxy_test_world
+rtk test .\gradlew runClient -PvoxyQuickPlayWorld=voxy_test_world
 ```
 
-Do not commit `run/saves`, local launcher files, logs, or crash reports.
+Do not commit `run/saves`, local launcher files, logs, crash reports, or local
+config.
 
-## Success criteria
+## Runtime Evidence
 
-After `runClient` starts:
+For log evidence, use targeted RTK log reads:
 
-- the first observed Minecraft screen should be an in-world view, not the title
-  screen or world list;
-- `run/logs/latest.log` should show `--quickPlaySingleplayer` in the launch
-  arguments;
-- the integrated server should start without manually selecting a world;
-- the tester should still execute `/tp @s 128 140 128` and confirm the chat/log
-  teleport feedback before continuing.
+```powershell
+rtk log run/logs/latest.log
+```
 
-## Failure diagnosis
+Do not read full `latest.log` or `debug.log` directly.
+
+Useful evidence to collect when validating the current parity route:
+
+```text
+quick-play world actually opened
+no repeated Oculus reload/start-cleanup loop
+no shaderpack compile fallback when the Voxy patch should be active
+no new GL error loop
+no lightmap texture-zero status during terrain draw
+non-zero MDIC draw-count readback when LoD should be visible
+water/fluid model ids do not alias model id 0
+```
+
+## Visual Checks
+
+Ask the user only for what logs/status cannot prove:
+
+```text
+far LoD terrain brightness under day and night
+water/translucent visibility
+vanilla chunk to LoD seam
+movement/update rhythm while flying
+whether the previously fixed polygon-grid artifact stays absent
+```
+
+Do not treat screenshots or manual commands as the formal implementation path.
+They are runtime evidence for the original-parity path only.
+
+## Failure Diagnosis
 
 If the client lands on the title screen:
 
-- check `run/logs/latest.log` for `--quickPlaySingleplayer`;
-- confirm the value matches a folder under `run/saves`;
-- if the value is non-ASCII and the argument is present but quick-play still
-  fails, create or copy a local ASCII-named test world and run with
-  `-PvoxyQuickPlayWorld=<folder>`;
-- if Minecraft shows a quick-play invalid identifier screen, the argument was
-  accepted but the save folder could not be found.
+```text
+check targeted latest.log output for --quickPlaySingleplayer
+confirm the value matches a folder under run/saves
+if a non-ASCII save folder is suspected, use -PvoxyQuickPlayWorld=<folder>
+if Minecraft shows a quick-play invalid identifier screen, the save folder id
+was accepted but not found
+```
 
-## Manual fallback
+## Manual Fallback
 
-If quick-play fails during validation:
+If quick-play fails and runtime validation is still necessary:
 
-1. screenshot the title screen or error screen;
-2. read `latest.log` for quick-play arguments or failure evidence;
-3. use keyboard navigation to enter the test world;
-4. execute `/tp @s 128 140 128`;
-5. screenshot and confirm the chat/log feedback;
-6. close Minecraft normally.
+1. Capture the title screen or error screen if visual evidence matters.
+2. Use targeted `rtk log` output to confirm quick-play arguments or failures.
+3. Enter the test world manually.
+4. Use only the minimal in-game commands needed for the current validation.
+5. Close Minecraft normally.
 
-Do not treat the fallback as a quick-play pass.
+Do not count the fallback as a quick-play pass.

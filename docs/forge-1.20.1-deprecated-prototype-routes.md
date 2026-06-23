@@ -144,14 +144,28 @@ model/geometry staging code, not the deleted simple-GPU preview renderer.
 Remaining naming debt:
 
 ```text
-ForgeModelStoreStats still carries several status-field names from the old
-formal/readiness vocabulary. These are status interface names only; they should
-be renamed in a separate focused cleanup so active model-store layout behavior is
-not changed while prototype code is being removed.
-
 Oculus/Iris Samplers files still match naive "sample" filename scans because
 sampler is the shaderpack API term. They are active shaderpack bridge code.
 ```
+
+The 2026-06-23 follow-up cleanup removed the isolated placeholder model-store
+family that previously kept old fake model-data/status vocabulary alive:
+
+```text
+ForgeModelStoreSkeleton
+ForgeModelDataBuffer
+ForgeModelStoreRecord
+ForgeModelStoreStats
+ForgeModelStoreAuditResult
+ForgeModelStoreLayout
+ForgeModelStoreLayoutAuditor
+ForgeModelStoreLayoutAuditResult
+```
+
+`ForgeVoxyModelIdMapper` still exists only for legacy CPU-geometry
+compatibility/status paths. It is not the active original model-id owner; the
+active route uses `ForgeOriginalVoxyModelFactory` and
+`ForgeOriginalVoxyModelStore`.
 
 ## Current non-deprecated parity entry
 

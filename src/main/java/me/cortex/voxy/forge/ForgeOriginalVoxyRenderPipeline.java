@@ -419,7 +419,8 @@ final class ForgeOriginalVoxyRenderPipeline {
 
     boolean oculusImageBindingsReady() {
         return this.oculusPipelineData != null
-                && (this.oculusPipelineData.getImageSet() == null || this.oculusPipelineData.hasImages());
+                && (this.oculusPipelineData.getImageSet() == null
+                || (this.oculusPipelineData.hasImages() && this.oculusPipelineData.getImageSet().ready()));
     }
 
     boolean oculusBlendReady() {
@@ -435,6 +436,10 @@ final class ForgeOriginalVoxyRenderPipeline {
     }
 
     String oculusPipelineFailureReason() {
+        String imageFailure = this.oculusImageSetFailureReason();
+        if (!"none".equals(imageFailure)) {
+            return imageFailure;
+        }
         return this.oculusBridgeResult.failureReason();
     }
 
@@ -611,7 +616,18 @@ final class ForgeOriginalVoxyRenderPipeline {
             this.oculusPipelineData.getImageSet()
                     .bindingFunction()
                     .accept(ForgeOriginalVoxyOculusRenderPipelineData.BASE_SAMPLER_BINDING_INDEX);
+            String imageFailure = this.oculusImageSetFailureReason();
+            if (!"none".equals(imageFailure)) {
+                this.lastFailureReason = imageFailure;
+            }
         }
+    }
+
+    private String oculusImageSetFailureReason() {
+        if (this.oculusPipelineData == null || this.oculusPipelineData.getImageSet() == null) {
+            return "none";
+        }
+        return this.oculusPipelineData.getImageSet().lastFailureReason();
     }
 
     private StringBuilder buildOculusShaderHeader(String input) {

@@ -819,10 +819,102 @@ public final class ForgeOriginalVoxyOculusRenderPipelineData {
         return uniforms;
     }
 
-    private record TextureWithSampler(String name, IntSupplier texture, IntSupplier sampler) {
+    private static final class TextureWithSampler {
+        private final String name;
+        private final IntSupplier texture;
+        private final IntSupplier sampler;
+        private final boolean requiredNonZeroTexture;
+        private int lastTextureId = -1;
+
+        private TextureWithSampler(
+                String name,
+                IntSupplier texture,
+                IntSupplier sampler,
+                boolean requiredNonZeroTexture) {
+            this.name = name;
+            this.texture = texture;
+            this.sampler = sampler;
+            this.requiredNonZeroTexture = requiredNonZeroTexture;
+        }
+
+        private String name() {
+            return this.name;
+        }
+
+        private int textureId() {
+            this.lastTextureId = this.texture.getAsInt();
+            return this.lastTextureId;
+        }
+
+        private boolean ready() {
+            return !this.requiredNonZeroTexture || this.textureId() != 0;
+        }
+
+        private String failureReason() {
+            return this.requiredNonZeroTexture && this.lastTextureId == 0
+                    ? "oculus-image-binding-texture-zero:" + this.name
+                    : "none";
+        }
     }
 
-    public record ImageSet(String layout, IntConsumer bindingFunction) {
+    public static final class ImageSet {
+        private final String layout;
+        private final TextureWithSampler[] samplers;
+        private final IntConsumer bindingFunction;
+        private String lastFailureReason = "none";
+        private boolean textureZeroLogged;
+
+        private ImageSet(String layout, TextureWithSampler[] samplers) {
+            this.layout = layout;
+            this.samplers = samplers;
+            this.bindingFunction = this::bind;
+        }
+
+        public String layout() {
+            return this.layout;
+        }
+
+        public IntConsumer bindingFunction() {
+            return this.bindingFunction;
+        }
+
+        boolean ready() {
+            this.lastFailureReason = "none";
+            for (TextureWithSampler sampler : this.samplers) {
+                if (!sampler.ready()) {
+                    this.lastFailureReason = sampler.failureReason();
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        String lastFailureReason() {
+            return this.lastFailureReason;
+        }
+
+        private void bind(int base) {
+            this.lastFailureReason = "none";
+            for (int j = 0; j < this.samplers.length; j++) {
+                int unit = j + base;
+                TextureWithSampler sampler = this.samplers[j];
+                int textureId = sampler.textureId();
+                if (sampler.requiredNonZeroTexture && textureId == 0) {
+                    this.lastFailureReason = sampler.failureReason();
+                    if (!this.textureZeroLogged) {
+                        this.textureZeroLogged = true;
+                        VoxyForge.LOGGER.warn(
+                                "Voxy Oculus shaderpack sampler '{}' resolved to texture id 0; status will report image bindings not ready.",
+                                sampler.name);
+                    }
+                }
+                glBindTextureUnit(unit, textureId);
+                int samplerId = sampler.sampler.getAsInt();
+                if (samplerId != -1) {
+                    glBindSampler(unit, samplerId);
+                }
+            }
+        }
     }
 
     private static ImageSet createImageSet(
@@ -888,7 +980,8 @@ public final class ForgeOriginalVoxyOculusRenderPipelineData {
                 samplerSet.add(new TextureWithSampler(
                         this.name(names),
                         texture,
-                        sampler != null ? sampler::getId : () -> -1));
+                        sampler != null ? sampler::getId : () -> -1,
+                        false));
                 return true;
             }
 
@@ -900,9 +993,9 @@ public final class ForgeOriginalVoxyOculusRenderPipelineData {
                 String name = this.name(names);
                 IntSupplier externalTexture = externalTextures.get(name);
                 if (externalTexture != null) {
-                    samplerSet.add(new TextureWithSampler(name, externalTexture, () -> 0));
+                    samplerSet.add(new TextureWithSampler(name, externalTexture, () -> 0, true));
                 } else {
-                    samplerSet.add(new TextureWithSampler(name, () -> texture, () -> -1));
+                    samplerSet.add(new TextureWithSampler(name, () -> texture, () -> -1, false));
                 }
             }
 
@@ -959,16 +1052,7 @@ public final class ForgeOriginalVoxyOculusRenderPipelineData {
             i++;
         }
 
-        IntConsumer bindingFunction = base -> {
-            for (int j = 0; j < samplers.length; j++) {
-                int unit = j + base;
-                TextureWithSampler sampler = samplers[j];
-                glBindTextureUnit(unit, sampler.texture.getAsInt());
-                int samplerId = sampler.sampler.getAsInt();
-                glBindSampler(unit, samplerId == -1 ? 0 : samplerId);
-            }
-        };
-        return new ImageSet(builder.toString(), bindingFunction);
+        return new ImageSet(builder.toString(), samplers);
     }
 
     public record SSBOSet(String layout, IntConsumer bindingFunction) {

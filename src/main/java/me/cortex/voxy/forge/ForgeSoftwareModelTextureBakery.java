@@ -87,7 +87,7 @@ final class ForgeSoftwareModelTextureBakery {
             this.lastFailureReason = "null-block-state";
             return 0;
         }
-        if (state.isAir() || state.getRenderShape() == RenderShape.INVISIBLE) {
+        if (state.isAir()) {
             return 0;
         }
         if (this.atlasPixels == null) {
@@ -100,6 +100,9 @@ final class ForgeSoftwareModelTextureBakery {
                 return 0;
             }
             return this.renderFluid(state, outputBuffer);
+        }
+        if (state.getRenderShape() == RenderShape.INVISIBLE) {
+            return 0;
         }
         return this.renderBlock(minecraft, state, outputBuffer);
     }
@@ -128,16 +131,35 @@ final class ForgeSoftwareModelTextureBakery {
         this.atlasWidth = Math.max(1, Math.round(sample.contents().width() / uRange));
         this.atlasHeight = Math.max(1, Math.round(sample.contents().height() / vRange));
         ByteBuffer pixels = BufferUtils.createByteBuffer(this.atlasWidth * this.atlasHeight * 4);
-        GL11C.glFlush();
-        GL11C.glFinish();
-        GL30C.glBindFramebuffer(GL30C.GL_FRAMEBUFFER, 0);
-        GL15C.glBindBuffer(GL21C.GL_PIXEL_PACK_BUFFER, 0);
-        GL11C.glPixelStorei(GL11C.GL_PACK_ROW_LENGTH, this.atlasWidth);
-        GL11C.glPixelStorei(GL12C.GL_PACK_IMAGE_HEIGHT, 0);
-        GL11C.glPixelStorei(GL11C.GL_PACK_SKIP_ROWS, 0);
-        GL11C.glPixelStorei(GL11C.GL_PACK_SKIP_PIXELS, 0);
-        GL11C.glPixelStorei(GL11C.GL_PACK_ALIGNMENT, 4);
-        ARBDirectStateAccess.glGetTextureImage(atlas.getId(), 0, GL11C.GL_RGBA, GL11C.GL_UNSIGNED_BYTE, pixels);
+        int previousReadFramebuffer = GL11C.glGetInteger(GL30C.GL_READ_FRAMEBUFFER_BINDING);
+        int previousDrawFramebuffer = GL11C.glGetInteger(GL30C.GL_DRAW_FRAMEBUFFER_BINDING);
+        int previousPixelPackBuffer = GL11C.glGetInteger(GL21C.GL_PIXEL_PACK_BUFFER_BINDING);
+        int previousPackRowLength = GL11C.glGetInteger(GL11C.GL_PACK_ROW_LENGTH);
+        int previousPackImageHeight = GL11C.glGetInteger(GL12C.GL_PACK_IMAGE_HEIGHT);
+        int previousPackSkipRows = GL11C.glGetInteger(GL11C.GL_PACK_SKIP_ROWS);
+        int previousPackSkipPixels = GL11C.glGetInteger(GL11C.GL_PACK_SKIP_PIXELS);
+        int previousPackAlignment = GL11C.glGetInteger(GL11C.GL_PACK_ALIGNMENT);
+        try {
+            GL11C.glFlush();
+            GL11C.glFinish();
+            GL30C.glBindFramebuffer(GL30C.GL_FRAMEBUFFER, 0);
+            GL15C.glBindBuffer(GL21C.GL_PIXEL_PACK_BUFFER, 0);
+            GL11C.glPixelStorei(GL11C.GL_PACK_ROW_LENGTH, this.atlasWidth);
+            GL11C.glPixelStorei(GL12C.GL_PACK_IMAGE_HEIGHT, 0);
+            GL11C.glPixelStorei(GL11C.GL_PACK_SKIP_ROWS, 0);
+            GL11C.glPixelStorei(GL11C.GL_PACK_SKIP_PIXELS, 0);
+            GL11C.glPixelStorei(GL11C.GL_PACK_ALIGNMENT, 4);
+            ARBDirectStateAccess.glGetTextureImage(atlas.getId(), 0, GL11C.GL_RGBA, GL11C.GL_UNSIGNED_BYTE, pixels);
+        } finally {
+            GL15C.glBindBuffer(GL21C.GL_PIXEL_PACK_BUFFER, previousPixelPackBuffer);
+            GL11C.glPixelStorei(GL11C.GL_PACK_ROW_LENGTH, previousPackRowLength);
+            GL11C.glPixelStorei(GL12C.GL_PACK_IMAGE_HEIGHT, previousPackImageHeight);
+            GL11C.glPixelStorei(GL11C.GL_PACK_SKIP_ROWS, previousPackSkipRows);
+            GL11C.glPixelStorei(GL11C.GL_PACK_SKIP_PIXELS, previousPackSkipPixels);
+            GL11C.glPixelStorei(GL11C.GL_PACK_ALIGNMENT, previousPackAlignment);
+            GL30C.glBindFramebuffer(GL30C.GL_READ_FRAMEBUFFER, previousReadFramebuffer);
+            GL30C.glBindFramebuffer(GL30C.GL_DRAW_FRAMEBUFFER, previousDrawFramebuffer);
+        }
         this.atlasPixels = new int[this.atlasWidth * this.atlasHeight];
         for (int i = 0; i < this.atlasPixels.length; i++) {
             int r = pixels.get(i * 4) & 0xFF;

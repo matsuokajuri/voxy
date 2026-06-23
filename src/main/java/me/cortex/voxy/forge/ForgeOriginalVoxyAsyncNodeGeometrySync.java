@@ -624,7 +624,7 @@ final class ForgeOriginalVoxyAsyncNodeGeometrySync {
         if (previous == null) {
             this.needsWaitForSync = false;
         }
-        this.mergeGeometryEvents(sync);
+        this.mergeGeometryEvents(sync, previous != null);
         sync.geometrySectionCount = this.geometryManager.getSectionCount();
         sync.usedGeometry = this.geometryManager.getGeometryUsedBytes();
         sync.currentMaxNodeId = this.nodeManager.getCurrentMaxNodeId();
@@ -651,7 +651,7 @@ final class ForgeOriginalVoxyAsyncNodeGeometrySync {
         return sync;
     }
 
-    private void mergeGeometryEvents(SyncResults sync) {
+    private void mergeGeometryEvents(SyncResults sync, boolean mergeWithPrevious) {
         if (!this.topLevelNodeIdChanges.isEmpty()) {
             var iter = this.topLevelNodeIdChanges.intIterator();
             while (iter.hasNext()) {
@@ -672,11 +672,13 @@ final class ForgeOriginalVoxyAsyncNodeGeometrySync {
             this.cleanerIdResetClear.clear();
         }
         IntOpenHashSet removals = this.geometryManager.getHeapRemovals();
-        if (!removals.isEmpty()) {
+        if (!removals.isEmpty() && mergeWithPrevious) {
             var iter = removals.intIterator();
             while (iter.hasNext()) {
                 sync.geometryUpload.remove(iter.nextInt());
             }
+            removals.clear();
+        } else if (!removals.isEmpty()) {
             removals.clear();
         }
         Int2ObjectOpenHashMap<MemoryBuffer> uploads = this.geometryManager.getUploads();

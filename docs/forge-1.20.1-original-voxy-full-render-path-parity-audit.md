@@ -588,8 +588,10 @@ semantics.
 
 ## Remaining bottom-up parity work
 
-1. Keep removing historical `ForgeFormalModelStore` references from preview
-   code; the original model pipeline now uses `ForgeOriginalVoxyModelStore`.
+1. Continue classifying/removing legacy CPU/BuiltSection/cache compatibility
+   surfaces that are not part of the original Voxy owner chain. The isolated
+   placeholder model-store family has been removed; the original model pipeline
+   uses `ForgeOriginalVoxyModelStore`.
 2. Continue runtime validation of original `Viewport` / `MDICViewport` / HiZ /
    render-list ownership, production `cmdgen.comp`, and MDIC draw submission
    after real render frames.
@@ -966,6 +968,19 @@ integration, not the removed sample-set route.
 The remaining readback/audit fields in the original MDIC/model-store path are
 diagnostic parity checks for active original-shaped buffers, not deleted renderer
 owners.
+
+The 2026-06-23 repair removed the isolated placeholder model-store family
+(`ForgeModelStoreSkeleton`, `ForgeModelDataBuffer`, placeholder record/status
+types, and placeholder layout/audit helpers) and detached resource reload from
+that deleted skeleton path. `ForgeVoxyModelIdMapper` remains only for legacy
+CPU-geometry compatibility/status code and is explicitly not the formal
+original model-id owner.
+
+The 2026-06-23 lifecycle repair added a Forge `GameShuttingDownEvent` terminal
+owner that can drain `SectionSavingService` and shut down the original
+`UnifiedServiceThreadPool` when render cleanup completes synchronously on the
+render thread. This reduces the service-leak gap but does not replace the
+remaining full `VoxyRenderSystem` outer-owner requirement.
 ```
 
 Validation:
@@ -975,6 +990,9 @@ deleted prototype class/method scan: no hits
 deleted config/runtime switch scan: no hits
 Forge/config suspicious filename scan: only Oculus/Iris Samplers files
 gradlew classes: passed
+rtk test .\gradlew compileJava: passed after terminal-shutdown and placeholder
+cleanup repairs
+rtk test .\gradlew processResources: passed after dependency range narrowing
 ```
 
 No readiness flags are changed by this audit:

@@ -19,7 +19,7 @@ final class ForgeModelBridgeResourceReloadTracker {
     private boolean reloadCleanupOnRenderThread;
     private boolean reloadCleanupCompleted;
     private long reloadCleanupFailures;
-    private boolean modelStoreSkeletonStale;
+    private boolean originalModelResourcesStale;
     private boolean originalVoxyPipelineReloadMarked;
     private String lastReloadReason = "none";
 
@@ -53,18 +53,16 @@ final class ForgeModelBridgeResourceReloadTracker {
         this.reloadCleanupOnRenderThread = RenderSystem.isOnRenderThread();
         this.reloadCleanupScheduled = !this.reloadCleanupOnRenderThread;
         this.reloadCleanupCompleted = false;
-        this.modelStoreSkeletonStale = true;
+        this.originalModelResourcesStale = true;
         this.originalVoxyPipelineReloadMarked = true;
         this.lastReloadReason = reason == null || reason.isBlank() ? (real ? "forge-client-resource-reload" : "command-simulated-resource-reload") : reason;
-        String staleReason = real ? "resource-reload-event" : "resource-reload-simulated";
         try {
-            this.instance.getModelStoreSkeleton().markStale(staleReason);
             this.instance.getOriginalVoxyModelPipeline().markResourceReload();
             this.reloadCleanupCompleted = true;
         } catch (RuntimeException e) {
             this.reloadCleanupFailures++;
             this.reloadCleanupCompleted = false;
-            VoxyForge.LOGGER.error("Failed to stale model bridge resources after {}.", this.lastReloadSource, e);
+            VoxyForge.LOGGER.error("Failed to mark original Voxy model resources stale after {}.", this.lastReloadSource, e);
         }
         this.lastReloadFinishedAt = Instant.now().toString();
         return this.createStatusSnapshot();
@@ -86,7 +84,7 @@ final class ForgeModelBridgeResourceReloadTracker {
                 this.reloadCleanupOnRenderThread,
                 this.reloadCleanupCompleted,
                 this.reloadCleanupFailures,
-                this.modelStoreSkeletonStale,
+                this.originalModelResourcesStale,
                 this.originalVoxyPipelineReloadMarked,
                 this.lastReloadReason
         );
@@ -108,7 +106,7 @@ final class ForgeModelBridgeResourceReloadTracker {
         this.reloadCleanupOnRenderThread = false;
         this.reloadCleanupCompleted = false;
         this.reloadCleanupFailures = 0L;
-        this.modelStoreSkeletonStale = false;
+        this.originalModelResourcesStale = false;
         this.originalVoxyPipelineReloadMarked = false;
         this.lastReloadReason = "none";
     }

@@ -290,6 +290,18 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
                 || this.translucentDrawCount > 0);
     }
 
+    boolean hasOpaqueDrawCountReadback() {
+        return this.readbackAuditRuns > 0 && this.opaqueDrawCount > 0;
+    }
+
+    boolean hasTemporalOpaqueDrawCountReadback() {
+        return this.readbackAuditRuns > 0 && this.temporalOpaqueDrawCount > 0;
+    }
+
+    boolean hasTranslucentDrawCountReadback() {
+        return this.readbackAuditRuns > 0 && this.translucentDrawCount > 0;
+    }
+
     boolean ready() {
         return this.terrainProgramId != 0
                 && this.translucentTerrainProgramId != 0

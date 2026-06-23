@@ -13,6 +13,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
 import net.minecraftforge.client.event.RegisterClientCommandsEvent;
 import net.minecraftforge.common.MinecraftForge;
+import net.minecraftforge.event.GameShuttingDownEvent;
 import net.minecraftforge.event.TickEvent;
 
 import java.nio.ByteBuffer;
@@ -39,11 +40,10 @@ public final class ForgeVoxyInstance {
     private final ForgeSectionGeometryConsumeManager sectionGeometryConsumeManager = new ForgeSectionGeometryConsumeManager(this);
     private final ForgeGpuGeometryUploadManager gpuGeometryUploadManager = new ForgeGpuGeometryUploadManager(this);
     private final ForgeMdicCommandManager mdicCommandManager = new ForgeMdicCommandManager(this);
-    private final ForgeModelStoreSkeleton modelStoreSkeleton = new ForgeModelStoreSkeleton(this);
-    private final ForgeModelStoreLayoutAuditor modelStoreLayoutAuditor = new ForgeModelStoreLayoutAuditor();
     private final ForgeModelBridgeResourceReloadTracker modelBridgeResourceReloadTracker = new ForgeModelBridgeResourceReloadTracker(this);
     private final AtomicInteger storageWriteCount = new AtomicInteger();
     private String activeClientDimension;
+    private boolean shuttingDown;
 
     private ForgeVoxyInstance() {
     }
@@ -54,6 +54,7 @@ public final class ForgeVoxyInstance {
         MinecraftForge.EVENT_BUS.addListener(this::onClientLogout);
         MinecraftForge.EVENT_BUS.addListener(this::onClientTick);
         MinecraftForge.EVENT_BUS.addListener(this::onRegisterClientCommands);
+        MinecraftForge.EVENT_BUS.addListener(this::onGameShuttingDown);
         this.chunkIngestManager.register();
         this.cpuMeshBuildManager.register();
         this.builtSectionBuildManager.register();
@@ -66,6 +67,9 @@ public final class ForgeVoxyInstance {
     }
 
     public Optional<WorldEngine> getCurrentEngineOptional() {
+        if (this.shuttingDown) {
+            return Optional.empty();
+        }
         return this.activeWorld != null && this.activeWorld.isLive()
                 ? Optional.of(this.activeWorld)
                 : Optional.empty();
@@ -131,14 +135,6 @@ public final class ForgeVoxyInstance {
         return this.mdicCommandManager;
     }
 
-    public ForgeModelStoreSkeleton getModelStoreSkeleton() {
-        return this.modelStoreSkeleton;
-    }
-
-    public ForgeModelStoreLayoutAuditor getModelStoreLayoutAuditor() {
-        return this.modelStoreLayoutAuditor;
-    }
-
     public ForgeModelBridgeResourceReloadTracker getModelBridgeResourceReloadTracker() {
         return this.modelBridgeResourceReloadTracker;
     }
@@ -149,6 +145,9 @@ public final class ForgeVoxyInstance {
 
     private void onClientTick(TickEvent.ClientTickEvent event) {
         if (event.phase != TickEvent.Phase.END) {
+            return;
+        }
+        if (this.shuttingDown) {
             return;
         }
 
@@ -182,8 +181,6 @@ public final class ForgeVoxyInstance {
         this.sectionGeometryConsumeManager.clear();
         this.gpuGeometryUploadManager.clear();
         this.mdicCommandManager.clear();
-        this.modelStoreSkeleton.clear();
-        this.modelStoreLayoutAuditor.clear();
         this.modelBridgeResourceReloadTracker.clear();
         this.originalVoxyModelPipeline.markDimensionSwitch();
         this.closeActiveWorld();
@@ -196,6 +193,9 @@ public final class ForgeVoxyInstance {
     }
 
     public boolean ensureActiveWorldSkeletonForCurrentWorldIfAllowed() {
+        if (this.shuttingDown) {
+            return false;
+        }
         if (!ForgeVoxyRuntimeOverrides.enabledWorldEngineSkeleton()) {
             return false;
         }
@@ -214,6 +214,9 @@ public final class ForgeVoxyInstance {
     }
 
     public boolean ensureOriginalVoxyActiveWorldForCurrentWorld() {
+        if (this.shuttingDown) {
+            return false;
+        }
         if (!ForgeVoxyConfig.ENABLED.get()) {
             return false;
         }
@@ -251,12 +254,62 @@ public final class ForgeVoxyInstance {
         this.sectionGeometryConsumeManager.clear();
         this.gpuGeometryUploadManager.clear();
         this.mdicCommandManager.clear();
-        this.modelStoreSkeleton.clear();
-        this.modelStoreLayoutAuditor.clear();
         this.modelBridgeResourceReloadTracker.clear();
         this.originalVoxyModelPipeline.markWorldUnload();
         this.activeClientDimension = null;
         this.closeActiveWorld();
+    }
+
+    private void onGameShuttingDown(GameShuttingDownEvent event) {
+        this.shutdown();
+    }
+
+    public void shutdown() {
+        synchronized (this) {
+            if (this.shuttingDown) {
+                return;
+            }
+            this.shuttingDown = true;
+        }
+
+        VoxyForge.LOGGER.info("Shutting down Voxy Forge original-parity instance.");
+        VoxelIngestService.setAutoIngestTarget(null);
+        this.chunkIngestManager.clear();
+        this.cpuMeshBuildManager.clear();
+        this.builtSectionBuildManager.clear();
+        this.cpuMeshCache.clear();
+        this.voxyGeometryCache.clear();
+        this.sectionGeometryConsumeManager.clear();
+        this.gpuGeometryUploadManager.clear();
+        this.mdicCommandManager.clear();
+        this.modelBridgeResourceReloadTracker.clear();
+
+        boolean renderCleanupComplete = this.originalVoxyModelPipeline.shutdownForClientStop();
+        this.activeClientDimension = null;
+        this.closeActiveWorld();
+        if (!renderCleanupComplete) {
+            VoxyForge.LOGGER.warn(
+                    "Skipped terminal Voxy service shutdown because render-resource cleanup was deferred off the render thread.");
+            return;
+        }
+
+        try {
+            this.originalVoxySectionSavingService.shutdown();
+        } catch (Exception e) {
+            VoxyForge.LOGGER.error("Failed to shut down Voxy section saving service.", e);
+        }
+        this.drainClosingWorldsForShutdown();
+        if (!this.closingWorlds.isEmpty()) {
+            VoxyForge.LOGGER.warn(
+                    "Skipped freeing {} Voxy world(s) during client shutdown because they still had live references.",
+                    this.closingWorlds.size());
+        }
+        try {
+            this.originalVoxyModelPipeline.shutdownOriginalServiceThreads();
+        } catch (Exception e) {
+            VoxyForge.LOGGER.error("Failed to shut down Voxy original service thread pool.", e);
+        }
+        VoxyForge.LOGGER.info("Voxy Forge original-parity instance shutdown complete.");
     }
 
     public void closeActiveWorld() {
@@ -279,7 +332,24 @@ public final class ForgeVoxyInstance {
                 continue;
             }
             world.free();
-            VoxyForge.LOGGER.info("Closed Voxy WorldEngine skeleton.");
+            VoxyForge.LOGGER.info("Closed Voxy WorldEngine.");
+            iterator.remove();
+        }
+    }
+
+    private void drainClosingWorldsForShutdown() {
+        Iterator<WorldEngine> iterator = this.closingWorlds.iterator();
+        while (iterator.hasNext()) {
+            WorldEngine world = iterator.next();
+            if (!world.isLive()) {
+                iterator.remove();
+                continue;
+            }
+            if (world.isWorldUsed()) {
+                continue;
+            }
+            world.free();
+            VoxyForge.LOGGER.info("Closed Voxy WorldEngine during client shutdown.");
             iterator.remove();
         }
     }

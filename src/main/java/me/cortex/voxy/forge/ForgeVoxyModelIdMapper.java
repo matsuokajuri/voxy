@@ -1,16 +1,14 @@
 package me.cortex.voxy.forge;
 
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
-import java.util.OptionalInt;
 
 /**
- * Runtime-only placeholder for original Voxy client model ids.
+ * Legacy CPU-geometry compatibility mapper for old Forge status/diagnostic paths.
  *
- * <p>The original ModelFactory assigns ids after baking block models and model
- * textures into ModelStore. G2.2 deliberately stays CPU-only, so this maps the
- * existing Voxy Mapper blockstate id to a stable 16-bit placeholder model id.
+ * <p>The active original-Voxy model pipeline uses {@link ForgeOriginalVoxyModelFactory}
+ * and {@link ForgeOriginalVoxyModelStore}; new renderer work must not treat this
+ * mapper as the formal model-id owner.
  */
 public final class ForgeVoxyModelIdMapper {
     public static final ForgeVoxyModelIdMapper INSTANCE = new ForgeVoxyModelIdMapper();
@@ -18,7 +16,6 @@ public final class ForgeVoxyModelIdMapper {
     private static final int MAX_CLIENT_MODEL_ID = 0xFFFF;
 
     private final Map<Integer, Integer> blockStateIdToModelId = new HashMap<>();
-    private final Map<Integer, Integer> modelIdToBlockStateId = new HashMap<>();
     private int nextModelId = 1;
 
     private ForgeVoxyModelIdMapper() {
@@ -40,7 +37,6 @@ public final class ForgeVoxyModelIdMapper {
 
         int modelId = this.nextModelId++;
         this.blockStateIdToModelId.put(blockStateId, modelId);
-        this.modelIdToBlockStateId.put(modelId, blockStateId);
         return new ModelIdResult(modelId, false, false);
     }
 
@@ -48,36 +44,6 @@ public final class ForgeVoxyModelIdMapper {
         return this.blockStateIdToModelId.size();
     }
 
-    public synchronized OptionalInt blockStateIdForModelId(int modelId) {
-        Integer blockStateId = this.modelIdToBlockStateId.get(modelId);
-        return blockStateId == null ? OptionalInt.empty() : OptionalInt.of(blockStateId);
-    }
-
-    public synchronized boolean hasStableReverseMappings() {
-        if (this.blockStateIdToModelId.size() != this.modelIdToBlockStateId.size()) {
-            return false;
-        }
-        for (Map.Entry<Integer, Integer> entry : this.blockStateIdToModelId.entrySet()) {
-            Integer reverse = this.modelIdToBlockStateId.get(entry.getValue());
-            if (reverse == null || !reverse.equals(entry.getKey())) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    public synchronized List<ModelIdMapping> createSnapshot(int maxEntries) {
-        int limit = Math.max(0, maxEntries);
-        return this.blockStateIdToModelId.entrySet().stream()
-                .sorted(Map.Entry.comparingByValue())
-                .limit(limit)
-                .map(entry -> new ModelIdMapping(entry.getKey(), entry.getValue()))
-                .toList();
-    }
-
     public record ModelIdResult(int modelId, boolean missing, boolean overflow) {
-    }
-
-    public record ModelIdMapping(int blockStateId, int modelId) {
     }
 }

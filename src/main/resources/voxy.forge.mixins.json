@@ -8,6 +8,7 @@
     "ForgeOriginalVoxyEmbeddiumChunkTrackerAccessor",
     "ForgeOriginalVoxyEmbeddiumDefaultChunkRendererMixin",
     "ForgeOriginalVoxyEmbeddiumRenderSectionManagerMixin",
+    "ForgeOriginalVoxyClientLevelMixin",
     "ForgeOriginalVoxyOculusCustomUniformsAccessor",
     "ForgeOriginalVoxyOculusIrisSamplersMixin",
     "ForgeOriginalVoxyOculusIrisRenderingPipelineAccessor",

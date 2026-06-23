@@ -15,7 +15,7 @@ record ForgeModelBridgeResourceReloadStats(
         boolean reloadCleanupOnRenderThread,
         boolean reloadCleanupCompleted,
         long reloadCleanupFailures,
-        boolean modelStoreSkeletonStale,
+        boolean originalModelResourcesStale,
         boolean originalVoxyPipelineReloadMarked,
         String lastReloadReason
 ) {

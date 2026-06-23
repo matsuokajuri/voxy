@@ -107,6 +107,17 @@ public final class ForgeOriginalVoxyModelPipeline {
     private long uploadTickRuns;
     private long blockBakeRequests;
     private long clearRuns;
+    private long lifecycleGeneration;
+    private long startQueuedGeneration = -1L;
+    private long queuedStartStaleSkipCount;
+    private long queuedCleanupStaleSkipCount;
+    private long queuedFactoryUploadStaleSkipCount;
+    private long oculusReloadPollCount;
+    private long oculusReloadEdgeCount;
+    private long oculusReloadDuplicatePollCount;
+    private boolean oculusReloadFlagCurrentlyObserved;
+    private boolean oculusReloadDuplicatePollLogged;
+    private String lastQueuedLifecycleSkipReason = "none";
     private long workerUnparkRuns;
     private int originalServiceThreadTargetCount;
     private int originalServiceThreadDedicatedCount;
@@ -150,6 +161,7 @@ public final class ForgeOriginalVoxyModelPipeline {
     private long originalOculusViewportAppliedGeneration;
     private long originalOculusViewportApplyCount;
     private int originalOculusMatrixAuditRuns;
+    private boolean serviceThreadPoolShutdown;
 
     ForgeOriginalVoxyModelPipeline(ForgeVoxyInstance instance) {
         this.instance = instance;
@@ -160,14 +172,41 @@ public final class ForgeOriginalVoxyModelPipeline {
     }
 
     void ensureOriginalServiceThreads() {
+        synchronized (this) {
+            if (this.serviceThreadPoolShutdown) {
+                this.recordNonFatalFailure("original-service-thread-pool-shutdown");
+                return;
+            }
+        }
         this.updateDedicatedThreads();
+    }
+
+    boolean shutdownForClientStop() {
+        if (!RenderSystem.isOnRenderThread()) {
+            this.markStaleAndClear("client-shutdown-deferred");
+            return false;
+        }
+        this.markStaleAndClear("client-shutdown");
+        return true;
+    }
+
+    void shutdownOriginalServiceThreads() {
+        synchronized (this) {
+            if (this.serviceThreadPoolShutdown) {
+                return;
+            }
+            this.serviceThreadPoolShutdown = true;
+        }
+        this.serviceThreadPool.shutdown();
     }
 
     synchronized ForgeOriginalVoxyModelPipelineStats requestStart(String reason) {
         this.startRequests++;
+        this.lifecycleGeneration++;
         this.startRequested = true;
         this.stale = false;
         this.requiresRebuild = false;
+        this.startQueuedGeneration = -1L;
         this.lifecycleState = "START_REQUESTED";
         this.lastLifecycleEvent = safeReason(reason);
         this.lastFailureReason = "none";
@@ -179,8 +218,9 @@ public final class ForgeOriginalVoxyModelPipeline {
         if (this.shouldRequestClientWorldStart()) {
             this.requestStart("client-world-ready");
         }
-        if (this.shouldScheduleStart()) {
-            this.runOnRenderThread(this::startOnRenderThread);
+        long startGeneration = this.scheduleStartOnRenderThread();
+        if (startGeneration >= 0L) {
+            this.runOnRenderThread(() -> this.startOnRenderThread(startGeneration));
         }
         if (this.processingThreadException != null) {
             Throwable exception = this.processingThreadException;
@@ -679,12 +719,13 @@ public final class ForgeOriginalVoxyModelPipeline {
         this.markStaleAndClear("clear");
     }
 
-    private synchronized boolean shouldScheduleStart() {
+    private synchronized long scheduleStartOnRenderThread() {
         if (!this.startRequested || this.ownerReady || this.startQueuedOnRenderThread) {
-            return false;
+            return -1L;
         }
         this.startQueuedOnRenderThread = true;
-        return true;
+        this.startQueuedGeneration = this.lifecycleGeneration;
+        return this.startQueuedGeneration;
     }
 
     private boolean shouldRequestClientWorldStart() {
@@ -716,20 +757,51 @@ public final class ForgeOriginalVoxyModelPipeline {
     private boolean consumeOculusWorldRenderingSettingsReload() {
         ForgeOculusWorldRenderingSettingsBridge.ReloadState reloadState =
                 ForgeOculusWorldRenderingSettingsBridge.isReloadRequired();
+        synchronized (this) {
+            this.oculusReloadPollCount++;
+        }
         if (!reloadState.ready()) {
             this.recordNonFatalFailure(reloadState.failureReason());
             return false;
         }
         if (!reloadState.reloadRequired()) {
+            synchronized (this) {
+                this.oculusReloadFlagCurrentlyObserved = false;
+                this.oculusReloadDuplicatePollLogged = false;
+            }
             return false;
         }
+        synchronized (this) {
+            if (this.oculusReloadFlagCurrentlyObserved) {
+                this.oculusReloadDuplicatePollCount++;
+                if (!this.oculusReloadDuplicatePollLogged) {
+                    this.oculusReloadDuplicatePollLogged = true;
+                    Logger.info("Debounced repeated Oculus WorldRenderingSettings reload flag while waiting for Oculus to consume it.");
+                }
+                return false;
+            }
+            this.oculusReloadFlagCurrentlyObserved = true;
+            this.oculusReloadEdgeCount++;
+        }
+        Logger.info("Observed Oculus WorldRenderingSettings reload edge for Voxy owner rebuild.");
         this.markOculusWorldRenderingSettingsReload();
         return true;
     }
 
-    private void startOnRenderThread() {
+    private void startOnRenderThread(long expectedGeneration) {
         synchronized (this) {
+            if (expectedGeneration != this.lifecycleGeneration
+                    || !this.startQueuedOnRenderThread
+                    || this.startQueuedGeneration != expectedGeneration
+                    || !this.startRequested
+                    || this.ownerReady) {
+                this.queuedStartStaleSkipCount++;
+                this.lastQueuedLifecycleSkipReason = "start-stale-generation";
+                this.lastLifecycleEvent = "start-skipped-stale-generation";
+                return;
+            }
             this.startQueuedOnRenderThread = false;
+            this.startQueuedGeneration = -1L;
         }
         if (!RenderSystem.isOnRenderThread()) {
             this.recordFailure("start-not-on-render-thread");
@@ -887,6 +959,20 @@ public final class ForgeOriginalVoxyModelPipeline {
                 geometrySync::addTopLevel,
                 geometrySync::removeTopLevel);
         renderDistanceTracker.setRenderDistance((int) Math.ceil(ForgeVoxyConfig.ORIGINAL_VOXY_SECTION_RENDER_DISTANCE.get() + 1.0D));
+        if (!this.isStartGenerationCurrent(expectedGeneration)) {
+            viewportSelector.free();
+            mdicSectionRenderer.freeOnRenderThread();
+            chunkBoundRenderer.freeOnRenderThread();
+            renderPipeline.freeOnRenderThread();
+            hierarchicalOcclusionTraverser.freeOnRenderThread();
+            geometrySync.stopOnRenderThread();
+            cleaner.freeOnRenderThread();
+            geometryData.freeOnRenderThread();
+            renderGeneration.shutdown();
+            factory.shutdown();
+            store.free();
+            return;
+        }
         geometrySync.start();
         renderGeneration.setResultConsumer(geometrySync::submitGeometryResult);
         targetWorld.acquireRef();
@@ -941,6 +1027,9 @@ public final class ForgeOriginalVoxyModelPipeline {
         boolean translucentSubmitted = false;
         boolean finishCalled = false;
         boolean capturedRenderState = false;
+        boolean postDynamicWorkEligible = false;
+        double postDynamicCameraX = 0.0D;
+        double postDynamicCameraZ = 0.0D;
         int oldFramebuffer = 0;
         OriginalVoxyRenderState oldRenderState = null;
         try {
@@ -1056,9 +1145,10 @@ public final class ForgeOriginalVoxyModelPipeline {
                     oldRenderState.readFramebuffer(),
                     sourceWidth,
                     sourceHeight);
+            postDynamicWorkEligible = true;
+            postDynamicCameraX = camera.x;
+            postDynamicCameraZ = camera.z;
             sectionRenderer.renderOpaque(viewport, geometryData, modelStore, renderPipeline);
-            boolean frameHadGeometry = geometryData.sectionCount() > 0;
-            opaqueSubmitted = frameHadGeometry && renderPipeline.opaqueDrawTargetReady();
             viewport.buildHizFromSourceDepth(depthTexture, width, height);
             this.runOriginalInnerPrimaryWorkWithTraversal(
                     viewport,
@@ -1070,11 +1160,12 @@ public final class ForgeOriginalVoxyModelPipeline {
             sectionRenderer.buildDrawCalls(viewport, geometryData, ForgeOriginalVoxyRenderProperties.getRenderProperties());
             commandGenerationCompleted = true;
             sectionRenderer.renderTemporal(viewport, geometryData, modelStore, renderPipeline);
-            temporalSubmitted = frameHadGeometry && renderPipeline.opaqueDrawTargetReady();
             sectionRenderer.postOpaquePreperation(viewport);
             renderPipeline.postOpaquePreTranslucent(viewport, oldFramebuffer, true);
             sectionRenderer.renderTranslucent(viewport, geometryData, modelStore, renderPipeline);
-            translucentSubmitted = frameHadGeometry && renderPipeline.translucentDrawTargetReady();
+            opaqueSubmitted = sectionRenderer.hasOpaqueDrawCountReadback();
+            temporalSubmitted = sectionRenderer.hasTemporalOpaqueDrawCountReadback();
+            translucentSubmitted = sectionRenderer.hasTranslucentDrawCountReadback();
             renderPipeline.finish(viewport, oldFramebuffer, sourceWidth, sourceHeight, true);
             finishCalled = true;
             visibleFrameCompleted = true;
@@ -1114,9 +1205,9 @@ public final class ForgeOriginalVoxyModelPipeline {
         } finally {
             try {
                 try {
-                    if (commandGenerationCompleted) {
+                    if (postDynamicWorkEligible) {
                         try {
-                            this.runOriginalPostDynamicWorkAfterCommandGeneration(camera.x, camera.z);
+                            this.runOriginalPostDynamicWorkAfterCommandGeneration(postDynamicCameraX, postDynamicCameraZ);
                             synchronized (this) {
                                 this.originalPostFrameDynamicWorkUsed = true;
                             }
@@ -1166,10 +1257,16 @@ public final class ForgeOriginalVoxyModelPipeline {
     }
 
     private synchronized void updateDedicatedThreads() {
+        if (this.serviceThreadPoolShutdown) {
+            this.originalServiceThreadConfigOwnerReady = false;
+            this.originalServiceThreadPolicyFailureReason = "service-thread-pool-shutdown";
+            return;
+        }
         ForgeOriginalVoxyServiceThreadPolicy.Selection selection = ForgeOriginalVoxyServiceThreadPolicy.select();
         this.originalServiceThreadConfigOwnerReady = selection.configOwnerReady();
         this.originalEmbeddiumBuilderThreadSharingEnabled = selection.useEmbeddiumBuilderThreads();
-        this.originalEmbeddiumBuilderThreadSharingReady = selection.useEmbeddiumBuilderThreads();
+        this.originalEmbeddiumBuilderThreadSharingReady = selection.useEmbeddiumBuilderThreads()
+                && selection.embeddiumBuilderThreadCountAvailable();
         this.originalServiceThreadTargetCount = selection.targetThreadCount();
         this.originalServiceThreadDedicatedCount = selection.dedicatedThreadCount();
         this.originalEmbeddiumBuilderThreadCount = selection.embeddiumBuilderThreadCount();
@@ -1184,6 +1281,7 @@ public final class ForgeOriginalVoxyModelPipeline {
     }
 
     private void markStaleAndClear(String event) {
+        long cleanupGeneration;
         WorldEngine callbackWorld;
         ForgeOriginalVoxyModelFactory factory;
         ForgeOriginalVoxyModelStore store;
@@ -1199,9 +1297,12 @@ public final class ForgeOriginalVoxyModelPipeline {
         ForgeOriginalVoxyChunkBoundRenderer chunkBoundRenderer;
         ForgeOriginalVoxyViewportSelector viewportSelector;
         synchronized (this) {
+            this.lifecycleGeneration++;
+            cleanupGeneration = this.lifecycleGeneration;
             this.clearRuns++;
             this.startRequested = false;
             this.startQueuedOnRenderThread = false;
+            this.startQueuedGeneration = -1L;
             this.ownerReady = false;
             this.pendingChunkBoundAdds.clear();
             this.pendingChunkBoundRemoves.clear();
@@ -1253,8 +1354,17 @@ public final class ForgeOriginalVoxyModelPipeline {
         }
         this.stopProcessingThread();
         this.runOnRenderThread(() -> {
+            boolean cleanupCurrent;
+            synchronized (this) {
+                cleanupCurrent = cleanupGeneration == this.lifecycleGeneration || !this.ownerReady;
+                if (!cleanupCurrent) {
+                    this.queuedCleanupStaleSkipCount++;
+                    this.lastQueuedLifecycleSkipReason = "cleanup-stale-generation";
+                    this.lastLifecycleEvent = "cleanup-skipped-global-flush-stale-generation";
+                }
+            }
             boolean flushedDownloadStream = false;
-            if (ForgeOriginalVoxyDownloadStream.isReady()) {
+            if (cleanupCurrent && ForgeOriginalVoxyDownloadStream.isReady()) {
                 ForgeOriginalVoxyDownloadStream.instance().flushWaitClear();
                 flushedDownloadStream = true;
             }
@@ -1294,7 +1404,7 @@ public final class ForgeOriginalVoxyModelPipeline {
             if (store != null) {
                 store.free();
             }
-            if (ForgeOriginalVoxyDownloadStream.isReady()) {
+            if (cleanupCurrent && ForgeOriginalVoxyDownloadStream.isReady()) {
                 ForgeOriginalVoxyDownloadStream.instance().flushWaitClear();
                 flushedDownloadStream = true;
             }
@@ -1374,6 +1484,14 @@ public final class ForgeOriginalVoxyModelPipeline {
         if (!RenderSystem.isOnRenderThread()) {
             this.recordFailure("model-factory-upload-not-render-thread");
             return;
+        }
+        synchronized (this) {
+            if (!this.ownerReady || this.stale || factory != this.modelFactory) {
+                this.queuedFactoryUploadStaleSkipCount++;
+                this.lastQueuedLifecycleSkipReason = "factory-upload-stale-generation";
+                this.lastLifecycleEvent = "factory-upload-skipped-stale-generation";
+                return;
+            }
         }
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.level == null || minecraft.player == null) {
@@ -1604,14 +1722,26 @@ public final class ForgeOriginalVoxyModelPipeline {
     }
 
     private synchronized void recordFailure(String reason) {
+        this.lifecycleGeneration++;
         this.startRequested = false;
         this.startQueuedOnRenderThread = false;
+        this.startQueuedGeneration = -1L;
         this.ownerReady = false;
         this.stale = true;
         this.requiresRebuild = true;
         this.lifecycleState = "FAILED_SAFE";
         this.lastLifecycleEvent = "failure";
         this.lastFailureReason = reason == null || reason.isBlank() ? "unspecified" : reason;
+    }
+
+    private synchronized boolean isStartGenerationCurrent(long expectedGeneration) {
+        if (expectedGeneration == this.lifecycleGeneration && this.startRequested && !this.ownerReady) {
+            return true;
+        }
+        this.queuedStartStaleSkipCount++;
+        this.lastQueuedLifecycleSkipReason = "start-install-stale-generation";
+        this.lastLifecycleEvent = "start-install-skipped-stale-generation";
+        return false;
     }
 
     private synchronized void recordNonFatalFailure(String reason) {
