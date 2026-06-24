@@ -137,12 +137,12 @@ public class VoxelIngestService {
         int missingNonAirBlockLightSections = 0;
         int missingNonAirSkyLightSections = 0;
         for (var section : chunk.getSections()) {
-            if (section != null && shouldIngestLoadedChunkSection(section, chunk.getPos().x, sectionY, chunk.getPos().z)) {
+            if (section != null) {
                 var sectionPos = SectionPos.of(chunk.getPos().x, sectionY, chunk.getPos().z);
                 var blockLight = lightEngine.getLayerListener(LightLayer.BLOCK).getDataLayerData(sectionPos);
                 var skyLight = lightEngine.getLayerListener(LightLayer.SKY).getDataLayerData(sectionPos);
                 boolean missingSkyLight = skyLight == null && chunk.getLevel().dimensionType().hasSkyLight();
-                if (missingSkyLight) {
+                if (missingSkyLight && !section.hasOnlyAir()) {
                     missingNonAirBlockLightSections += blockLight == null ? 1 : 0;
                     missingNonAirSkyLightSections++;
                 }
@@ -156,29 +156,31 @@ public class VoxelIngestService {
         }
         sectionY = chunk.getMinSection();
         for (var section : chunk.getSections()) {
-            if (section != null && shouldIngestLoadedChunkSection(section, chunk.getPos().x, sectionY, chunk.getPos().z)) {
+            if (section != null) {
                 var sectionPos = SectionPos.of(chunk.getPos().x, sectionY, chunk.getPos().z);
                 var blockLight = lightEngine.getLayerListener(LightLayer.BLOCK).getDataLayerData(sectionPos);
                 var skyLight = lightEngine.getLayerListener(LightLayer.SKY).getDataLayerData(sectionPos);
                 boolean missingBlockLight = blockLight == null;
                 boolean missingSkyLight = skyLight == null && chunk.getLevel().dimensionType().hasSkyLight();
-                if (missingSkyLight) {
+                if (missingSkyLight && !section.hasOnlyAir()) {
                     stats = stats.add(IngestStats.EMPTY
                             .withMissingLightSections(missingBlockLight ? 1 : 0, 1)
                             .withDeferredLightSection());
                     continue;
                 }
-                IngestStats sectionStats = rawIngestWithStats(
-                        engine,
-                        section,
-                        chunk.getPos().x,
-                        sectionY,
-                        chunk.getPos().z,
-                        getLightingSupplier(
-                                blockLight == null ? null : blockLight.copy(),
-                                skyLight == null ? null : skyLight.copy()))
-                        .withMissingLightSections(missingBlockLight ? 1 : 0, missingSkyLight ? 1 : 0);
-                stats = stats.add(sectionStats);
+                if (shouldIngestLoadedChunkSection(section, blockLight, skyLight)) {
+                    IngestStats sectionStats = rawIngestWithStats(
+                            engine,
+                            section,
+                            chunk.getPos().x,
+                            sectionY,
+                            chunk.getPos().z,
+                            getLightingSupplier(
+                                    blockLight == null ? null : blockLight.copy(),
+                                    skyLight == null ? null : skyLight.copy()))
+                            .withMissingLightSections(missingBlockLight ? 1 : 0, missingSkyLight ? 1 : 0);
+                    stats = stats.add(sectionStats);
+                }
             }
             sectionY++;
         }
@@ -202,7 +204,7 @@ public class VoxelIngestService {
             return IngestStats.EMPTY;
         }
         LevelChunkSection section = sections[sectionIndex];
-        if (section == null || !shouldIngestLoadedChunkSection(section, chunk.getPos().x, sectionY, chunk.getPos().z)) {
+        if (section == null) {
             return IngestStats.EMPTY;
         }
 
@@ -212,10 +214,13 @@ public class VoxelIngestService {
         var skyLight = lightEngine.getLayerListener(LightLayer.SKY).getDataLayerData(sectionPos);
         boolean missingBlockLight = blockLight == null;
         boolean missingSkyLight = skyLight == null && chunk.getLevel().dimensionType().hasSkyLight();
-        if (missingSkyLight) {
+        if (missingSkyLight && !section.hasOnlyAir()) {
             return IngestStats.EMPTY
                     .withMissingLightSections(missingBlockLight ? 1 : 0, 1)
                     .withDeferredLightSection();
+        }
+        if (!shouldIngestLoadedChunkSection(section, blockLight, skyLight)) {
+            return IngestStats.EMPTY;
         }
         return rawIngestWithStats(
                 engine,
@@ -233,8 +238,13 @@ public class VoxelIngestService {
         return section != null;
     }
 
-    private static boolean shouldIngestLoadedChunkSection(LevelChunkSection section, int cx, int cy, int cz) {
-        return shouldIngestSection(section, cx, cy, cz) && !section.hasOnlyAir();
+    private static boolean shouldIngestLoadedChunkSection(LevelChunkSection section, DataLayer blockLight, DataLayer skyLight) {
+        return shouldIngestSection(section, 0, 0, 0)
+                && (!section.hasOnlyAir() || hasLightData(blockLight) || hasLightData(skyLight));
+    }
+
+    private static boolean hasLightData(DataLayer light) {
+        return light != null && !light.isEmpty();
     }
 
     public static VoxelizedSection convertSection(WorldEngine engine, LevelChunkSection section, int x, int y, int z, DataLayer blockLight, DataLayer skyLight) {

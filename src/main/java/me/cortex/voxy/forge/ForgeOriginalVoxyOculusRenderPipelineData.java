@@ -910,9 +910,7 @@ public final class ForgeOriginalVoxyOculusRenderPipelineData {
                 }
                 glBindTextureUnit(unit, textureId);
                 int samplerId = sampler.sampler.getAsInt();
-                if (samplerId != -1) {
-                    glBindSampler(unit, samplerId);
-                }
+                glBindSampler(unit, samplerId == -1 ? 0 : samplerId);
             }
         }
     }
