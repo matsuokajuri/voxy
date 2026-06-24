@@ -220,3 +220,12 @@ requires rewriting thousands of lines, treat that as the correct direction
 rather than reaching for a shortcut.
 
 When in doubt, inspect more original Voxy code before implementing.
+
+## 11. RTK wrapper
+
+When running verbose shell commands, prefer RTK wrappers:
+- use `rtk git status` instead of `git status`
+- use `rtk git diff` instead of `git diff`
+- use `rtk test <command>` for test/build commands
+- use `rtk log <file>` instead of reading full logs
+- do not read full latest.log/debug.log directly
