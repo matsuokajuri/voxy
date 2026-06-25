@@ -1297,3 +1297,580 @@ Runtime visual status:
   persistent zero-conversion stall.
 - Visual result is pending user confirmation because the agent is not using
   ComputerUse for visual inspection.
+
+## Candidate 8: Opaque render-path GL state and buffer binding parity
+
+Status: `excluded`.
+
+Question:
+
+Does the Forge opaque terrain draw set up different GL state or different
+buffer/texture bindings than original Voxy, given that translucent (water)
+renders correctly but opaque (solid) is black?
+
+Source compared:
+
+- Forge `ForgeOriginalVoxyMdicSectionRenderer.renderTerrain` (line 556) and
+  `bindRenderingBuffers` (line 540).
+- Original `MDICSectionRenderer.renderTerrain` (line 186) and
+  `bindRenderingBuffers` (line 172).
+
+Finding — `bindRenderingBuffers` is binding-for-binding identical:
+
+```text
+UBO 0            = uniform buffer
+SSBO 1           = geometry buffer
+SSBO 2           = metadata buffer
+modelStore.bind(3, 4, 0)
+SSBO 5           = position scratch buffer
+lightmap -> unit 1   (Forge bindLightmap(1) vs original LightMapHelper.bind(1))
+depth    -> unit 2   (depth-bounding depth texture)
+element / draw-indirect / parameter buffers identical
+```
+
+Finding — opaque `renderTerrain` GL state is also at parity:
+
+```text
+glDisable(GL_CULL_FACE)
+glDisable(GL_BLEND)
+glEnable(GL_DEPTH_TEST)
+glDepthFunc(closerEqualDepthCompare)
+setupAndBindOpaque(viewport)
+bindRenderingBuffers(...)
+glMemoryBarrier(COMMAND | SHADER_STORAGE)
+glProvokingVertex(GL_FIRST_VERTEX_CONVENTION)
+glMultiDrawElementsIndirectCountARB(...)
+```
+
+The only Forge additions are the already-explained grid-fix
+`glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)` around the draw, and using
+`glUseProgram`/`vertexArrayId` instead of `terrainShader.bind()`/`STATIC_VAO`,
+which are equivalent.
+
+Note on lightmap binding: in `PATCHED_SHADER` mode `quads.frag` derives
+`parameters.lightMap` from the per-quad light byte (`getLightmapUv(interData.y)`),
+not from the unit-1 lightmap texture, so `bindLightmap` correctness is not the
+opaque-black cause for the active patched Complementary path.
+
+Conclusion:
+
+- The opaque draw GL state and buffer/texture bindings are NOT the bug.
+- Because opaque and translucent share this parity-matched binding/state code,
+  the remaining opaque-vs-translucent difference is narrowed to:
+  - the opaque patched program vs translucent patched program output, or
+  - what `setupAndBindOpaque` resolves and binds differently from
+    `setupAndBindTranslucent`: the opaque framebuffer (`fb`) draw-target
+    attachments and, critically, the opaque draw-target main/alt texture
+    resolution via `getDrawBuffers(...) + getFlippedAfterPrepare()`.
+
+## Next candidate (Candidate 9): opaque draw-target main/alt flip resolution
+
+Not yet read. Binary question to answer next:
+
+```text
+Does the Forge opaque pass write Voxy albedo/material into the SAME physical
+shaderpack texture (main vs alt of target 0 and target 6) that Complementary's
+deferred lighting pass later reads?
+```
+
+A main/alt flip-state mismatch in `getDrawBuffers(...)` /
+`getFlippedAfterPrepare()` for the opaque targets would make solid LOD write to
+one texture while the shaderpack reads the other (cleared/black), producing
+exactly "solid LOD black while translucent is fine". Compare Forge
+`ForgeOriginalVoxyOculusRenderPipelineData.getDrawBuffers` /
+`ForgeOriginalVoxyNormalPipelineTargets` attach+flip handling against original
+`IrisVoxyRenderPipelineData` and the Iris `RenderTargets` flip semantics, and
+confirm the opaque framebuffer's depth attachment matches what the shaderpack
+deferred pass samples.
+
+### Candidate 9 result
+
+Status: `excluded` (no Forge-vs-original divergence found in this area).
+
+Source compared:
+
+- Original `IrisVoxyRenderPipelineData.buildPipeline` / `getDrawBuffers`
+  (lines 97-122) and `IrisVoxyRenderPipeline` constructor opaque/translucent
+  framebuffer attachment (lines 43-61), `setup`/`postOpaquePreTranslucent`
+  (lines 116-162).
+- Forge `ForgeOriginalVoxyOculusRenderPipelineData.buildPipeline` /
+  `getDrawBuffers` and `ForgeOriginalVoxyNormalPipelineTargets.resizeExternal`
+  / `attachDrawTargets`.
+
+Findings:
+
+- Draw-target resolution timing is parity: BOTH original and Forge resolve
+  `opaqueDrawTargets` / `translucentDrawTargets` ONCE at pipeline build via
+  `getDrawBuffers(targets, getFlippedAfterPrepare(), renderTargets)`, picking
+  `getAltTexture()` when the target is in the flipped set, else
+  `getMainTexture()`. So the earlier "main/alt flip resolved once vs per-frame"
+  concern is not a divergence.
+- Color attachment is parity: opaque targets attach to
+  `GL_COLOR_ATTACHMENT0 + i` in order, followed by an ordered
+  `glNamedFramebufferDrawBuffers`.
+- Depth split is structurally equivalent: original keeps separate opaque (`fb`)
+  and translucent (`fbTranslucent`) depth and blits opaque depth into the
+  translucent fb in `postOpaquePreTranslucent`; Forge keeps the opaque
+  depthStage depth and a separate `translucentDepthFramebuffer`.
+
+Residual sub-check (not yet read, lower priority): the opaque depth SEEDING from
+the source/vanilla framebuffer. Original `setup` calls
+`initDepthStencil(sourceFramebuffer, this.fb.framebuffer.id, ...)` to seed Voxy
+opaque depth from the already-rendered scene. If the Forge equivalent seeds wrong
+depth this would cause missing/occluded LOD, but seeding wrong depth tends to
+drop or z-fight fragments rather than render them uniformly black, so it does not
+cleanly explain "solid uniformly black while data is valid".
+
+## Candidate 10: Voxy opaque injection point vs Oculus deferred lighting passes
+
+Status: NOT yet read. Promoted to primary hypothesis by the Candidate 8/9 parity
+results.
+
+Reasoning:
+
+In the Iris/Oculus deferred model, Voxy's opaque pass does NOT blit its own
+colour to the screen. It writes albedo/material into the shaderpack's OWN gbuffer
+render targets (gbufferData0/target0, gbufferData6/target6 via
+`RenderTargets.getOrCreate`). The shaderpack's later DEFERRED lighting passes
+read those gbuffer textures and produce the final lit image. So solid LOD only
+becomes lit if the shaderpack's deferred passes run AFTER Voxy's opaque gbuffer
+write and actually process those pixels.
+
+Original Voxy injects at the Iris terrain/shadow render hook. The Forge port
+injects MDIC terrain draw from the Embeddium cutout hook
+(`ForgeOriginalVoxyEmbeddiumRenderSectionManagerMixin`). If that Forge injection
+point sits at a different place in the Oculus frame relative to the deferred
+lighting passes, Voxy's opaque gbuffer writes may never be lit (or be overwritten
+before deferred), producing exactly:
+
+```text
+solid LOD black (deferred-lit terrain not lit) while
+translucent LOD fine (composited forward, after deferred)
+```
+
+This fits ALL current evidence: valid quad light (skyMax=15), valid customId,
+patched shader used, opaque draw count nonzero, glError=0 — the data IS in the
+gbuffer; it simply is not lit.
+
+Binary question to answer next:
+
+```text
+Does the Oculus frame run its deferred lighting passes AFTER the Embeddium cutout
+hook that submits Voxy opaque, reading the same target0/target6 textures Voxy
+wrote? Or does Voxy opaque write the gbuffer at a point the deferred pass has
+already consumed (or never consumes for those pixels)?
+```
+
+Next read: the Forge hook ordering — where `ForgeOriginalVoxyEmbeddiumRenderSectionManagerMixin`
+/ the Oculus pipeline bridge submit Voxy opaque relative to Oculus
+`IrisRenderingPipeline` deferred/composite stages — compared with where original
+Voxy submits inside the Iris terrain pass.
+
+### Candidate 10 result
+
+Status: `blocked` on static analysis (no structural divergence found; remaining
+question is runtime-only).
+
+Source compared:
+
+- Original `VoxyRenderSystem.renderOpaque` (the entry called from the Sodium
+  chunk-render hook, `MixinDefaultChunkRenderer`).
+- Forge submission via `ForgeOriginalVoxyModelPipeline` from the Embeddium
+  cutout hook (corroborated by the Roman VIII entry in
+  `forge-1.20.1-formal-renderer-readiness-audit.md`).
+
+Findings:
+
+- Original `renderOpaque` runs the WHOLE Voxy pipeline in one hook call:
+  `preSetup` -> chunk-bound render -> `runPipeline(...)` (which internally does
+  setup -> opaque -> postOpaquePreTranslucent -> translucent -> finish) ->
+  post-frame dynamic work -> restore `oldFB` and clear texture/sampler/buffer
+  bindings + `IrisUtil.clearIrisSamplers()`. So original opaque and translucent
+  are NOT two separate engine passes; both run inside the single Sodium cutout
+  hook, writing into the shaderpack gbuffer, and the shaderpack's deferred passes
+  light them later in the Iris frame.
+- Forge runs the same documented full sequence
+  (`preSetup, setup, renderOpaque, buildDrawCalls, renderTemporal,
+  postOpaquePreTranslucent, renderTranslucent, finish`, then GL state restore)
+  from the Embeddium cutout hook.
+
+Conclusion:
+
+- There is NO "opaque and translucent split across different engine hooks"
+  divergence. The hook STRUCTURE is parity.
+- The only remaining part of this hypothesis is whether the Embeddium cutout
+  hook fires at the same point in the Oculus frame (relative to Oculus deferred
+  lighting passes) as the Sodium cutout hook does relative to Iris deferred
+  passes. That is a property of Oculus/Embeddium runtime frame ordering and
+  CANNOT be decided by reading Forge source alone.
+
+## Static avenue status and required runtime split
+
+After Candidates 4-10, every statically-checkable opaque-path suspect has been
+compared against original and found at parity, except the one real divergence
+already fixed (Candidate 7 sampler unbind). The remaining live hypotheses all
+depend on Oculus RUNTIME state and cannot be resolved by more source reading:
+
+```text
+- do the resolved opaqueDrawTargets texture ids actually equal the shaderpack
+  gbuffer textures the Oculus deferred pass later reads (runtime flip / Oculus
+  getOrCreate semantics)?
+- does the Embeddium cutout hook fire before Oculus deferred lighting (runtime
+  frame ordering)?
+```
+
+The next decisive evidence MUST be a runtime probe, not more static parity
+reading. Highest-value, lowest-risk runtime splits, in order:
+
+1. Shaderpack ON vs OFF split (no code change): does solid LOD render correctly
+   with NO shaderpack (normal `quads.frag` path)? If yes, the bug is isolated to
+   the Oculus-patched opaque path; if solid LOD is also black with no shaderpack,
+   the bug is upstream of shaderpack integration entirely. This single test
+   cleanly partitions the entire remaining search space.
+2. Constant-colour opaque probe: temporarily make the patched opaque fragment
+   write a constant bright colour to gbufferData0; if solid LOD shows that colour
+   we learn the deferred pass DOES process Voxy opaque pixels (so the bug is the
+   light/material inputs), if it stays black the deferred pass never lights Voxy
+   opaque pixels (gbuffer target / frame-ordering bug).
+3. Draw-target id audit: log the actual bound opaqueDrawTargets texture ids at
+   draw time vs the shaderpack gbuffer texture ids the deferred pass samples.
+
+## Runtime split #1 result: shaderpack ON vs OFF
+
+Status: `confirmed` that the black-solid-LOD bug is isolated to the Oculus
+patched opaque path.
+
+Run: client launched into quick-play world `新的世界` with
+`ComplementaryUnbound_r5.8.1.zip`, then shaders disabled in-session.
+
+Log corroboration (run/logs/latest.log):
+
+```text
+22:19:06  External Voxy opaque shader patch applied from Oculus shaderpack
+22:19:06  External Voxy translucent shader patch applied from Oculus shaderpack
+22:19:06  Using shaderpack: ComplementaryUnbound_r5.8.1.zip      (phase A: shaders ON)
+22:19:31  Shaders are disabled because enableShaders is set to false  (phase B: shaders OFF)
+```
+
+No Voxy GL error or render exception in either phase (only the known harmless
+`BIOME_PALE_GARDEN` / `endFlashIntensity` Oculus custom-uniform warnings).
+
+User visual result:
+
+- Phase A (shaders ON): LOD visible, solid LOD black (the bug).
+- Phase B (shaders OFF): **LOD disappears entirely; view is identical to vanilla
+  (no far LOD at all).**
+
+Conclusions:
+
+1. The black-solid-LOD bug lives entirely inside the Oculus patched opaque path.
+   It cannot be compared against a no-shaderpack baseline because, on Forge, the
+   no-shaderpack (Normal) pipeline does not draw LOD at all.
+2. Secondary finding (separate from the black bug): the Forge port currently
+   renders Voxy LOD ONLY through the Oculus/shaderpack path. Original Voxy
+   renders LOD with or without a shaderpack via `NormalRenderPipeline`. The Forge
+   no-shaderpack draw path appears unwired/non-drawing. Track separately; do not
+   let it derail the black-solid investigation.
+
+## Next: runtime split #2 (forced constant albedo probe)
+
+Because #1 isolated the bug to the Oculus opaque path, the decisive next split is
+whether the shaderpack deferred pass lights Voxy opaque pixels AT ALL, vs whether
+it lights them but with bad input values.
+
+Probe (temporary diagnostic, do NOT commit): in `voxy:lod/gl46/quads.frag`, force
+the albedo `colour` passed to `voxy_emitFragment(...)` to a constant bright value
+(e.g. `vec4(1,0,0,1)`) just before the patched-mode emit call. Then with the
+shaderpack ON:
+
+```text
+solid LOD shows red  -> deferred DOES light Voxy opaque pixels; bug is the
+                        light/material/colour INPUTS to the patch
+                        (sampledColour / tinting / lightMap delivery)
+solid LOD stays black -> deferred does NOT light Voxy opaque pixels; confirms a
+                        gbuffer draw-target main/alt mismatch (Candidate 9) or
+                        frame-ordering issue (Candidate 10) for the opaque targets
+```
+
+Note: the same `quads.frag` feeds both opaque and translucent (TRANSLUCENT
+define), so translucent/water will also turn red under this probe, which doubles
+as a control: water-red confirms the forced colour reaches the gbuffer.
+
+### Runtime split #2 result (forced white albedo + full lightmap)
+
+Status: `confirmed` that the shaderpack deferred pass lights Voxy opaque pixels.
+Candidates 9 (gbuffer main/alt mismatch) and 10 (frame ordering) are now
+`excluded`.
+
+Probe applied: `colour = vec4(1.0)` and lightMap forced to `vec2(1.0)` before the
+patched `voxy_emitFragment` (shaders ON, Complementary; log confirmed opaque +
+translucent patch applied).
+
+User visual result:
+
+- Solid LOD turned VERY WHITE (bright).
+- Water turned slightly whiter (expected: translucent alpha-blends).
+
+Conclusion:
+
+- The deferred lighting path DOES read and light Voxy opaque fragments. So the
+  black-solid bug is NOT a draw-target/ordering problem. It is bad INPUT values
+  reaching the patched fragment: `colour` (albedo) and/or
+  `getLightmapUv(interData.y)` (light).
+
+Leading hypothesis (re-linked to the original RenderDataFactory lighting model):
+
+- Fully-opaque solid faces clear self-light and take light from NEIGHBOURS
+  (adjacent voxel / neighbouring section face). Water/translucent keeps
+  self-light. So "solid black while water fine" fits an opaque-face neighbour
+  light that resolves to ~0 in the final packed quad.
+- Tension to resolve: the Candidate 1 audit reported sky=15 on sampled quads, so
+  either those samples were not the black opaque faces, or the light sits in a
+  bit position the shader does not read as `interData.y`, or self-light clearing
+  / neighbour selection happens after that audit.
+
+### Next: runtime split #2a (light-only probe) — decisive albedo-vs-light split
+
+Probe (temporary): force ONLY the lightMap to full (`vec2(1.0)`) and keep the
+REAL `colour` (atlas albedo) in the patched `voxy_emitFragment` call.
+
+```text
+solid LOD shows normal textured terrain, properly bright -> LIGHT was the bug
+    (opaque-face light / neighbour light resolves to ~0); fix is in light packing
+    / neighbour-light selection for opaque faces.
+solid LOD stays black/dark                               -> ALBEDO was the bug
+    (atlas albedo ~0 for opaque); fix is in model atlas sampling / colour for the
+    opaque path.
+```
+
+### Runtime split #2a result (light-only probe)
+
+Status: `confirmed` — LIGHT is the bug; albedo is fine.
+
+Probe: real `colour` (atlas albedo) kept, lightMap forced to `vec2(1.0)`.
+
+User visual result: solid LOD shows NORMAL block textures and is properly bright.
+
+Conclusion:
+
+- Atlas albedo / colour for opaque is correct (real textures show).
+- The light value reaching opaque faces in the real path
+  (`getLightmapUv(interData.y)`) is effectively ~0.
+- `quads.frag`, `quad_util.glsl`, `lighting.glsl` are SHARED resources with
+  original Voxy (original works with them), so the bug is NOT in the shader. It is
+  in the Forge Java side: either the per-quad light byte packed into the GPU
+  geometry attribute (`interData.y`) is wrong/zero for opaque faces, or the
+  upstream neighbour/air light feeding it is zero.
+
+Probe reverted in `quads.frag` after this result.
+
+Tension to resolve: Candidate 1's `auditQuadLighting` reported sky=15 on sampled
+quads. So either (a) the audit reads a different representation than the byte the
+shader consumes, (b) the sampled quads were not the black opaque faces, or (c) the
+light is correct in the quad record but mis-placed when packed into the GPU
+attribute buffer. Next step is a static compare of the Forge per-quad light
+packing into the geometry attribute vs original `RenderDataFactory`, and the
+shader's `getLightmapUv` nibble layout.
+
+## Root cause (located): opaque-face neighbour light is 0 from skipped air sections
+
+Status: `confirmed` by static trace + Probe A; bit layout fully parity.
+
+Light bit layout (shared shader == Forge Java == original):
+
+- shader `quad_format.glsl` `extractLightId` = `Eu32(quad, 8, 55)` → light is 8
+  bits at bit 55.
+- shader `lighting.glsl` `getLightmapUv(index)` = `vec2((index>>4)&0xF,
+  index&0xF)/15` → high nibble = block light, low nibble = sky light. Index 0
+  clamps to the minimum lightmap UV (≈ fully dark) → black.
+- Forge `ForgeOriginalVoxyRenderDataFactory.packPartialQuadData`:
+  `(state & ((0x1FF<<47)|(0xFF<<56))) >>> 1` moves the raw light byte from bit 56
+  to bit 55 (matches `extractLightId`), then `&= ~(_isFullyOpaque * (0xFF<<55))`
+  clears self light for fully-opaque blocks.
+- Forge opaque inner/outer geometry takes NEIGHBOUR light:
+  `(selfModel & ~LM) | (nextModel & LM)` with `LM = 0xFF<<55`. All parity with
+  original `RenderDataFactory`.
+
+So packing is correct. The opaque face light equals the adjacent AIR voxel's
+light. That air light is written by ingest only if the air section is converted.
+
+The skipped-air chain:
+
+- `VoxelIngestService` (current committed logic): a pure-air section with
+  `skyLight DataLayer == null` has `hasLightData(skyLight) == false`, so
+  `shouldIngestLoadedChunkSection` returns false → the section is NOT ingested →
+  its air voxels never get sky light written → opaque faces adjacent to it read
+  neighbour light 0 → `getLightmapUv(0)` → black.
+- In Minecraft, a null sky `DataLayer` above the surface is the implicit
+  "fully-lit sky (15)" optimisation, NOT "no light". Forge treats it as "no
+  data → skip", which is the defect.
+
+Why this reconciles all evidence:
+
+- Probe A (force full light) → solid bright: confirms the missing input is light.
+- Probe #2 (force white albedo + full light) → solid white: deferred lights it.
+- Candidate 1 audit `sky=15` was lvl=4 only (far, heavily downsampled); it never
+  sampled the near solid LOD whose opaque faces read 0 neighbour light.
+- Fix Attempt 1 only converts air sections when the light layer returns NON-EMPTY
+  data, so the common null-sky-DataLayer air sections above terrain are still
+  skipped — which is why it did not fix the visual.
+
+Proposed fix direction (needs original-parity check before editing):
+
+- When a pure-air section has a null sky `DataLayer` in a sky-lit dimension,
+  treat its sky light as the correct vanilla value (full 15 above the heightmap),
+  NOT as "no data → skip", so air voxels carry sky light and opaque neighbour
+  faces are lit.
+- CAUTION: null sky `DataLayer` does NOT always mean 15 (enclosed/underground
+  air is dark). The fix must not over-brighten caves/night. Per AGENTS.md parity
+  rule, first read how original Voxy ingest resolves air/sky light for null light
+  layers and match it.
+
+Next step: read original Voxy's ingest light handling (its equivalent of
+`VoxelIngestService` / `WorldConversionFactory` air light) to design a
+parity-correct fix for the null sky `DataLayer` case, then implement + runtime
+verify with a near-LOD opaque-quad light audit.
+
+### Precise defect line (located)
+
+`VoxelIngestService.getLightingSupplier` (line 324):
+
+```java
+boolean hasSkyLight = skyLight != null && !skyLight.isEmpty();
+...
+int sky = hasSkyLight ? Math.min(15, skyLight.get(x, y, z)) : 0;   // <-- 0 when sky layer null/empty
+return (byte) (sky | (block << 4));
+```
+
+So the defect is broader than "pure-air sections are skipped": ANY section whose
+sky `DataLayer` is null/empty has EVERY voxel's sky light written as 0, including
+its air voxels. `WorldConversionFactory.convert` then stores
+`Mapper.airWithLight(sky=0)`, and opaque neighbour faces read 0 → black.
+
+Minecraft semantics that make this fatal: a fully sky-exposed section ABOVE the
+terrain surface has NO stored sky `DataLayer` (it is implicitly 15; the sky light
+engine never stores a layer for it). Therefore:
+
+- the prior "defer non-air sections until the real sky DataLayer appears"
+  strategy can NEVER resolve for above-surface sections — MC will never store
+  one;
+- those air sections, when ingested, get sky = 0, so all opaque LOD faces facing
+  open sky are unlit → black.
+
+Disambiguation needed for the fix (cave safety): a null sky `DataLayer` means
+either "above surface → 15" or, in some cases, "enclosed/below → 0". A blunt
+null→15 default risks over-brightening enclosed sections. The robust source of
+truth is the light engine's computed value
+(`lightEngine.getLayerListener(SKY).getLightValue(pos)`), which returns 15 above
+the surface and 0 in caves even when the raw `DataLayer` is null. Note: a
+`Level.getBrightness(...)` fallback was previously removed from the ingest path
+(see deprecated-routes doc) — but applying the light-engine value ONLY when the
+sky layer is null (not wholesale) is different from that removed blanket
+fallback.
+
+## Fix applied (partial step, committed 2026-06-25) + verification status
+
+Fix in `VoxelIngestService` (compiles; committed as a partial step — it corrects
+ingest-time air sky light but does NOT by itself fix the visual; see the
+sky-only probe result below):
+
+- New `resolveUniformSkyLight(chunk, lightEngine, sectionPos, skyLight)`: when the
+  sky `DataLayer` is null/empty in a sky-lit dimension, sample
+  `lightEngine.getLayerListener(SKY).getLightValue(sectionPos.origin())` (15 above
+  surface, 0 in caves). A null layer is uniform, so one sample suffices.
+- `getLightingSupplier(blockLight, skyLight, skyDefault)`: uses `skyDefault`
+  instead of 0 when the sky layer is absent.
+- `shouldIngestLoadedChunkSection(..., skyDefault)`: also ingests pure-air
+  sections when `skyDefault > 0`, so above-surface air sections carry sky light to
+  provide neighbour light for opaque outer faces.
+
+Runtime verification with a temporary `voxy.debugIngestLight` log (since removed)
+CONFIRMED the fix works at ingest:
+
+```text
+above-surface pure-air sections: skyLayer=null  engineSkyOrigin=15  skyDefault=15
+surface sections:                skyLayer=data   skyTopSample=15
+underground solid sections:      skyLayer=empty  skyDefault=0   (correct)
+```
+
+So air voxels now carry sky=15 at ingest. The static trace (packPartialQuadData /
+applyQuadLight / inner+outer neighbour selection / Mipper.mip light handling) all
+preserves that light, so opaque faces SHOULD now be lit.
+
+BUT: re-test in `新的世界` still showed black far LOD.
+
+Leading hypothesis for the remaining black (verify first next session):
+
+```text
+`新的世界` is heavily pre-explored, so its far LOD (beyond MC render distance) is
+served from OLD persisted Voxy storage written with sky=0. Auto-ingest only
+re-processes chunks within MC render distance, so the visible far LOD is never
+re-ingested with the fix. The fix only affects newly-ingested chunks.
+```
+
+### Resume point (next session)
+
+1. DECISIVE TEST: launch, create a BRAND-NEW world (creative, daytime), enable
+   Complementary, fly out, look at far solid LOD.
+   - lit  -> fix works; the `新的世界` black is stale persisted far-LOD cache.
+     Then decide on cache invalidation / full re-ingest, or accept that new
+     terrain is correct.
+   - black -> the fix is correct at ingest but a downstream render bug remains;
+     next suspects: render geometry not regenerating from the updated WorldSection,
+     the 16^3 VoxelizedSection -> 32^3 WorldSection placement, or opaque OUTER
+     faces reading neighbour WorldSections that were not re-ingested.
+2. The fix is uncommitted in the working tree (VoxelIngestService.java) and
+   compiles. The XI investigation doc changes are also uncommitted. Decide whether
+   to commit the ingest fix once the new-world test confirms the visual.
+3. Excluded so far: shader/G-buffer/deferred (Probe #2), gbuffer target/ordering
+   (Candidate 9/10), albedo (Probe A), light bit layout (Mapper parity), sampler
+   unbind (Candidate 7, already committed). The bug is the opaque-face light value
+   reaching 0; the ingest fix addresses the upstream cause.
+
+## Sky-only lightmap probe result, 2026-06-25 (reframes the remaining bug)
+
+Two corrections to earlier reasoning:
+
+- The Voxy world is IN-MEMORY (`voxy-client.toml`: `enableWorldEngineSkeleton`,
+  no on-disk LOD storage). So the "stale persisted far-LOD cache" hypothesis is
+  WRONG: the black LOD was ingested THIS session with the fix and is still black.
+  The remaining bug is downstream, not cache.
+- Probe A / Probe #2 both forced `lightMap = vec2(1.0)`, which raises BOTH the
+  block AND sky lightmap coordinates, so their "lit" result did not isolate sky.
+
+Decisive sky-only probe: forced `lightMap = vec2(0.0, 1.0)` (block=0, sky=max) in
+the patched `voxy_emitFragment`. Daytime, Complementary on.
+
+User result: solid LOD is correctly lit ("normal") in daytime, whereas WITHOUT
+the probe daytime solid LOD is still black.
+
+Conclusions:
+
+- Sky lighting in the shaderpack deferred pass WORKS (forcing sky=max → correctly
+  lit). So the shaderpack sky uniform/contract is fine. Night-time is excluded
+  (the bug reproduces in daytime).
+- Therefore the real path's `getLightmapUv(interData.y)` is delivering a near-zero
+  SKY nibble to the opaque faces. The rendered opaque quad light byte has sky≈0
+  for the visible faces, even though the ingest fix makes air voxels sky=15 and
+  the lvl=4 audit (which DOES sample opaque buffers 2-7) showed sky=15.
+- So there is still a gap between "ingested WorldSection air sky=15" and "rendered
+  opaque quad sky=15" for the visible faces. The ingest fix is necessary but not
+  sufficient.
+
+### Next investigation (resume here)
+
+Find where the opaque face sky nibble becomes ~0 between WorldSection data and the
+emitted quad, for the VISIBLE levels (not just lvl=4 which audited as 15):
+
+1. Add a correct per-level opaque-quad light audit (sample buffers 2-7, i.e. skip
+   the first `offsets[2]` quads, OR log at the `generateYZOpaque*Geometry`
+   `putNext`/`applyQuadLight` site) and log sky distribution per `section.lvl`.
+2. Check the OUTER-face path: `generateYZOpaqueOuterGeometry` /
+   `acquireNeighborData` reads neighbour WorldSections via `world.acquire(...)`;
+   if a neighbour section is not yet ingested it is created empty (neighbourId=0 →
+   sky 0). Confirm whether visible faces are inner (same-section, should be 15) or
+   outer (neighbour-section, may be 0) — the "holes" symptom also points at
+   neighbour/culling.
+3. Re-check the 16^3 VoxelizedSection -> 32^3 WorldSection placement
+   (WorldUpdater.insertUpdate) preserves air light into the level-0 WorldSection
+   the renderer reads.

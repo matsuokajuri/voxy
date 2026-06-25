@@ -12,6 +12,7 @@ import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.level.chunk.DataLayer;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.LevelChunkSection;
+import net.minecraft.world.level.lighting.LevelLightEngine;
 import org.slf4j.LoggerFactory;
 
 public class VoxelIngestService {
@@ -168,7 +169,8 @@ public class VoxelIngestService {
                             .withDeferredLightSection());
                     continue;
                 }
-                if (shouldIngestLoadedChunkSection(section, blockLight, skyLight)) {
+                int skyDefault = resolveUniformSkyLight(chunk, lightEngine, sectionPos, skyLight);
+                if (shouldIngestLoadedChunkSection(section, blockLight, skyLight, skyDefault)) {
                     IngestStats sectionStats = rawIngestWithStats(
                             engine,
                             section,
@@ -177,7 +179,8 @@ public class VoxelIngestService {
                             chunk.getPos().z,
                             getLightingSupplier(
                                     blockLight == null ? null : blockLight.copy(),
-                                    skyLight == null ? null : skyLight.copy()))
+                                    skyLight == null ? null : skyLight.copy(),
+                                    skyDefault))
                             .withMissingLightSections(missingBlockLight ? 1 : 0, missingSkyLight ? 1 : 0);
                     stats = stats.add(sectionStats);
                 }
@@ -219,7 +222,8 @@ public class VoxelIngestService {
                     .withMissingLightSections(missingBlockLight ? 1 : 0, 1)
                     .withDeferredLightSection();
         }
-        if (!shouldIngestLoadedChunkSection(section, blockLight, skyLight)) {
+        int skyDefault = resolveUniformSkyLight(chunk, lightEngine, sectionPos, skyLight);
+        if (!shouldIngestLoadedChunkSection(section, blockLight, skyLight, skyDefault)) {
             return IngestStats.EMPTY;
         }
         return rawIngestWithStats(
@@ -230,7 +234,8 @@ public class VoxelIngestService {
                 chunk.getPos().z,
                 getLightingSupplier(
                         blockLight == null ? null : blockLight.copy(),
-                        skyLight == null ? null : skyLight.copy()))
+                        skyLight == null ? null : skyLight.copy(),
+                        skyDefault))
                 .withMissingLightSections(missingBlockLight ? 1 : 0, missingSkyLight ? 1 : 0);
     }
 
@@ -238,13 +243,29 @@ public class VoxelIngestService {
         return section != null;
     }
 
-    private static boolean shouldIngestLoadedChunkSection(LevelChunkSection section, DataLayer blockLight, DataLayer skyLight) {
+    private static boolean shouldIngestLoadedChunkSection(LevelChunkSection section, DataLayer blockLight, DataLayer skyLight, int skyDefault) {
         return shouldIngestSection(section, 0, 0, 0)
-                && (!section.hasOnlyAir() || hasLightData(blockLight) || hasLightData(skyLight));
+                && (!section.hasOnlyAir() || hasLightData(blockLight) || hasLightData(skyLight) || skyDefault > 0);
     }
 
     private static boolean hasLightData(DataLayer light) {
         return light != null && !light.isEmpty();
+    }
+
+    // When a section has no stored sky DataLayer, Minecraft leaves its sky light implicit: a fully
+    // sky-exposed section above the surface is uniformly 15 (the engine never stores a layer for it),
+    // while an enclosed section is 0. Sampling the light engine's computed value lets air voxels carry
+    // the correct sky light instead of defaulting to 0. The previous 0 default left opaque LOD faces,
+    // which take their light from the neighbouring air voxel, unlit/black against open sky.
+    private static int resolveUniformSkyLight(LevelChunk chunk, LevelLightEngine lightEngine, SectionPos sectionPos, DataLayer skyLight) {
+        if (skyLight != null && !skyLight.isEmpty()) {
+            return 0;//Per-voxel sky data is present, so no uniform default is needed.
+        }
+        if (!chunk.getLevel().dimensionType().hasSkyLight()) {
+            return 0;
+        }
+        //A null sky layer is uniform across the section, so one sample at the section origin is enough.
+        return lightEngine.getLayerListener(LightLayer.SKY).getLightValue(sectionPos.origin());
     }
 
     public static VoxelizedSection convertSection(WorldEngine engine, LevelChunkSection section, int x, int y, int z, DataLayer blockLight, DataLayer skyLight) {
@@ -322,14 +343,19 @@ public class VoxelIngestService {
     }
 
     private static ILightingSupplier getLightingSupplier(DataLayer blockLight, DataLayer skyLight) {
+        return getLightingSupplier(blockLight, skyLight, 0);
+    }
+
+    private static ILightingSupplier getLightingSupplier(DataLayer blockLight, DataLayer skyLight, int skyDefault) {
         boolean hasSkyLight = skyLight != null && !skyLight.isEmpty();
         boolean hasBlockLight = blockLight != null && !blockLight.isEmpty();
-        if (!hasSkyLight && !hasBlockLight) {
+        int skyConstant = Math.max(0, Math.min(15, skyDefault));
+        if (!hasSkyLight && !hasBlockLight && skyConstant == 0) {
             return NO_LIGHTING;
         }
         return (x, y, z) -> {
             int block = hasBlockLight ? Math.min(15, blockLight.get(x, y, z)) : 0;
-            int sky = hasSkyLight ? Math.min(15, skyLight.get(x, y, z)) : 0;
+            int sky = hasSkyLight ? Math.min(15, skyLight.get(x, y, z)) : skyConstant;
             return (byte) (sky | (block << 4));
         };
     }
