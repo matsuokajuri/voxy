@@ -1,5 +1,12 @@
 # Forge 1.20.1 black LoD bugfix plan, 2026-06-22
 
+> **RESOLVED 2026-06-25 (commit 24c5503c).** Root cause: `PATCHED_SHADER` was
+> defined only on the terrain fragment shader, not the vertex shader, so the two
+> stages disagreed on the attribute layout and the opaque light byte never reached
+> the fragment. See
+> `forge-1.20.1-xi-runtime-visual-investigation-notes-2026-06-23.md`. Kept as
+> historical record only.
+
 This document is the active, low-budget repair plan for the current black LoD
 runtime bug. It intentionally separates the black LoD issue from the secondary
 water/fluid issue so the next repair pass does not burn time switching between

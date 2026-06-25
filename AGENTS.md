@@ -1,155 +1,93 @@
 # AGENTS.md
 
-This repository is a Forge 1.20.1 port of Voxy. The project has now reset its
-implementation direction around one rule:
+Forge 1.20.1 port of Voxy. One rule governs everything:
 
-```text
-original Voxy source is the baseline
-```
+> **original Voxy source is the baseline**
 
 Every renderer, model, geometry, visibility, shader, command, lifecycle, and
-resource-management path must be traced back to the original Voxy
-implementation before code is written.
+resource path must be traced to the original Voxy implementation before code is
+written.
 
-## 1. Project identity
+## 1. Project
 
-- Project: Voxy Forge 1.20.1 renderer migration.
+- Voxy Forge 1.20.1 renderer migration. Goal: replicate original Voxy renderer
+  behavior and performance on Forge as closely as the platform allows.
 - Main branch: `forge-1.20.1-skeleton`.
 - Environment: Windows, PowerShell, Gradle, Java, Forge 1.20.1.
-- Hard Forge client prerequisites: Embeddium and Oculus. These replace the
-  original Fabric-side Sodium and Iris frontends for the Forge port.
-- Goal: replicate original Voxy renderer behavior and performance on Forge as
-  closely as the platform allows.
+- Hard client prerequisites: **Embeddium** (Forge replacement for Sodium) and
+  **Oculus** (Forge replacement for Iris / the shaderpack frontend). Dev runs
+  must load both.
 
-## 2. Supreme implementation rule
+## 2. Supreme rule: port, don't substitute
 
 When original Voxy has a component, data structure, shader contract, lifecycle
 owner, algorithm, or resource layout, the Forge path must port or adapt that
-exact mechanism.
-
-Required workflow:
+EXACT mechanism.
 
 ```text
 find original Voxy source
- -> inspect all dependencies down to the bottom layer
+ -> inspect dependencies down to the bottom layer
  -> map the exact ownership and data flow
  -> port/adapt to Forge 1.20.1
  -> document only unavoidable Forge-specific deviations
 ```
 
-Forbidden workflow:
+**Hard prohibition (applies to every rule below).** No fallback, preview,
+synthetic fixture, sample-set bridge, debug renderer, manual-QA command,
+offscreen validation, or one-off path may become the formal route or count as
+readiness. If such a path still exists in code it is historical/temporary
+evidence only — never extend it; remove deprecated paths in controlled batches
+once their references are gone.
 
-```text
-notice original Voxy has custom logic
- -> skip it
- -> substitute a convenient Forge/debug/sample/preview path
- -> call the result formal or ready
-```
+## 3. The chain to port
 
-No fallback, preview, synthetic fixture, sample-set bridge, debug renderer,
-manual QA command, or one-off validation path may become the formal route.
-
-## 3. Deprecated history
-
-Older H/I/J/K and K10-preview-era stage notes, proof renderers, sample-set
-bridges, synthetic fixtures, and QA-only paths are historical evidence only.
-They are deprecated as implementation direction.
-
-Historical code may remain temporarily if command/status references still need
-it for compilation, but new work must not extend it. Remove deprecated paths in
-controlled batches once their references are no longer needed.
-
-The current route is not "continue K preview work" or "continue L-stage work".
-The current route is:
-
-```text
-original Voxy parity remediation
-```
-
-New implementation rounds use Roman numerals only. Old alphanumeric labels such
-as H/I/J/K/L are historical labels and must not be used for new work. A large
-Roman numeral is one implementation round, and dotted Arabic suffixes are steps
-inside that same round, for example:
-
-```text
-V_ORIGINAL_MDIC_COMMAND_GENERATION_CHAIN
-V.1_ORIGINAL_MDIC_VIEWPORT_CMDGEN_INPUT_PARITY
-V.2_ORIGINAL_CMDGEN_COMP_OUTPUT_PARITY
-V.3_ORIGINAL_CMDGEN_READBACK_AND_BARRIER_AUDIT
-```
-
-Prefer coherent multi-step Roman rounds over one tiny commit per dotted step,
-while still compiling between risky steps and committing the completed round.
-
-## 4. Original Voxy chain to port
-
-The formal Forge route must converge on the original Voxy chain:
+The formal route converges on the original Voxy chain:
 
 ```text
 WorldEngine / WorldSection / Mapper
- -> ModelBakerySubsystem
- -> ModelFactory
- -> SoftwareModelTextureBakery / TextureUtils / ModelQueries
- -> ModelStore
- -> RenderGenerationService
- -> RenderDataFactory
- -> BuiltSection
- -> BasicAsyncGeometryManager
- -> BasicSectionGeometryData
- -> RenderDistanceTracker
- -> HierarchicalOcclusionTraverser
- -> ViewportSelector / Viewport
- -> MDICViewport
- -> cmdgen.comp
- -> MDICSectionRenderer
- -> original terrain shader contract
+ -> ModelBakerySubsystem -> ModelFactory
+ -> SoftwareModelTextureBakery / TextureUtils / ModelQueries -> ModelStore
+ -> RenderGenerationService -> RenderDataFactory -> BuiltSection
+ -> BasicAsyncGeometryManager -> BasicSectionGeometryData
+ -> RenderDistanceTracker -> HierarchicalOcclusionTraverser
+ -> ViewportSelector / Viewport -> MDICViewport
+ -> cmdgen.comp -> MDICSectionRenderer -> original terrain shader contract
 ```
 
-If a Forge-specific adapter is necessary, it must preserve the same ownership,
-data layout, lifecycle, and performance semantics unless a documented platform
-blocker makes exact parity impossible.
+A Forge adapter must preserve the same ownership, data layout, lifecycle, and
+performance semantics unless a documented platform blocker makes exact parity
+impossible.
 
-## 5. Parity audit requirements
+## 4. Reading code: CodeGraph first
 
-Code reading rule:
-
-- When inspecting or locating source code in this repository, use CodeGraph
-  first. Prefer `codegraph_explore` for subsystem questions, ownership/data-flow
-  tracing, and multi-symbol context; prefer `codegraph_node` for a specific
-  source file or symbol.
-- Use direct file reads, `rg`, or other shell tools only when CodeGraph reports
-  the target is not indexed, the target is not source code such as docs,
-  configs, resources, logs, or scripts, or a CodeGraph staleness warning needs
-  targeted confirmation.
-- If CodeGraph is unavailable or the repository is not indexed, say so and fall
-  back to the normal file tools.
+- Inspect/locate source with CodeGraph: `codegraph_explore` for subsystem
+  questions, ownership/data-flow tracing, and multi-symbol context;
+  `codegraph_node` for one file or symbol.
+- Use direct reads / `rg` only when CodeGraph reports the target is not indexed,
+  the target is non-source (docs, config, resources, logs, scripts), or a
+  staleness warning needs targeted confirmation. If CodeGraph is unavailable or
+  unindexed, say so and fall back.
 
 Before changing a subsystem:
 
-1. Read the original Voxy files that implement that subsystem.
+1. Read the original Voxy files that implement it.
 2. Read the original dependency classes that feed or consume it.
-3. Compare the current Forge path against the original path.
+3. Compare the Forge path against the original path.
 4. Remove or deprecate substitute logic instead of building on top of it.
 5. Update the parity audit when a deviation is found or fixed.
 
-Important audit document:
+Key docs:
 
 ```text
-docs/forge-1.20.1-original-voxy-full-render-path-parity-audit.md
+docs/forge-1.20.1-original-voxy-full-render-path-parity-audit.md   parity audit
+docs/forge-1.20.1-deprecated-prototype-routes.md                  deprecated inventory
+docs/forge-1.20.1-xi-runtime-visual-investigation-notes-2026-06-23.md  latest investigation trail
 ```
 
-Deprecated prototype inventory:
+## 5. Readiness
 
-```text
-docs/forge-1.20.1-deprecated-prototype-routes.md
-```
-
-## 6. Formal readiness rules
-
-Do not claim readiness from historical preview or validation evidence.
-
-These must stay false until the original Voxy-equivalent owner exists and is
-connected:
+Do not claim readiness from historical preview or validation evidence. These
+stay false until the original-Voxy-equivalent owner exists and is connected:
 
 ```text
 formalRendererReady=false
@@ -158,74 +96,83 @@ formalDrawPipelineReady=false
 earlyUsableLodRendererReady=false
 ```
 
-Preview-visible pixels, offscreen validation, sample atlas uploads, synthetic
-cmdgen results, and debug MDIC draws do not count as formal renderer readiness.
+Preview pixels, offscreen validation, sample atlas uploads, synthetic cmdgen
+results, and debug MDIC draws never count toward readiness.
 
-## 7. Validation cadence
+## 6. Round labels
 
-Use fewer game loops and larger coherent implementation batches, but do not
-skip verification.
+New work uses Roman-numeral rounds; dotted Arabic suffixes are steps inside one
+round (e.g. `V`, `V.1`, `V.2_ORIGINAL_CMDGEN_COMP_OUTPUT_PARITY`). Old H/I/J/K/L
+labels are historical only — do not reuse. Prefer coherent multi-step rounds over
+one tiny commit per step, while still compiling between risky steps and
+committing the completed round.
 
-Default validation:
+## 7. Validation
+
+Default after a code change:
 
 ```powershell
 git status
 .\gradlew compileJava
 ```
 
-Run `.\gradlew runClient` only when runtime behavior, Minecraft resource state,
-GL behavior, or visual output must be validated. If runClient is needed:
+Run `.\gradlew runClient` only when runtime, GL, visual, or Minecraft resource
+behavior must be validated:
 
-- use quick-play when available;
-- prefer backend/console/RCON command input if available;
-- if no backend command input exists, report that and use minimal in-game chat
-  commands;
+- use quick-play when available (default world `新的世界`;
+  `-PvoxyQuickPlayWorld=<folder>` for an ASCII world);
+- prefer backend/console command input; otherwise minimal in-game chat commands;
+- the agent does NOT inspect the screen — ask the user for visual confirmation
+  (LOD brightness day/night, water, vanilla/LOD seams, holes);
 - do not use ComputerUse unless the user explicitly permits it;
-- close Minecraft normally;
-- never kill Java unless explicitly instructed.
+- close Minecraft normally; never kill Java unless explicitly instructed.
 
-## 8. Git and artifact rules
+## 8. Git & artifacts
 
-Never commit:
+Never commit: `run/`, logs, crash reports, saves, local config, build outputs,
+`.idea/`, local IDE state, `.agents/`, `.codegraph/`, and `CODEX.md` (user-local
+instructions, unless the user explicitly asks). Use focused commit messages;
+report commit hash, build status, runClient status (if used), and final git
+status. Commit/push only when the user asks.
 
-```text
-run/
-logs
-crash reports
-saves
-local config
-build outputs
-.idea/
-.vscode local machine state
-```
+## 9. Docs
 
-`CODEX.md` may exist locally as user-provided instructions. Do not commit it
-unless the user explicitly asks.
-
-Use focused commit messages. Report commit hash, build status, runClient status
-if used, and final git status.
-
-## 9. Documentation rules
-
-Docs must reflect the current parity route. If an old document contains
-preview-era or fallback-era instructions, either rewrite it to the parity route
-or mark it superseded/deprecated.
-
-Do not preserve obsolete instructions as if they are still actionable.
+Docs must reflect the current parity route. Rewrite preview/fallback-era docs to
+the parity route or mark them superseded. Do not preserve obsolete instructions
+as if they are still actionable.
 
 ## 10. Working style
 
-Be direct. If current code diverges from original Voxy, say so. If parity
-requires rewriting thousands of lines, treat that as the correct direction
-rather than reaching for a shortcut.
+Be direct. If Forge code diverges from original Voxy, say so. If parity requires
+rewriting thousands of lines, treat that as the correct direction rather than a
+shortcut. When in doubt, inspect more original Voxy code before implementing.
 
-When in doubt, inspect more original Voxy code before implementing.
+## 11. RTK wrappers
 
-## 11. RTK wrapper
+Prefer for verbose shell commands: `rtk git status`, `rtk git diff`,
+`rtk test <build/test command>`, `rtk log <file>`. Do not read full
+`latest.log` / `debug.log` directly.
 
-When running verbose shell commands, prefer RTK wrappers:
-- use `rtk git status` instead of `git status`
-- use `rtk git diff` instead of `git diff`
-- use `rtk test <command>` for test/build commands
-- use `rtk log <file>` instead of reading full logs
-- do not read full latest.log/debug.log directly
+## 12. Hard-won lessons
+
+- **Shader-stage defines must match across vertex and fragment.** Voxy's terrain
+  vertex (`quads3.vert` / `quad_util.glsl`) and fragment (`quads.frag`) share
+  `#ifdef PATCHED_SHADER`, and their attribute layout depends on it. Any define
+  for the patched/shaderpack path MUST be applied to BOTH stages — exactly as
+  original `AbstractSectionRenderer` does by defining on the whole `Shader.make()`
+  builder. Defining it on only one stage silently scrambles attributes (light
+  byte vs tint) with no GL error. This was the 2026-06-25 black-solid-LOD bug.
+- **Diagnose with ground truth, not guesses.** For a runtime visual bug: read ONE
+  candidate -> classify it confirmed / excluded / blocked -> record that in the
+  investigation doc -> only then read the next. Get ground truth from gated audits
+  (e.g. `-Dvoxy.forge.auditLighting`) and from temporary, never-committed GPU/shader
+  probes (force a value, visualize an attribute as colour) instead of speculating.
+  Revert every probe before committing.
+- **The WorldEngine is in-memory** (`voxy-client.toml: enableWorldEngineSkeleton`).
+  There is no on-disk LOD cache; each session re-ingests as chunks load, and LOD
+  beyond MC render distance reflects only what was ingested this session.
+- **Two parallel geometry/MDIC paths exist.** The active render route is
+  `ForgeOriginalVoxy*`. A legacy `ForgeVoxy*` / `ForgeCpu*` / `ForgeMdicCommand*`
+  path is still wired into `ForgeVoxyInstance` and the Embeddium mixin but does
+  NOT drive the visible MDIC render. Do not extend the legacy path; retire it only
+  after tracing which path drives the visible render.

@@ -1,5 +1,10 @@
 # Forge 1.20.1 XI confirmed-defect repair plan, 2026-06-23
 
+> **Black-solid-LOD defect RESOLVED 2026-06-25 (commit 24c5503c)** —
+> `PATCHED_SHADER` was defined only on the terrain fragment shader, not the vertex
+> shader. See `forge-1.20.1-xi-runtime-visual-investigation-notes-2026-06-23.md`.
+> Any other defects listed here remain as historical record.
+
 This document is the repair plan for the confirmed defects recorded in:
 
 ```text
