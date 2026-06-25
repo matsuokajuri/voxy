@@ -1874,3 +1874,65 @@ emitted quad, for the VISIBLE levels (not just lvl=4 which audited as 15):
 3. Re-check the 16^3 VoxelizedSection -> 32^3 WorldSection placement
    (WorldUpdater.insertUpdate) preserves air light into the level-0 WorldSection
    the renderer reads.
+
+## ROOT CAUSE FOUND AND FIXED, 2026-06-25
+
+Status: `confirmed fixed` — solid LOD now renders correctly lit (user-verified).
+
+The black-solid-LOD bug was a `PATCHED_SHADER` define mismatch between the vertex
+and fragment terrain shaders in the Forge MDIC renderer.
+
+Evidence chain that pinpointed it:
+
+- Opaque-quad audit (sampling buffers 2-7) showed the CPU geometry quads carry
+  correct sky light (lvl4 sky=15, lower lvls avg 12-14). So ingest + geometry are
+  correct.
+- The geometry upload (sync `upload` + `memcpy.comp`) copies 8-byte records
+  verbatim, so the GPU buffer also carries sky=15.
+- A fragment visualization probe (`colour = vec4(block/15, sky/15, 0, 1)` with
+  forced full light) showed `interData.y` arriving at the fragment as 0 for
+  non-tinted blocks (stone/dirt) — i.e. the light byte never reached the fragment
+  even though the quad record had it.
+
+Why: `interData.y` is produced in the VERTEX shader by
+`quad_util.glsl`/`makeRemainingAttributes`, whose attribute layout is
+`#ifdef PATCHED_SHADER`-dependent:
+
+```text
+PATCHED_SHADER : attributes.x = lighting       (-> attributeData.y = light byte)
+non-patched    : attributes.x = packVec4(...)  ; attributes.y = conditionalTinting
+                 (-> attributeData.y = conditionalTinting, 0 for untinted blocks)
+```
+
+Forge `ForgeOriginalVoxyMdicSectionRenderer.compilePatchedOrNormal` defined
+`PATCHED_SHADER` ONLY on the fragment source:
+
+```java
+compileProgram(
+    vertexSource,                                          // <- missing PATCHED_SHADER
+    patched ? withDefines(fragmentSource, "PATCHED_SHADER", 1) : fragmentSource,
+    name);
+```
+
+So the vertex compiled NON-patched (putting `conditionalTinting` into
+`attributeData.y`) while the patched fragment read `interData.y` as the light
+byte. Untinted blocks (stone/dirt, `conditionalTinting==0`) -> light byte 0 ->
+black. Tinted blocks (grass, water) carried a non-zero tint value, which is why
+water/translucent appeared "fine" and masked the bug.
+
+Original Voxy avoids this because `AbstractSectionRenderer` applies
+`.defineIf("PATCHED_SHADER", patched)` to the whole `Shader.make()` builder, which
+covers BOTH the vertex and fragment stages.
+
+Fix (committed): define `PATCHED_SHADER` on the vertex source too when patched:
+
+```java
+compileProgram(
+    patched ? withDefines(vertexSource, "PATCHED_SHADER", 1) : vertexSource,
+    patched ? withDefines(fragmentSource, "PATCHED_SHADER", 1) : fragmentSource,
+    name);
+```
+
+Note: the earlier ingest sky-light fix (commit 82a48f5b) is still correct and
+necessary (air voxels must carry sky light for opaque neighbour faces), but it was
+not sufficient on its own because of this shader-define bug downstream.

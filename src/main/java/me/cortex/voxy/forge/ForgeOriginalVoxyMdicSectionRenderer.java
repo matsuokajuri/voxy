@@ -1066,7 +1066,7 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
         boolean patched = fragmentSource != normalFragmentSource;
         try {
             int programId = compileProgram(
-                    vertexSource,
+                    patched ? withDefines(vertexSource, "PATCHED_SHADER", 1) : vertexSource,
                     patched ? withDefines(fragmentSource, "PATCHED_SHADER", 1) : fragmentSource,
                     name);
             return new ShaderProgramBuildResult(programId, patched, patched, false);
