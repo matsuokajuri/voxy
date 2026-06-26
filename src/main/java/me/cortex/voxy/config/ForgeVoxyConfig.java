@@ -89,8 +89,8 @@ public final class ForgeVoxyConfig {
                 .comment("Maximum already-loaded chunks to ingest per client tick when auto ingest is enabled.")
                 .defineInRange("autoIngestMaxChunksPerTick", 1, 1, 8);
         AUTO_INGEST_COOLDOWN_TICKS = builder
-                .comment("Ticks between nearby chunk scans. Queued chunks may still be processed every tick.")
-                .defineInRange("autoIngestCooldownTicks", 20, 0, 200);
+                .comment("Ticks between stationary nearby-chunk scans. A scan also happens immediately when the player crosses into a new chunk, so this only bounds stationary rediscovery latency.")
+                .defineInRange("autoIngestCooldownTicks", 4, 0, 200);
 
         ENABLE_AUTO_CPU_MESH_BUILD = builder
                 .comment("Automatically builds cached CPU mesh for already-ingested nearby chunks.")

@@ -14,6 +14,10 @@ import java.util.HashSet;
 
 public final class ForgeChunkIngestManager {
     private static final int SUMMARY_INTERVAL_TICKS = 100;
+    //Per-tick wall-time budget for catching up the ingest backlog during fast movement. The queue is
+    //drained until at least the configured minimum is ingested and then up to this budget, so fast
+    //flight does not outrun ingest (fewer holes) while keeping per-tick main-thread cost bounded.
+    private static final long INGEST_CATCHUP_BUDGET_NANOS = 4_000_000L;
 
     private final ForgeVoxyInstance instance;
     private final ArrayDeque<Long> pendingChunks = new ArrayDeque<>();
@@ -23,6 +27,8 @@ public final class ForgeChunkIngestManager {
     private String activeDimension;
     private long tickCounter;
     private int scanCooldown;
+    private int lastScanChunkX = Integer.MIN_VALUE;
+    private int lastScanChunkZ = Integer.MIN_VALUE;
     private int windowChunks;
     private int windowConvertedSections;
     private int windowNonAirSections;
@@ -54,6 +60,8 @@ public final class ForgeChunkIngestManager {
         this.resetWindow();
         this.activeDimension = null;
         this.scanCooldown = 0;
+        this.lastScanChunkX = Integer.MIN_VALUE;
+        this.lastScanChunkZ = Integer.MIN_VALUE;
         this.lastAverageMs = 0.0;
         this.mixinChunkIngestAttempts = 0L;
         this.mixinChunkIngestUpdates = 0L;
@@ -127,12 +135,17 @@ public final class ForgeChunkIngestManager {
             this.activeDimension = dimension;
         }
 
-        if (this.scanCooldown <= 0) {
-            int centerChunkX = player.chunkPosition().x;
-            int centerChunkZ = player.chunkPosition().z;
+        int centerChunkX = player.chunkPosition().x;
+        int centerChunkZ = player.chunkPosition().z;
+        //Rescan immediately when the player crosses into a new chunk so newly loaded chunks ahead of
+        //fast movement are discovered without waiting out the cooldown, instead of leaving holes.
+        boolean movedChunk = centerChunkX != this.lastScanChunkX || centerChunkZ != this.lastScanChunkZ;
+        if (this.scanCooldown <= 0 || movedChunk) {
             int radius = getConfiguredRadius();
             this.pruneRecordsAround(centerChunkX, centerChunkZ, radius);
             this.enqueueNearbyLoadedChunks(level, centerChunkX, centerChunkZ, radius);
+            this.lastScanChunkX = centerChunkX;
+            this.lastScanChunkZ = centerChunkZ;
             this.scanCooldown = getConfiguredCooldownTicks();
         } else {
             this.scanCooldown--;
@@ -169,8 +182,10 @@ public final class ForgeChunkIngestManager {
     }
 
     private void processQueue(ClientLevel level, String dimension) {
-        int maxChunks = getConfiguredMaxChunksPerTick();
-        for (int processed = 0; processed < maxChunks && !this.pendingChunks.isEmpty(); processed++) {
+        int minChunks = getConfiguredMaxChunksPerTick();
+        long deadline = System.nanoTime() + INGEST_CATCHUP_BUDGET_NANOS;
+        int ingested = 0;
+        while (!this.pendingChunks.isEmpty() && (ingested < minChunks || System.nanoTime() < deadline)) {
             Long queuedKey = this.pendingChunks.pollFirst();
             if (queuedKey == null) {
                 break;
@@ -189,6 +204,7 @@ public final class ForgeChunkIngestManager {
             }
 
             this.ingestLoadedChunk(dimension, chunkX, chunkZ, chunk);
+            ingested++;
         }
     }
 
