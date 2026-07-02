@@ -31,6 +31,8 @@ public final class ForgeVoxyInstance {
     private final ForgeOriginalVoxyModelPipeline originalVoxyModelPipeline = new ForgeOriginalVoxyModelPipeline(this);
     private final SectionSavingService originalVoxySectionSavingService =
             new SectionSavingService(this.originalVoxyModelPipeline.getServiceManager());
+    private final VoxelIngestService originalVoxyIngestService =
+            new VoxelIngestService(this.originalVoxyModelPipeline.getServiceManager());
     private final ForgeChunkIngestManager chunkIngestManager = new ForgeChunkIngestManager(this);
     private final ForgeCpuMeshBuildManager cpuMeshBuildManager = new ForgeCpuMeshBuildManager(this);
     private final ForgeCpuMeshCache cpuMeshCache = new ForgeCpuMeshCache();
@@ -50,6 +52,7 @@ public final class ForgeVoxyInstance {
 
     public void register() {
         VoxelIngestService.setAutoIngestTarget(chunk -> this.getCurrentEngineOptional().orElse(null));
+        VoxelIngestService.setActiveService(this.originalVoxyIngestService);
         MinecraftForge.EVENT_BUS.addListener(this::onClientLogin);
         MinecraftForge.EVENT_BUS.addListener(this::onClientLogout);
         MinecraftForge.EVENT_BUS.addListener(this::onClientTick);
@@ -101,6 +104,10 @@ public final class ForgeVoxyInstance {
 
     public ForgeChunkIngestManager getChunkIngestManager() {
         return this.chunkIngestManager;
+    }
+
+    public VoxelIngestService getIngestService() {
+        return this.originalVoxyIngestService;
     }
 
     public ForgeCpuMeshBuildManager getCpuMeshBuildManager() {
@@ -274,6 +281,7 @@ public final class ForgeVoxyInstance {
 
         VoxyForge.LOGGER.info("Shutting down Voxy Forge original-parity instance.");
         VoxelIngestService.setAutoIngestTarget(null);
+        VoxelIngestService.setActiveService(null);
         this.chunkIngestManager.clear();
         this.cpuMeshBuildManager.clear();
         this.builtSectionBuildManager.clear();
@@ -293,6 +301,11 @@ public final class ForgeVoxyInstance {
             return;
         }
 
+        try {
+            this.originalVoxyIngestService.shutdown();
+        } catch (Exception e) {
+            VoxyForge.LOGGER.error("Failed to shut down Voxy ingest service.", e);
+        }
         try {
             this.originalVoxySectionSavingService.shutdown();
         } catch (Exception e) {

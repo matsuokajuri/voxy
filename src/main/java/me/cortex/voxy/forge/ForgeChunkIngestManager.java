@@ -14,9 +14,9 @@ import java.util.HashSet;
 
 public final class ForgeChunkIngestManager {
     private static final int SUMMARY_INTERVAL_TICKS = 100;
-    //Per-tick wall-time budget for catching up the ingest backlog during fast movement. The queue is
-    //drained until at least the configured minimum is ingested and then up to this budget, so fast
-    //flight does not outrun ingest (fewer holes) while keeping per-tick main-thread cost bounded.
+    //Per-tick wall-time budget for catching up the ingest backlog during fast movement. Since ingest
+    //conversion runs on the async "Ingest service" worker, the main thread only captures light data
+    //and enqueues; this budget bounds that capture cost per tick.
     private static final long INGEST_CATCHUP_BUDGET_NANOS = 4_000_000L;
 
     private final ForgeVoxyInstance instance;
@@ -32,7 +32,6 @@ public final class ForgeChunkIngestManager {
     private int windowChunks;
     private int windowConvertedSections;
     private int windowNonAirSections;
-    private int windowNonAirVoxels;
     private int windowStorageWrites;
     private int windowMissingBlockLightSections;
     private int windowMissingSkyLightSections;
@@ -229,7 +228,6 @@ public final class ForgeChunkIngestManager {
             this.windowChunks++;
             this.windowConvertedSections += stats.convertedSections();
             this.windowNonAirSections += stats.nonAirSections();
-            this.windowNonAirVoxels += stats.nonAirVoxels();
             this.windowStorageWrites += stats.storageWrites();
             this.windowMissingBlockLightSections += stats.missingBlockLightSections();
             this.windowMissingSkyLightSections += stats.missingSkyLightSections();
@@ -248,13 +246,13 @@ public final class ForgeChunkIngestManager {
 
         double averageMs = this.windowElapsedMs / this.windowChunks;
         VoxyForge.LOGGER.info(
-                "Voxy auto ingest {}: queued={} attempted={} converted={} nonAirSections={} nonAirVoxels={} storageWrites={} missingBlockLightSections={} missingSkyLightSections={} deferredLightSections={} avgMs={}",
+                "Voxy auto ingest {}: queued={} attempted={} enqueuedSections={} nonAirSections={} workerBacklog={} storageWrites={} missingBlockLightSections={} missingSkyLightSections={} deferredLightSections={} avgCaptureMs={}",
                 dimension,
                 this.pendingChunks.size(),
                 this.windowChunks,
                 this.windowConvertedSections,
                 this.windowNonAirSections,
-                this.windowNonAirVoxels,
+                this.instance.getIngestService().getTaskCount(),
                 this.windowStorageWrites,
                 this.windowMissingBlockLightSections,
                 this.windowMissingSkyLightSections,
@@ -270,7 +268,6 @@ public final class ForgeChunkIngestManager {
         this.windowChunks = 0;
         this.windowConvertedSections = 0;
         this.windowNonAirSections = 0;
-        this.windowNonAirVoxels = 0;
         this.windowStorageWrites = 0;
         this.windowMissingBlockLightSections = 0;
         this.windowMissingSkyLightSections = 0;

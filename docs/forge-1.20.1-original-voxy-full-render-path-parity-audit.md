@@ -1003,3 +1003,54 @@ actualRendererDrawEnabled=false
 formalDrawPipelineReady=false
 earlyUsableLodRendererReady=false
 ```
+
+## 2026-07-02 ingest-threading parity repair
+
+Investigating the remaining fast-movement issues (vanilla/LOD boundary hitch
+that scales with MC render distance) exposed an ingest ownership divergence
+that earlier audits missed:
+
+```text
+Original Voxy VoxelIngestService is a ServiceManager-backed async service
+("Ingest service", weight 5000). Callers (Sodium RenderSectionManager mixin,
+chunk add/remove hooks, block-update hooks) only capture light DataLayer
+copies on the game thread and enqueue IngestSection records; voxel conversion,
+mipping, and WorldUpdater.insertUpdate run on ingest worker threads.
+
+The Forge port had rewritten VoxelIngestService as fully synchronous statics:
+every chunk add/remove event and every ForgeChunkIngestManager catch-up tick
+ran convert + mip + insertUpdate on the client thread. Chunk load/unload event
+volume scales with render distance, which made the main-thread ingest cost
+scale with render distance during movement - matching the observed hitch.
+```
+
+The active fix restores the original ownership:
+
+```text
+VoxelIngestService again owns a ServiceManager service ("Ingest service",
+weight 5000, same UnifiedServiceThreadPool as SectionSavingService) with a
+ConcurrentLinkedDeque work queue.
+rawIngestWithStats(...) is now the enqueue point: game-thread callers still do
+live-engine checks, DataLayer copies, uniform-sky-light resolution, and
+missing/deferred-light accounting (all light-engine access stays on the game
+thread), then enqueue; the worker runs convert + mip + insertUpdate.
+Queued sections whose WorldEngine died before execution are dropped by an
+isLive() check on the worker.
+ForgeVoxyInstance constructs the service beside SectionSavingService, routes
+the static entry points to it via setActiveService, and shuts it down in the
+same terminal path as the saving service. Without an active service the old
+synchronous path remains as fallback.
+ForgeChunkIngestManager per-tick budget now bounds capture cost only; its
+summary log reports enqueuedSections and the ingest worker backlog instead of
+worker-side voxel counts, and avgMs is now capture-only (avgCaptureMs).
+```
+
+Validation:
+
+```text
+compileJava: passed
+runClient: pending user visual confirmation (boundary hitch during fast
+movement at high render distance)
+```
+
+No readiness flags are changed by this repair.

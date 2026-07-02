@@ -4,6 +4,7 @@ import me.cortex.voxy.common.voxelization.ILightingSupplier;
 import me.cortex.voxy.common.voxelization.VoxelizedSection;
 import me.cortex.voxy.common.voxelization.WorldConversionFactory;
 import me.cortex.voxy.common.voxelization.WorldVoxilizedSectionMipper;
+import me.cortex.voxy.common.thread.Service;
 import me.cortex.voxy.common.thread.ServiceManager;
 import me.cortex.voxy.common.world.WorldEngine;
 import me.cortex.voxy.common.world.WorldUpdater;
@@ -14,6 +15,8 @@ import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.minecraft.world.level.lighting.LevelLightEngine;
 import org.slf4j.LoggerFactory;
+
+import java.util.concurrent.ConcurrentLinkedDeque;
 
 public class VoxelIngestService {
     private static final org.slf4j.Logger LOGGER = LoggerFactory.getLogger("Voxy");
@@ -106,10 +109,34 @@ public class VoxelIngestService {
         }
     }
 
-    public VoxelIngestService() {
-    }
+    //Original Voxy runs voxel conversion + mip + world insertion on a dedicated "Ingest service"
+    // worker (ServiceManager weight 5000); the game thread only captures light data and enqueues.
+    // The record mirrors original's IngestSection with the resolved lighting supplier captured
+    // up front (it embeds the copied DataLayers and the Forge uniform-sky-light default, both of
+    // which must be sampled on the game thread).
+    private record PendingSection(WorldEngine engine, LevelChunkSection section, int x, int y, int z, ILightingSupplier lighting) {}
+
+    private static volatile VoxelIngestService activeService;
+
+    private final ConcurrentLinkedDeque<PendingSection> ingestQueue = new ConcurrentLinkedDeque<>();
+    private final Service service;
 
     public VoxelIngestService(ServiceManager serviceManager) {
+        this.service = serviceManager.createServiceNoCleanup(() -> this::processJob, 5000, "Ingest service");
+    }
+
+    private void processJob() {
+        var task = this.ingestQueue.pop();
+        //The owning world may have been closed between enqueue and execution (dimension change,
+        // logout); queued sections for it are simply dropped.
+        if (!task.engine.isLive()) {
+            return;
+        }
+        ingestNow(task.engine, task.section, task.x, task.y, task.z, task.lighting);
+    }
+
+    public static void setActiveService(VoxelIngestService service) {
+        activeService = service;
     }
 
     public static void setAutoIngestTarget(AutoIngestTarget target) {
@@ -308,6 +335,19 @@ public class VoxelIngestService {
         if (!shouldIngestSection(section, x, y, z)) {
             return IngestStats.EMPTY;
         }
+        VoxelIngestService service = activeService;
+        if (service != null && service.service.isLive()) {
+            engine.markActive();
+            service.ingestQueue.add(new PendingSection(engine, section, x, y, z, lightingSupplier));
+            service.service.execute();
+            //Conversion happens on the ingest worker, so voxel-level stats are unknown here;
+            // nonAirSections falls back to the section's own emptiness flag.
+            return new IngestStats(1, section.hasOnlyAir() ? 0 : 1, 0, 1, 0, 0, 0, 0);
+        }
+        return ingestNow(engine, section, x, y, z, lightingSupplier);
+    }
+
+    private static IngestStats ingestNow(WorldEngine engine, LevelChunkSection section, int x, int y, int z, ILightingSupplier lightingSupplier) {
         var voxelized = convertSection(engine, section, x, y, z, lightingSupplier);
         if (voxelized == null) {
             return IngestStats.EMPTY;
@@ -336,10 +376,17 @@ public class VoxelIngestService {
     }
 
     public int getTaskCount() {
-        return 0;
+        return this.service.numJobs();
     }
 
     public void shutdown() {
+        if (activeService == this) {
+            activeService = null;
+        }
+        if (this.service.isLive()) {
+            this.service.shutdown();
+        }
+        this.ingestQueue.clear();
     }
 
     private static ILightingSupplier getLightingSupplier(DataLayer blockLight, DataLayer skyLight) {
