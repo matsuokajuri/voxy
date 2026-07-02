@@ -1134,3 +1134,31 @@ polygon mode, and driver extension state
 ```
 
 No readiness flags are changed by this evidence update.
+
+## 2026-07-03 hook-adapter GL state coverage completed (XVIII)
+
+The remaining "full hook-adapter GL state coverage" blocker is addressed.
+OriginalVoxyRenderState now additionally captures and restores:
+
+```text
+depth func; blend src/dst RGB+alpha; stencil func/ref/value-mask/write-mask
+and fail/zfail/zpass ops; polygon mode; provoking vertex (Voxy sets
+GL_FIRST_VERTEX_CONVENTION and previously never restored the vanilla
+GL_LAST_VERTEX_CONVENTION); front face; indexed GL_UNIFORM_BUFFER bindings
+(first min(16, MAX) points; Voxy binds points 0..7); GL_DRAW_INDIRECT_BUFFER
+and GL_PARAMETER_BUFFER_ARB bindings; NV_representative_fragment_test enable
+state (guarded on driver capability).
+```
+
+Image bindings were listed in the original blocker text but the Voxy frame
+path performs no glBindImageTexture calls (verified by source inventory), so
+no coverage is required there.
+
+The remaining readiness blocker is now only:
+
+```text
+full outer VoxyRenderSystem lifecycle ownership (model-bakery setup inside
+the complete original constructor boundary)
+```
+
+No readiness flags are changed by this repair.

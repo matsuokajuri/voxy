@@ -41,9 +41,41 @@ import static org.lwjgl.opengl.GL11C.glGetInteger;
 import static org.lwjgl.opengl.GL11C.glGetIntegerv;
 import static org.lwjgl.opengl.GL11C.glIsEnabled;
 import static org.lwjgl.opengl.GL11C.glViewport;
+import static org.lwjgl.opengl.GL11C.GL_DEPTH_FUNC;
+import static org.lwjgl.opengl.GL11C.GL_FRONT_FACE;
+import static org.lwjgl.opengl.GL11C.GL_POLYGON_MODE;
+import static org.lwjgl.opengl.GL11C.GL_STENCIL_FAIL;
+import static org.lwjgl.opengl.GL11C.GL_STENCIL_FUNC;
+import static org.lwjgl.opengl.GL11C.GL_STENCIL_PASS_DEPTH_FAIL;
+import static org.lwjgl.opengl.GL11C.GL_STENCIL_PASS_DEPTH_PASS;
+import static org.lwjgl.opengl.GL11C.GL_STENCIL_REF;
+import static org.lwjgl.opengl.GL11C.GL_STENCIL_VALUE_MASK;
+import static org.lwjgl.opengl.GL11C.GL_STENCIL_WRITEMASK;
+import static org.lwjgl.opengl.GL11C.glDepthFunc;
+import static org.lwjgl.opengl.GL11C.glFrontFace;
+import static org.lwjgl.opengl.GL11C.glPolygonMode;
+import static org.lwjgl.opengl.GL11C.glStencilFunc;
+import static org.lwjgl.opengl.GL11C.glStencilMask;
+import static org.lwjgl.opengl.GL11C.glStencilOp;
+import static org.lwjgl.opengl.GL11C.GL_FRONT_AND_BACK;
 import static org.lwjgl.opengl.GL13C.GL_ACTIVE_TEXTURE;
 import static org.lwjgl.opengl.GL13C.GL_TEXTURE0;
 import static org.lwjgl.opengl.GL13C.glActiveTexture;
+import static org.lwjgl.opengl.GL14C.GL_BLEND_DST_ALPHA;
+import static org.lwjgl.opengl.GL14C.GL_BLEND_DST_RGB;
+import static org.lwjgl.opengl.GL14C.GL_BLEND_SRC_ALPHA;
+import static org.lwjgl.opengl.GL14C.GL_BLEND_SRC_RGB;
+import static org.lwjgl.opengl.GL14C.glBlendFuncSeparate;
+import static org.lwjgl.opengl.GL15C.glBindBuffer;
+import static org.lwjgl.opengl.GL31C.GL_MAX_UNIFORM_BUFFER_BINDINGS;
+import static org.lwjgl.opengl.GL31C.GL_UNIFORM_BUFFER;
+import static org.lwjgl.opengl.GL31C.GL_UNIFORM_BUFFER_BINDING;
+import static org.lwjgl.opengl.GL32C.GL_PROVOKING_VERTEX;
+import static org.lwjgl.opengl.GL32C.glProvokingVertex;
+import static org.lwjgl.opengl.GL40C.GL_DRAW_INDIRECT_BUFFER;
+import static org.lwjgl.opengl.GL40C.GL_DRAW_INDIRECT_BUFFER_BINDING;
+import static org.lwjgl.opengl.ARBIndirectParameters.GL_PARAMETER_BUFFER_ARB;
+import static org.lwjgl.opengl.ARBIndirectParameters.GL_PARAMETER_BUFFER_BINDING_ARB;
 import static org.lwjgl.opengl.GL20C.GL_CURRENT_PROGRAM;
 import static org.lwjgl.opengl.GL20C.GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS;
 import static org.lwjgl.opengl.GL20C.glUseProgram;
@@ -1679,6 +1711,14 @@ public final class ForgeOriginalVoxyModelPipeline {
             colorMask[2] = mask.get(2) != 0;
             colorMask[3] = mask.get(3) != 0;
         }
+        int uniformBindingCount = Math.min(16, Math.max(8, glGetInteger(GL_MAX_UNIFORM_BUFFER_BINDINGS)));
+        int[] uniformBufferBindings = new int[uniformBindingCount];
+        for (int i = 0; i < uniformBufferBindings.length; i++) {
+            uniformBufferBindings[i] = glGetIntegeri(GL_UNIFORM_BUFFER_BINDING, i);
+        }
+        int[] polygonMode = new int[2];
+        glGetIntegerv(GL_POLYGON_MODE, polygonMode);
+        boolean nvRepresentativeSupported = org.lwjgl.opengl.GL.getCapabilities().GL_NV_representative_fragment_test;
         return new OriginalVoxyRenderState(
                 glGetInteger(GL_DRAW_FRAMEBUFFER_BINDING),
                 glGetInteger(GL_READ_FRAMEBUFFER_BINDING),
@@ -1697,7 +1737,28 @@ public final class ForgeOriginalVoxyModelPipeline {
                 colorMask[1],
                 colorMask[2],
                 colorMask[3],
-                activeTexture);
+                activeTexture,
+                glGetInteger(GL_DEPTH_FUNC),
+                glGetInteger(GL_BLEND_SRC_RGB),
+                glGetInteger(GL_BLEND_DST_RGB),
+                glGetInteger(GL_BLEND_SRC_ALPHA),
+                glGetInteger(GL_BLEND_DST_ALPHA),
+                glGetInteger(GL_STENCIL_FUNC),
+                glGetInteger(GL_STENCIL_REF),
+                glGetInteger(GL_STENCIL_VALUE_MASK),
+                glGetInteger(GL_STENCIL_WRITEMASK),
+                glGetInteger(GL_STENCIL_FAIL),
+                glGetInteger(GL_STENCIL_PASS_DEPTH_FAIL),
+                glGetInteger(GL_STENCIL_PASS_DEPTH_PASS),
+                polygonMode[0],
+                glGetInteger(GL_PROVOKING_VERTEX),
+                glGetInteger(GL_FRONT_FACE),
+                uniformBufferBindings,
+                glGetInteger(GL_DRAW_INDIRECT_BUFFER_BINDING),
+                glGetInteger(GL_PARAMETER_BUFFER_BINDING_ARB),
+                nvRepresentativeSupported,
+                nvRepresentativeSupported
+                        && glIsEnabled(org.lwjgl.opengl.NVRepresentativeFragmentTest.GL_REPRESENTATIVE_FRAGMENT_TEST_NV));
     }
 
     private static void restoreOriginalVoxyRenderState(OriginalVoxyRenderState state) {
@@ -1733,6 +1794,27 @@ public final class ForgeOriginalVoxyModelPipeline {
                 glBindBufferBase(GL_SHADER_STORAGE_BUFFER, i, bufferBindings[i]);
             }
         }
+        glDepthFunc(state.depthFunc());
+        glBlendFuncSeparate(state.blendSrcRgb(), state.blendDstRgb(), state.blendSrcAlpha(), state.blendDstAlpha());
+        glStencilFunc(state.stencilFunc(), state.stencilRef(), state.stencilValueMask());
+        glStencilMask(state.stencilWriteMask());
+        glStencilOp(state.stencilFail(), state.stencilPassDepthFail(), state.stencilPassDepthPass());
+        glPolygonMode(GL_FRONT_AND_BACK, state.polygonMode());
+        glProvokingVertex(state.provokingVertex());
+        glFrontFace(state.frontFace());
+        int[] uniformBindings = state.uniformBufferBindings();
+        if (uniformBindings != null) {
+            for (int i = 0; i < uniformBindings.length; i++) {
+                glBindBufferBase(GL_UNIFORM_BUFFER, i, uniformBindings[i]);
+            }
+        }
+        glBindBuffer(GL_DRAW_INDIRECT_BUFFER, state.drawIndirectBuffer());
+        glBindBuffer(GL_PARAMETER_BUFFER_ARB, state.parameterBuffer());
+        if (state.nvRepresentativeFragmentTestSupported()) {
+            setCapability(
+                    org.lwjgl.opengl.NVRepresentativeFragmentTest.GL_REPRESENTATIVE_FRAGMENT_TEST_NV,
+                    state.nvRepresentativeFragmentTestEnabled());
+        }
         glActiveTexture(state.activeTexture());
     }
 
@@ -1762,7 +1844,27 @@ public final class ForgeOriginalVoxyModelPipeline {
             boolean colorMaskG,
             boolean colorMaskB,
             boolean colorMaskA,
-            int activeTexture) {
+            int activeTexture,
+            int depthFunc,
+            int blendSrcRgb,
+            int blendDstRgb,
+            int blendSrcAlpha,
+            int blendDstAlpha,
+            int stencilFunc,
+            int stencilRef,
+            int stencilValueMask,
+            int stencilWriteMask,
+            int stencilFail,
+            int stencilPassDepthFail,
+            int stencilPassDepthPass,
+            int polygonMode,
+            int provokingVertex,
+            int frontFace,
+            int[] uniformBufferBindings,
+            int drawIndirectBuffer,
+            int parameterBuffer,
+            boolean nvRepresentativeFragmentTestSupported,
+            boolean nvRepresentativeFragmentTestEnabled) {
     }
 
     private void processRenderDistanceTrackerOnRenderThread(double cameraX, double cameraZ) {
