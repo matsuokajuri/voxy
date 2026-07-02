@@ -24,7 +24,10 @@ final class ForgeOriginalVoxyViewportSelector {
         if (vivecraftPass != null) {
             return this.select(vivecraftPass, "vivecraft-" + String.valueOf(vivecraftPass));
         }
-        if (ForgeOculusShadowStateBridge.shadowActive()) {
+        //ShadowRenderer.ACTIVE is only reset by Oculus's own shadow pass; when the shaderpack is
+        // disabled mid-session the flag can be left stuck true, which would skip EVERY frame and
+        // blank all LOD. Only honour it while a shaderpack pipeline is actually active.
+        if (ForgeOculusShadowStateBridge.shadowActive() && ForgeOriginalVoxyOculusPipelineBridge.shaderpackActive()) {
             this.lastSelectedViewport = null;
             this.lastSelectedKey = "oculus-shadow-skipped";
             return null;

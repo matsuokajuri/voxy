@@ -58,6 +58,20 @@ final class ForgeOriginalVoxyRenderPipeline {
     private String lastLifecycleEvent = "created";
     private String lastFailureReason = "none";
 
+    private String lastLoggedFailureReason = "";
+
+    //Per-frame guard failures were previously recorded silently, which made "LOD invisible"
+    // states undiagnosable from logs. Log once per distinct reason (deduped against the last
+    // LOGGED reason, since lastFailureReason is reset to "none" by successful paths), never
+    // per frame.
+    private void recordSilentFailure(String reason) {
+        if (!reason.equals(this.lastLoggedFailureReason)) {
+            this.lastLoggedFailureReason = reason;
+            me.cortex.voxy.common.Logger.warn("Original Voxy render pipeline failure: " + reason);
+        }
+        this.lastFailureReason = reason;
+    }
+
     ForgeOriginalVoxyRenderPipeline(ForgeOriginalVoxyRenderProperties properties) {
         this.properties = properties;
         this.useEnvFog = ForgeVoxyConfig.ORIGINAL_VOXY_USE_ENVIRONMENTAL_FOG.get();
@@ -184,7 +198,7 @@ final class ForgeOriginalVoxyRenderPipeline {
         this.setupAndBindOpaqueCount++;
         this.lastLifecycleEvent = "setup-and-bind-opaque";
         if (!this.opaqueDrawTargetReady()) {
-            this.lastFailureReason = "original-normal-pipeline-colour-target-not-ready";
+            this.recordSilentFailure("original-normal-pipeline-colour-target-not-ready");
             return;
         }
         this.normalTargets.bindOpaqueFramebuffer(this.depthStage);
@@ -198,7 +212,7 @@ final class ForgeOriginalVoxyRenderPipeline {
         this.setupAndBindTranslucentCount++;
         this.lastLifecycleEvent = "setup-and-bind-translucent";
         if (!this.translucentDrawTargetReady()) {
-            this.lastFailureReason = "original-normal-pipeline-translucent-target-not-ready";
+            this.recordSilentFailure("original-normal-pipeline-translucent-target-not-ready");
             return;
         }
         this.normalTargets.bindTranslucentFramebuffer();
@@ -226,7 +240,7 @@ final class ForgeOriginalVoxyRenderPipeline {
             return;
         }
         if (!this.opaqueDrawTargetReady() || !this.translucentDrawTargetReady()) {
-            this.lastFailureReason = "original-normal-pipeline-ssao-target-not-ready";
+            this.recordSilentFailure("original-normal-pipeline-ssao-target-not-ready");
             return;
         }
         this.ssao.compute(
@@ -531,7 +545,7 @@ final class ForgeOriginalVoxyRenderPipeline {
 
     private void postOpaquePreTranslucentOculus(ForgeOriginalVoxyMdicViewport viewport) {
         if (!this.opaqueDrawTargetReady() || !this.translucentDrawTargetReady()) {
-            this.lastFailureReason = "oculus-shaderpack-draw-target-not-ready";
+            this.recordSilentFailure("oculus-shaderpack-draw-target-not-ready");
             return;
         }
         if (this.shaderDepthHackFixTransformBlit != null) {

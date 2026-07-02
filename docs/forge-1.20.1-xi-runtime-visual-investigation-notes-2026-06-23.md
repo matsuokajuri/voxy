@@ -1943,3 +1943,74 @@ compileProgram(
 Note: the earlier ingest sky-light fix (commit 82a48f5b) is still correct and
 necessary (air voxels must carry sky light for opaque neighbour faces), but it was
 not sufficient on its own because of this shader-define bug downstream.
+
+## 2026-07-02 diagonal slash artifact: precise re-report and binary split plan
+
+The XI-era "white diagonal marks" persist and are now precisely characterized
+by the user (spyglass observation):
+
+```text
+exact 45-degree line, 1px wide
+runs from the block face's top-left corner to the face center (half the block
+diagonal), then stops
+SOUTH-facing block faces only
+colour inverts with lighting: white in shadow, grey-black in direct light
+only on some blocks; nearly invisible without a spyglass
+```
+
+This rules out the XI rain/weather-streak hypothesis (weather moves, is not
+pinned to block geometry, and is not face-direction-specific). The inverted
+brightness is characteristic of a FLIPPED NORMAL under deferred shaderpack
+lighting; corner-to-center geometry is characteristic of a triangulation-edge
+sliver on merged quads.
+
+Relevant parity facts already established:
+- quads3.vert / quad_util.glsl / quads.frag are byte-identical to the dev
+  baseline; directional face tint is original behavior and compiled out on the
+  PATCHED_SHADER path.
+- opaque/translucent shader patches compile and are in use
+  (2026-07-02 audit: used=true fallback=false).
+
+Next decisive split (no code change): toggle the Oculus shaderpack OFF and
+re-observe the same faces.
+- still present -> core mesh/rasterization path (quad emission for Z-axis
+  faces, index winding, model atlas sampling);
+- gone -> patched-path gbuffer attributes (normal/material written for south
+  faces along the triangle edge).
+
+## 2026-07-02 no-shaderpack path restored; diagonal artifact classified as core-path
+
+While attempting the shaderpack ON/OFF split for the diagonal artifact, the
+OFF side turned out to be entirely broken (no LOD at all). Two stacked defects
+were found and fixed, verified in-game:
+
+```text
+1. ShadowRenderer.ACTIVE stuck true after disabling the shaderpack: nothing
+   resets the flag once the Oculus shadow pass stops running, so the viewport
+   selector treated EVERY frame as a shadow pass and skipped it (log ground
+   truth: 13556 consecutive viewport-null frame skips in the shaders-off
+   window). Fix: the shadow skip now also requires an active shaderpack
+   pipeline (Iris.getCurrentPack().isPresent()).
+2. Render-distance fog misclassified as environmental fog: 1.20.1 exposes one
+   combined fog state, so the terrain fog (end tracks the vanilla render
+   distance) satisfied fogCoversAllRendering every frame and the final blit
+   was skipped silently. Fix: ForgeOriginalVoxyFogParameters classifies fog
+   ending near the render distance as non-environmental; only genuinely dense
+   environmental fog (lava/blindness/nether-style) keeps real distances.
+```
+
+Supporting change: per-frame silent guard failures in the model pipeline and
+render pipeline now log once per distinct reason (deduped against the last
+logged reason; the legitimate per-frame Oculus shadow-pass skip is excluded),
+so "LOD invisible" states are diagnosable from logs.
+
+Binary split result for the diagonal artifact: with the no-shaderpack path
+restored, the user confirms the south-face corner-to-center diagonal line IS
+still present with shaders off. The artifact is therefore in the CORE
+mesh/rasterization path (quad emission, triangulation, atlas sampling), NOT in
+the Oculus patched-shader/gbuffer path.
+
+New observation (shaders off only): LOD ground shows scattered black dots and
+short lines. The normal path uniquely runs Voxy's own SSAO and final blit;
+suspects are SSAO sampling or atlas bleed on the normal path. Not yet
+investigated.

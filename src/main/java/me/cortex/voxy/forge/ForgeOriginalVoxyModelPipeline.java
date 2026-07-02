@@ -1074,6 +1074,20 @@ public final class ForgeOriginalVoxyModelPipeline {
             }
             if (viewport == null || traversal == null || sectionRenderer == null || renderPipeline == null || chunkBoundRenderer == null || geometryData == null
                     || modelStore == null || !traversal.ready()) {
+                //A null viewport during the Oculus shadow pass is the expected per-frame skip, not
+                // a failure state.
+                if (viewport == null && selector != null && "oculus-shadow-skipped".equals(selector.lastSelectedKey())) {
+                    return;
+                }
+                this.recordNonFatalFailure("visible-frame-not-ready:"
+                        + (viewport == null ? "viewport," : "")
+                        + (traversal == null ? "traversal," : "")
+                        + (sectionRenderer == null ? "sectionRenderer," : "")
+                        + (renderPipeline == null ? "renderPipeline," : "")
+                        + (chunkBoundRenderer == null ? "chunkBoundRenderer," : "")
+                        + (geometryData == null ? "geometryData," : "")
+                        + (modelStore == null ? "modelStore," : "")
+                        + (traversal != null && !traversal.ready() ? "traversal-not-ready" : ""));
                 return;
             }
             oldRenderState = captureOriginalVoxyRenderState();
@@ -1792,9 +1806,18 @@ public final class ForgeOriginalVoxyModelPipeline {
         return false;
     }
 
+    private String lastLoggedNonFatalReason = "";
+
     private synchronized void recordNonFatalFailure(String reason) {
         this.lastLifecycleEvent = "non-fatal-render-failure";
-        this.lastFailureReason = reason == null || reason.isBlank() ? "unspecified" : reason.replace(' ', '-');
+        String normalized = reason == null || reason.isBlank() ? "unspecified" : reason.replace(' ', '-');
+        //Dedup against the last LOGGED reason (lastFailureReason gets reset to "none" by successful
+        // paths between frames, which would defeat transition-based dedup and spam the log).
+        if (!normalized.equals(this.lastLoggedNonFatalReason)) {
+            this.lastLoggedNonFatalReason = normalized;
+            Logger.warn("Original Voxy non-fatal render failure: " + normalized);
+        }
+        this.lastFailureReason = normalized;
     }
 
     private static Matrix4f computeProjectionMat(

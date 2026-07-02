@@ -91,6 +91,9 @@ minecraft {
             if (project.hasProperty('voxyAuditChunkBound')) {
                 property 'voxy.forge.auditChunkBound', 'true'
             }
+            if (project.hasProperty('voxyAuditShaderpack')) {
+                property 'voxy.forge.auditShaderpack', 'true'
+            }
         }
 
         server {

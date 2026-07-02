@@ -1105,3 +1105,32 @@ no outline shader compile/link failures; chunk-bound render active all session
 ```
 
 No readiness flags are changed by this repair.
+
+## 2026-07-02 patched shaderpack terrain compile parity: blocker retired
+
+The 2026-06-22 blocker "patched shaderpack terrain compile parity:
+ComplementaryUnbound currently references uniforms/samplers that the
+Forge/Oculus bridge has not yet declared or bound" is stale. A
+`-Dvoxy.forge.auditShaderpack` run (exposed via
+`.\gradlew runClient -PvoxyAuditShaderpack`) on 2026-07-02 with
+ComplementaryUnbound r5.8.1 active reports:
+
+```text
+opaquePatch requested=true used=true fallback=false
+translucentPatch requested=true used=true fallback=false
+MDIC readback audit: opaquePatchUsed=true translucentPatchUsed=true glError=0
+```
+
+The XI-era repairs (shaderpack sampler unbind, PATCHED_SHADER define applied to
+both shader stages, Oculus sidecar source discovery) had already resolved the
+compile fallback; the audit list was never re-validated afterwards. The
+remaining readiness blockers are therefore:
+
+```text
+full outer VoxyRenderSystem lifecycle ownership (model-bakery setup inside the
+complete original constructor boundary)
+full hook-adapter GL state coverage for image bindings, indirect buffers,
+polygon mode, and driver extension state
+```
+
+No readiness flags are changed by this evidence update.
