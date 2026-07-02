@@ -2014,3 +2014,38 @@ New observation (shaders off only): LOD ground shows scattered black dots and
 short lines. The normal path uniquely runs Voxy's own SSAO and final blit;
 suspects are SSAO sampling or atlas bleed on the normal path. Not yet
 investigated.
+
+## 2026-07-02 diagonal slash root cause: software rasterizer seam (FIXED)
+
+Ruled out first (normalized diffs, all parity): ForgeOriginalVoxySharedIndexBuffer
+quad indices, ForgeOriginalVoxyRenderDataFactory quad emission (the Java-17
+expandBits/expandBitsLong replacements for Integer.expand/Long.expand were
+verified semantically identical).
+
+Root cause (Forge-specific; original 1.21 bakes on the GPU): the software model
+texture bakery rasterizer split each model quad into two triangles with
+inconsistent coverage rules - triangle A used strict > barycentric tests while
+triangle B used >= as the shared-diagonal tie-break, but the two triangles
+evaluate the shared edge with OPPOSITE vertex orders (edge(v3,v1) vs
+edge(v1,v3)), which are not exact float negations. Pixels near the diagonal
+could fail both tests, leaving a one-pixel diagonal row of clear-value texels
+baked into the face texture. Which faces leak depends on the per-face view
+matrix float values - hence "south faces, some models only". The user's
+spyglass screenshot showed the signature: identical slash position repeated on
+every face of the same model, confirming a texture-space (bake-time) defect.
+
+Fix: rasterize each quad with a single four-edge-function coverage test (the
+interior diagonal is no longer a coverage boundary); the triangle split is
+kept only to select a barycentric interpolation basis. User-verified: the
+diagonal slashes AND the no-shaderpack black ground dots/lines are both gone.
+
+Follow-up in the same round: with shaders off, vanilla's render-distance fog
+still faded terrain into a fog band before the LOD took over. Original Voxy
+disables vanilla render-distance fog outright while LOD rendering is active
+(MixinFogRenderer -> FogData.renderDistanceStart/End = infinity). Forge 1.20.1
+equivalent: a ViewportEvent.RenderFog listener in ForgeVoxyInstance extends
+FOG_TERRAIN/FogType.NONE fog to infinity when the LOD owner is active, no
+shaderpack is active, and the current fog is classified as render-distance fog
+(same near-render-distance test as ForgeOriginalVoxyFogParameters); water/
+lava/powder-snow fog by type and short environmental fog by distance are left
+untouched.

@@ -94,50 +94,81 @@ final class ForgeOriginalVoxySoftwareRasterizer {
         this.loadTransformPos(transform, addr, 1, this.scratch2, this.qmuv2);
         this.loadTransformPos(transform, addr, 2, this.scratch3, this.qmuv3);
         this.loadTransformPos(transform, addr, 3, this.scratch4, this.qmuv4);
-
-        this.scratchR1.set(this.scratch1);
-        this.scratchR2.set(this.scratch2);
-        this.scratchR3.set(this.scratch3);
-        this.a1.set(this.qmuv1);
-        this.a2.set(this.qmuv2);
-        this.a3.set(this.qmuv3);
-        this.rasterTriangle(false);
-
-        this.scratchR1.set(this.scratch3);
-        this.scratchR2.set(this.scratch4);
-        this.scratchR3.set(this.scratch1);
-        this.a1.set(this.qmuv3);
-        this.a2.set(this.qmuv4);
-        this.a3.set(this.qmuv1);
-        this.rasterTriangle(true);
+        this.rasterConvexQuad();
     }
 
-    private void rasterTriangle(boolean orZero) {
-        Vector3f v1 = this.scratchR1;
-        Vector3f v2 = this.scratchR2;
-        Vector3f v3 = this.scratchR3;
-        float area = edge(v1, v2, v3);
+    //Rasterize the whole quad with four edge functions instead of two independent triangles.
+    // Splitting into triangles made the shared diagonal a coverage boundary evaluated with
+    // OPPOSITE vertex orders by the two triangles; float rounding then let edge pixels fail both
+    // tests, leaving a one-pixel diagonal gap of clear-value texels baked into some face textures
+    // (the visible corner-to-center slash on LOD faces). With one coverage test per quad the
+    // interior diagonal cannot leak; the triangle split below is only used to pick a barycentric
+    // basis for attribute interpolation, which is continuous across the diagonal.
+    private void rasterConvexQuad() {
+        Vector3f v1 = this.scratch1;
+        Vector3f v2 = this.scratch2;
+        Vector3f v3 = this.scratch3;
+        Vector3f v4 = this.scratch4;
+        float areaA = edge(v1, v2, v3);
+        float areaB = edge(v3, v4, v1);
+        float area = areaA + areaB;
         if (area < 0 == this.cullBackFace) {
             return;
         }
         if (Math.abs(area) < 0.001F) {
             return;
         }
-        int minX = Math.max((int) Math.floor(Math.min(Math.min(v1.x, v2.x), v3.x)), 0);
-        int maxX = Math.min((int) Math.ceil(Math.max(Math.max(v1.x, v2.x), v3.x)), this.targetSize - 1);
-        int minY = Math.max((int) Math.floor(Math.min(Math.min(v1.y, v2.y), v3.y)), 0);
-        int maxY = Math.min((int) Math.ceil(Math.max(Math.max(v1.y, v2.y), v3.y)), this.targetSize - 1);
-        float invArea = 1.0F / area;
+        float sign = area > 0.0F ? 1.0F : -1.0F;
+        boolean triangleAUsable = Math.abs(areaA) >= 0.001F;
+        boolean triangleBUsable = Math.abs(areaB) >= 0.001F;
+        float invAreaA = triangleAUsable ? 1.0F / areaA : 0.0F;
+        float invAreaB = triangleBUsable ? 1.0F / areaB : 0.0F;
+        int minX = Math.max((int) Math.floor(Math.min(Math.min(v1.x, v2.x), Math.min(v3.x, v4.x))), 0);
+        int maxX = Math.min((int) Math.ceil(Math.max(Math.max(v1.x, v2.x), Math.max(v3.x, v4.x))), this.targetSize - 1);
+        int minY = Math.max((int) Math.floor(Math.min(Math.min(v1.y, v2.y), Math.min(v3.y, v4.y))), 0);
+        int maxY = Math.min((int) Math.ceil(Math.max(Math.max(v1.y, v2.y), Math.max(v3.y, v4.y))), this.targetSize - 1);
         for (int py = minY; py <= maxY; py++) {
             for (int px = minX; px <= maxX; px++) {
                 float cx = px + 0.5F;
                 float cy = py + 0.5F;
-                float w1 = edge(v2, v3, cx, cy) * invArea;
-                float w2 = edge(v3, v1, cx, cy) * invArea;
-                float w3 = 1.0F - w1 - w2;
-                if ((w1 > 0.0F && w2 > 0.0F && w3 > 0.0F) || (orZero && w1 >= 0.0F && w2 >= 0.0F && w3 >= 0.0F)) {
-                    this.rasterPixel(px + py * this.targetSize, w1, w2, w3);
+                //A degenerate edge (duplicated vertex encoding a triangle as a quad) evaluates to
+                // exactly 0 and so imposes no constraint under >= 0.
+                if (edge(v1, v2, cx, cy) * sign < 0.0F
+                        || edge(v2, v3, cx, cy) * sign < 0.0F
+                        || edge(v3, v4, cx, cy) * sign < 0.0F
+                        || edge(v4, v1, cx, cy) * sign < 0.0F) {
+                    continue;
                 }
+                boolean useTriangleA = triangleAUsable
+                        && (!triangleBUsable || edge(v3, v1, cx, cy) * sign >= 0.0F);
+                float w1;
+                float w2;
+                float w3;
+                if (useTriangleA) {
+                    w1 = edge(v2, v3, cx, cy) * invAreaA;
+                    w2 = edge(v3, v1, cx, cy) * invAreaA;
+                    w3 = 1.0F - w1 - w2;
+                    this.scratchR1.set(v1);
+                    this.scratchR2.set(v2);
+                    this.scratchR3.set(v3);
+                    this.a1.set(this.qmuv1);
+                    this.a2.set(this.qmuv2);
+                    this.a3.set(this.qmuv3);
+                } else {
+                    if (!triangleBUsable) {
+                        continue;
+                    }
+                    w1 = edge(v4, v1, cx, cy) * invAreaB;
+                    w2 = edge(v1, v3, cx, cy) * invAreaB;
+                    w3 = 1.0F - w1 - w2;
+                    this.scratchR1.set(v3);
+                    this.scratchR2.set(v4);
+                    this.scratchR3.set(v1);
+                    this.a1.set(this.qmuv3);
+                    this.a2.set(this.qmuv4);
+                    this.a3.set(this.qmuv1);
+                }
+                this.rasterPixel(px + py * this.targetSize, w1, w2, w3);
             }
         }
     }

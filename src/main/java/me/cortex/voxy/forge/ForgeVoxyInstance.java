@@ -58,11 +58,40 @@ public final class ForgeVoxyInstance {
         MinecraftForge.EVENT_BUS.addListener(this::onClientTick);
         MinecraftForge.EVENT_BUS.addListener(this::onRegisterClientCommands);
         MinecraftForge.EVENT_BUS.addListener(this::onGameShuttingDown);
+        MinecraftForge.EVENT_BUS.addListener(this::onRenderFog);
         this.chunkIngestManager.register();
         this.cpuMeshBuildManager.register();
         this.builtSectionBuildManager.register();
         this.sectionGeometryConsumeManager.register();
         this.gpuGeometryUploadManager.register();
+    }
+
+    //Original Voxy disables vanilla's render-distance fog whenever LOD rendering is active
+    // (MixinFogRenderer pushes FogData.renderDistanceStart/End to infinity) so vanilla terrain
+    // does not fade into a fog band right before the LOD picks up. 1.20.1 has one combined fog
+    // state, so this uses the same classification as ForgeOriginalVoxyFogParameters: only fog
+    // ending near the vanilla render distance is render-distance fog; environmental fog
+    // (water/lava/powder snow by type; blindness/darkness/nether thickness by short distance)
+    // is left untouched. The Oculus shaderpack path manages its own fog and is skipped.
+    private void onRenderFog(net.minecraftforge.client.event.ViewportEvent.RenderFog event) {
+        if (event.getMode() != net.minecraft.client.renderer.FogRenderer.FogMode.FOG_TERRAIN) {
+            return;
+        }
+        if (event.getType() != net.minecraft.world.level.material.FogType.NONE) {
+            return;
+        }
+        if (!ForgeVoxyConfig.ENABLED.get()
+                || !this.originalVoxyModelPipeline.isChunkBoundTrackerActive()
+                || ForgeOriginalVoxyOculusPipelineBridge.shaderpackActive()) {
+            return;
+        }
+        float renderDistanceBlocks = Minecraft.getInstance().options.getEffectiveRenderDistance() * 16.0F;
+        if (event.getFarPlaneDistance() < renderDistanceBlocks * 0.75F) {
+            return;
+        }
+        event.setNearPlaneDistance(9_999_999.0F);
+        event.setFarPlaneDistance(9_999_999.0F);
+        event.setCanceled(true);
     }
 
     public WorldEngine getActiveWorld() {
