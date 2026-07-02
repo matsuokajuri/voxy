@@ -34,14 +34,6 @@ public final class ForgeVoxyInstance {
     private final VoxelIngestService originalVoxyIngestService =
             new VoxelIngestService(this.originalVoxyModelPipeline.getServiceManager());
     private final ForgeChunkIngestManager chunkIngestManager = new ForgeChunkIngestManager(this);
-    private final ForgeCpuMeshBuildManager cpuMeshBuildManager = new ForgeCpuMeshBuildManager(this);
-    private final ForgeCpuMeshCache cpuMeshCache = new ForgeCpuMeshCache();
-    private final ForgeVoxyBuiltSectionBuildManager builtSectionBuildManager = new ForgeVoxyBuiltSectionBuildManager(this);
-    private final ForgeVoxyGeometryCache voxyGeometryCache = new ForgeVoxyGeometryCache();
-    private final ForgeSectionGeometryManager sectionGeometryManager = new ForgeSectionGeometryManager();
-    private final ForgeSectionGeometryConsumeManager sectionGeometryConsumeManager = new ForgeSectionGeometryConsumeManager(this);
-    private final ForgeGpuGeometryUploadManager gpuGeometryUploadManager = new ForgeGpuGeometryUploadManager(this);
-    private final ForgeMdicCommandManager mdicCommandManager = new ForgeMdicCommandManager(this);
     private final ForgeModelBridgeResourceReloadTracker modelBridgeResourceReloadTracker = new ForgeModelBridgeResourceReloadTracker(this);
     private final AtomicInteger storageWriteCount = new AtomicInteger();
     private String activeClientDimension;
@@ -60,10 +52,6 @@ public final class ForgeVoxyInstance {
         MinecraftForge.EVENT_BUS.addListener(this::onGameShuttingDown);
         MinecraftForge.EVENT_BUS.addListener(this::onRenderFog);
         this.chunkIngestManager.register();
-        this.cpuMeshBuildManager.register();
-        this.builtSectionBuildManager.register();
-        this.sectionGeometryConsumeManager.register();
-        this.gpuGeometryUploadManager.register();
     }
 
     //Original Voxy disables vanilla's render-distance fog whenever LOD rendering is active
@@ -138,38 +126,6 @@ public final class ForgeVoxyInstance {
         return this.originalVoxyIngestService;
     }
 
-    public ForgeCpuMeshBuildManager getCpuMeshBuildManager() {
-        return this.cpuMeshBuildManager;
-    }
-
-    public ForgeCpuMeshCache getCpuMeshCache() {
-        return this.cpuMeshCache;
-    }
-
-    public ForgeVoxyBuiltSectionBuildManager getBuiltSectionBuildManager() {
-        return this.builtSectionBuildManager;
-    }
-
-    public ForgeVoxyGeometryCache getVoxyGeometryCache() {
-        return this.voxyGeometryCache;
-    }
-
-    public ForgeSectionGeometryManager getSectionGeometryManager() {
-        return this.sectionGeometryManager;
-    }
-
-    public ForgeSectionGeometryConsumeManager getSectionGeometryConsumeManager() {
-        return this.sectionGeometryConsumeManager;
-    }
-
-    public ForgeGpuGeometryUploadManager getGpuGeometryUploadManager() {
-        return this.gpuGeometryUploadManager;
-    }
-
-    public ForgeMdicCommandManager getMdicCommandManager() {
-        return this.mdicCommandManager;
-    }
-
     public ForgeModelBridgeResourceReloadTracker getModelBridgeResourceReloadTracker() {
         return this.modelBridgeResourceReloadTracker;
     }
@@ -209,13 +165,6 @@ public final class ForgeVoxyInstance {
 
         this.activeClientDimension = dimension;
         this.chunkIngestManager.clear();
-        this.cpuMeshBuildManager.clear();
-        this.builtSectionBuildManager.clear();
-        this.cpuMeshCache.setActiveDimension(dimension);
-        this.voxyGeometryCache.setActiveDimension(dimension);
-        this.sectionGeometryConsumeManager.clear();
-        this.gpuGeometryUploadManager.clear();
-        this.mdicCommandManager.clear();
         this.modelBridgeResourceReloadTracker.clear();
         this.originalVoxyModelPipeline.markDimensionSwitch();
         this.closeActiveWorld();
@@ -282,13 +231,6 @@ public final class ForgeVoxyInstance {
 
     private void onClientLogout(ClientPlayerNetworkEvent.LoggingOut event) {
         this.chunkIngestManager.clear();
-        this.cpuMeshBuildManager.clear();
-        this.builtSectionBuildManager.clear();
-        this.cpuMeshCache.clear();
-        this.voxyGeometryCache.clear();
-        this.sectionGeometryConsumeManager.clear();
-        this.gpuGeometryUploadManager.clear();
-        this.mdicCommandManager.clear();
         this.modelBridgeResourceReloadTracker.clear();
         this.originalVoxyModelPipeline.markWorldUnload();
         this.activeClientDimension = null;
@@ -311,13 +253,6 @@ public final class ForgeVoxyInstance {
         VoxelIngestService.setAutoIngestTarget(null);
         VoxelIngestService.setActiveService(null);
         this.chunkIngestManager.clear();
-        this.cpuMeshBuildManager.clear();
-        this.builtSectionBuildManager.clear();
-        this.cpuMeshCache.clear();
-        this.voxyGeometryCache.clear();
-        this.sectionGeometryConsumeManager.clear();
-        this.gpuGeometryUploadManager.clear();
-        this.mdicCommandManager.clear();
         this.modelBridgeResourceReloadTracker.clear();
 
         boolean renderCleanupComplete = this.originalVoxyModelPipeline.shutdownForClientStop();

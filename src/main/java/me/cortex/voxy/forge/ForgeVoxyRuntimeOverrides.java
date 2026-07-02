@@ -73,10 +73,6 @@ public final class ForgeVoxyRuntimeOverrides {
         return ForgeVoxyConfig.MDIC_COMMAND_DIRECTIONAL_FACE_MASK_DEBUG_LOG.get();
     }
 
-    public static synchronized ForgeMdicCommandSelectionMode mdicCommandSelectionMode() {
-        return ForgeMdicCommandSelectionMode.parse(ForgeVoxyConfig.MDIC_COMMAND_SELECTION_MODE.get());
-    }
-
     public static synchronized int mdicCommandRenderDistanceChunks() {
         return Math.min(128, Math.max(1, ForgeVoxyConfig.MDIC_COMMAND_RENDER_DISTANCE_CHUNKS.get()));
     }

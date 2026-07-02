@@ -101,3 +101,28 @@ commands, `ForgeVoxyPresetCommands` owns the preset subtree,
 `ForgeVoxyModelPipelineCommands` owns model pipeline commands, and
 `ForgeVoxyFormalOwnerCommands` owns the K1-K4 formal owner skeleton command
 set.
+
+## 2026-07-03 batch executed: legacy geometry/MDIC island removed (XIX)
+
+The "affected first batch" renderer classes listed above were already deleted by
+fe4691dc. The remaining legacy geometry/MDIC path was mapped and found to be a
+CLOSED ISLAND referenced only by ForgeVoxyInstance (fields/getters/register/
+clear) plus intra-family references — no commands, no mixins, no active-path
+classes. Removed in one batch (38 classes):
+
+```text
+ForgeCpu* (except ForgeCpuMeshLayer), ForgeGpuGeometry*, ForgeMdicCommand*,
+ForgeMdicVisibility*, ForgeSectionGeometry*, ForgeVoxyBuiltSection*,
+ForgeVoxyGeometryBuffer, ForgeVoxyGeometryCache, ForgeVoxyGreedyMesher,
+ForgeVoxyQuadEncoder
+```
+
+Kept: ForgeCpuMeshLayer (used by the ACTIVE model pipeline:
+ForgeSoftwareModelTextureBakery.chooseLayer and ForgeOriginalVoxyModelFactory).
+ForgeVoxyRuntimeOverrides.mdicCommandSelectionMode() was removed with its only
+consumer; other mdicCommand*/legacy config entries in ForgeVoxyConfig are now
+unused but left declared to avoid config schema churn — they can go in a later
+sweep together with their config spec definitions.
+
+compileJava passed immediately after the deletion, confirming the island
+mapping.
