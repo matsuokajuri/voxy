@@ -283,6 +283,27 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
         this.lastLifecycleEvent = "readback-audit-requested";
     }
 
+    //Lightweight draw-count read for -Dvoxy.forge.auditChunkBound: {opaque, translucent, temporal,
+    // renderListSections}. Forces a GPU sync, so callers must rate-limit it.
+    int[] auditDrawCounts(ForgeOriginalVoxyMdicViewport viewport) {
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            long drawCountPtr = stack.nmalloc(DRAW_COUNT_WORDS * Integer.BYTES);
+            nglGetNamedBufferSubData(
+                    viewport.drawCountCallBuffer.id,
+                    0L,
+                    DRAW_COUNT_WORDS * (long) Integer.BYTES,
+                    drawCountPtr);
+            long renderListPtr = stack.nmalloc(Integer.BYTES);
+            nglGetNamedBufferSubData(viewport.indirectLookupBuffer.id, 0L, Integer.BYTES, renderListPtr);
+            return new int[] {
+                    MemoryUtil.memGetInt(drawCountPtr + 12L),
+                    MemoryUtil.memGetInt(drawCountPtr + 16L),
+                    MemoryUtil.memGetInt(drawCountPtr + 20L),
+                    MemoryUtil.memGetInt(renderListPtr)
+            };
+        }
+    }
+
     boolean hasAuditedDrawOutput() {
         return this.readbackAuditReady
                 && (this.opaqueDrawCount > 0

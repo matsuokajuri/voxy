@@ -1,10 +1,14 @@
 package me.cortex.voxy.forge;
 
+import com.mojang.blaze3d.systems.RenderSystem;
 import it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import me.cortex.voxy.common.util.MemoryBuffer;
+import me.jellysquid.mods.sodium.client.SodiumClientMod;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.SectionPos;
+import net.minecraft.util.Mth;
+import org.embeddedt.embeddium.render.ShaderModBridge;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
 import org.joml.Vector3i;
@@ -72,6 +76,10 @@ final class ForgeOriginalVoxyChunkBoundRenderer {
     private final int programId;
     private final int vertexArrayId;
     private boolean previousFrameWasExact;
+    //Audit counters for -Dvoxy.forge.auditChunkBound: applied mask deltas per boundary handoff.
+    private long addsAppliedCount;
+    private long removesAppliedCount;
+    private long depthBoundClearCount;
 
     ForgeOriginalVoxyChunkBoundRenderer(
             ForgeOriginalVoxyRenderProperties properties,
@@ -107,6 +115,18 @@ final class ForgeOriginalVoxyChunkBoundRenderer {
         return this.chunkToIndex.size();
     }
 
+    long addsAppliedCount() {
+        return this.addsAppliedCount;
+    }
+
+    long removesAppliedCount() {
+        return this.removesAppliedCount;
+    }
+
+    long depthBoundClearCount() {
+        return this.depthBoundClearCount;
+    }
+
     void render(ForgeOriginalVoxyMdicViewport viewport, boolean renderExactBounds) {
         if (this.previousFrameWasExact && !renderExactBounds) {
             long address = ForgeOriginalVoxyUploadStream.instance().upload(
@@ -121,15 +141,17 @@ final class ForgeOriginalVoxyChunkBoundRenderer {
         }
         if (!this.removeQueue.isEmpty()) {
             boolean wasEmpty = this.chunkToIndex.isEmpty();
+            this.removesAppliedCount += this.removeQueue.size();
             this.removeQueue.forEach(this::removeSectionNow);
             this.removeQueue.clear();
             if (this.chunkToIndex.isEmpty() && !wasEmpty) {
                 viewport.clearDepthBounding(this.properties.inverseClearDepth());
+                this.depthBoundClearCount++;
             }
         }
 
         int count = this.chunkToIndex.size();
-        float renderDistance = Minecraft.getInstance().options.getEffectiveRenderDistance() * 16.0F;
+        float renderDistance = embeddiumSearchDistanceBlocks();
         if (renderExactBounds) {
             long address = ForgeOriginalVoxyUploadStream.instance().upload(
                     this.chunkPosBuffer.id,
@@ -159,6 +181,7 @@ final class ForgeOriginalVoxyChunkBoundRenderer {
         this.renderInner(viewport, renderDistance, count);
 
         if (!this.addQueue.isEmpty()) {
+            this.addsAppliedCount += this.addQueue.size();
             this.addQueue.forEach(this::addSectionNow);
             this.addQueue.clear();
             ForgeOriginalVoxyUploadStream.instance().commit();
@@ -408,6 +431,22 @@ final class ForgeOriginalVoxyChunkBoundRenderer {
     private static void putPos(long ptr, long pos) {
         MemoryUtil.memPutInt(ptr, (int) (pos & 0xFFFFFFFFL));
         MemoryUtil.memPutInt(ptr + 4L, (int) ((pos >>> 32) & 0xFFFFFFFFL));
+    }
+
+    //The mask cull radius must equal the circle Embeddium actually draws, i.e.
+    // RenderSectionManager.getSearchDistance(): with fog occlusion enabled and no shaderpack the
+    // drawn circle shrinks to the opaque-fog end, and masking beyond it leaves masked-but-never-
+    // drawn holes. Original Voxy always used the full option render distance here.
+    private static float embeddiumSearchDistanceBlocks() {
+        float renderDistance = Minecraft.getInstance().options.getEffectiveRenderDistance() * 16.0F;
+        if (!SodiumClientMod.options().performance.useFogOcclusion || ShaderModBridge.areShadersEnabled()) {
+            return renderDistance;
+        }
+        float[] fogColor = RenderSystem.getShaderFogColor();
+        if (!Mth.equal(fogColor[3], 1.0F)) {
+            return renderDistance;
+        }
+        return Math.min(renderDistance, RenderSystem.getShaderFogEnd() + 0.5F);
     }
 
     private static MemoryBuffer generateByteCubesIndexBuffer(int count) {

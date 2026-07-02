@@ -1054,3 +1054,54 @@ movement at high render distance)
 ```
 
 No readiness flags are changed by this repair.
+
+## 2026-07-02 vanilla/LOD boundary mask contract repair (XIII)
+
+The vanilla/LOD boundary flicker (full ring while moving) plus 2-3 persistent
+stationary holes were diagnosed with two gated audits
+(`-Dvoxy.forge.auditChunkBound`; enable in dev runs with
+`.\gradlew runClient -PvoxyAuditChunkBound`):
+
+```text
+ForgeOriginalVoxyModelPipeline once-per-second handoff log: chunk-bound mask
+adds/removes/clears applied, tracked mask size, MDIC opaque/temporal/
+translucent draw counts, geometry queue depth.
+ForgeOriginalVoxyEmbeddiumRenderSectionManagerMixin once-per-second
+mask-coverage log: built-but-not-drawn sections classified into the
+render-distance ring sliver vs in-circle frustum/occlusion culls.
+```
+
+Ground truth: every stationary hole sample sat at nearest-corner distance
+96.0-97.3 blocks against a 96-block draw radius, stable for tens of seconds.
+That is exactly the band admitted by the mask cull's 1-block box expansion.
+
+Root cause (present in original Voxy as well; the shader is byte-identical to
+the dev-branch baseline): the chunk-bound mask culls its AABBs with a cylinder
+over the section box EXPANDED by 1 block (`outline.vsh` `icorner-1..icorner+17`),
+while Embeddium's `OcclusionCuller.isWithinRenderDistance` draws sections using
+the UNEXPANDED box. Sections inside the mask cylinder but outside the draw
+cylinder are masked-but-never-drawn: holes pinned to the render-distance
+circle, churning as a flickering ring while the player moves.
+
+Documented deviation from original (defect fix, keeping the mask contract
+"mask = exactly where Embeddium draws"):
+
+```text
+outline.vsh shouldRender now uses the unexpanded section box, matching
+Embeddium's distance cull exactly.
+ForgeOriginalVoxyChunkBoundRenderer now derives the mask radius from
+Embeddium's RenderSectionManager.getSearchDistance() semantics (fog-occlusion
+opaque-fog clamp when no shaderpack is active) instead of always using the
+full option render distance.
+```
+
+Validation:
+
+```text
+compileJava: passed
+runClient with shaderpack: user confirmed stationary boundary holes gone and
+the moving boundary ring flicker resolved
+no outline shader compile/link failures; chunk-bound render active all session
+```
+
+No readiness flags are changed by this repair.

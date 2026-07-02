@@ -17,7 +17,11 @@ ivec3 unpackPos(ivec2 pos) {
 }
 
 bool shouldRender(ivec3 icorner) {
-    vec3 corner = vec3(mix(mix(ivec3(0), icorner-1, greaterThan(icorner-1, ivec3(0))), icorner+17, lessThan(icorner+17, ivec3(0))))-negInnerBlock.xyz;
+    //Must match Embeddium OcclusionCuller.isWithinRenderDistance exactly (UNEXPANDED section box,
+    //cylindrical metric): a mask cube kept here for a section Embeddium distance-culls becomes a
+    //masked-but-never-drawn hole at the render-distance circle. Original Voxy expanded the box by
+    //1 block (icorner-1 / icorner+17), leaving a ~1.4-block ring of such holes.
+    vec3 corner = vec3(mix(mix(ivec3(0), icorner, greaterThan(icorner, ivec3(0))), icorner+16, lessThan(icorner+16, ivec3(0))))-negInnerBlock.xyz;
     bool visible = (corner.x*corner.x + corner.z*corner.z) < (negInnerBlock.w*negInnerBlock.w);
     visible = visible && abs(corner.y) < negInnerBlock.w;
     return visible;

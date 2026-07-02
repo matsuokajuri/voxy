@@ -71,6 +71,7 @@ public final class ForgeOriginalVoxyModelPipeline {
     private static final int MAX_MODEL_UPLOADS_PER_TICK = 2;
     private static final int ORIGINAL_GEOMETRY_MAX_SECTION_COUNT = 1 << 20;
     private static final boolean AUDIT_OCULUS_MATRICES = Boolean.getBoolean("voxy.forge.auditOculusMatrices");
+    private static final boolean AUDIT_CHUNK_BOUND = Boolean.getBoolean("voxy.forge.auditChunkBound");
 
     private final ForgeVoxyInstance instance;
     private final IntOpenHashSet seenBlockBakeRequests = new IntOpenHashSet(6000);
@@ -162,6 +163,11 @@ public final class ForgeOriginalVoxyModelPipeline {
     private long originalOculusViewportApplyCount;
     private int originalOculusMatrixAuditRuns;
     private boolean serviceThreadPoolShutdown;
+    private long chunkBoundAuditLastNanos;
+    private long chunkBoundAuditLastAdds;
+    private long chunkBoundAuditLastRemoves;
+    private long chunkBoundAuditLastClears;
+    private int chunkBoundAuditFramesInWindow;
 
     ForgeOriginalVoxyModelPipeline(ForgeVoxyInstance instance) {
         this.instance = instance;
@@ -1169,6 +1175,9 @@ public final class ForgeOriginalVoxyModelPipeline {
             renderPipeline.finish(viewport, oldFramebuffer, sourceWidth, sourceHeight, true);
             finishCalled = true;
             visibleFrameCompleted = true;
+            if (AUDIT_CHUNK_BOUND) {
+                this.auditChunkBoundHandoff(viewport, chunkBoundRenderer, sectionRenderer, geometrySync);
+            }
             synchronized (this) {
                 if (this.ownerReady && !this.stale) {
                     this.originalVisibleFrameRunCount++;
@@ -1506,6 +1515,45 @@ public final class ForgeOriginalVoxyModelPipeline {
                 this.lastFailureReason = factory.createStatusSnapshot().lastFailureReason();
             }
         }
+    }
+
+    //Gated by -Dvoxy.forge.auditChunkBound: once per second, log the vanilla/LOD boundary handoff
+    // ground truth — chunk-bound mask churn (adds/removes/clears applied), tracked mask size, and
+    // the MDIC draw counts (opaque/temporal/translucent + render-list sections). Boundary flicker
+    // hypotheses separate on these: abnormal mask churn (tracker feed), temporal count stuck at 0
+    // while opaque changes (temporal pass not covering newly exposed sections), or render-list
+    // collapse (traversal). The draw-count read forces a GPU sync, hence the 1s rate limit.
+    private void auditChunkBoundHandoff(
+            ForgeOriginalVoxyMdicViewport viewport,
+            ForgeOriginalVoxyChunkBoundRenderer chunkBoundRenderer,
+            ForgeOriginalVoxyMdicSectionRenderer sectionRenderer,
+            ForgeOriginalVoxyAsyncNodeGeometrySync geometrySync) {
+        this.chunkBoundAuditFramesInWindow++;
+        long now = System.nanoTime();
+        if (now - this.chunkBoundAuditLastNanos < 1_000_000_000L) {
+            return;
+        }
+        long adds = chunkBoundRenderer.addsAppliedCount();
+        long removes = chunkBoundRenderer.removesAppliedCount();
+        long clears = chunkBoundRenderer.depthBoundClearCount();
+        int[] drawCounts = sectionRenderer.auditDrawCounts(viewport);
+        Logger.info(String.format(
+                "Voxy chunk-bound audit: frames=%d tracked=%d adds/s=%d removes/s=%d clears/s=%d opaqueDraws=%d temporalDraws=%d translucentDraws=%d renderListSections=%d geometryQueue=%d",
+                this.chunkBoundAuditFramesInWindow,
+                chunkBoundRenderer.trackedSectionCount(),
+                adds - this.chunkBoundAuditLastAdds,
+                removes - this.chunkBoundAuditLastRemoves,
+                clears - this.chunkBoundAuditLastClears,
+                drawCounts[0],
+                drawCounts[2],
+                drawCounts[1],
+                drawCounts[3],
+                geometrySync == null ? -1 : geometrySync.createStatusSnapshot().queuedGeometryResults()));
+        this.chunkBoundAuditLastNanos = now;
+        this.chunkBoundAuditLastAdds = adds;
+        this.chunkBoundAuditLastRemoves = removes;
+        this.chunkBoundAuditLastClears = clears;
+        this.chunkBoundAuditFramesInWindow = 0;
     }
 
     private void runOriginalInnerPrimaryWorkBeforeTraversal(

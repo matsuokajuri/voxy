@@ -88,6 +88,9 @@ minecraft {
             property 'forge.enabledGameTestNamespaces', project.mod_id
             def quickPlayWorld = (project.findProperty('voxyQuickPlayWorld') ?: '新的世界').toString()
             args '--quickPlaySingleplayer', quickPlayWorld
+            if (project.hasProperty('voxyAuditChunkBound')) {
+                property 'voxy.forge.auditChunkBound', 'true'
+            }
         }
 
         server {
