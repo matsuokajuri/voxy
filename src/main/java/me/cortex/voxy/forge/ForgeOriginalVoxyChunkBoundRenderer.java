@@ -141,7 +141,6 @@ final class ForgeOriginalVoxyChunkBoundRenderer {
         }
         if (!this.removeQueue.isEmpty()) {
             boolean wasEmpty = this.chunkToIndex.isEmpty();
-            this.removesAppliedCount += this.removeQueue.size();
             this.removeQueue.forEach(this::removeSectionNow);
             this.removeQueue.clear();
             if (this.chunkToIndex.isEmpty() && !wasEmpty) {
@@ -181,7 +180,6 @@ final class ForgeOriginalVoxyChunkBoundRenderer {
         this.renderInner(viewport, renderDistance, count);
 
         if (!this.addQueue.isEmpty()) {
-            this.addsAppliedCount += this.addQueue.size();
             this.addQueue.forEach(this::addSectionNow);
             this.addQueue.clear();
             ForgeOriginalVoxyUploadStream.instance().commit();
@@ -274,6 +272,7 @@ final class ForgeOriginalVoxyChunkBoundRenderer {
         if (this.chunkToIndex.containsKey(pos)) {
             return;
         }
+        this.addsAppliedCount++;
         this.ensureChunkCapacity();
         int index = this.chunkToIndex.size();
         this.chunkToIndex.put(pos, index);
@@ -286,6 +285,7 @@ final class ForgeOriginalVoxyChunkBoundRenderer {
         if (index == -1) {
             return;
         }
+        this.removesAppliedCount++;
         if (index == this.chunkToIndex.size()) {
             return;
         }

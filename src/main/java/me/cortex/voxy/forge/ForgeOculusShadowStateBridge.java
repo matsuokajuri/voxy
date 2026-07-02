@@ -16,7 +16,10 @@ final class ForgeOculusShadowStateBridge {
             return false;
         }
         try {
-            return field.getBoolean(null);
+            //ShadowRenderer.ACTIVE is only ever reset by Oculus's own shadow pass; after the
+            // shaderpack is disabled mid-session the flag can be left stuck true. Gate on an
+            // actually-active shaderpack pipeline here so EVERY caller is protected.
+            return field.getBoolean(null) && ForgeOriginalVoxyOculusPipelineBridge.shaderpackActive();
         } catch (IllegalAccessException | RuntimeException ignored) {
             return false;
         }

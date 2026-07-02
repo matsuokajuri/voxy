@@ -44,6 +44,10 @@ final class ForgeOriginalVoxyBasicAsyncGeometryManager {
         this.allocationHeap.setLimit(geometryCapacityBytes / GEOMETRY_ELEMENT_SIZE);
     }
 
+    long geometryCapacityBytes() {
+        return this.geometryCapacityBytes;
+    }
+
     synchronized int uploadSection(ForgeOriginalVoxyBuiltSection section) {
         return this.uploadReplaceSection(-1, section);
     }

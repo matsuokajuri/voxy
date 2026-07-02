@@ -80,13 +80,12 @@ public final class ForgeVoxyInstance {
         if (event.getType() != net.minecraft.world.level.material.FogType.NONE) {
             return;
         }
-        if (!ForgeVoxyConfig.ENABLED.get()
+        if (!ForgeVoxyConfig.isEnabledEarlySafe()
                 || !this.originalVoxyModelPipeline.isChunkBoundTrackerActive()
                 || ForgeOriginalVoxyOculusPipelineBridge.shaderpackActive()) {
             return;
         }
-        float renderDistanceBlocks = Minecraft.getInstance().options.getEffectiveRenderDistance() * 16.0F;
-        if (event.getFarPlaneDistance() < renderDistanceBlocks * 0.75F) {
+        if (!ForgeOriginalVoxyFogParameters.isRenderDistanceFog(event.getFarPlaneDistance())) {
             return;
         }
         event.setNearPlaneDistance(9_999_999.0F);

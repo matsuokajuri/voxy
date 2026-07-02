@@ -126,7 +126,12 @@ public class VoxelIngestService {
     }
 
     private void processJob() {
-        var task = this.ingestQueue.pop();
+        //poll() instead of pop(): Service.steal()/drain() can retire permits without consuming
+        // queue entries, so a permit/queue mismatch must not crash the worker.
+        var task = this.ingestQueue.poll();
+        if (task == null) {
+            return;
+        }
         //The owning world may have been closed between enqueue and execution (dimension change,
         // logout); queued sections for it are simply dropped.
         if (!task.engine.isLive()) {

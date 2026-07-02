@@ -593,7 +593,10 @@ final class ForgeOriginalVoxyAsyncNodeGeometrySync {
     }
 
     private boolean hasGeometryCapacityHeadroom() {
-        return this.geometryManager.createStatusSnapshot(true).geometryCapacityBytes()
+        //Direct reads: this runs in the worker's 300-iteration upload loop condition, where the
+        // previous synchronized createStatusSnapshot call allocated a stats record per iteration
+        // (original AsyncNodeManager reads a cached capacity field here).
+        return this.geometryManager.geometryCapacityBytes()
                 - this.geometryManager.getGeometryUsedBytes() > GEOMETRY_UPLOAD_HEADROOM_BYTES;
     }
 

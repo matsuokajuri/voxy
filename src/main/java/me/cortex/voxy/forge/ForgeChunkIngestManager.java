@@ -32,7 +32,7 @@ public final class ForgeChunkIngestManager {
     private int windowChunks;
     private int windowConvertedSections;
     private int windowNonAirSections;
-    private int windowStorageWrites;
+    private int windowStorageWritesBase;
     private int windowMissingBlockLightSections;
     private int windowMissingSkyLightSections;
     private int windowDeferredLightSections;
@@ -216,10 +216,7 @@ public final class ForgeChunkIngestManager {
         long key = ChunkPos.asLong(chunkX, chunkZ);
         try {
             long start = System.nanoTime();
-            int storageWritesBefore = this.instance.getStorageWriteCount();
             var stats = VoxelIngestService.ingestChunkWithStats(engine.get(), chunk);
-            int storageWrites = this.instance.getStorageWriteCount() - storageWritesBefore;
-            stats = stats.withStorageWrites(storageWrites);
             double elapsedMs = (System.nanoTime() - start) / 1_000_000.0;
 
             if (!stats.deferred()) {
@@ -228,7 +225,6 @@ public final class ForgeChunkIngestManager {
             this.windowChunks++;
             this.windowConvertedSections += stats.convertedSections();
             this.windowNonAirSections += stats.nonAirSections();
-            this.windowStorageWrites += stats.storageWrites();
             this.windowMissingBlockLightSections += stats.missingBlockLightSections();
             this.windowMissingSkyLightSections += stats.missingSkyLightSections();
             this.windowDeferredLightSections += stats.deferredLightSections();
@@ -245,6 +241,11 @@ public final class ForgeChunkIngestManager {
         }
 
         double averageMs = this.windowElapsedMs / this.windowChunks;
+        //Ingest runs on the async worker now, so storage writes are measured as the global
+        // counter delta across the summary window instead of around each (now non-blocking) call.
+        int storageWriteCount = this.instance.getStorageWriteCount();
+        int windowStorageWriteDelta = storageWriteCount - this.windowStorageWritesBase;
+        this.windowStorageWritesBase = storageWriteCount;
         VoxyForge.LOGGER.info(
                 "Voxy auto ingest {}: queued={} attempted={} enqueuedSections={} nonAirSections={} workerBacklog={} storageWrites={} missingBlockLightSections={} missingSkyLightSections={} deferredLightSections={} avgCaptureMs={}",
                 dimension,
@@ -253,7 +254,7 @@ public final class ForgeChunkIngestManager {
                 this.windowConvertedSections,
                 this.windowNonAirSections,
                 this.instance.getIngestService().getTaskCount(),
-                this.windowStorageWrites,
+                windowStorageWriteDelta,
                 this.windowMissingBlockLightSections,
                 this.windowMissingSkyLightSections,
                 this.windowDeferredLightSections,
@@ -268,7 +269,7 @@ public final class ForgeChunkIngestManager {
         this.windowChunks = 0;
         this.windowConvertedSections = 0;
         this.windowNonAirSections = 0;
-        this.windowStorageWrites = 0;
+        this.windowStorageWritesBase = this.instance.getStorageWriteCount();
         this.windowMissingBlockLightSections = 0;
         this.windowMissingSkyLightSections = 0;
         this.windowDeferredLightSections = 0;

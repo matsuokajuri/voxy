@@ -286,6 +286,9 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
     //Lightweight draw-count read for -Dvoxy.forge.auditChunkBound: {opaque, translucent, temporal,
     // renderListSections}. Forces a GPU sync, so callers must rate-limit it.
     int[] auditDrawCounts(ForgeOriginalVoxyMdicViewport viewport) {
+        if (viewport.drawCountCallBuffer.id == 0 || viewport.indirectLookupBuffer.id == 0) {
+            return new int[4];
+        }
         try (MemoryStack stack = MemoryStack.stackPush()) {
             long drawCountPtr = stack.nmalloc(DRAW_COUNT_WORDS * Integer.BYTES);
             nglGetNamedBufferSubData(

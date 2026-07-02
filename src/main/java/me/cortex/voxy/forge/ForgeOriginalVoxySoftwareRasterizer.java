@@ -127,6 +127,10 @@ final class ForgeOriginalVoxySoftwareRasterizer {
         int maxX = Math.min((int) Math.ceil(Math.max(Math.max(v1.x, v2.x), Math.max(v3.x, v4.x))), this.targetSize - 1);
         int minY = Math.max((int) Math.floor(Math.min(Math.min(v1.y, v2.y), Math.min(v3.y, v4.y))), 0);
         int maxY = Math.min((int) Math.ceil(Math.max(Math.max(v1.y, v2.y), Math.max(v3.y, v4.y))), this.targetSize - 1);
+        //0 = none selected yet, 1 = triangle A basis loaded, 2 = triangle B basis loaded. The
+        // interpolation basis registers are only reloaded when the pixel crosses the diagonal
+        // (at most twice per scanline), not per pixel.
+        int loadedBasis = 0;
         for (int py = minY; py <= maxY; py++) {
             for (int px = minX; px <= maxX; px++) {
                 float cx = px + 0.5F;
@@ -148,12 +152,15 @@ final class ForgeOriginalVoxySoftwareRasterizer {
                     w1 = edge(v2, v3, cx, cy) * invAreaA;
                     w2 = edge(v3, v1, cx, cy) * invAreaA;
                     w3 = 1.0F - w1 - w2;
-                    this.scratchR1.set(v1);
-                    this.scratchR2.set(v2);
-                    this.scratchR3.set(v3);
-                    this.a1.set(this.qmuv1);
-                    this.a2.set(this.qmuv2);
-                    this.a3.set(this.qmuv3);
+                    if (loadedBasis != 1) {
+                        loadedBasis = 1;
+                        this.scratchR1.set(v1);
+                        this.scratchR2.set(v2);
+                        this.scratchR3.set(v3);
+                        this.a1.set(this.qmuv1);
+                        this.a2.set(this.qmuv2);
+                        this.a3.set(this.qmuv3);
+                    }
                 } else {
                     if (!triangleBUsable) {
                         continue;
@@ -161,12 +168,15 @@ final class ForgeOriginalVoxySoftwareRasterizer {
                     w1 = edge(v4, v1, cx, cy) * invAreaB;
                     w2 = edge(v1, v3, cx, cy) * invAreaB;
                     w3 = 1.0F - w1 - w2;
-                    this.scratchR1.set(v3);
-                    this.scratchR2.set(v4);
-                    this.scratchR3.set(v1);
-                    this.a1.set(this.qmuv3);
-                    this.a2.set(this.qmuv4);
-                    this.a3.set(this.qmuv1);
+                    if (loadedBasis != 2) {
+                        loadedBasis = 2;
+                        this.scratchR1.set(v3);
+                        this.scratchR2.set(v4);
+                        this.scratchR3.set(v1);
+                        this.a1.set(this.qmuv3);
+                        this.a2.set(this.qmuv4);
+                        this.a3.set(this.qmuv1);
+                    }
                 }
                 this.rasterPixel(px + py * this.targetSize, w1, w2, w3);
             }

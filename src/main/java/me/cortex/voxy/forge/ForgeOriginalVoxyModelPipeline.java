@@ -1076,7 +1076,7 @@ public final class ForgeOriginalVoxyModelPipeline {
                     || modelStore == null || !traversal.ready()) {
                 //A null viewport during the Oculus shadow pass is the expected per-frame skip, not
                 // a failure state.
-                if (viewport == null && selector != null && "oculus-shadow-skipped".equals(selector.lastSelectedKey())) {
+                if (viewport == null && selector != null && selector.lastSelectionWasOculusShadowSkip()) {
                     return;
                 }
                 this.recordNonFatalFailure("visible-frame-not-ready:"

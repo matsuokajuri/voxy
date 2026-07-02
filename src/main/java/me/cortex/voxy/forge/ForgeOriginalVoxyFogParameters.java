@@ -33,17 +33,25 @@ record ForgeOriginalVoxyFogParameters(
         float alpha = colour.length > 3 ? colour[3] : 1.0F;
 
         boolean fogIsVeryClose = end < 10.0F;
-        //1.20.1 exposes a single fog state, so the terrain render-distance fog (its end tracks the
-        // vanilla render distance) arrives here too. Original Voxy's environmentalEnd carries only
-        // genuinely environmental fog (weather/lava/nether); letting render-distance fog through
-        // made fogCoversAllRendering true every frame on the no-shaderpack path, which skipped the
-        // final blit and blanked all LOD. Classify near-render-distance fog as non-environmental.
-        float renderDistanceBlocks = Minecraft.getInstance().options.getEffectiveRenderDistance() * 16.0F;
-        boolean renderDistanceFog = end >= renderDistanceBlocks * 0.75F;
-        if ((!useEnvironmentalFog || renderDistanceFog) && !fogIsVeryClose) {
+        if ((!useEnvironmentalFog || isRenderDistanceFog(end)) && !fogIsVeryClose) {
             start = DISABLED_FOG_DISTANCE;
             end = DISABLED_FOG_DISTANCE;
         }
         return new ForgeOriginalVoxyFogParameters(start, end, red, green, blue, alpha);
+    }
+
+    static float vanillaRenderDistanceBlocks() {
+        return Minecraft.getInstance().options.getEffectiveRenderDistance() * 16.0F;
+    }
+
+    //1.20.1 exposes a single fog state, so the terrain render-distance fog (its end tracks the
+    // vanilla render distance) is indistinguishable from environmental fog by source. Original
+    // Voxy's environmentalEnd carries only genuinely environmental fog (weather/lava/nether);
+    // classifying render-distance fog as environmental made fogCoversAllRendering true every
+    // frame on the no-shaderpack path, which skipped the final blit and blanked all LOD. This
+    // single classification is shared with the ViewportEvent.RenderFog listener in
+    // ForgeVoxyInstance so the two sites cannot diverge.
+    static boolean isRenderDistanceFog(float fogEnd) {
+        return fogEnd >= vanillaRenderDistanceBlocks() * 0.75F;
     }
 }

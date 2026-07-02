@@ -6,6 +6,7 @@ import java.util.function.Supplier;
 
 final class ForgeOriginalVoxyViewportSelector {
     private static final Object DEFAULT_VIEWPORT_KEY = new Object();
+    static final String OCULUS_SHADOW_SKIPPED_KEY = "oculus-shadow-skipped";
 
     private final Supplier<ForgeOriginalVoxyMdicViewport> creator;
     private final ForgeOriginalVoxyMdicViewport defaultViewport;
@@ -24,12 +25,11 @@ final class ForgeOriginalVoxyViewportSelector {
         if (vivecraftPass != null) {
             return this.select(vivecraftPass, "vivecraft-" + String.valueOf(vivecraftPass));
         }
-        //ShadowRenderer.ACTIVE is only reset by Oculus's own shadow pass; when the shaderpack is
-        // disabled mid-session the flag can be left stuck true, which would skip EVERY frame and
-        // blank all LOD. Only honour it while a shaderpack pipeline is actually active.
-        if (ForgeOculusShadowStateBridge.shadowActive() && ForgeOriginalVoxyOculusPipelineBridge.shaderpackActive()) {
+        //The stuck-ACTIVE protection (shaderpack must actually be active) lives inside
+        // ForgeOculusShadowStateBridge.shadowActive() so all callers share it.
+        if (ForgeOculusShadowStateBridge.shadowActive()) {
             this.lastSelectedViewport = null;
-            this.lastSelectedKey = "oculus-shadow-skipped";
+            this.lastSelectedKey = OCULUS_SHADOW_SKIPPED_KEY;
             return null;
         }
         return this.select(DEFAULT_VIEWPORT_KEY, "default");
@@ -73,6 +73,10 @@ final class ForgeOriginalVoxyViewportSelector {
 
     String lastSelectedKey() {
         return this.lastSelectedKey;
+    }
+
+    boolean lastSelectionWasOculusShadowSkip() {
+        return OCULUS_SHADOW_SKIPPED_KEY.equals(this.lastSelectedKey);
     }
 
     ForgeOriginalVoxyMdicViewport lastSelectedViewport() {
