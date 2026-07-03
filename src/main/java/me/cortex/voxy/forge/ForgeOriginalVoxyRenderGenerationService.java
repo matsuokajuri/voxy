@@ -48,7 +48,7 @@ final class ForgeOriginalVoxyRenderGenerationService {
     private final StampedLock taskMapLock = new StampedLock();
     private final Long2ObjectOpenHashMap<BuildTask> taskMap = new Long2ObjectOpenHashMap<>(5000);
     private final WorldEngine world;
-    private final ForgeOriginalVoxyModelPipeline modelPipeline;
+    private final ForgeOriginalVoxyModelBakerySubsystem modelBakery;
     private final ForgeOriginalVoxyModelFactory modelFactory;
     private final boolean emitMeshlets;
     private final Service service;
@@ -67,15 +67,15 @@ final class ForgeOriginalVoxyRenderGenerationService {
     private String lastLifecycleEvent = "created";
     private String lastFailureReason = "none";
 
+    //Original RenderGenerationService receives the ModelBakerySubsystem and reads its factory.
     ForgeOriginalVoxyRenderGenerationService(
             WorldEngine world,
-            ForgeOriginalVoxyModelPipeline modelPipeline,
-            ForgeOriginalVoxyModelFactory modelFactory,
+            ForgeOriginalVoxyModelBakerySubsystem modelBakery,
             ServiceManager serviceManager,
             boolean emitMeshlets) {
         this.world = world;
-        this.modelPipeline = modelPipeline;
-        this.modelFactory = modelFactory;
+        this.modelBakery = modelBakery;
+        this.modelFactory = modelBakery.factory;
         this.emitMeshlets = emitMeshlets;
         this.service = serviceManager.createService(() -> {
             ForgeOriginalVoxyRenderDataFactory factory = new ForgeOriginalVoxyRenderDataFactory(
@@ -188,7 +188,7 @@ final class ForgeOriginalVoxyRenderGenerationService {
             for (int j = 0; j < 32 * 32; j++) {
                 int block = Mapper.getBlockId(auxData[j + (i * 32 * 32)]);
                 if (block != 0 && !this.modelFactory.hasModelForBlockId(block) && seenMissedIds.add(block)) {
-                    this.modelPipeline.requestBlockBakeInternal(block);
+                    this.modelBakery.requestBlockBake(block);
                     this.modelMissRequestCount++;
                 }
             }
@@ -200,7 +200,7 @@ final class ForgeOriginalVoxyRenderGenerationService {
         for (long state : section._unsafeGetRawDataArray()) {
             int block = Mapper.getBlockId(state);
             if (block != 0 && !this.modelFactory.hasModelForBlockId(block) && seenMissedIds.add(block)) {
-                this.modelPipeline.requestBlockBakeInternal(block);
+                this.modelBakery.requestBlockBake(block);
                 this.modelMissRequestCount++;
             }
         }
@@ -337,7 +337,7 @@ final class ForgeOriginalVoxyRenderGenerationService {
 
     private void requestMissingModel(ForgeOriginalVoxyIdNotYetComputedException e, IntOpenHashSet seenMissedIds) {
         if (e.isIdBlockId && !this.modelFactory.hasModelForBlockId(e.id) && seenMissedIds.add(e.id)) {
-            this.modelPipeline.requestBlockBakeInternal(e.id);
+            this.modelBakery.requestBlockBake(e.id);
             this.modelMissRequestCount++;
         }
     }

@@ -24,6 +24,16 @@ public final class ForgeOriginalVoxyOculusPipelineBridge {
         return ForgeOculusShadowStateBridge.shadowActive();
     }
 
+    //Original IrisUtil.disableIrisShaders(): used when render-system construction fails with an
+    // active shaderpack so the Oculus-triggered reload can retry on the normal path.
+    public static void disableShaders() {
+        try {
+            net.irisshaders.iris.api.v0.IrisApi.getInstance().getConfig().setShadersEnabledAndApply(false);
+        } catch (RuntimeException | LinkageError e) {
+            VoxyForge.LOGGER.error("Failed to disable Oculus shaders after Voxy render-system construction failure.", e);
+        }
+    }
+
     public static boolean shouldExposeVoxyShaderpackPatch() {
         /*
          * Original Voxy exposes VOXY/patch data when rendering is enabled because

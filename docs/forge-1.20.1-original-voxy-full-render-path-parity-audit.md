@@ -599,6 +599,8 @@ semantics.
    shaderpacks that ship `voxy.json`, including uniform/sampler/SSBO bindings,
    draw target attachments, TAA, blend state, and depth transfer.
 4. Port full `VoxyRenderSystem` lifecycle around the completed lower owners.
+   Done in Roman XX (2026-07-03): `ForgeOriginalVoxyRenderSystem` is the single
+   outer owner; see the XX section at the end of this ledger.
 5. Validate movement/update performance under the original-shaped owner and
    continue deleting isolated historical preview/prototype command paths.
 
@@ -1162,3 +1164,80 @@ the complete original constructor boundary)
 ```
 
 No readiness flags are changed by this repair.
+
+## 2026-07-03 full outer VoxyRenderSystem lifecycle ownership (XX)
+
+The last readiness blocker from the 2026-07-02 list is addressed. The Forge
+route now has a single outer lifecycle owner, `ForgeOriginalVoxyRenderSystem`,
+ported from original `VoxyRenderSystem`; `ForgeOriginalVoxyModelPipeline`
+remains only the platform adapter (start/stop event policy, Embeddium hook
+entry, stats), matching the original `MixinLevelRenderer` +
+`VoxyClientInstance` split.
+
+- The constructor is the complete original construction boundary:
+  `world.acquireRef()` FIRST, `System.gc()`, the vanilla render-distance < 3
+  chat warning, SSBO binding capture, double `glFinish()`, then model bakery
+  -> render generation -> geometry data/manager -> async node manager -> node
+  cleaner -> traversal -> world dirty callback -> existing biome queue ->
+  mapper biome callback -> node manager start -> render pipeline -> custom
+  block-state mapping (the original `setupExtraModelBakeryData` position) ->
+  traversal late-stage compile -> MDIC section renderer -> viewport selector
+  -> render distance tracker -> chunk-bound renderer, a single
+  `catch (RuntimeException)` -> `releaseRef` -> rethrow, then SSBO binding
+  restore and texture-unit/sampler clears.
+- Model-bakery setup sits inside that boundary:
+  `ForgeOriginalVoxyModelBakerySubsystem` ports original
+  `ModelBakerySubsystem` (store + factory + "Model factory processor" worker
+  thread started in the constructor, seen-id request dedupe with the original
+  out-of-range error, `requestBlockBake`, `addBiome`, `tick`, shutdown join
+  order worker -> factory -> store).
+- `ForgeOriginalVoxyRenderGenerationService` now receives the bakery
+  subsystem and requests missing models through it, matching original
+  `RenderGenerationService -> ModelBakerySubsystem` ownership instead of
+  routing model-miss requests through the Forge pipeline adapter.
+- `shutdown(boolean)` mirrors original `VoxyRenderSystem.shutdown()` order:
+  download-stream flush, callback detach, node manager stop, model bakery
+  shutdown, render generation shutdown, traversal/cleaner/geometry frees,
+  chunk-bound free, viewport selector free, pipeline (with the section
+  renderer it owns in original) freed last, second flush, world `releaseRef`.
+- Reload mirroring: `markStaleAndClear` delegates to that shutdown on the
+  render thread; a restart with a still-live owner shuts the previous owner
+  down before constructing the new one (original
+  `MixinLevelRenderer.allChanged` order); construction failure with an active
+  shaderpack disables Oculus shaders through `IrisApi` (original
+  `IrisUtil.disableIrisShaders()` recovery) so the Oculus-triggered reload
+  retries on the normal path.
+
+Documented Forge adaptations (not substitutes):
+
+- Store/factory GL setup takes the Minecraft instance and reports error
+  strings; the render system rethrows them inside the original exception
+  boundary.
+- Original leaks partially constructed GL owners when the constructor throws;
+  the Forge port keeps the VI-round failure cleanup and frees them in
+  shutdown order before releasing the world ref.
+- The Forge AsyncNodeManager split (geometry manager + geometry sync)
+  requires explicitly attaching the render-generation result consumer
+  immediately after node-manager construction, before the world dirty
+  callback can route the first build tasks to service workers.
+- The global download-stream flush is skipped when a newer lifecycle
+  generation already owns the stream.
+- Model-bakery worker death records FAILED_SAFE and tears down on the next
+  client tick instead of crashing the client (original rethrows out of
+  `tick()`); without a shaderpack, construction failure records FAILED_SAFE
+  instead of the original client crash.
+- There is no Forge `RenderResourceReuse` geometry-buffer cache; the geometry
+  buffer is owned per lifecycle.
+
+Validation:
+
+```text
+gradlew compileJava: passed
+runtime regression pending next play session: world entry, LOD render with
+shaderpack on/off, dimension switch, resource reload (F3+T), Oculus
+shaderpack toggle, logout/login, client quit
+```
+
+No readiness flags are changed by this port until the runtime regression
+pass confirms the outer owner in-game.
+
