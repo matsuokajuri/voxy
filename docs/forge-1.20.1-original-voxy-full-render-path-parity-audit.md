@@ -1241,3 +1241,34 @@ shaderpack toggle, logout/login, client quit
 No readiness flags are changed by this port until the runtime regression
 pass confirms the outer owner in-game.
 
+### XX.1 shaderpack-toggle rebuild regression: silent model-upload loss
+
+The first XX runtime regression pass surfaced per-face LOD holes and black
+quads after in-game shaderpack toggles, worsening with each toggle. Ground
+truth (baseline vs post-toggle `/voxy original_voxy_model_pipeline_status`,
+HOC readback audits, and an in-game re-ingest probe) excluded mesh coverage
+(post-rebuild completed meshes and live geometry matched baseline), world
+data loss (re-ingest still meshed), and the node tree (remesh worked but the
+holes persisted).
+
+Root cause: `ForgeOriginalVoxyModelStore.glErrorOrNone()` validated uploads
+with `glGetError()`, which reads the context-wide latched error flags. An
+Oculus pipeline reload latches GL errors routinely, so model uploads staged
+during the rebuild window read someone else's error, were reported as
+failed, and `processUploadsOnRenderThread` freed and silently dropped them —
+leaving those model ids zeroed on the GPU forever (baseline lost 2 uploads,
+each toggle lost more: `nextModelId` vs `uploadedModelRecordCount` drift).
+Every quad referencing a dropped model rendered invisible or black,
+clustered by block type, unfixable by remesh.
+
+Fix: drain latched GL errors before the model-store build, before the
+upload-audit loop, and at the top of the render-system construction
+boundary (all logged); upload failures now retry next tick (front of the
+queue, capped at 16 attempts) and only then drop with a loud error log.
+This is a Forge audit-layer repair — original Voxy performs these uploads
+without glGetError audits at all, so no original behavior is displaced.
+
+Also applied in XX.1: the world dirty/biome callbacks and node-manager start
+moved to the end of the construction boundary (still inside it) because
+Forge ingest services keep running through an owner rebuild, unlike the
+original world-join timing.

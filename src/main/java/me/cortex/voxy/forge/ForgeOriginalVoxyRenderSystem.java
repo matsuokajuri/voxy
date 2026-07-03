@@ -92,6 +92,9 @@ final class ForgeOriginalVoxyRenderSystem {
             //wait for opengl to be finished, this should hopefully ensure all memory allocations are free
             glFinish();
             glFinish();
+            //Construction often runs right after an Oculus pipeline reload; do not let its
+            // latched GL errors fail the glGetError-based build audits of the owners below.
+            ForgeOriginalVoxyModelStore.drainLatchedGlErrors("original-render-system-construction");
 
             this.worldIn = world;
 

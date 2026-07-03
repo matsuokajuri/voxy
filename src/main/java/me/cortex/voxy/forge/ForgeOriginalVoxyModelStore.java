@@ -41,6 +41,7 @@ final class ForgeOriginalVoxyModelStore {
         if (!RenderSystem.isOnRenderThread()) {
             return this.fail("model-store-build-not-render-thread");
         }
+        drainLatchedGlErrors("original-model-store-build");
         try {
             this.modelBufferId = createZeroedBuffer(MODEL_DATA_BYTES);
             this.modelColourBufferId = createZeroedBuffer(MODEL_COLOUR_BYTES);
@@ -301,6 +302,22 @@ final class ForgeOriginalVoxyModelStore {
     private String glErrorOrNone(String prefix) {
         int error = GL11C.glGetError();
         return error == GL11C.GL_NO_ERROR ? "none" : prefix + "-" + glErrorName(error);
+    }
+
+    //glGetError reads the context-wide latched error flags, which include errors raised by
+    // earlier non-Voxy GL calls (Oculus pipeline reloads latch errors routinely). Drain them
+    // before running upload-audit checks so glErrorOrNone only reflects Voxy's own calls.
+    static void drainLatchedGlErrors(String context) {
+        int error = GL11C.glGetError();
+        int drained = 0;
+        while (error != GL11C.GL_NO_ERROR && drained < 16) {
+            VoxyForge.LOGGER.warn(
+                    "Drained pre-existing GL error {} before {} (latched by earlier non-Voxy GL calls).",
+                    glErrorName(error),
+                    context);
+            drained++;
+            error = GL11C.glGetError();
+        }
     }
 
     private static int createZeroedBuffer(long bytes) {

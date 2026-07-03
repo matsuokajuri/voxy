@@ -60,6 +60,9 @@ final class ForgeOriginalVoxyModelFactory {
     private final ConcurrentLinkedDeque<Mapper.BiomeEntry> biomeQueue = new ConcurrentLinkedDeque<>();
     private final ConcurrentLinkedDeque<ResultUploader> uploadResults = new ConcurrentLinkedDeque<>();
     private final ConcurrentLinkedDeque<PendingUploadAudit> pendingUploadAudits = new ConcurrentLinkedDeque<>();
+    private static final int MAX_UPLOAD_ATTEMPTS = 16;
+    private int consecutiveUploadFailureCount;
+    private long droppedUploadCount;
     private final ReentrantLock blockStatesInFlightLock = new ReentrantLock();
     private final IntOpenHashSet blockStatesInFlight = new IntOpenHashSet(6000);
     private final Map<ModelEntry, Integer> modelTexture2id = new HashMap<>();
@@ -207,17 +210,41 @@ final class ForgeOriginalVoxyModelFactory {
         if (upload == null) {
             return 0;
         }
+        //Do not let latched errors from earlier non-Voxy GL calls (e.g. an Oculus pipeline
+        // reload) fail Voxy's own upload-audit checks below.
+        ForgeOriginalVoxyModelStore.drainLatchedGlErrors("original-model-uploads");
         GL11C.glPixelStorei(GL11C.GL_UNPACK_ROW_LENGTH, 0);
         GL11C.glPixelStorei(GL11C.GL_UNPACK_SKIP_PIXELS, 0);
         GL11C.glPixelStorei(GL11C.GL_UNPACK_SKIP_ROWS, 0);
         GL11C.glPixelStorei(GL11C.GL_UNPACK_ALIGNMENT, 4);
         while (upload != null && processed < maxUploads) {
             String error = upload.upload(this.store, this);
-            upload.free();
             if (!"none".equals(error)) {
+                //Dropping the upload would leave the model's GPU data zeroed forever (invisible
+                // or black faces for every blockstate that maps to it), so retry next tick and
+                // only give up after repeated failures.
+                this.consecutiveUploadFailureCount++;
+                if (this.consecutiveUploadFailureCount <= MAX_UPLOAD_ATTEMPTS) {
+                    this.uploadResults.addFirst(upload);
+                    VoxyForge.LOGGER.warn(
+                            "Original Voxy model upload failed (attempt {}/{}), retrying next tick: {}",
+                            this.consecutiveUploadFailureCount,
+                            MAX_UPLOAD_ATTEMPTS,
+                            error);
+                } else {
+                    upload.free();
+                    this.droppedUploadCount++;
+                    VoxyForge.LOGGER.error(
+                            "Original Voxy model upload dropped after {} failed attempts (models referencing it will render empty until rebuild): {}",
+                            MAX_UPLOAD_ATTEMPTS,
+                            error);
+                    this.consecutiveUploadFailureCount = 0;
+                }
                 this.fail(error);
                 break;
             }
+            upload.free();
+            this.consecutiveUploadFailureCount = 0;
             processed++;
             upload = this.uploadResults.poll();
         }
