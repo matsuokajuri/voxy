@@ -226,8 +226,14 @@ public class ActiveSectionTracker implements WorldSection.ReleaseTracker {
         WorldSection sec = null;
         final var lock = this.locks[index];
         long stamp = lock.writeLock();
+        //Any throw inside this region previously leaked the slice write lock, permanently
+        // wedging every thread that touches this cache slice (including Embeddium builder
+        // threads running shared Voxy jobs, which then freezes ChunkBuilder shutdown). Track
+        // the unlock explicitly and back-stop it in finally.
+        boolean stampReleased = false;
         boolean shouldRetryExit = false;
-        {
+        WorldSection aa = null;
+        try {
             VarHandle.loadLoadFence();
             if (this.engine != null && section.shouldSave()) {//Last call for saving
                 if (section.tryAcquire()) {
@@ -258,6 +264,7 @@ public class ActiveSectionTracker implements WorldSection.ReleaseTracker {
             //This is a painful case, we need to abort here if there was a funky thing that happened
             if (shouldRetryExit) {
                 lock.unlockWrite(stamp);
+                stampReleased = true;
                 //retry
                 this.tryUnload(section, hints);
                 return;
@@ -265,11 +272,23 @@ public class ActiveSectionTracker implements WorldSection.ReleaseTracker {
 
             if (section.getRefCount() == 0 && this.engine != null && section.shouldSave()) {
                 lock.unlockWrite(stamp);
+                stampReleased = true;
                 this.tryUnload(section, hints);
                 return;
             }
             if (section.getRefCount() == 0 && section.inSaveQueue) {
                 lock.unlockWrite(stamp);
+                stampReleased = true;
+                return;
+            }
+            if (section.getRefCount() == 0 && this.engine != null && section.isDirty) {
+                //A racing dirty mark/save-queue transition can slip in between the save guards
+                // above and the free below (markDirty and the save queue flags do not take the
+                // slice lock); freeing now would trip the trySetFreed dirty invariant. Retry so
+                // the save path picks the section up instead.
+                lock.unlockWrite(stamp);
+                stampReleased = true;
+                this.tryUnload(section, hints);
                 return;
             }
 
@@ -284,24 +303,32 @@ public class ActiveSectionTracker implements WorldSection.ReleaseTracker {
                 }
                 sec = section;
             }
-        }
 
-        WorldSection aa = null;
-        if (sec != null) {
-            long stamp2 = this.lruLock.writeLock();
-            lock.unlockWrite(stamp);
-            WorldSection a = this.lruSecondaryCache.put(section.key, section);
-            if (a != null) {
-                throw new IllegalStateException("duplicate sections in cache is impossible");
-            }
-            //If cache is bigger than its ment to be, remove the least recently used and free it
-            if (this.lruSize < this.lruSecondaryCache.size()) {
-                aa = this.lruSecondaryCache.removeFirst();
-            }
-            this.lruLock.unlockWrite(stamp2);
+            if (sec != null) {
+                long stamp2 = this.lruLock.writeLock();
+                lock.unlockWrite(stamp);
+                stampReleased = true;
+                try {
+                    WorldSection a = this.lruSecondaryCache.put(section.key, section);
+                    if (a != null) {
+                        throw new IllegalStateException("duplicate sections in cache is impossible");
+                    }
+                    //If cache is bigger than its ment to be, remove the least recently used and free it
+                    if (this.lruSize < this.lruSecondaryCache.size()) {
+                        aa = this.lruSecondaryCache.removeFirst();
+                    }
+                } finally {
+                    this.lruLock.unlockWrite(stamp2);
+                }
 
-        } else {
-            lock.unlockWrite(stamp);
+            } else {
+                lock.unlockWrite(stamp);
+                stampReleased = true;
+            }
+        } finally {
+            if (!stampReleased) {
+                lock.unlockWrite(stamp);
+            }
         }
 
 

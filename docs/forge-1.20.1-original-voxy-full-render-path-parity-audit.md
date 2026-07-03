@@ -1272,3 +1272,38 @@ Also applied in XX.1: the world dirty/biome callbacks and node-manager start
 moved to the end of the construction boundary (still inside it) because
 Forge ingest services keep running through an owner rebuild, unlike the
 original world-join timing.
+
+### XX.2 dimension-switch regression: section-tracker lock leak freezes chunk building
+
+The dimension-switch regression pass (overworld -> nether -> overworld via
+/execute) hung the "Joining world" screen ~30s, left vanilla and LOD chunk
+building dead (only a few chunks built), and a following F3+T froze the
+client permanently in Embeddium `ChunkBuilder: Stopping worker threads`.
+
+Root cause chain, from the force-killed session log:
+
+1. During the return switch, an in-flight ingest job against the closing
+   nether `WorldEngine` hit the original `WorldSection.trySetFreed()`
+   invariant (`Section freed while marked as dirty`): a racing dirty
+   mark/save-queue transition slipped between `ActiveSectionTracker.tryUnload`'s
+   save guards and the final free (`markDirty` and the save-queue flags do
+   not take the slice lock).
+2. The invariant throw happened INSIDE the slice `StampedLock` write region
+   of `tryUnload`, which had no try/finally — the write lock leaked forever.
+3. Every thread touching that cache slice parked permanently: Voxy service
+   jobs, and Embeddium builder threads running shared Voxy jobs inline in
+   `MultiThreadPrioritySemaphore.Block.acquire` — chunk building died
+   (Joining-world timeout, ~3 chunks), and `ChunkBuilder.stopWorkers` on the
+   next F3+T joined wedged builder threads forever (the freeze). The service
+   executor swallows job exceptions, so the log showed only the single
+   ServiceManager error line.
+
+Fix (defect repair of original common code, not a substitute path):
+`tryUnload`'s slice-lock region and LRU-lock region are finally-backed so no
+throw can leak them, and a locked re-check retries (into the save path)
+when the section turned dirty between the guards and the free, instead of
+tripping the trySetFreed invariant (which also poisoned the cache entry
+because its CAS commits before the check throws).
+
+No readiness flags are changed by this repair; the dimension-switch
+regression item stays pending until the rerun passes.
