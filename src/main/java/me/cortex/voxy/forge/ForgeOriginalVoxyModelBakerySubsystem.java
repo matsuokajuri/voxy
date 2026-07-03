@@ -46,8 +46,14 @@ final class ForgeOriginalVoxyModelBakerySubsystem {
         this.factory.prepareOnRenderThread(minecraft);
         this.processingThread = new Thread(() -> {
             while (this.isRunning) {
-                while (this.factory.processAllThings());
-                LockSupport.park();
+                //Unlike the original ModelFactory, the Forge factory reports the render-thread
+                // drained upload queue as in-flight work, so the drain loop must observe
+                // shutdown: otherwise it spins here while the render thread joins this thread
+                // inside shutdown() and the uploads can never drain (client deadlock).
+                while (this.isRunning && this.factory.processAllThings());
+                if (this.isRunning) {
+                    LockSupport.park();
+                }
             }
         }, "Model factory processor");
         this.processingThread.setUncaughtExceptionHandler((thread, exception) -> {

@@ -1307,3 +1307,27 @@ because its CAS commits before the check throws).
 
 No readiness flags are changed by this repair; the dimension-switch
 regression item stays pending until the rerun passes.
+
+### XX.3 shaderpack-enable regression: model-bakery worker spin deadlocks shutdown
+
+Enabling BSL froze the client inside `ForgeOriginalVoxyRenderSystem.shutdown()`
+(log ends after "Shutting down rendering"). BSL's enable produced a second
+reload edge ~2s after the first rebuild, tearing down a system whose model
+bakery still had pending render-thread uploads. The XX port mirrored the
+original ModelBakerySubsystem worker loop verbatim
+(`while (factory.processAllThings());`), but the Forge factory's
+`processAllThings()` returns `hasInflightWork()`, which includes the upload
+queue that ONLY the render thread drains: the worker spins without parking,
+`modelService.shutdown()` joins it from the render thread, and the uploads
+can never drain — deadlock. Every earlier rebuild had happened against
+quiescent queues, which is why toggles and dimension switches passed.
+
+Fix: the worker drain loop observes `isRunning` again (the pre-XX guard,
+documented as a Forge semantic deviation from the original loop). No
+readiness flags are changed.
+
+Open regression item from the same pass: Photon (photon_v1.3b) renders no
+LOD water (translucent MDIC output not visible under that pack); pack loads
+its own external Voxy patches and the rebuild is clean in logs, so this is
+a shaderpack-path visual parity item needing an in-game
+`-PvoxyAuditShaderpack` investigation, not a lifecycle defect.
