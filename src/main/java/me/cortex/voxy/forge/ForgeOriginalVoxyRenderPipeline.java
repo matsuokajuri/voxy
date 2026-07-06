@@ -46,9 +46,14 @@ final class ForgeOriginalVoxyRenderPipeline {
     private final boolean useEnvFog;
     private final ForgeOriginalVoxyOculusPipelineBridge.Result oculusBridgeResult;
     private final ForgeOriginalVoxyOculusRenderPipelineData oculusPipelineData;
+    //The Oculus pipeline instance the data above was captured from; used by the frame path to
+    // detect that Oculus swapped pipelines after this owner was built (see the bridge comment).
+    private final Object oculusSourcePipelineInstance;
     private final ForgeOriginalVoxyGlBuffer oculusShaderUniforms;
     private final ForgeOriginalVoxyFullscreenBlit shaderpackDepthBlit;
     private final ForgeOriginalVoxyFullscreenBlit shaderDepthHackFixTransformBlit;
+    private static final boolean AUDIT_SOURCE_DEPTH = Boolean.getBoolean("voxy.forge.auditSourceDepth");
+    private int drawTargetAuditCount;
     private long setupCount;
     private long setupAndBindOpaqueCount;
     private long setupAndBindTranslucentCount;
@@ -145,9 +150,14 @@ final class ForgeOriginalVoxyRenderPipeline {
         this.ssao = createdSsao;
         this.oculusBridgeResult = capturedOculusData;
         this.oculusPipelineData = capturedPipelineData;
+        this.oculusSourcePipelineInstance = capturedOculusData.pipelineInstance();
         this.oculusShaderUniforms = createdOculusShaderUniforms;
         this.shaderpackDepthBlit = createdShaderpackDepthBlit;
         this.shaderDepthHackFixTransformBlit = createdShaderDepthHackFixTransformBlit;
+    }
+
+    boolean oculusPipelineGenerationStale() {
+        return ForgeOriginalVoxyOculusPipelineBridge.pipelineGenerationChanged(this.oculusSourcePipelineInstance);
     }
 
     ForgeOriginalVoxyRenderProperties properties() {
@@ -185,6 +195,15 @@ final class ForgeOriginalVoxyRenderPipeline {
                 viewport.width,
                 viewport.height);
         this.normalTargets.resize(this.depthStage, viewport.width, viewport.height, this.oculusPipelineData);
+        if (AUDIT_SOURCE_DEPTH && this.oculusPipelineData != null && this.drawTargetAuditCount < 8) {
+            this.drawTargetAuditCount++;
+            ForgeOriginalVoxyOculusPipelineBridge.auditDrawTargets(
+                    this.drawTargetAuditCount,
+                    this.oculusSourcePipelineInstance,
+                    this.oculusPipelineData,
+                    this.depthStage.framebufferId(),
+                    this.normalTargets.translucentFramebufferId());
+        }
         this.setupCount++;
         this.lifecycleState = "SETUP";
         this.lastLifecycleEvent = this.oculusPipelineData == null
@@ -336,8 +355,14 @@ final class ForgeOriginalVoxyRenderPipeline {
         return builder.toString();
     }
 
+    //Diagnostic bisect switch: render with the NORMAL terrain programs while a shaderpack is
+    // active, separating patched-program defects from pack draw-target/blend/depth integration
+    // defects. Never a formal route.
+    private static final boolean FORCE_NORMAL_TERRAIN_SHADERS =
+            Boolean.getBoolean("voxy.forge.forceNormalTerrainShaders");
+
     String patchOpaqueShader(ForgeOriginalVoxyMdicSectionRenderer renderer, String input) {
-        if (this.oculusPipelineData == null) {
+        if (this.oculusPipelineData == null || FORCE_NORMAL_TERRAIN_SHADERS) {
             return null;
         }
         StringBuilder builder = this.buildOculusShaderHeader(input);
@@ -346,7 +371,7 @@ final class ForgeOriginalVoxyRenderPipeline {
     }
 
     String patchTranslucentShader(ForgeOriginalVoxyMdicSectionRenderer renderer, String input) {
-        if (this.oculusPipelineData == null || this.oculusPipelineData.translucentFragPatch() == null) {
+        if (this.oculusPipelineData == null || this.oculusPipelineData.translucentFragPatch() == null || FORCE_NORMAL_TERRAIN_SHADERS) {
             return null;
         }
         StringBuilder builder = this.buildOculusShaderHeader(input);
@@ -588,8 +613,15 @@ final class ForgeOriginalVoxyRenderPipeline {
         glStencilMask(0xFF);
     }
 
+    //Diagnostic bisect switch: skip writing Voxy LOD depth back into the hook-time framebuffer's
+    // depth on the shaderpack path. If post-switch holes vanish with this, the written-back depth
+    // is surviving into the next frame's stencil setup and self-culling the LOD. Never a formal route.
+    private static final boolean SKIP_VANILLA_DEPTH_FEEDBACK =
+            Boolean.getBoolean("voxy.forge.skipVanillaDepthFeedback");
+
     private void finishOculus(ForgeOriginalVoxyMdicViewport viewport, int sourceFramebuffer, int srcWidth, int srcHeight) {
-        if (this.oculusPipelineData.renderToVanillaDepth && srcWidth == viewport.width && srcHeight == viewport.height) {
+        if (!SKIP_VANILLA_DEPTH_FEEDBACK
+                && this.oculusPipelineData.renderToVanillaDepth && srcWidth == viewport.width && srcHeight == viewport.height) {
             int shaderpackDepthTexture = this.normalTargets.translucentDepthTextureId();
             if (shaderpackDepthTexture == 0) {
                 shaderpackDepthTexture = this.depthStage.depthTextureId();

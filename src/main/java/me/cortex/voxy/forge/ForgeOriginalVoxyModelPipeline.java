@@ -101,6 +101,7 @@ public final class ForgeOriginalVoxyModelPipeline {
     private static final int ORIGINAL_GEOMETRY_MAX_SECTION_COUNT = 1 << 20;
     private static final boolean AUDIT_OCULUS_MATRICES = Boolean.getBoolean("voxy.forge.auditOculusMatrices");
     private static final boolean AUDIT_CHUNK_BOUND = Boolean.getBoolean("voxy.forge.auditChunkBound");
+    private static final boolean AUDIT_SOURCE_DEPTH_FRAMES = Boolean.getBoolean("voxy.forge.auditSourceDepth");
 
     private final ForgeVoxyInstance instance;
     private final UnifiedServiceThreadPool serviceThreadPool = new UnifiedServiceThreadPool();
@@ -174,6 +175,7 @@ public final class ForgeOriginalVoxyModelPipeline {
     private long originalOculusViewportAppliedGeneration;
     private long originalOculusViewportApplyCount;
     private int originalOculusMatrixAuditRuns;
+    private int shadowLeakAuditCount;
     private boolean serviceThreadPoolShutdown;
     private long chunkBoundAuditLastNanos;
     private long chunkBoundAuditLastAdds;
@@ -363,6 +365,17 @@ public final class ForgeOriginalVoxyModelPipeline {
         this.renderSystem.sectionRenderer().requestReadbackAudit();
         this.lastLifecycleEvent = "original-mdic-command-generation-readback-audit-requested";
         return this.renderSystem.sectionRenderer().createStatusSnapshot();
+    }
+
+    synchronized ForgeOriginalVoxyModelPipelineStats requestNodeConsistencyAudit() {
+        if (this.renderSystem == null || !this.ownerReady || this.stale) {
+            this.lastFailureReason = "original-async-node-manager-not-ready";
+            return this.createStatusSnapshot();
+        }
+        this.renderSystem.nodeManager().requestConsistencyAudit();
+        this.lastLifecycleEvent = "original-node-consistency-audit-requested";
+        this.lastFailureReason = "none";
+        return this.createStatusSnapshot();
     }
 
     public void applyCapturedOculusViewport() {
@@ -960,6 +973,17 @@ public final class ForgeOriginalVoxyModelPipeline {
             ForgeOriginalVoxyRenderGenerationService renderGeneration = renderSystem.renderGenerationService();
             ForgeOriginalVoxyModelBakerySubsystem modelBakery = renderSystem.modelService();
             ForgeOriginalVoxyModelStore modelStore = modelBakery.getStore();
+            if (renderPipeline.oculusPipelineGenerationStale()) {
+                //Oculus swapped its pipeline after this owner captured its pipeline data (the
+                // Forge reload-edge rebuild can race Oculus's lazy pipeline creation, unlike the
+                // original allChanged ordering where Iris creates the pipeline first). Rendering
+                // with the stale capture draws against destroyed shaderpack targets, so restart
+                // the owner against the live pipeline instead.
+                Logger.info("Oculus pipeline generation changed since Voxy owner capture, restarting the owner.");
+                this.markStaleAndClear("oculus-pipeline-generation-mismatch");
+                this.requestStart("oculus-pipeline-generation-mismatch");
+                return;
+            }
             viewport = selector == null ? null : selector.getViewport();
             Minecraft minecraft = Minecraft.getInstance();
             if (minecraft.level == null || minecraft.player == null || matrices == null || camera == null) {
@@ -992,6 +1016,21 @@ public final class ForgeOriginalVoxyModelPipeline {
             capturedRenderState = true;
             int sourceWidth = oldRenderState.viewport()[2];
             int sourceHeight = oldRenderState.viewport()[3];
+            if (AUDIT_SOURCE_DEPTH_FRAMES && this.shadowLeakAuditCount < 8) {
+                //Shadow-leak detector: this point means we DECIDED TO RUN the full frame. A run
+                // during the Oculus shadow pass (undetected by the ACTIVE flag) would build the
+                // stencil/HiZ from shadow-perspective depth and corrupt main-pass culling. The
+                // shadow map is square and differs from the screen size, so log both signals.
+                boolean shadowFlag = ForgeOculusShadowStateBridge.shadowActive();
+                boolean squareViewport = sourceWidth == sourceHeight;
+                if (shadowFlag || squareViewport) {
+                    this.shadowLeakAuditCount++;
+                    Logger.warn("Voxy frame ran with shadow-suspicious state: shadowActive=" + shadowFlag
+                            + " sourceViewport=" + sourceWidth + "x" + sourceHeight
+                            + " framebuffer=" + oldFramebuffer
+                            + " occurrence=" + this.shadowLeakAuditCount);
+                }
+            }
             if (sourceWidth <= 0 || sourceHeight <= 0) {
                 this.recordNonFatalFailure("original-hoc-embeddium-cutout-invalid-viewport");
                 return;

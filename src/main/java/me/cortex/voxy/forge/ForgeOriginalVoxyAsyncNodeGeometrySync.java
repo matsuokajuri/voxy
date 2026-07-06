@@ -101,6 +101,8 @@ final class ForgeOriginalVoxyAsyncNodeGeometrySync {
     private IntConsumer topLevelNodeRemoveCallback;
     private String lastLifecycleEvent = "created";
     private String lastFailureReason = "none";
+    private final java.util.concurrent.atomic.AtomicBoolean consistencyAuditRequested = new java.util.concurrent.atomic.AtomicBoolean();
+    private int consistencyAuditDeferredTicks;
 
     ForgeOriginalVoxyAsyncNodeGeometrySync(
             ForgeOriginalVoxyBasicAsyncGeometryManager geometryManager,
@@ -281,6 +283,7 @@ final class ForgeOriginalVoxyAsyncNodeGeometrySync {
         }
         this.ensurePrograms();
         this.ensureNodeBuffer();
+        this.maybeRunConsistencyAudit();
         SyncResults sync = this.results.getAndSet(null);
         if (sync == null) {
             return;
@@ -385,6 +388,214 @@ final class ForgeOriginalVoxyAsyncNodeGeometrySync {
 
     int maxNodeCount() {
         return ORIGINAL_MAX_NODE_COUNT;
+    }
+
+    void requestConsistencyAudit() {
+        this.consistencyAuditRequested.set(true);
+    }
+
+    //Snapshot of every mesh id referenced by the CPU node tree (audit use; tolerates worker
+    // concurrency the same way the consistency audit does — judge against workerQuiescent).
+    IntOpenHashSet auditUsedMeshIds() {
+        IntOpenHashSet used = new IntOpenHashSet();
+        int endNodeId = this.nodeManager.getCurrentMaxNodeId();
+        for (int nodeId = 0; nodeId <= endNodeId; nodeId++) {
+            if (this.nodeManager.auditNodeExists(nodeId)) {
+                int geometry = this.nodeManager.auditNodeGeometry(nodeId);
+                if (geometry >= 0) {
+                    used.add(geometry);
+                }
+            }
+        }
+        return used;
+    }
+
+    int auditGeometrySectionCount() {
+        return this.geometryData.sectionCount();
+    }
+
+    //Defers the audit until the worker has no queued work and no unapplied sync results, so the
+    // CPU tree and GPU buffer are at the same generation; gives up waiting after 240 render ticks
+    // and audits anyway (workerQuiescent=false in the report flags the residual noise).
+    private void maybeRunConsistencyAudit() {
+        if (!this.consistencyAuditRequested.get()) {
+            return;
+        }
+        boolean quiescent = !this.hasWork() && this.results.get() == null;
+        if (!quiescent && ++this.consistencyAuditDeferredTicks < 240) {
+            return;
+        }
+        this.consistencyAuditRequested.set(false);
+        this.consistencyAuditDeferredTicks = 0;
+        this.runNodeConsistencyAuditOnRenderThread();
+    }
+
+    //Node consistency audit (XX.4): compares the GPU node buffer byte-for-byte against the CPU
+    // node tree's serialization (nodeData.writeNode is the single source of truth for the GPU
+    // layout) and reports duplicate mesh pointers in the CPU tree. GPU!=CPU localises the
+    // corruption to the scatter/upload layer; GPU==CPU with duplicate mesh pointers localises
+    // it to the node-tree logic itself. Runs on the render thread while the worker may still
+    // mutate the tree, so quiescence is reported alongside for judging noise.
+    void runNodeConsistencyAuditOnRenderThread() {
+        requireRenderThread("run original node consistency audit");
+        int endNodeId = this.nodeManager.getCurrentMaxNodeId();
+        if (this.nodeBufferId == 0 || endNodeId < 0) {
+            VoxyForge.LOGGER.warn(
+                    "Node consistency audit unavailable: nodeBuffer={} endNodeId={}",
+                    this.nodeBufferId,
+                    endNodeId);
+            return;
+        }
+        int nodeCount = endNodeId + 1;
+        long byteCount = nodeCount * 16L;
+        int geometrySectionCount = this.geometryData.sectionCount();
+        int metadataBufferId = this.geometryData.metadataBufferId();
+        MemoryBuffer gpuNodes = new MemoryBuffer(byteCount);
+        MemoryBuffer expectedNode = new MemoryBuffer(16L);
+        MemoryBuffer gpuMetadata = geometrySectionCount > 0 && metadataBufferId != 0
+                ? new MemoryBuffer(geometrySectionCount * 32L)
+                : null;
+        try {
+            org.lwjgl.opengl.GL45C.nglGetNamedBufferSubData(this.nodeBufferId, 0L, byteCount, gpuNodes.address);
+            if (gpuMetadata != null) {
+                org.lwjgl.opengl.GL45C.nglGetNamedBufferSubData(
+                        metadataBufferId, 0L, gpuMetadata.size, gpuMetadata.address);
+            }
+            //allChildrenAreLeaf (flags bit 5 → bit 29 of the z word) is cleared CPU-side without a
+            // scatter invalidation in two node-manager paths (matching the original NodeManager,
+            // which has the same omission), and no in-use shader reads it — mask it out so the
+            // audit separates that benign staleness from real pointer corruption.
+            long benignStaleMask = ~0x20000000L;
+            int existingNodes = 0;
+            int mismatchCount = 0;
+            int realMismatchCount = 0;
+            StringBuilder mismatchSamples = new StringBuilder();
+            it.unimi.dsi.fastutil.ints.Int2IntOpenHashMap meshUse = new it.unimi.dsi.fastutil.ints.Int2IntOpenHashMap();
+            int nullMeshNodes = 0;
+            int emptyMeshNodes = 0;
+            int outOfRangeMeshes = 0;
+            int metadataPosMismatches = 0;
+            StringBuilder metadataSamples = new StringBuilder();
+            int requestInFlightNodes = 0;
+            int inFlightEmptyMeshNoChildren = 0;
+            int orphanedRequestFlags = 0;
+            StringBuilder inFlightSamples = new StringBuilder();
+            for (int nodeId = 0; nodeId < nodeCount; nodeId++) {
+                this.nodeManager.writeNode(nodeId, expectedNode.address);
+                long expectedA = MemoryUtil.memGetLong(expectedNode.address);
+                long expectedB = MemoryUtil.memGetLong(expectedNode.address + 8L);
+                long actualA = MemoryUtil.memGetLong(gpuNodes.address + nodeId * 16L);
+                long actualB = MemoryUtil.memGetLong(gpuNodes.address + nodeId * 16L + 8L);
+                if (expectedA != actualA || expectedB != actualB) {
+                    mismatchCount++;
+                    boolean real = expectedA != actualA
+                            || (expectedB & benignStaleMask) != (actualB & benignStaleMask);
+                    if (real) {
+                        realMismatchCount++;
+                    }
+                    if (real ? realMismatchCount <= 8 : (mismatchCount <= 8 && realMismatchCount == 0)) {
+                        if (real && realMismatchCount == 1) {
+                            mismatchSamples.setLength(0);
+                        }
+                        mismatchSamples.append(String.format(
+                                " [node=%d%s cpu=%016x,%016x gpu=%016x,%016x]",
+                                nodeId, real ? " REAL" : "", expectedA, expectedB, actualA, actualB));
+                    }
+                }
+                if (this.nodeManager.auditNodeExists(nodeId)) {
+                    existingNodes++;
+                    int geometry = this.nodeManager.auditNodeGeometry(nodeId);
+                    if (this.nodeManager.auditNodeRequestInFlight(nodeId)) {
+                        requestInFlightNodes++;
+                        String requestDetail = this.nodeManager.auditNodeRequestDetail(nodeId);
+                        if (requestDetail.endsWith("ORPHANED")) {
+                            orphanedRequestFlags++;
+                        }
+                        boolean emptyNoChildren = geometry == -2 && !this.nodeManager.auditNodeHasChildren(nodeId);
+                        if (emptyNoChildren) {
+                            inFlightEmptyMeshNoChildren++;
+                        }
+                        //Sample positions of stuck-suspect nodes (empty own mesh + no children =
+                        // renders nothing while its request never completes = a visible hole).
+                        if (emptyNoChildren ? inFlightEmptyMeshNoChildren <= 12 : (requestInFlightNodes <= 12 && inFlightEmptyMeshNoChildren == 0)) {
+                            if (emptyNoChildren && inFlightEmptyMeshNoChildren == 1) {
+                                inFlightSamples.setLength(0);
+                            }
+                            inFlightSamples.append(" [node=").append(nodeId)
+                                    .append(emptyNoChildren ? " HOLE-SUSPECT " : " ")
+                                    .append(WorldEngine.pprintPos(this.nodeManager.auditNodePosition(nodeId)))
+                                    .append(requestDetail)
+                                    .append(']');
+                        }
+                    }
+                    if (geometry == -1) {
+                        nullMeshNodes++;
+                    } else if (geometry == -2) {
+                        emptyMeshNodes++;
+                    } else {
+                        meshUse.addTo(geometry, 1);
+                        if (geometry >= geometrySectionCount) {
+                            outOfRangeMeshes++;
+                        } else if (gpuMetadata != null) {
+                            //A mesh slot's first 8 bytes are the section position, serialized in
+                            // the same word order as the node buffer — a live, correctly-pointed
+                            // slot must match the owning node's position exactly.
+                            long metadataPos = MemoryUtil.memGetLong(gpuMetadata.address + geometry * 32L);
+                            if (metadataPos != expectedA) {
+                                metadataPosMismatches++;
+                                if (metadataPosMismatches <= 8) {
+                                    metadataSamples.append(String.format(
+                                            " [node=%d mesh=%d nodePos=%016x meshPos=%016x]",
+                                            nodeId, geometry, expectedA, metadataPos));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            int duplicatedMeshIds = 0;
+            int nodesOnDuplicatedMeshes = 0;
+            StringBuilder duplicateSamples = new StringBuilder();
+            for (var entry : meshUse.int2IntEntrySet()) {
+                if (entry.getIntValue() > 1) {
+                    duplicatedMeshIds++;
+                    nodesOnDuplicatedMeshes += entry.getIntValue();
+                    if (duplicatedMeshIds <= 8) {
+                        duplicateSamples.append(" [mesh=").append(entry.getIntKey())
+                                .append(" nodes=").append(entry.getIntValue()).append(']');
+                    }
+                }
+            }
+            VoxyForge.LOGGER.info(
+                    "Node consistency audit: nodeRange={} existing={} gpuMismatch={} gpuRealMismatch={} uniqueMeshes={} duplicatedMeshIds={} nodesOnDuplicatedMeshes={} nullMesh={} emptyMesh={} geometrySectionCount={} outOfRangeMeshes={} metadataPosMismatch={} activeRequests={} requestInFlightNodes={} inFlightEmptyMeshNoChildren={} orphanedRequestFlags={} workerQuiescent={} mismatchSamples=[{}] duplicateSamples=[{}] metadataSamples=[{}] inFlightSamples=[{}]",
+                    nodeCount,
+                    existingNodes,
+                    mismatchCount,
+                    realMismatchCount,
+                    meshUse.size(),
+                    duplicatedMeshIds,
+                    nodesOnDuplicatedMeshes,
+                    nullMeshNodes,
+                    emptyMeshNodes,
+                    geometrySectionCount,
+                    outOfRangeMeshes,
+                    metadataPosMismatches,
+                    this.nodeManager.getActiveNodeRequestCount(),
+                    requestInFlightNodes,
+                    inFlightEmptyMeshNoChildren,
+                    orphanedRequestFlags,
+                    !this.hasWork() && this.results.get() == null,
+                    mismatchSamples.toString().trim(),
+                    duplicateSamples.toString().trim(),
+                    metadataSamples.toString().trim(),
+                    inFlightSamples.toString().trim());
+        } finally {
+            gpuNodes.free();
+            expectedNode.free();
+            if (gpuMetadata != null) {
+                gpuMetadata.free();
+            }
+        }
     }
 
     void stopOnRenderThread() {

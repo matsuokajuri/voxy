@@ -94,6 +94,18 @@ minecraft {
             if (project.hasProperty('voxyAuditShaderpack')) {
                 property 'voxy.forge.auditShaderpack', 'true'
             }
+            if (project.hasProperty('voxyForceNormalTerrainShaders')) {
+                property 'voxy.forge.forceNormalTerrainShaders', 'true'
+            }
+            if (project.hasProperty('voxyAuditSourceDepth')) {
+                property 'voxy.forge.auditSourceDepth', 'true'
+            }
+            if (project.hasProperty('voxySkipVanillaDepthFeedback')) {
+                property 'voxy.forge.skipVanillaDepthFeedback', 'true'
+            }
+            if (project.hasProperty('voxyRenderdocCompat')) {
+                property 'voxy.forge.renderdocCompatGeometryBuffer', 'true'
+            }
         }
 
         server {

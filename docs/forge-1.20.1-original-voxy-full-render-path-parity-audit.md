@@ -1331,3 +1331,90 @@ LOD water (translucent MDIC output not visible under that pack); pack loads
 its own external Voxy patches and the rebuild is clean in logs, so this is
 a shaderpack-path visual parity item needing an in-game
 `-PvoxyAuditShaderpack` investigation, not a lifecycle defect.
+
+### XX.4 open investigation: shaderpack-switch LOD holes and missing water (NOT an XX regression)
+
+Status: OPEN. The 2026-07-04 investigation (audit runs, RenderDoc captures,
+and a version bisect) reframed this defect:
+
+- It PREDATES XX: on pre-XX code (590bff49) BSL pack switches alternate
+  broken/fine (odd switches broken, even fine; Complementary always fine);
+  the XX-era code makes every switch broken. Pack switching was never
+  regression-tested before XX, so the defect is a longstanding gap, not a
+  lifecycle-port regression.
+- Confirmed mechanism level: in broken lifecycles the MDIC command
+  generation emits almost no opaque commands (RenderDoc: 20-26 vs 212-270
+  healthy on the same pack) while the HOC render list stays full (~1900
+  sections); the temporal pass partially compensates each frame; the stable
+  losers are the visible holes; translucent commands collapse the same way
+  (missing water). The failure is decided per lifecycle at rebuild time and
+  persists (a remesh does not fix it).
+- The failure pattern depends on the GEOMETRY BUFFER allocation mode:
+  sparse-4GB (NVIDIA workaround) alternates per switch; plain-512MB
+  (renderdocCompat) fails sporadically (once in ~5 switches) on pre-XX and
+  always on current code. This implicates GL memory allocation circumstances
+  (VRAM aliasing between the dying and new lifecycle's buffers is the prime
+  suspect; the in-tree NVIDIA free-wait workaround only covers the geometry
+  buffer, not metadata/node/HiZ objects).
+- Exhaustively EXCLUDED with ground truth: model bakes/uploads/custom ids
+  (per-model audits + GPU readback audits pass), geometry accounting
+  (padding explained the apparent gap), render-list collapse, Oculus
+  pipeline-data staleness (per-frame generation check never fired), FBO
+  draw-target staleness/flip (attachment audit clean), stencil mask
+  (uniform 0x01 both states), depth input source (real values), shadow-pass
+  leakage (probe never fired), sparse commitment growth (1GB headroom probe
+  no change), patched programs (force-normal probe no change), vanilla
+  depth feedback (skip probe no change), frame pass ordering (skeletons
+  identical healthy vs broken).
+- Diagnostic infrastructure added during the investigation (kept in tree):
+  Oculus pipeline generation check with owner restart, draw-target audit,
+  shadow-leak probe, source-depth frame audit wiring, sparse commitment
+  growth log, and gradle flags voxyForceNormalTerrainShaders /
+  voxyAuditSourceDepth / voxySkipVanillaDepthFeedback / voxyRenderdocCompat.
+
+- 2026-07-05 RenderDoc Pixel History finding (locked): hole pixels are
+  NEVER touched by any of the frame's section draws — only the sky clear
+  and vanilla sky geometry write them; the holes match the sky color
+  because they ARE sky. Simultaneously the broken frame's MDIC draws MORE
+  sections than the healthy frame (2888 vs 1489) with the user confirming
+  per-subdraw scrubbing shows the holes simply never being painted. A
+  command list that is both inflated (duplicates) and incomplete (losses)
+  points at node→mesh pointer corruption established at rebuild time —
+  consistent with every persistence property observed (remesh-proof,
+  render-list inflation, hasChildren tree anomalies).
+
+Current probe: `/voxy original_voxy_node_consistency_audit` — downloads the
+GPU node buffer's active range and byte-compares every node against the CPU
+tree's own serialization (`ForgeOriginalVoxyNodeStore.writeNode` is the
+single source of truth for the 16-byte GPU layout), and independently
+tallies mesh-pointer duplication inside the CPU tree. The audit defers to a
+worker-quiescent render tick (≤240-tick timeout, quiescence reported).
+Interpretation: gpuMismatch>0 → scatter/upload-layer corruption;
+gpuMismatch=0 with duplicatedMeshIds>0 → node-manager logic race. RenderDoc
+golden captures (same code, same pack, broken vs fine) remain available via
+the pre-XX checkout recipe recorded in the project memory.
+
+### XX.5 RenderResourceReuse port: geometry buffer reused across owner rebuilds
+
+The XX.4 investigation's allocation-mode-dependent failure pattern led back
+to a dropped original component: original `RenderResourceReuse` caches the
+geometry buffer across renderer recreations (`getOrCreateGeometryBuffer` /
+`giveBackGeometryBuffer`) and only frees it at full instance shutdown
+(`VoxyClientInstance.shutdown -> clearResources`). The Forge port had
+documented "no geometry-buffer cache; owned per lifecycle" as a harmless
+deviation — it was not: per-rebuild free-then-reallocate of the
+driver-heavy geometry allocation (4GB sparse on the NVIDIA workaround
+path) opens exactly the VRAM-aliasing window implicated by XX.4, a window
+the original never opens by design. Reuse also keeps GL command ordering
+on a single buffer object across the rebuild.
+
+`ForgeOriginalVoxyRenderResourceReuse` now ports the geometry-buffer half
+(the model-atlas half was already ported as the model store's static
+texture cache): `ForgeOriginalVoxyBasicSectionGeometryData` borrows the
+buffer on build (carrying over sparse page commitment so ensureAccessable
+does not re-commit) and gives it back on free — no decommit, no delete, no
+NVIDIA free-wait during rebuilds. `ForgeVoxyInstance.shutdown()` calls
+`clearResources()` mirroring the original instance shutdown.
+
+Validation pending: shaderpack-switch regression rerun (previously every
+switch produced holes/missing water on this code).

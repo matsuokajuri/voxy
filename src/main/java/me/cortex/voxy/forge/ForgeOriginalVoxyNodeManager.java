@@ -258,6 +258,45 @@ final class ForgeOriginalVoxyNodeManager {
         this.nodeData.writeNode(address, node);
     }
 
+    //Diagnostic accessors for the node consistency audit: existence and geometry/mesh pointer
+    // (-1 = null sentinel, -2 = empty-mesh sentinel, >=0 = geometry section id).
+    boolean auditNodeExists(int nodeId) {
+        return this.nodeData.nodeExists(nodeId);
+    }
+
+    int auditNodeGeometry(int nodeId) {
+        return this.nodeData.getNodeGeometry(nodeId);
+    }
+
+    boolean auditNodeRequestInFlight(int nodeId) {
+        return this.nodeData.isNodeRequestInFlight(nodeId);
+    }
+
+    long auditNodePosition(int nodeId) {
+        return this.nodeData.nodePosition(nodeId);
+    }
+
+    boolean auditNodeHasChildren(int nodeId) {
+        int ptr = this.nodeData.getChildPtr(nodeId);
+        return ptr != -1 && ptr != SENTINEL_EMPTY_CHILD_PTR;
+    }
+
+    //Detail for an in-flight node request: the outstanding (unsatisfied) child mask, or ORPHANED
+    // when the request-in-flight flag is set but the request object was already released — a
+    // bookkeeping desync that would permanently block re-requests for the node.
+    String auditNodeRequestDetail(int nodeId) {
+        if (!this.nodeData.isNodeRequestInFlight(nodeId)) {
+            return "";
+        }
+        int requestId = this.nodeData.getNodeRequest(nodeId);
+        try {
+            ForgeOriginalVoxyNodeChildRequest request = this.childRequests.get(requestId);
+            return " req=" + requestId + " outstanding=" + Integer.toBinaryString(Byte.toUnsignedInt(request.getMsk()));
+        } catch (IllegalArgumentException e) {
+            return " req=" + requestId + " ORPHANED";
+        }
+    }
+
     int getCurrentMaxNodeId() {
         return this.nodeData.getEndNodeId();
     }

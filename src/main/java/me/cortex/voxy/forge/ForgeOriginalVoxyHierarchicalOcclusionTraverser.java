@@ -1,6 +1,7 @@
 package me.cortex.voxy.forge;
 
 import it.unimi.dsi.fastutil.ints.Int2IntOpenHashMap;
+import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
 import me.cortex.voxy.config.ForgeVoxyConfig;
 import me.cortex.voxy.common.util.MemoryBuffer;
 import me.cortex.voxy.common.world.WorldEngine;
@@ -269,6 +270,7 @@ final class ForgeOriginalVoxyHierarchicalOcclusionTraverser {
                 nglGetNamedBufferSubData(viewport.renderListBufferId(), 0L, Integer.BYTES, renderListPtr);
                 renderListCounter = MemoryUtil.memGetInt(renderListPtr);
             }
+            this.auditRenderListContent(viewport, renderListCounter);
 
             AuditNodeSample sample = this.sampleTopNodes(stack, viewport);
             long hocAuditPtr = stack.nmalloc(HOC_AUDIT_COUNTER_COUNT * Integer.BYTES);
@@ -598,6 +600,84 @@ final class ForgeOriginalVoxyHierarchicalOcclusionTraverser {
                 this.lastLifecycleEvent,
                 this.lastFailureReason
         );
+    }
+
+    //Render-list content audit (XX.4): the render list is what the cull raster and cmdgen operate
+    // on, rebuilt by the traversal each frame. With the node/metadata layers verified clean, this
+    // discriminates the remaining suspects: duplicate/stale/out-of-range entries → traversal or
+    // queue layer emits garbage; a clean list → the collapse is in the raster visibility marking.
+    private void auditRenderListContent(ForgeOriginalVoxyMdicViewport viewport, int renderListCounter) {
+        if (viewport == null || viewport.renderListBufferId() == 0 || renderListCounter <= 0) {
+            return;
+        }
+        int maxEntries = (int) (viewport.renderListBufferSize() / Integer.BYTES) - 1;
+        int entryCount = Math.min(renderListCounter, maxEntries);
+        int sectionCount = this.nodeSync.auditGeometrySectionCount();
+        IntOpenHashSet usedMeshIds = this.nodeSync.auditUsedMeshIds();
+        long entriesPtr = MemoryUtil.nmemAlloc(entryCount * (long) Integer.BYTES);
+        long visibilityPtr = MemoryUtil.nmemAlloc(4L);
+        try {
+            nglGetNamedBufferSubData(
+                    viewport.renderListBufferId(), Integer.BYTES, entryCount * (long) Integer.BYTES, entriesPtr);
+            IntOpenHashSet seen = new IntOpenHashSet(entryCount);
+            Int2IntOpenHashMap visibilityHistogram = new Int2IntOpenHashMap();
+            int duplicates = 0;
+            int outOfRange = 0;
+            int staleEntries = 0;
+            int highBitSet = 0;
+            StringBuilder badSamples = new StringBuilder();
+            for (int i = 0; i < entryCount; i++) {
+                int sectionId = MemoryUtil.memGetInt(entriesPtr + i * 4L);
+                boolean bad = false;
+                if (!seen.add(sectionId)) {
+                    duplicates++;
+                    bad = true;
+                }
+                if (sectionId < 0 || sectionId >= sectionCount) {
+                    outOfRange++;
+                    bad = true;
+                } else {
+                    if (!usedMeshIds.contains(sectionId)) {
+                        staleEntries++;
+                        bad = true;
+                    }
+                    nglGetNamedBufferSubData(viewport.visibilityBuffer.id, sectionId * 4L, 4L, visibilityPtr);
+                    int visibility = MemoryUtil.memGetInt(visibilityPtr);
+                    visibilityHistogram.addTo(visibility & 0x7fffffff, 1);
+                    if ((visibility & 0x80000000) != 0) {
+                        highBitSet++;
+                    }
+                }
+                if (bad && duplicates + outOfRange + staleEntries <= 8) {
+                    badSamples.append(" [i=").append(i).append(" section=").append(sectionId).append(']');
+                }
+            }
+            int modalVisibility = -1;
+            int modalCount = 0;
+            int distinctVisibilities = visibilityHistogram.size();
+            for (var entry : visibilityHistogram.int2IntEntrySet()) {
+                if (entry.getIntValue() > modalCount) {
+                    modalCount = entry.getIntValue();
+                    modalVisibility = entry.getIntKey();
+                }
+            }
+            VoxyForge.LOGGER.info(
+                    "Original HOC render-list content audit: entries={} treeMeshes={} geometrySectionCount={} duplicates={} outOfRange={} staleEntries={} visMarkedModal={}@{} distinctVis={} visHighBitSet={} badSamples=[{}]",
+                    entryCount,
+                    usedMeshIds.size(),
+                    sectionCount,
+                    duplicates,
+                    outOfRange,
+                    staleEntries,
+                    modalCount,
+                    modalVisibility,
+                    distinctVisibilities,
+                    highBitSet,
+                    badSamples.toString().trim());
+        } finally {
+            MemoryUtil.nmemFree(entriesPtr);
+            MemoryUtil.nmemFree(visibilityPtr);
+        }
     }
 
     private void addTopLevelNode(int id) {

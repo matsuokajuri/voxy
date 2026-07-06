@@ -32,6 +32,8 @@ final class ForgeVoxyParityCommands {
                         .executes(ctx -> originalVoxyMdicCmdgenStatus(ctx.getSource())))
                 .then(Commands.literal("original_voxy_mdic_cmdgen_request_audit")
                         .executes(ctx -> originalVoxyMdicCmdgenRequestAudit(ctx.getSource())))
+                .then(Commands.literal("original_voxy_node_consistency_audit")
+                        .executes(ctx -> originalVoxyNodeConsistencyAudit(ctx.getSource())))
                 .then(Commands.literal("original_voxy_model_pipeline_clear")
                         .executes(ctx -> originalVoxyModelPipelineClear(ctx.getSource())));
     }
@@ -87,6 +89,16 @@ final class ForgeVoxyParityCommands {
                 .getOriginalVoxyModelPipeline()
                 .requestMdicCommandGenerationReadbackAudit();
         source.sendSuccess(() -> Component.literal("Voxy original MDIC cmdgen audit requested: " + format(status)), false);
+        return 1;
+    }
+
+    private static int originalVoxyNodeConsistencyAudit(CommandSourceStack source) {
+        ForgeOriginalVoxyModelPipelineStats status = ForgeVoxyInstance.INSTANCE
+                .getOriginalVoxyModelPipeline()
+                .requestNodeConsistencyAudit();
+        source.sendSuccess(() -> Component.literal(
+                "Voxy original node consistency audit requested (result is logged on the next quiescent render tick): "
+                        + format(status)), false);
         return 1;
     }
 
