@@ -50,6 +50,12 @@ final class ForgeOriginalVoxyBasicSectionGeometryData {
     private String lastLifecycleEvent = "created";
     private String lastFailureReason = "none";
 
+    //RenderDoc cannot capture ARB_sparse_buffer usage; this diagnostic switch forces a small
+    // plain geometry buffer so frames are capturable. Never a formal route.
+    private static final boolean RENDERDOC_COMPAT =
+            Boolean.getBoolean("voxy.forge.renderdocCompatGeometryBuffer");
+    private static final long RENDERDOC_COMPAT_CAPACITY_BYTES = 1L << 29;
+
     ForgeOriginalVoxyBasicSectionGeometryData(int maxSectionCount) {
         this.maxSectionCount = maxSectionCount;
     }
@@ -58,34 +64,38 @@ final class ForgeOriginalVoxyBasicSectionGeometryData {
         requireRenderThread("build original BasicSectionGeometryData");
         this.freeOnRenderThread();
         this.metadataCapacityBytes = (long) this.maxSectionCount * SECTION_METADATA_SIZE;
-        this.geometryCapacityBytes = computeOriginalGeometryCapacityBytes();
-        if (this.geometryCapacityBytes % Long.BYTES != 0) {
-            this.recordFailure("geometry-capacity-not-8-byte-aligned");
-            return this.lastFailureReason;
-        }
 
         int metadataBuffer = 0;
-        int geometryBuffer = 0;
+        ForgeOriginalVoxyRenderResourceReuse.ReusedGeometryBuffer geometry = null;
         try {
             metadataBuffer = createStorageBuffer(this.metadataCapacityBytes, 0, true);
-            GeometryAllocation geometry = createGeometryBuffer(this.geometryCapacityBytes);
-            geometryBuffer = geometry.bufferId;
+            //Original RenderResourceReuse semantics: the geometry buffer is REUSED across owner
+            // rebuilds and only truly freed at instance shutdown. This avoids the per-rebuild
+            // free/reallocate window of this driver-heavy allocation (XX.4: NVIDIA VRAM aliasing
+            // between the dying and new lifecycle's buffers) and keeps GL ordering on one object.
+            geometry = ForgeOriginalVoxyRenderResourceReuse.getOrCreateGeometryBuffer();
+            this.geometryCapacityBytes = geometry.capacityBytes();
+            if (this.geometryCapacityBytes % Long.BYTES != 0) {
+                throw new IllegalStateException("geometry-capacity-not-8-byte-aligned");
+            }
             this.sectionMetadataBufferId = metadataBuffer;
-            this.geometryBufferId = geometryBuffer;
-            this.sparseGeometryBuffer = geometry.sparse;
+            this.geometryBufferId = geometry.bufferId();
+            this.sparseGeometryBuffer = geometry.sparse();
             this.sparseBufferSupported = getCapabilities().GL_ARB_sparse_buffer;
-            this.nvidiaWindowsSparseWorkaroundUsed = geometry.nvidiaWindowsSparseWorkaroundUsed;
+            this.nvidiaWindowsSparseWorkaroundUsed = geometry.nvidiaWindowsSparseWorkaroundUsed();
             this.externalGeometryBuffer = false;
             this.currentSectionCount = 0;
-            this.sparseCommitmentBytes = 0L;
+            //Carry over the reused buffer's page commitment so ensureAccessable does not
+            // redundantly re-commit already-committed pages.
+            this.sparseCommitmentBytes = geometry.committedSparseBytes();
             this.generation++;
             this.buildCount++;
             this.lastLifecycleEvent = "build-on-render-thread";
             this.lastFailureReason = "none";
             return "none";
         } catch (RuntimeException e) {
-            if (geometryBuffer != 0) {
-                glDeleteBuffers(geometryBuffer);
+            if (geometry != null) {
+                ForgeOriginalVoxyRenderResourceReuse.giveBackGeometryBuffer(geometry);
             }
             if (metadataBuffer != 0) {
                 glDeleteBuffers(metadataBuffer);
@@ -105,6 +115,11 @@ final class ForgeOriginalVoxyBasicSectionGeometryData {
             size += 65536L * 1024L;
             glBufferPageCommitmentARB(GL_ARRAY_BUFFER, this.sparseCommitmentBytes, size - this.sparseCommitmentBytes, true);
             glBindBuffer(GL_ARRAY_BUFFER, 0);
+            VoxyForge.LOGGER.info(
+                    "Voxy sparse geometry commitment grown: {} -> {} bytes (buffer {})",
+                    this.sparseCommitmentBytes,
+                    size,
+                    this.geometryBufferId);
             this.sparseCommitmentBytes = size;
         }
     }
@@ -136,40 +151,18 @@ final class ForgeOriginalVoxyBasicSectionGeometryData {
             this.sectionMetadataBufferId = 0;
         }
         if (this.geometryBufferId != 0) {
-            long gpuMemoryBeforeFree = -1L;
-            long committedSparseBytes = this.sparseCommitmentBytes;
-            if (getCapabilities().GL_NVX_gpu_memory_info) {
-                glFinish();
-                gpuMemoryBeforeFree = queryFreeDedicatedGpuMemoryBytes();
-            }
-            if (this.sparseGeometryBuffer) {
-                glBindBuffer(GL_ARRAY_BUFFER, this.geometryBufferId);
-                glBufferPageCommitmentARB(GL_ARRAY_BUFFER, 0, this.sparseCommitmentBytes, false);
-                glBindBuffer(GL_ARRAY_BUFFER, 0);
-            }
-            glFinish();
+            //Original RenderResourceReuse semantics: give the geometry buffer back to the cache
+            // for the next owner instead of deleting it (no decommit, no delete, no NVIDIA
+            // free-wait — the entire per-rebuild reallocation hazard window is gone). Committed
+            // sparse pages stay committed and travel with the cached buffer.
             if (!this.externalGeometryBuffer) {
-                glDeleteBuffers(this.geometryBufferId);
-                glFinish();
-                if (gpuMemoryBeforeFree != -1L) {
-                    long releaseSize = (long) (this.geometryCapacityBytes * 0.75D);
-                    if (this.sparseGeometryBuffer) {
-                        releaseSize = (long) (committedSparseBytes * 0.75D);
-                    }
-                    if (queryFreeDedicatedGpuMemoryBytes() - gpuMemoryBeforeFree <= releaseSize) {
-                        long start = System.currentTimeMillis();
-                        while (System.currentTimeMillis() - start < GPU_MEMORY_RELEASE_WAIT_TIMEOUT_MS) {
-                            glFinish();
-                            if (queryFreeDedicatedGpuMemoryBytes() - gpuMemoryBeforeFree > releaseSize) {
-                                break;
-                            }
-                        }
-                        if (queryFreeDedicatedGpuMemoryBytes() - gpuMemoryBeforeFree <= releaseSize) {
-                            VoxyForge.LOGGER.warn(
-                                    "Failed to wait for original geometry buffer memory to be freed; this could indicate a driver issue");
-                        }
-                    }
-                }
+                ForgeOriginalVoxyRenderResourceReuse.giveBackGeometryBuffer(
+                        new ForgeOriginalVoxyRenderResourceReuse.ReusedGeometryBuffer(
+                                this.geometryBufferId,
+                                this.geometryCapacityBytes,
+                                this.sparseGeometryBuffer,
+                                this.nvidiaWindowsSparseWorkaroundUsed,
+                                this.sparseCommitmentBytes));
             }
             this.geometryBufferId = 0;
             this.freeCount++;
@@ -208,9 +201,14 @@ final class ForgeOriginalVoxyBasicSectionGeometryData {
         );
     }
 
-    private static GeometryAllocation createGeometryBuffer(long geometryCapacityBytes) {
+    //Capacity selection for the reuse cache: honours the RenderDoc-compat diagnostic override.
+    static long selectGeometryCapacityBytes() {
+        return RENDERDOC_COMPAT ? RENDERDOC_COMPAT_CAPACITY_BYTES : computeOriginalGeometryCapacityBytes();
+    }
+
+    static GeometryAllocation createGeometryBuffer(long geometryCapacityBytes) {
         var capabilities = getCapabilities();
-        boolean sparseSupported = capabilities.GL_ARB_sparse_buffer;
+        boolean sparseSupported = capabilities.GL_ARB_sparse_buffer && !RENDERDOC_COMPAT;
         boolean isNvidiaWindows = isNvidiaVendor() && Platform.get() == Platform.WINDOWS && sparseSupported;
         int buffer = 0;
         glGetError();
@@ -303,6 +301,6 @@ final class ForgeOriginalVoxyBasicSectionGeometryData {
         }
     }
 
-    private record GeometryAllocation(int bufferId, boolean sparse, boolean nvidiaWindowsSparseWorkaroundUsed) {
+    record GeometryAllocation(int bufferId, boolean sparse, boolean nvidiaWindowsSparseWorkaroundUsed) {
     }
 }

@@ -263,6 +263,9 @@ public final class ForgeVoxyInstance {
                     "Skipped terminal Voxy service shutdown because render-resource cleanup was deferred off the render thread.");
             return;
         }
+        //Original VoxyClientInstance.shutdown(): free the render resource cache since the entire
+        // instance is freed (this is the only point the reused geometry buffer is truly deleted).
+        ForgeOriginalVoxyRenderResourceReuse.clearResources();
 
         try {
             this.originalVoxyIngestService.shutdown();
