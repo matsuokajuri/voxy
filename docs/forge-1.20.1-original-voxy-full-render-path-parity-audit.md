@@ -588,11 +588,11 @@ semantics.
 
 ## Remaining parity work after the renderer regression
 
-1. Port the remaining optional external storage backends. XXI.1-XXI.2 completed
-   the persistent default chain and its original JSON lifecycle; XXI.3 adds the
-   active local optional TYPE surface and records the upstream-incomplete types.
-   LMDB and Redis remain separate because they require native-library and
-   external-service validation respectively.
+1. Port the remaining Redis external storage backend. XXI.1-XXI.2 completed the
+   persistent default chain and its original JSON lifecycle; XXI.3 added the
+   active local optional TYPE surface and recorded upstream-incomplete types;
+   XXI.4 ports and restart-validates LMDB. Redis remains because it requires an
+   external service for honest runtime validation.
 2. Triage the remaining unported-content inventory and optional compatibility
    integrations after the renderer readiness round.
 3. Perform non-functional cleanup of unused MDIC config keys and the active
@@ -1891,3 +1891,66 @@ pre-test `config.json` was restored and verified byte-for-byte by SHA-256. The
 isolated test database remains under ignored `run/` only. Whole-mod parity stays
 false for LMDB, Redis, and the remaining non-storage migration inventory;
 renderer readiness is unchanged.
+
+### XXI.4 original LMDB backend and restart recovery
+
+XXI.4 ports original `LMDBStorageBackend` without replacing its transaction or
+database model. The platform-neutral original support classes are compiled
+directly from the reference tree:
+
+```text
+LMDBInterface
+Cursor
+TransactionCallback
+TransactionWrappedCallback
+TransactionWrapper
+```
+
+The Forge namespace backend preserves the original mechanics:
+
+```text
+environment flags = 0
+max named databases = 2
+initial map size = 1 << 25 bytes
+named databases = world_sections, id_mapping
+section/id keys use the original native ByteBuffer integer encoding
+MDB_MAP_FULL code -30792 triggers the original access-count/resize-lock loop
+map growth step = 1 << 25 bytes
+flush = forced mdb_env_sync
+close = section DB, mapping DB, environment
+```
+
+`iteratePositions()` remains an unconditional `Not yet implemented` exception
+because that is the current original LMDB implementation; XXI.4 does not claim
+or invent functionality absent upstream. The active WorldEngine persistence
+path used by this port does not call it during the validated load/save lifecycle.
+
+ForgeGradle packages `org.lwjgl:lwjgl-lmdb:3.3.1` through Jar-in-Jar and embeds
+the official Windows/Linux x64 native resources at their original LWJGL paths,
+matching the classifier handling already used for ZSTD.
+
+Runtime validation used `BasicPathConfig("xxi4-lmdb")` so the optional backend
+could not touch the default RocksDB database:
+
+```text
+first JVM:
+  backendChain=Serializer->ZSTD(level=1)->BasicPath(xxi4-lmdb)->LMDB
+  data.mdb created at 33,554,432 bytes; lock.mdb created at 8,192 bytes
+  sectionWrites=20786
+  mappingWrites=386
+  normal LMDB/WorldEngine/render/client shutdown, runClient exit 0
+
+second JVM:
+  identical backend chain and LMDB path
+  mappingEntriesLoaded=386
+  sectionLoadHits=3037
+  sectionLoadMisses=2900
+  sectionWrites=1012
+  no LMDB error code, native load, duplicate mapping, or shutdown failure
+  runClient exit 0
+```
+
+The pre-test default ZSTD/RocksDB `config.json` was restored and verified
+byte-for-byte by SHA-256. LMDB test data remains only under ignored `run/`.
+Whole-mod parity remains false for Redis and the remaining non-storage migration
+inventory; renderer readiness is unchanged.

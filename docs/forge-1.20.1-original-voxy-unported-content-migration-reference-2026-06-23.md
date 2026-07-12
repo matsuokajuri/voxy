@@ -87,11 +87,11 @@ The most important unported or incomplete areas are:
 
 ## 1. Instance, world storage, and service root
 
-Status after XXI.3:
+Status after XXI.4:
 
 ```text
-partial: original default persistent backend, dynamic JSON config, and local
-optional TYPE surface complete; LMDB/Redis remain
+partial: original default persistent backend, dynamic JSON config, local
+optional TYPE surface, and LMDB complete; Redis remains
 ```
 
 Original Voxy source areas:
@@ -120,17 +120,19 @@ creation/reload semantics, original `ConfigBuildCtx`, and the exact polymorphic
 TYPE JSON for Serializer, CompressionAdaptor, ZSTD, and RocksDB. Its reload run
 loaded 1,384 mappings and recorded 5,989 stored-section hits. XXI.3 adds LZ4,
 BasicPathConfig, explicit/automatic fragmentation, and exact registrations for
-the upstream-incomplete ConditionalConfig/ReadonlyCachingLayer paths.
+the upstream-incomplete ConditionalConfig/ReadonlyCachingLayer paths. XXI.4
+ports original LMDB transactions/backend/native packaging and validates restart
+recovery with 386 mappings and 3,037 stored-section hits.
 
 Not yet migrated:
 
 ```text
-- optional LMDB and Redis storage configurations
+- optional Redis storage configuration
 - full `VoxyInstance.activeWorlds` map parity beyond the active/closing Forge
   adapter (the currently required same-world reuse behavior is ported)
 ```
 
-XXI.1-XXI.3 completed:
+XXI.1-XXI.4 completed:
 
 ```text
 - read original instance/storage ownership through shutdown
@@ -155,19 +157,24 @@ XXI.1-XXI.3 completed:
 - exact ConditionalConfig and ReadonlyCachingLayer upstream-incomplete behavior
 - LZMA2 excluded by ground truth: its entire original implementation is commented
   out and does not produce a config TYPE
+- original LMDBInterface/Cursor/transaction wrapper classes
+- LMDB world_sections/id_mapping databases, resize locking, flush, and close
+- LWJGL LMDB 3.3.1 plus official Windows/Linux x64 native packaging
+- isolated LMDB restart recovery; original iteratePositions remains upstream
+  unimplemented
 ```
 
 Remaining migration steps:
 
 ```text
-1. Port and independently validate LMDB with original LWJGL native packaging.
-2. Port and independently validate Redis with an external test service.
-3. Validate multiplayer server isolation and corrupted-section deletion.
+1. Port and independently validate Redis with an external test service.
+2. Validate multiplayer server isolation and corrupted-section deletion.
    Dimension isolation, relog, and shutdown passed in XXI.1; default config
-   creation/reload passed in XXI.2; LZ4 and fragmentation restart passed in XXI.3.
+   creation/reload passed in XXI.2; LZ4 and fragmentation restart passed in XXI.3;
+   LMDB restart passed in XXI.4.
 ```
 
-XXI.1-XXI.3 validation:
+XXI.1-XXI.4 validation:
 
 ```text
 rtk test .\gradlew compileJava
@@ -178,6 +185,9 @@ second JVM reported storageConfigSource=loaded and reused the same database
 isolated LZ4 explicit-fragment run wrote four RocksDB databases
 AutoFragmentationAdaptor restart loaded 384 mappings and hit 4,925 sections
 original ZSTD config restored byte-for-byte after the isolated test
+isolated LMDB run wrote data.mdb/lock.mdb and 386 mappings
+second LMDB JVM loaded all 386 mappings and hit 3,037 stored sections
+original ZSTD config restored byte-for-byte after the LMDB test
 ```
 
 ## 2. Full VoxyRenderSystem outer lifecycle owner

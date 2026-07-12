@@ -37,6 +37,7 @@ final class ForgeOriginalVoxyStorageConfig {
     static {
         SECTION_TYPES.register("Serializer", SerializerConfig.class);
         STORAGE_TYPES.register("RocksDB", RocksDbConfig.class);
+        STORAGE_TYPES.register("LMDB", LmdbConfig.class);
         STORAGE_TYPES.register("CompressionAdaptor", CompressionAdaptorConfig.class);
         STORAGE_TYPES.register("BasicPathConfig", BasicPathConfig.class);
         STORAGE_TYPES.register("FragmentationAdaptor", FragmentationAdaptorConfig.class);
@@ -170,6 +171,19 @@ final class ForgeOriginalVoxyStorageConfig {
         @Override
         String describe() {
             return "RocksDB";
+        }
+    }
+
+    static final class LmdbConfig extends StorageConfig {
+        @Override
+        StorageBackend build(ConfigBuildCtx context) {
+            String path = context.ensurePathExists(context.substituteString(context.resolvePath()));
+            return new ForgeOriginalVoxyLmdbStorageBackend(path);
+        }
+
+        @Override
+        String describe() {
+            return "LMDB";
         }
     }
 
