@@ -1268,6 +1268,13 @@ queue, capped at 16 attempts) and only then drop with a loud error log.
 This is a Forge audit-layer repair — original Voxy performs these uploads
 without glGetError audits at all, so no original behavior is displaced.
 
+2026-07-12 correction: the GL-error-triggered loss above was real, but the
+`nextModelId`/`uploadedModelRecordCount` drift used to quantify it was
+confounded by a second, older Forge-only loss path. XX.6 below identifies the
+independent budget-boundary queue bug; the earlier byte-for-byte readback
+proved correctness only for uploaders that actually entered `upload()`, not
+coverage of every allocated unique model id.
+
 Also applied in XX.1: the world dirty/biome callbacks and node-manager start
 moved to the end of the construction boundary (still inside it) because
 Forge ingest services keep running through an owner rebuild, unlike the
@@ -1394,6 +1401,92 @@ gpuMismatch=0 with duplicatedMeshIds>0 → node-manager logic race. RenderDoc
 golden captures (same code, same pack, broken vs fine) remain available via
 the pre-XX checkout recipe recorded in the project memory.
 
+2026-07-11 current frontier (supersedes the earlier node-pointer and
+allocation working inferences above):
+
+- The failure still reproduces with XX.5 geometry-buffer reuse active. The
+  final broken BSL rebuild reused sparse buffer 271 with its existing
+  134348800-byte commitment. Reuse is required original parity, but the
+  free/reallocate window is excluded as the root cause of the holes.
+- Two worker-quiescent node audits in the same broken lifecycle were stable
+  across 42 seconds: 6420 nodes, 4610 unique meshes, zero real GPU/CPU
+  mismatches, zero duplicate/out-of-range mesh ids, zero metadata-position
+  mismatches, and zero orphaned request flags. The render-generation and
+  async-result queues were empty and their submitted/processed counters
+  remained balanced.
+- The HOC audit was also structurally clean: 645 render-list entries with no
+  duplicate, stale, or out-of-range entry. It nevertheless reported 294
+  visible `enqueueSelfEmpty` nodes and no newly queued requests. The later
+  coordinate-targeted audit excludes those aggregate empty-node counts as the
+  cause of the confirmed hole below.
+- The recorded ground-hole coordinate `block=[209,63,23]` maps to
+  `4@[0,0,0] -> 3@[0,0,0] -> 2@[1,0,0] -> 1@[3,0,0] -> 0@[6,1,0]`. The
+  coordinate-targeted node audit found every level present, non-empty, and
+  request-free; the L0 entry was a leaf with `geometry=238`. This excludes the
+  lost-request/`hasRequested` theory for this visually confirmed hole.
+- The coordinate-targeted HOC audit then found exactly one selected level for
+  the same point: its L0 node (`mesh=274` in that rebuilt lifecycle) was
+  `selectedThisFrame=true` and present at render-list index 117. The HOC and
+  render-list stages are therefore excluded for this confirmed hole; the next
+  boundary is the target mesh's generated draw commands and packed quads.
+- The old audit mislabeled `NodeChildRequest.getMsk()` as `outstanding`; it is
+  the required-child mask. Actual outstanding work is
+  `required & ~results`. A zero-required-mask top-level request with zero
+  child existence is an intentional original-Voxy sentinel, not a stuck
+  completion. The audit now reports required/results/outstanding/existence
+  masks separately and classifies these sentinels explicitly.
+- `/voxy original_voxy_node_consistency_audit <blockX> <blockY> <blockZ>` now
+  adds a short L4-to-L0 target-chain record after the normal quiescent audit.
+  Each level queries `activeSectionMap` directly, so it can distinguish
+  absent, leaf, inner, single-request, and child-request entries and report the
+  exact target-child bit, watcher flags, mesh/children state, request id, and
+  true outstanding mask. This is read-only instrumentation; request and render
+  behavior are unchanged.
+
+2026-07-12 target-model/quad frontier:
+
+- The user isolated a new content correlation: in one broken BSL lifecycle the
+  holes affected grass blocks while red concrete placed at the same locations
+  rendered normally; other lifecycles can instead affect a leaf type or another
+  block type. This reopens semantic model-id/model-record/atlas correlation,
+  not the already-passed byte-for-byte upload-at-commit audit.
+- BSL 10.1.3 maps `grass_block` and `red_concrete` to the same shaderpack block
+  id (`block.25099`), and both BSL and Complementary's opaque Voxy sidecars use
+  tint RGB rather than tint alpha for fragment rejection. A shaderpack
+  `customId` or biome-tint-alpha difference alone therefore does not explain
+  the observed grass-versus-concrete split.
+- Opaque `quads.frag` only alpha-discards when the model face's discard bit is
+  active (or its merged-quad override applies) and the exact L0 atlas alpha is
+  at most 0.1. The decisive checks are consequently: whether a target UP-face
+  quad exists, which packed `modelId` it carries, and whether that model's GPU
+  face record and atlas tile agree with the factory mapping.
+- `/voxy original_voxy_block_model_audit <blockX> <blockY> <blockZ>` is a
+  read-only coordinate probe. It resolves the state/biome from Voxy's ingested
+  L0 `WorldSection` (falling back to a read-only lookup of the `ClientLevel`
+  state in the Mapper's existing-entry snapshot), then reports
+  block-state/model ids, non-air-to-model-zero, dedupe summary,
+  expected versus GPU `customId`, face discard/override bits, current biome
+  colour entry, full atlas checksum, and per-face alpha histograms.
+- The targeted MDIC audit now also reconstructs split metadata positions in
+  their actual high-word/low-word order and reads only the matched section's
+  bounded geometry range. It deep-scans at most the first matching render-list
+  entry per LOD level and separately counts duplicates, bounding the diagnostic
+  even when the list itself is corrupt. It reports all packed quads covering the
+  target cell, including buffer, face, extent, `modelId`, biome id, and raw
+  64-bit value.
+  This distinguishes "no surface was generated" from "surface generated with
+  the wrong model" and "correct surface later discarded" in one capture.
+- The first target-HOC probe black-screened because the diagnostic itself put a
+  full node-buffer snapshot on LWJGL `MemoryStack`, producing
+  `OutOfMemoryError: Out of stack space` before the MDIC target result ran. It
+  is not evidence about XX.4. Full snapshots now use bounded native-heap
+  checked allocations with conditional `finally` frees; the target geometry
+  probe reads at most one matched section per LOD level.
+
+Validation for the diagnostic refinements: `gradlew compileJava` passed after
+both the stack-allocation fix and the target model/quad additions. The broken
+capture then produced the XX.6 ground truth below; no readiness flag changes.
+
 ### XX.5 RenderResourceReuse port: geometry buffer reused across owner rebuilds
 
 The XX.4 investigation's allocation-mode-dependent failure pattern led back
@@ -1416,5 +1509,107 @@ does not re-commit) and gives it back on free — no decommit, no delete, no
 NVIDIA free-wait during rebuilds. `ForgeVoxyInstance.shutdown()` calls
 `clearResources()` mirroring the original instance shutdown.
 
-Validation pending: shaderpack-switch regression rerun (previously every
-switch produced holes/missing water on this code).
+Validation result (2026-07-11): buffer reuse is active across repeated
+Complementary/BSL owner rebuilds, but BSL ground holes still reproduced. XX.5
+therefore closes the RenderResourceReuse parity deviation without closing
+XX.4.
+
+### XX.6 model upload queue conservation: zero GPU slots caused block-type holes
+
+The 2026-07-12 coordinate capture closes XX.4's remaining render-path gap for
+the confirmed grass hole at `block=[209,63,23]`:
+
+- HOC selected exactly the L0 node (`mesh=711`, render-list index 529).
+- MDIC produced five effective opaque commands plus one effective translucent
+  command for the section. The bounded geometry readback found two quads
+  covering the target cell, including its UP face; both carried `modelId=24`.
+- Voxy's ingested voxel was `grass_block[snowy=false]`, block-state id 146,
+  and the current factory mapping was also model id 24. Its summary was a real
+  unique bake (`primarySprite=software-bakery-face-down`), not a dedupe alias.
+- The current GPU model-24 record was zero (`actualCustomId=0` versus expected
+  10132), and every face of its atlas tile had 256/256 zero-alpha, zero-RGBA
+  pixels. Thus geometry selection, command generation, and packed model-id
+  selection were correct; the referenced GPU model slot had never been
+  populated.
+
+The factory snapshot supplies exact queue-conservation evidence:
+
+```text
+nextModelId=262
+dedupeMissCount=262
+uploadedModelRecordCount=250
+uploadedAtlasFaceCount=1500 (= 250 * 6)
+modelStoreReadbackAuditRuns=250
+modelStoreReadbackAuditFailures=0
+queuedUploadResultCount=0
+queuesEmpty=true
+```
+
+Twelve unique model ids were published to `idMappings`, metadata, summaries,
+and therefore geometry, but only 250 of 262 `ModelBakeUpload` objects reached
+the GPU. The existing readback audit is enqueued at the end of a successful
+`ModelBakeUpload.upload()`, so the twelve missing uploaders bypassed it
+entirely; all 250 audited uploads could be byte-correct while twelve GPU slots
+remained at their expected new-store zero initialization.
+
+Root cause: the Forge port added an undocumented
+`MAX_MODEL_UPLOADS_PER_TICK=2` to original `ModelFactory.processUploads()`.
+The bounded loop polled its next `ResultUploader` at the end of each successful
+iteration, then checked the budget at the top. After processing item two it
+removed item three from the concurrent deque, exited because the budget was
+exhausted, and neither uploaded, requeued, nor freed item three. Each saturated
+client-tick batch therefore lost one native model/atlas payload without an
+error or dropped-upload counter. Worker/render timing changes the batch
+boundaries on every owner rebuild, explaining why the permanently missing
+type can be grass, one leaf type, another block, or nothing conspicuous.
+
+Original parity: original `ModelBakerySubsystem.tick(long totalBudget)` ignores
+the budget and calls `ModelFactory.processUploads()`, whose do/while loop drains
+the complete upload deque. XX.6 removes the Forge-only two-upload cap and its
+capped API, restoring that drain-all owner contract. Forge's context-GL-error
+isolation, post-commit readback, bounded retry, and loud terminal failure remain
+as audit/platform adaptations; every polled uploader is now uploaded and freed,
+requeued on a retryable failure, or explicitly freed with a loud terminal
+failure.
+
+Commit review also hardened that ownership boundary without changing successful
+upload behavior: an unexpected runtime exception requeues the polled native
+payload for lifecycle teardown, completion counters publish only after every
+record/colour/atlas stage succeeds, and the retry limit now means exactly 16
+failed attempts. The worker loop again uses original `processAllThings()`'s
+worker-only predicate rather than busy-spinning on the render-thread upload
+queue; global queue-empty status still includes those pending uploads.
+
+Static model-atlas reuse and zeroing are excluded as causes: original and Forge
+both clear the cached atlas on checkout for a new store. The zero initialization
+only became persistent because the corresponding upload object was lost.
+Geometry-buffer reuse is independent.
+
+Validation: `gradlew compileJava` passed. The user then confirmed no holes on a
+fresh Complementary lifecycle and across four repeated
+Complementary -> BSL -> Complementary rebuild cycles. The final quiescent
+snapshot satisfied the complete upload-conservation invariant:
+
+```text
+nextModelId=255
+dedupeMissCount=255
+uploadedModelRecordCount=255
+modelStoreReadbackAuditRuns=255
+uploadedAtlasFaceCount=1530 (= 255 * 6)
+queuedUploadResultCount=0
+queuesEmpty=true
+```
+
+The same grass target's model 24 now had `expectedCustomId=10132`,
+`actualCustomId=10132`, six non-zero atlas faces (256/256 opaque texels each),
+and successful record/texture readbacks. The client then completed normal
+render-system, world, and instance shutdown with no upload failure, drop, or
+diagnostic exception. This resolves XX.4's shaderpack-switch/new-lifecycle
+block-type holes. The wider dimension/F3+T/logout regression checklist remains
+separate, so readiness flags stay unchanged.
+
+Separate non-causal cleanup note: Forge's full client shutdown clears the
+reused geometry cache but does not yet explicitly delete the static cached
+model-atlas texture as original `RenderResourceReuse.clearResources()` does.
+That terminal GL-resource parity gap cannot cause reload-time model-24 zeroing
+and is not mixed into XX.6.

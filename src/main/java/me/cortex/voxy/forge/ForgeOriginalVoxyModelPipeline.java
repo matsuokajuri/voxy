@@ -7,6 +7,7 @@ import me.cortex.voxy.common.thread.MultiThreadPrioritySemaphore;
 import me.cortex.voxy.common.thread.ServiceManager;
 import me.cortex.voxy.common.thread.UnifiedServiceThreadPool;
 import me.cortex.voxy.common.world.WorldEngine;
+import me.cortex.voxy.common.world.WorldSection;
 import me.cortex.voxy.common.world.other.Mapper;
 import me.cortex.voxy.config.ForgeVoxyConfig;
 import me.jellysquid.mods.sodium.client.render.chunk.ChunkRenderMatrices;
@@ -97,7 +98,6 @@ import static org.lwjgl.opengl.GL45C.glBindTextureUnit;
 
 public final class ForgeOriginalVoxyModelPipeline {
     static final String STAGE = "ORIGINAL_VOXY_MODEL_PIPELINE_PARITY";
-    private static final int MAX_MODEL_UPLOADS_PER_TICK = 2;
     private static final int ORIGINAL_GEOMETRY_MAX_SECTION_COUNT = 1 << 20;
     private static final boolean AUDIT_OCULUS_MATRICES = Boolean.getBoolean("voxy.forge.auditOculusMatrices");
     private static final boolean AUDIT_CHUNK_BOUND = Boolean.getBoolean("voxy.forge.auditChunkBound");
@@ -358,22 +358,130 @@ public final class ForgeOriginalVoxyModelPipeline {
     }
 
     synchronized ForgeOriginalVoxyMdicCommandGenerationStats requestMdicCommandGenerationReadbackAudit() {
+        return this.requestMdicCommandGenerationReadbackAudit(null);
+    }
+
+    synchronized ForgeOriginalVoxyMdicCommandGenerationStats requestMdicCommandGenerationReadbackAudit(
+            int blockX,
+            int blockY,
+            int blockZ) {
+        return this.requestMdicCommandGenerationReadbackAudit(new int[]{blockX, blockY, blockZ});
+    }
+
+    private ForgeOriginalVoxyMdicCommandGenerationStats requestMdicCommandGenerationReadbackAudit(int[] targetBlock) {
         if (this.renderSystem == null || !this.ownerReady || this.stale) {
             return ForgeOriginalVoxyMdicCommandGenerationStats.unavailable("original-mdic-command-generator-not-ready");
         }
-        this.renderSystem.traversal().requestReadbackAudit();
-        this.renderSystem.sectionRenderer().requestReadbackAudit();
+        if (targetBlock == null) {
+            this.renderSystem.traversal().requestReadbackAudit();
+            this.renderSystem.sectionRenderer().requestReadbackAudit();
+        } else {
+            this.renderSystem.traversal().requestReadbackAudit(
+                    targetBlock[0], targetBlock[1], targetBlock[2]);
+            this.renderSystem.sectionRenderer().requestReadbackAudit(
+                    targetBlock[0], targetBlock[1], targetBlock[2]);
+        }
         this.lastLifecycleEvent = "original-mdic-command-generation-readback-audit-requested";
         return this.renderSystem.sectionRenderer().createStatusSnapshot();
     }
 
     synchronized ForgeOriginalVoxyModelPipelineStats requestNodeConsistencyAudit() {
+        return this.requestNodeConsistencyAudit(null);
+    }
+
+    synchronized ForgeOriginalVoxyModelPipelineStats requestNodeConsistencyAudit(
+            int blockX,
+            int blockY,
+            int blockZ) {
+        return this.requestNodeConsistencyAudit(new int[]{blockX, blockY, blockZ});
+    }
+
+    private ForgeOriginalVoxyModelPipelineStats requestNodeConsistencyAudit(int[] targetBlock) {
         if (this.renderSystem == null || !this.ownerReady || this.stale) {
             this.lastFailureReason = "original-async-node-manager-not-ready";
             return this.createStatusSnapshot();
         }
-        this.renderSystem.nodeManager().requestConsistencyAudit();
+        if (targetBlock == null) {
+            this.renderSystem.nodeManager().requestConsistencyAudit();
+        } else {
+            this.renderSystem.nodeManager().requestConsistencyAudit(
+                    targetBlock[0], targetBlock[1], targetBlock[2]);
+        }
         this.lastLifecycleEvent = "original-node-consistency-audit-requested";
+        this.lastFailureReason = "none";
+        return this.createStatusSnapshot();
+    }
+
+    synchronized ForgeOriginalVoxyModelPipelineStats requestBlockModelAudit(
+            int blockX,
+            int blockY,
+            int blockZ) {
+        if (this.renderSystem == null || !this.ownerReady || this.stale) {
+            this.lastFailureReason = "original-model-factory-not-ready";
+            return this.createStatusSnapshot();
+        }
+        ForgeOriginalVoxyRenderSystem expectedRenderSystem = this.renderSystem;
+        this.runOnRenderThread(() -> {
+            synchronized (ForgeOriginalVoxyModelPipeline.this) {
+                if (!ForgeOriginalVoxyModelPipeline.this.ownerReady
+                        || ForgeOriginalVoxyModelPipeline.this.stale
+                        || ForgeOriginalVoxyModelPipeline.this.renderSystem != expectedRenderSystem) {
+                    VoxyForge.LOGGER.info(
+                            "Original Voxy block-model target audit unavailable: owner changed block=[{},{},{}]",
+                            blockX,
+                            blockY,
+                            blockZ);
+                    return;
+                }
+            }
+            Minecraft minecraft = Minecraft.getInstance();
+            if (minecraft.level == null) {
+                VoxyForge.LOGGER.info(
+                        "Original Voxy block-model target audit unavailable: no client level block=[{},{},{}]",
+                        blockX,
+                        blockY,
+                        blockZ);
+                return;
+            }
+            net.minecraft.core.BlockPos position = new net.minecraft.core.BlockPos(blockX, blockY, blockZ);
+            boolean loaded = minecraft.level.hasChunkAt(position);
+            boolean worldVoxelPresent = false;
+            long worldMapping = 0L;
+            WorldEngine activeWorld = ForgeOriginalVoxyModelPipeline.this.instance.getActiveWorld();
+            if (activeWorld != null && activeWorld.isLive()) {
+                WorldSection section = null;
+                try {
+                    section = activeWorld.acquireIfExists(0, blockX >> 5, blockY >> 5, blockZ >> 5);
+                    if (section != null) {
+                        worldMapping = section._unsafeGetRawDataArray()[WorldSection.getIndex(
+                                blockX & 31,
+                                blockY & 31,
+                                blockZ & 31)];
+                        worldVoxelPresent = true;
+                    }
+                } catch (RuntimeException e) {
+                    VoxyForge.LOGGER.info(
+                            "Original Voxy block-model target audit could not read ingested voxel: block=[{},{},{}] error={}",
+                            blockX,
+                            blockY,
+                            blockZ,
+                            e.toString());
+                } finally {
+                    if (section != null) {
+                        section.release(WorldSection.RELEASE_HINT_POSSIBLE_REUSE);
+                    }
+                }
+            }
+            expectedRenderSystem.modelService().factory.auditBlockStateModelOnRenderThread(
+                    blockX,
+                    blockY,
+                    blockZ,
+                    minecraft.level.getBlockState(position),
+                    loaded,
+                    worldVoxelPresent,
+                    worldMapping);
+        });
+        this.lastLifecycleEvent = "original-block-model-target-audit-requested";
         this.lastFailureReason = "none";
         return this.createStatusSnapshot();
     }
@@ -1293,10 +1401,6 @@ public final class ForgeOriginalVoxyModelPipeline {
     }
 
     private void processFactoryUploads(ForgeOriginalVoxyRenderSystem renderSystem) {
-        this.processFactoryUploads(renderSystem, MAX_MODEL_UPLOADS_PER_TICK);
-    }
-
-    private void processFactoryUploads(ForgeOriginalVoxyRenderSystem renderSystem, int maxUploads) {
         if (!RenderSystem.isOnRenderThread()) {
             this.recordFailure("model-factory-upload-not-render-thread");
             return;
@@ -1318,7 +1422,7 @@ public final class ForgeOriginalVoxyModelPipeline {
         // client tick run the full teardown (this can sit mid-frame, so nothing is freed here).
         int processed;
         try {
-            processed = renderSystem.modelService().tick(maxUploads);
+            processed = renderSystem.modelService().tick();
         } catch (RuntimeException e) {
             this.recordFailure("model-factory-processor-" + e.getClass().getSimpleName() + ":" + e.getMessage());
             return;
@@ -1414,7 +1518,7 @@ public final class ForgeOriginalVoxyModelPipeline {
             ForgeOriginalVoxyUploadStream.instance().tick();
         }
         if (renderSystem != null) {
-            this.processFactoryUploads(renderSystem, 100_000_000);
+            this.processFactoryUploads(renderSystem);
         }
         glFinish();
         return geometrySync != null && geometrySync.hasWork()
@@ -1446,7 +1550,7 @@ public final class ForgeOriginalVoxyModelPipeline {
             renderSystem = this.ownerReady && !this.stale ? this.renderSystem : null;
         }
         if (renderSystem != null) {
-            this.processFactoryUploads(renderSystem, Integer.MAX_VALUE);
+            this.processFactoryUploads(renderSystem);
         }
     }
 

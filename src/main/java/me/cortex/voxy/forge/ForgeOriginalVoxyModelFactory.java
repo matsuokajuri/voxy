@@ -194,10 +194,10 @@ final class ForgeOriginalVoxyModelFactory {
         while (this.processModelResult(Minecraft.getInstance())) {
             // Drain like original ModelFactory.processAllThings().
         }
-        return this.hasInflightWork();
+        return this.hasWorkerWork();
     }
 
-    int processUploadsOnRenderThread(int maxUploads) {
+    int processUploadsOnRenderThread() {
         if (!RenderSystem.isOnRenderThread()) {
             this.fail("model-factory-upload-not-render-thread");
             return 0;
@@ -217,14 +217,24 @@ final class ForgeOriginalVoxyModelFactory {
         GL11C.glPixelStorei(GL11C.GL_UNPACK_SKIP_PIXELS, 0);
         GL11C.glPixelStorei(GL11C.GL_UNPACK_SKIP_ROWS, 0);
         GL11C.glPixelStorei(GL11C.GL_UNPACK_ALIGNMENT, 4);
-        while (upload != null && processed < maxUploads) {
-            String error = upload.upload(this.store, this);
+        //Original ModelFactory.processUploads() drains every queued ResultUploader. A polled
+        //uploader owns native model/atlas payloads and must be uploaded, requeued, or freed.
+        while (upload != null) {
+            String error;
+            try {
+                error = upload.upload(this.store, this);
+            } catch (RuntimeException e) {
+                //Pipeline failure handling tears this owner down on the next client tick. Keep
+                //the native payload queue-owned until that teardown drains and frees it.
+                this.uploadResults.addFirst(upload);
+                throw e;
+            }
             if (!"none".equals(error)) {
                 //Dropping the upload would leave the model's GPU data zeroed forever (invisible
                 // or black faces for every blockstate that maps to it), so retry next tick and
                 // only give up after repeated failures.
                 this.consecutiveUploadFailureCount++;
-                if (this.consecutiveUploadFailureCount <= MAX_UPLOAD_ATTEMPTS) {
+                if (this.consecutiveUploadFailureCount < MAX_UPLOAD_ATTEMPTS) {
                     this.uploadResults.addFirst(upload);
                     VoxyForge.LOGGER.warn(
                             "Original Voxy model upload failed (attempt {}/{}), retrying next tick: {}",
@@ -321,7 +331,7 @@ final class ForgeOriginalVoxyModelFactory {
         return !this.hasInflightWork();
     }
 
-    private boolean hasInflightWork() {
+    private boolean hasWorkerWork() {
         this.blockStatesInFlightLock.lock();
         try {
             if (!this.blockStatesInFlight.isEmpty()) {
@@ -330,7 +340,11 @@ final class ForgeOriginalVoxyModelFactory {
         } finally {
             this.blockStatesInFlightLock.unlock();
         }
-        return !this.uploadResults.isEmpty() || !this.biomeQueue.isEmpty() || !this.bakeQueue.isEmpty();
+        return !this.biomeQueue.isEmpty() || !this.bakeQueue.isEmpty();
+    }
+
+    private boolean hasInflightWork() {
+        return this.hasWorkerWork() || !this.uploadResults.isEmpty();
     }
 
     int getBakedCount() {
@@ -354,6 +368,189 @@ final class ForgeOriginalVoxyModelFactory {
             throw new ForgeOriginalVoxyIdNotYetComputedException(blockId, true);
         }
         return this.idMappings[blockId];
+    }
+
+    void auditBlockStateModelOnRenderThread(
+            int blockX,
+            int blockY,
+            int blockZ,
+            BlockState clientState,
+            boolean clientChunkLoaded,
+            boolean worldVoxelPresent,
+            long worldMapping) {
+        if (!RenderSystem.isOnRenderThread()) {
+            VoxyForge.LOGGER.warn(
+                    "Original Voxy block-model target audit unavailable: not on render thread block=[{},{},{}]",
+                    blockX,
+                    blockY,
+                    blockZ);
+            return;
+        }
+        int ingestedBlockStateId = worldVoxelPresent ? Mapper.getBlockId(worldMapping) : -1;
+        int ingestedBiomeId = worldVoxelPresent ? Mapper.getBiomeId(worldMapping) : -1;
+        BlockState state = worldVoxelPresent
+                ? this.mapper.getBlockStateFromBlockId(ingestedBlockStateId)
+                : clientState;
+        int blockStateId = worldVoxelPresent
+                ? ingestedBlockStateId
+                : this.findExistingBlockStateId(state);
+        int modelId = blockStateId >= 0 && blockStateId < this.idMappings.length
+                ? this.idMappings[blockStateId]
+                : -1;
+        ForgeOriginalUploadedModelSummary summary = this.uploadedByBlockState.get(blockStateId);
+        boolean modelIdZeroForNonAir = modelId == 0 && !state.isAir();
+        if (modelId < 0 || modelId >= MAX_MODEL_IDS) {
+            VoxyForge.LOGGER.info(
+                    "Original Voxy block-model target audit: block=[{},{},{}] clientChunkLoaded={} clientState={} worldVoxelPresent={} worldMapping=0x{} ingestedState={} blockStateId={} biomeId={} modelId={} modelIdZeroForNonAir={} summary={} modelReady=false",
+                    blockX,
+                    blockY,
+                    blockZ,
+                    clientChunkLoaded,
+                    clientState,
+                    worldVoxelPresent,
+                    Long.toHexString(worldMapping),
+                    state,
+                    blockStateId,
+                    ingestedBiomeId,
+                    modelId,
+                    modelIdZeroForNonAir,
+                    summary);
+            return;
+        }
+
+        byte[] modelRecord = new byte[MODEL_SIZE];
+        byte[] texture = new byte[(int) ForgeOriginalVoxyMipGen.UPLOADED_MIP_CHAIN_BYTES];
+        String modelReadError = this.store.readOriginalVoxyModelRecord(modelId, modelRecord);
+        String textureReadError = this.store.readOriginalVoxyModelTextureMipChain(modelId, texture);
+        int[] words = new int[MODEL_SIZE / Integer.BYTES];
+        for (int word = 0; word < words.length; word++) {
+            int offset = word * Integer.BYTES;
+            words[word] = Byte.toUnsignedInt(modelRecord[offset])
+                    | (Byte.toUnsignedInt(modelRecord[offset + 1]) << 8)
+                    | (Byte.toUnsignedInt(modelRecord[offset + 2]) << 16)
+                    | (Byte.toUnsignedInt(modelRecord[offset + 3]) << 24);
+        }
+
+        int levelWidth = ForgeModelAtlasLayout.MODEL_TEXTURE_SIZE * ForgeModelAtlasLayout.FACES_PER_MODEL_X;
+        int[] alphaZero = new int[ForgeModelAtlasLayout.FACE_COUNT];
+        int[] alphaCutout = new int[ForgeModelAtlasLayout.FACE_COUNT];
+        int[] alphaOpaque = new int[ForgeModelAtlasLayout.FACE_COUNT];
+        int[] rgbaZero = new int[ForgeModelAtlasLayout.FACE_COUNT];
+        for (int face = 0; face < ForgeModelAtlasLayout.FACE_COUNT; face++) {
+            int baseX = (face >> 1) * ForgeModelAtlasLayout.MODEL_TEXTURE_SIZE;
+            int baseY = (face & 1) * ForgeModelAtlasLayout.MODEL_TEXTURE_SIZE;
+            for (int y = 0; y < ForgeModelAtlasLayout.MODEL_TEXTURE_SIZE; y++) {
+                for (int x = 0; x < ForgeModelAtlasLayout.MODEL_TEXTURE_SIZE; x++) {
+                    int pixel = ((baseY + y) * levelWidth + baseX + x)
+                            * ForgeModelAtlasPixelFormat.BYTES_PER_PIXEL;
+                    int red = Byte.toUnsignedInt(texture[pixel]);
+                    int green = Byte.toUnsignedInt(texture[pixel + 1]);
+                    int blue = Byte.toUnsignedInt(texture[pixel + 2]);
+                    int alpha = Byte.toUnsignedInt(texture[pixel + 3]);
+                    if ((red | green | blue | alpha) == 0) {
+                        rgbaZero[face]++;
+                    }
+                    if (alpha == 0) {
+                        alphaZero[face]++;
+                    } else if (alpha <= 25) {
+                        alphaCutout[face]++;
+                    } else {
+                        alphaOpaque[face]++;
+                    }
+                }
+            }
+        }
+
+        StringBuilder faceWords = new StringBuilder();
+        for (int face = 0; face < ForgeOriginalVoxyModelStoreLayoutSpec.FACE_DATA_WORDS; face++) {
+            if (!faceWords.isEmpty()) {
+                faceWords.append(',');
+            }
+            faceWords.append(String.format(
+                    java.util.Locale.ROOT,
+                    "0x%08x(discard=%d,override=%d)",
+                    words[face],
+                    (words[face] >>> 22) & 1,
+                    (words[face] >>> 23) & 1));
+        }
+        StringBuilder alphaSummary = new StringBuilder();
+        for (int face = 0; face < ForgeModelAtlasLayout.FACE_COUNT; face++) {
+            if (!alphaSummary.isEmpty()) {
+                alphaSummary.append(';');
+            }
+            alphaSummary.append(face)
+                    .append(":zero=").append(alphaZero[face])
+                    .append(",low=").append(alphaCutout[face])
+                    .append(",opaque=").append(alphaOpaque[face])
+                    .append(",rgbaZero=").append(rgbaZero[face]);
+        }
+        int flagsA = words[ForgeOriginalVoxyModelStoreLayoutSpec.WORD_FLAGS_A];
+        int actualCustomId = words[ForgeOriginalVoxyModelStoreLayoutSpec.WORD_CUSTOM_ID];
+        boolean customMapContains = this.customBlockStateIdMapping != null
+                && this.customBlockStateIdMapping.containsKey(state);
+        int expectedCustomId = this.customBlockStateId(state);
+        int colourTint = words[ForgeOriginalVoxyModelStoreLayoutSpec.WORD_COLOUR_TINT];
+        String biomeColourRead = "not-biome-lut";
+        int biomeColourIndex = -1;
+        int biomeColour = 0;
+        if ((flagsA & 2) != 0 && ingestedBiomeId >= 0) {
+            long colourIndex = Integer.toUnsignedLong(colourTint) + ingestedBiomeId;
+            if (colourIndex <= Integer.MAX_VALUE) {
+                biomeColourIndex = (int) colourIndex;
+                byte[] colourBytes = new byte[Integer.BYTES];
+                biomeColourRead = this.store.readOriginalVoxyModelColourRange(
+                        biomeColourIndex,
+                        Integer.BYTES,
+                        colourBytes);
+                biomeColour = Byte.toUnsignedInt(colourBytes[0])
+                        | (Byte.toUnsignedInt(colourBytes[1]) << 8)
+                        | (Byte.toUnsignedInt(colourBytes[2]) << 16)
+                        | (Byte.toUnsignedInt(colourBytes[3]) << 24);
+            } else {
+                biomeColourRead = "biome-colour-index-overflow";
+            }
+        }
+        VoxyForge.LOGGER.info(
+                "Original Voxy block-model target audit: block=[{},{},{}] clientChunkLoaded={} clientState={} worldVoxelPresent={} worldMapping=0x{} ingestedState={} blockStateId={} biomeId={} modelId={} modelIdZeroForNonAir={} summaryModelId={} dedupeSignature={} primarySprite={} voxyMetadata={} modelRead={} textureRead={} faceData=[{}] flagsA=0x{} colourTint=0x{} biomeColourIndex={} biomeColour=0x{} biomeColourRead={} customMapContains={} expectedCustomId={} actualCustomId={} customIdMatch={} atlasChecksum={} alpha=[{}]",
+                blockX,
+                blockY,
+                blockZ,
+                clientChunkLoaded,
+                clientState,
+                worldVoxelPresent,
+                Long.toHexString(worldMapping),
+                state,
+                blockStateId,
+                ingestedBiomeId,
+                modelId,
+                modelIdZeroForNonAir,
+                summary == null ? -1 : summary.originalModelId(),
+                summary == null ? "missing" : summary.dedupeSignature(),
+                summary == null ? "missing" : summary.primarySprite(),
+                summary == null ? 0L : summary.voxyMetadata(),
+                modelReadError,
+                textureReadError,
+                faceWords,
+                Integer.toHexString(flagsA),
+                Integer.toHexString(colourTint),
+                biomeColourIndex,
+                Integer.toHexString(biomeColour),
+                biomeColourRead,
+                customMapContains,
+                expectedCustomId,
+                actualCustomId,
+                actualCustomId == expectedCustomId,
+                ForgeModelAtlasPixelFormat.checksum(texture),
+                alphaSummary);
+    }
+
+    private int findExistingBlockStateId(BlockState state) {
+        for (Mapper.StateEntry entry : this.mapper.getStateEntries()) {
+            if (entry.state.equals(state)) {
+                return entry.id;
+            }
+        }
+        return -1;
     }
 
     long getModelMetadataFromClientId(int clientId) {
@@ -1216,7 +1413,6 @@ final class ForgeOriginalVoxyModelFactory {
             if (!"none".equals(error)) {
                 return error;
             }
-            factory.uploadedModelRecordCount++;
             if (this.biomeUpload != null) {
                 error = store.uploadOriginalVoxyModelColourRange(
                         this.build.immediateBiomeColourBaseIndex(),
@@ -1225,11 +1421,16 @@ final class ForgeOriginalVoxyModelFactory {
                 if (!"none".equals(error)) {
                     return error;
                 }
-                factory.uploadedModelColourCount += (int) (this.biomeUpload.size / Integer.BYTES);
             }
             error = store.uploadOriginalVoxyModelTextureMipChain(this.modelId, this.texture);
             if (!"none".equals(error)) {
                 return error;
+            }
+            //Publish completion counters only after every stage succeeded. A retry after a later
+            //stage failure rewrites the same slot and must not be counted twice.
+            factory.uploadedModelRecordCount++;
+            if (this.biomeUpload != null) {
+                factory.uploadedModelColourCount += (int) (this.biomeUpload.size / Integer.BYTES);
             }
             factory.uploadedAtlasFaceCount += ForgeModelAtlasLayout.FACE_COUNT;
             factory.enqueueUploadAudit(new PendingUploadAudit(

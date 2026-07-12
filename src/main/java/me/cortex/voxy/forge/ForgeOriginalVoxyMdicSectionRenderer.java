@@ -8,6 +8,8 @@ import org.lwjgl.opengl.GL;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
 
+import java.util.concurrent.atomic.AtomicReference;
+
 import static org.lwjgl.opengl.ARBIndirectParameters.GL_PARAMETER_BUFFER_ARB;
 import static org.lwjgl.opengl.ARBIndirectParameters.glMultiDrawElementsIndirectCountARB;
 import static org.lwjgl.opengl.GL11C.GL_BLEND;
@@ -135,7 +137,7 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
     private int cmdgenProgramId;
     private int prefixSumProgramId;
     private int translucentGenProgramId;
-    private boolean readbackAuditRequested;
+    private final AtomicReference<ReadbackAuditRequest> readbackAuditRequest = new AtomicReference<>();
     private long opaqueRenderCallCount;
     private long translucentRenderCallCount;
     private long temporalRenderCallCount;
@@ -265,7 +267,7 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
                     "TRANSLUCENT_DISTANCE_BUFFER_BINDING", TRANSLUCENT_BUILD_DISTANCE_BUFFER_BINDING,
                     "TRANSLUCENT_OFFSET", TRANSLUCENT_OFFSET);
             this.translucentGenProgramId = compileComputeProgram(translucentGenSource, "buildtranslucents.comp");
-            this.readbackAuditRequested = false;
+            this.readbackAuditRequest.set(null);
             this.lifecycleState = "READY";
             this.lastLifecycleEvent = "build-on-render-thread";
             this.lastFailureReason = "none";
@@ -279,7 +281,13 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
     }
 
     void requestReadbackAudit() {
-        this.readbackAuditRequested = true;
+        this.readbackAuditRequest.set(new ReadbackAuditRequest(null));
+        this.lastLifecycleEvent = "readback-audit-requested";
+    }
+
+    void requestReadbackAudit(int blockX, int blockY, int blockZ) {
+        this.readbackAuditRequest.set(new ReadbackAuditRequest(
+                new BlockAuditTarget(blockX, blockY, blockZ)));
         this.lastLifecycleEvent = "readback-audit-requested";
     }
 
@@ -452,11 +460,12 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
                     && geometryData.sectionCount() > 0
                     && !this.readbackAuditReady
                     && this.readbackAuditRuns < MAX_AUTO_READBACK_AUDITS) {
-                this.readbackAuditRequested = true;
+                this.readbackAuditRequest.compareAndSet(null, new ReadbackAuditRequest(null));
             }
-            if (this.readbackAuditRequested && this.readbackAuditRuns < MAX_AUTO_READBACK_AUDITS) {
-                this.readbackAuditRequested = false;
-                this.readbackAudit(viewport, geometryData);
+            ReadbackAuditRequest auditRequest = this.readbackAuditRequest.getAndSet(null);
+            if (auditRequest != null
+                    && (auditRequest.target != null || this.readbackAuditRuns < MAX_AUTO_READBACK_AUDITS)) {
+                this.readbackAudit(viewport, geometryData, auditRequest.target);
             }
             this.inputParityReady = true;
             this.lifecycleState = "RUNNING_ORIGINAL_MDIC_CMDGEN";
@@ -821,7 +830,10 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
         this.translucentGenDispatchCount++;
     }
 
-    private void readbackAudit(ForgeOriginalVoxyMdicViewport viewport, ForgeOriginalVoxyBasicSectionGeometryData geometryData) {
+    private void readbackAudit(
+            ForgeOriginalVoxyMdicViewport viewport,
+            ForgeOriginalVoxyBasicSectionGeometryData geometryData,
+            BlockAuditTarget target) {
         int geometrySections = geometryData.sectionCount();
         this.readbackAuditRuns++;
         try (MemoryStack stack = MemoryStack.stackPush()) {
@@ -910,6 +922,9 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
                 this.firstPositionScratchWord0 = 0;
                 this.firstPositionScratchWord1 = 0;
             }
+            if (target != null) {
+                this.auditTargetCommands(viewport, geometryData, target);
+            }
         }
 
         boolean hasRenderListInput = this.renderListSectionCount > 0;
@@ -968,6 +983,375 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
                 this.lastGlError);
         this.lastLifecycleEvent = "readback-audit";
         this.lastGlError = glGetError();
+    }
+
+    private void auditTargetCommands(
+            ForgeOriginalVoxyMdicViewport viewport,
+            ForgeOriginalVoxyBasicSectionGeometryData geometryData,
+            BlockAuditTarget target) {
+        int maxEntries = (int) (viewport.renderListBufferSize() / Integer.BYTES) - 1;
+        int entryCount = Math.max(0, Math.min(this.renderListSectionCount, maxEntries));
+        int geometrySections = geometryData.sectionCount();
+        if (entryCount == 0 || geometrySections == 0) {
+            VoxyForge.LOGGER.info(
+                    "Original MDIC target audit: block=[{},{},{}] unavailable renderList={} geometrySections={}",
+                    target.blockX,
+                    target.blockY,
+                    target.blockZ,
+                    entryCount,
+                    geometrySections);
+            return;
+        }
+
+        long renderIdsSize = entryCount * (long) Integer.BYTES;
+        long metadataSize = geometrySections * SECTION_META_WORDS * (long) Integer.BYTES;
+        long renderIdsPtr = 0L;
+        long metadataPtr = 0L;
+        try {
+            renderIdsPtr = MemoryUtil.nmemAllocChecked(renderIdsSize);
+            metadataPtr = MemoryUtil.nmemAllocChecked(metadataSize);
+            nglGetNamedBufferSubData(
+                    viewport.indirectLookupBuffer.id,
+                    Integer.BYTES,
+                    renderIdsSize,
+                    renderIdsPtr);
+            nglGetNamedBufferSubData(
+                    geometryData.metadataBufferId(),
+                    0L,
+                    metadataSize,
+                    metadataPtr);
+
+            int matchedLevels = 0;
+            int duplicateMatches = 0;
+            StringBuilder matches = new StringBuilder();
+            for (int level = WorldEngine.MAX_LOD_LAYER; level >= 0; level--) {
+                boolean levelMatched = false;
+                int shift = 5 + level;
+                long expectedPosition = WorldEngine.getWorldSectionId(
+                        level,
+                        target.blockX >> shift,
+                        target.blockY >> shift,
+                        target.blockZ >> shift);
+                for (int drawId = 0; drawId < entryCount; drawId++) {
+                    int sectionId = MemoryUtil.memGetInt(renderIdsPtr + drawId * (long) Integer.BYTES);
+                    if (sectionId < 0 || sectionId >= geometrySections) {
+                        continue;
+                    }
+                    long metaPtr = metadataPtr + sectionId * SECTION_META_WORDS * (long) Integer.BYTES;
+                    long metadataPosition = (Integer.toUnsignedLong(MemoryUtil.memGetInt(metaPtr)) << 32)
+                            | Integer.toUnsignedLong(MemoryUtil.memGetInt(metaPtr + Integer.BYTES));
+                    if (metadataPosition != expectedPosition) {
+                        continue;
+                    }
+                    if (levelMatched) {
+                        duplicateMatches++;
+                        continue;
+                    }
+                    levelMatched = true;
+                    matchedLevels++;
+                    int visibility;
+                    long scratchPosition;
+                    try (MemoryStack stack = MemoryStack.stackPush()) {
+                        long visibilityPtr = stack.nmalloc(Integer.BYTES);
+                        nglGetNamedBufferSubData(
+                                viewport.visibilityBuffer.id,
+                                sectionId * (long) Integer.BYTES,
+                                Integer.BYTES,
+                                visibilityPtr);
+                        visibility = MemoryUtil.memGetInt(visibilityPtr);
+                        long scratchPtr = stack.nmalloc(2 * Integer.BYTES);
+                        nglGetNamedBufferSubData(
+                                viewport.positionScratchBuffer.id,
+                                drawId * 2L * Integer.BYTES,
+                                2L * Integer.BYTES,
+                                scratchPtr);
+                        scratchPosition = (Integer.toUnsignedLong(MemoryUtil.memGetInt(scratchPtr)) << 32)
+                                | Integer.toUnsignedLong(MemoryUtil.memGetInt(scratchPtr + Integer.BYTES));
+                    }
+
+                    int frame = viewport.frameId & 0x7fffffff;
+                    boolean visibilityCurrent = (visibility & 0x7fffffff) == frame;
+                    boolean visiblePreviousFrame = (visibility & 0x80000000) != 0;
+                    int opaqueEffectiveMax = Math.min(
+                            (int) (geometrySections * 4.4D + 128),
+                            OPAQUE_DRAW_COUNT);
+                    int translucentEffectiveMax = Math.min(geometrySections, TRANSLUCENT_DRAW_COUNT);
+                    int temporalEffectiveMax = Math.min(
+                            geometrySections,
+                            ForgeOriginalVoxyMdicViewport.TEMPORAL_DRAW_COUNT);
+                    CommandAuditSummary opaque = this.scanTargetCommands(
+                            viewport.drawCallBuffer.id,
+                            0L,
+                            Math.max(0, Math.min(this.opaqueDrawCount, OPAQUE_DRAW_COUNT)),
+                            opaqueEffectiveMax,
+                            drawId);
+                    CommandAuditSummary translucent = this.scanTargetCommands(
+                            viewport.drawCallBuffer.id,
+                            TRANSLUCENT_OFFSET * (long) DRAW_COMMAND_BYTES,
+                            Math.max(0, Math.min(this.translucentDrawCount, TRANSLUCENT_DRAW_COUNT)),
+                            translucentEffectiveMax,
+                            drawId);
+                    CommandAuditSummary temporal = this.scanTargetCommands(
+                            viewport.drawCallBuffer.id,
+                            TEMPORAL_OFFSET * (long) DRAW_COMMAND_BYTES,
+                            Math.max(0, Math.min(
+                                    this.temporalOpaqueDrawCount,
+                                    ForgeOriginalVoxyMdicViewport.TEMPORAL_DRAW_COUNT)),
+                            temporalEffectiveMax,
+                            drawId);
+                    QuadAuditSummary quads = this.scanTargetQuads(geometryData, metaPtr, level, target);
+
+                    if (!matches.isEmpty()) {
+                        matches.append(" | ");
+                    }
+                    matches.append("L").append(level)
+                            .append(" section=").append(sectionId)
+                            .append(" drawId=").append(drawId)
+                            .append(" visibility=").append(Integer.toUnsignedString(visibility))
+                            .append(" frame=").append(frame)
+                            .append(" visibilityCurrent=").append(visibilityCurrent)
+                            .append(" visiblePreviousFrame=").append(visiblePreviousFrame)
+                            .append(" positionScratchMatch=").append(scratchPosition == metadataPosition)
+                            .append(" metaCounts=[")
+                            .append(MemoryUtil.memGetInt(metaPtr + 16L)).append(',')
+                            .append(MemoryUtil.memGetInt(metaPtr + 20L)).append(',')
+                            .append(MemoryUtil.memGetInt(metaPtr + 24L)).append(',')
+                            .append(MemoryUtil.memGetInt(metaPtr + 28L)).append(']')
+                            .append(" opaque={").append(opaque).append('}')
+                            .append(" temporal={").append(temporal).append('}')
+                            .append(" translucent={").append(translucent).append('}')
+                            .append(" quads={").append(quads).append('}');
+                }
+            }
+            VoxyForge.LOGGER.info(
+                    "Original MDIC target audit: block=[{},{},{}] renderListEntries={} matchedLevels={} duplicateMatches={} matches=[{}]",
+                    target.blockX,
+                    target.blockY,
+                    target.blockZ,
+                    entryCount,
+                    matchedLevels,
+                    duplicateMatches,
+                    matches);
+        } finally {
+            if (renderIdsPtr != 0L) {
+                MemoryUtil.nmemFree(renderIdsPtr);
+            }
+            if (metadataPtr != 0L) {
+                MemoryUtil.nmemFree(metadataPtr);
+            }
+        }
+    }
+
+    private QuadAuditSummary scanTargetQuads(
+            ForgeOriginalVoxyBasicSectionGeometryData geometryData,
+            long metadataPtr,
+            int level,
+            BlockAuditTarget target) {
+        int[] counts = new int[8];
+        int total = 0;
+        for (int buffer = 0; buffer < counts.length; buffer++) {
+            int packed = MemoryUtil.memGetInt(metadataPtr + (4L + (buffer >> 1)) * Integer.BYTES);
+            counts[buffer] = (packed >>> ((buffer & 1) * 16)) & 0xffff;
+            total += counts[buffer];
+        }
+        long geometryElement = Integer.toUnsignedLong(MemoryUtil.memGetInt(metadataPtr + 3L * Integer.BYTES));
+        long byteOffset = geometryElement * Long.BYTES;
+        long byteCount = total * (long) Long.BYTES;
+        if (total == 0) {
+            return new QuadAuditSummary(geometryElement, counts, 0, 0, 0, 0, false, "");
+        }
+        if (byteOffset < 0L
+                || byteCount < 0L
+                || byteOffset > geometryData.geometryCapacityBytes()
+                || byteCount > geometryData.geometryCapacityBytes() - byteOffset) {
+            return new QuadAuditSummary(geometryElement, counts, total, 0, 0, 0, true, "geometry-range-oob");
+        }
+
+        int localX = (target.blockX >> level) & 31;
+        int localY = (target.blockY >> level) & 31;
+        int localZ = (target.blockZ >> level) & 31;
+        int covering = 0;
+        int coveringUp = 0;
+        int coveringModelZero = 0;
+        boolean layoutMismatch = false;
+        StringBuilder samples = new StringBuilder();
+        long quadsPtr = MemoryUtil.nmemAllocChecked(byteCount);
+        try {
+            nglGetNamedBufferSubData(
+                    geometryData.geometryBufferId(),
+                    byteOffset,
+                    byteCount,
+                    quadsPtr);
+            int quadIndex = 0;
+            for (int buffer = 0; buffer < counts.length; buffer++) {
+                for (int index = 0; index < counts[buffer]; index++, quadIndex++) {
+                    long quad = MemoryUtil.memGetLong(quadsPtr + quadIndex * (long) Long.BYTES);
+                    int face = (int) (quad & 7L);
+                    int size0 = (int) ((quad >>> 3) & 15L) + 1;
+                    int size1 = (int) ((quad >>> 7) & 15L) + 1;
+                    int z = (int) ((quad >>> 11) & 31L);
+                    int y = (int) ((quad >>> 16) & 31L);
+                    int x = (int) ((quad >>> 21) & 31L);
+                    int modelId = (int) ((quad >>> 26) & 0xffffL);
+                    int biomeId = (int) ((quad >>> 46) & 0x1ffL);
+                    int axis = face >> 1;
+                    boolean covers = switch (axis) {
+                        case 0 -> y == localY
+                                && localX >= x && localX < x + size0
+                                && localZ >= z && localZ < z + size1;
+                        case 1 -> z == localZ
+                                && localX >= x && localX < x + size0
+                                && localY >= y && localY < y + size1;
+                        case 2 -> x == localX
+                                && localY >= y && localY < y + size0
+                                && localZ >= z && localZ < z + size1;
+                        default -> false;
+                    };
+                    if (!covers) {
+                        continue;
+                    }
+                    covering++;
+                    coveringUp += face == 1 ? 1 : 0;
+                    coveringModelZero += modelId == 0 ? 1 : 0;
+                    boolean directionalBufferMatch = buffer < 2 || buffer == 2 + face;
+                    layoutMismatch |= !directionalBufferMatch;
+                    if (covering <= 16) {
+                        if (!samples.isEmpty()) {
+                            samples.append(',');
+                        }
+                        samples.append('b').append(buffer)
+                                .append('#').append(index)
+                                .append(":f").append(face)
+                                .append('@').append(x).append('/').append(y).append('/').append(z)
+                                .append('+').append(size0).append('x').append(size1)
+                                .append(" model=").append(modelId)
+                                .append(" biome=").append(biomeId)
+                                .append(" raw=0x").append(Long.toHexString(quad));
+                    }
+                }
+            }
+        } finally {
+            MemoryUtil.nmemFree(quadsPtr);
+        }
+        return new QuadAuditSummary(
+                geometryElement,
+                counts,
+                total,
+                covering,
+                coveringUp,
+                coveringModelZero,
+                layoutMismatch,
+                samples.toString());
+    }
+
+    private CommandAuditSummary scanTargetCommands(
+            int commandBufferId,
+            long commandOffset,
+            int commandCount,
+            int effectiveMax,
+            int drawId) {
+        if (commandCount <= 0) {
+            return new CommandAuditSummary(0, 0, false, false, "");
+        }
+        long byteCount = commandCount * (long) DRAW_COMMAND_BYTES;
+        long commandsPtr = MemoryUtil.nmemAllocChecked(byteCount);
+        try {
+            nglGetNamedBufferSubData(commandBufferId, commandOffset, byteCount, commandsPtr);
+            int found = 0;
+            int withinEffective = 0;
+            boolean layoutMismatch = false;
+            StringBuilder samples = new StringBuilder();
+            for (int index = 0; index < commandCount; index++) {
+                long ptr = commandsPtr + index * (long) DRAW_COMMAND_BYTES;
+                int baseInstance = MemoryUtil.memGetInt(ptr + 16L);
+                if (baseInstance != drawId) {
+                    continue;
+                }
+                found++;
+                if (index < effectiveMax) {
+                    withinEffective++;
+                }
+                int count = MemoryUtil.memGetInt(ptr);
+                int instances = MemoryUtil.memGetInt(ptr + 4L);
+                int firstIndex = MemoryUtil.memGetInt(ptr + 8L);
+                int baseVertex = MemoryUtil.memGetInt(ptr + 12L);
+                if (count <= 0 || instances != 1 || firstIndex != 0 || (baseVertex & 3) != 0) {
+                    layoutMismatch = true;
+                }
+                if (found <= 8) {
+                    if (!samples.isEmpty()) {
+                        samples.append(',');
+                    }
+                    samples.append(index).append(':').append(count).append('@').append(baseVertex);
+                }
+            }
+            return new CommandAuditSummary(
+                    found,
+                    withinEffective,
+                    found > 0 && withinEffective == 0,
+                    layoutMismatch,
+                    samples.toString());
+        } finally {
+            MemoryUtil.nmemFree(commandsPtr);
+        }
+    }
+
+    private static final class BlockAuditTarget {
+        private final int blockX;
+        private final int blockY;
+        private final int blockZ;
+
+        private BlockAuditTarget(int blockX, int blockY, int blockZ) {
+            this.blockX = blockX;
+            this.blockY = blockY;
+            this.blockZ = blockZ;
+        }
+    }
+
+    private static final class ReadbackAuditRequest {
+        private final BlockAuditTarget target;
+
+        private ReadbackAuditRequest(BlockAuditTarget target) {
+            this.target = target;
+        }
+    }
+
+    private record CommandAuditSummary(
+            int found,
+            int withinEffective,
+            boolean clipped,
+            boolean layoutMismatch,
+            String samples) {
+        @Override
+        public String toString() {
+            return "found=" + this.found
+                    + " withinEffective=" + this.withinEffective
+                    + " clipped=" + this.clipped
+                    + " layoutMismatch=" + this.layoutMismatch
+                    + " samples=[" + this.samples + ']';
+        }
+    }
+
+    private record QuadAuditSummary(
+            long geometryElement,
+            int[] counts,
+            int total,
+            int covering,
+            int coveringUp,
+            int coveringModelZero,
+            boolean layoutMismatch,
+            String samples) {
+        @Override
+        public String toString() {
+            return "geometryElement=" + this.geometryElement
+                    + " counts=" + java.util.Arrays.toString(this.counts)
+                    + " total=" + this.total
+                    + " covering=" + this.covering
+                    + " coveringUp=" + this.coveringUp
+                    + " coveringModelZero=" + this.coveringModelZero
+                    + " layoutMismatch=" + this.layoutMismatch
+                    + " samples=[" + this.samples + ']';
+        }
     }
 
     private void freePrograms() {

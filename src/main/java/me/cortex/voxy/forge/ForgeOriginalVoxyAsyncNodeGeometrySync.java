@@ -101,7 +101,7 @@ final class ForgeOriginalVoxyAsyncNodeGeometrySync {
     private IntConsumer topLevelNodeRemoveCallback;
     private String lastLifecycleEvent = "created";
     private String lastFailureReason = "none";
-    private final java.util.concurrent.atomic.AtomicBoolean consistencyAuditRequested = new java.util.concurrent.atomic.AtomicBoolean();
+    private final AtomicReference<ConsistencyAuditRequest> consistencyAuditRequest = new AtomicReference<>();
     private int consistencyAuditDeferredTicks;
 
     ForgeOriginalVoxyAsyncNodeGeometrySync(
@@ -391,7 +391,12 @@ final class ForgeOriginalVoxyAsyncNodeGeometrySync {
     }
 
     void requestConsistencyAudit() {
-        this.consistencyAuditRequested.set(true);
+        this.consistencyAuditRequest.set(new ConsistencyAuditRequest(null));
+    }
+
+    void requestConsistencyAudit(int blockX, int blockY, int blockZ) {
+        this.consistencyAuditRequest.set(new ConsistencyAuditRequest(
+                new BlockAuditTarget(blockX, blockY, blockZ)));
     }
 
     //Snapshot of every mesh id referenced by the CPU node tree (audit use; tolerates worker
@@ -418,16 +423,19 @@ final class ForgeOriginalVoxyAsyncNodeGeometrySync {
     // CPU tree and GPU buffer are at the same generation; gives up waiting after 240 render ticks
     // and audits anyway (workerQuiescent=false in the report flags the residual noise).
     private void maybeRunConsistencyAudit() {
-        if (!this.consistencyAuditRequested.get()) {
+        if (this.consistencyAuditRequest.get() == null) {
             return;
         }
         boolean quiescent = !this.hasWork() && this.results.get() == null;
         if (!quiescent && ++this.consistencyAuditDeferredTicks < 240) {
             return;
         }
-        this.consistencyAuditRequested.set(false);
+        ConsistencyAuditRequest request = this.consistencyAuditRequest.getAndSet(null);
+        if (request == null) {
+            return;
+        }
         this.consistencyAuditDeferredTicks = 0;
-        this.runNodeConsistencyAuditOnRenderThread();
+        this.runNodeConsistencyAuditOnRenderThread(request.target);
     }
 
     //Node consistency audit (XX.4): compares the GPU node buffer byte-for-byte against the CPU
@@ -437,6 +445,10 @@ final class ForgeOriginalVoxyAsyncNodeGeometrySync {
     // it to the node-tree logic itself. Runs on the render thread while the worker may still
     // mutate the tree, so quiescence is reported alongside for judging noise.
     void runNodeConsistencyAuditOnRenderThread() {
+        this.runNodeConsistencyAuditOnRenderThread(null);
+    }
+
+    private void runNodeConsistencyAuditOnRenderThread(BlockAuditTarget target) {
         requireRenderThread("run original node consistency audit");
         int endNodeId = this.nodeManager.getCurrentMaxNodeId();
         if (this.nodeBufferId == 0 || endNodeId < 0) {
@@ -479,6 +491,9 @@ final class ForgeOriginalVoxyAsyncNodeGeometrySync {
             int requestInFlightNodes = 0;
             int inFlightEmptyMeshNoChildren = 0;
             int orphanedRequestFlags = 0;
+            int zeroMaskTopLevelSentinels = 0;
+            int satisfiedNonSentinelRequests = 0;
+            int requestsWithOutstandingChildren = 0;
             StringBuilder inFlightSamples = new StringBuilder();
             for (int nodeId = 0; nodeId < nodeCount; nodeId++) {
                 this.nodeManager.writeNode(nodeId, expectedNode.address);
@@ -511,6 +526,16 @@ final class ForgeOriginalVoxyAsyncNodeGeometrySync {
                         if (requestDetail.endsWith("ORPHANED")) {
                             orphanedRequestFlags++;
                         }
+                        int outstandingMask = this.nodeManager.auditNodeRequestOutstandingMask(nodeId);
+                        boolean zeroMaskTopLevelSentinel =
+                                this.nodeManager.auditNodeIsZeroMaskTopLevelSentinel(nodeId);
+                        if (zeroMaskTopLevelSentinel) {
+                            zeroMaskTopLevelSentinels++;
+                        } else if (outstandingMask == 0 && !requestDetail.endsWith("ORPHANED")) {
+                            satisfiedNonSentinelRequests++;
+                        } else if (outstandingMask > 0) {
+                            requestsWithOutstandingChildren++;
+                        }
                         boolean emptyNoChildren = geometry == -2 && !this.nodeManager.auditNodeHasChildren(nodeId);
                         if (emptyNoChildren) {
                             inFlightEmptyMeshNoChildren++;
@@ -522,7 +547,9 @@ final class ForgeOriginalVoxyAsyncNodeGeometrySync {
                                 inFlightSamples.setLength(0);
                             }
                             inFlightSamples.append(" [node=").append(nodeId)
-                                    .append(emptyNoChildren ? " HOLE-SUSPECT " : " ")
+                                    .append(zeroMaskTopLevelSentinel
+                                            ? " ZERO-MASK-TOP-LEVEL "
+                                            : (emptyNoChildren ? " PENDING-EMPTY " : " "))
                                     .append(WorldEngine.pprintPos(this.nodeManager.auditNodePosition(nodeId)))
                                     .append(requestDetail)
                                     .append(']');
@@ -567,7 +594,7 @@ final class ForgeOriginalVoxyAsyncNodeGeometrySync {
                 }
             }
             VoxyForge.LOGGER.info(
-                    "Node consistency audit: nodeRange={} existing={} gpuMismatch={} gpuRealMismatch={} uniqueMeshes={} duplicatedMeshIds={} nodesOnDuplicatedMeshes={} nullMesh={} emptyMesh={} geometrySectionCount={} outOfRangeMeshes={} metadataPosMismatch={} activeRequests={} requestInFlightNodes={} inFlightEmptyMeshNoChildren={} orphanedRequestFlags={} workerQuiescent={} mismatchSamples=[{}] duplicateSamples=[{}] metadataSamples=[{}] inFlightSamples=[{}]",
+                    "Node consistency audit: nodeRange={} existing={} gpuMismatch={} gpuRealMismatch={} uniqueMeshes={} duplicatedMeshIds={} nodesOnDuplicatedMeshes={} nullMesh={} emptyMesh={} geometrySectionCount={} outOfRangeMeshes={} metadataPosMismatch={} activeRequests={} requestInFlightNodes={} inFlightEmptyMeshNoChildren={} zeroMaskTopLevelSentinels={} satisfiedNonSentinelRequests={} requestsWithOutstandingChildren={} orphanedRequestFlags={} workerQuiescent={} mismatchSamples=[{}] duplicateSamples=[{}] metadataSamples=[{}] inFlightSamples=[{}]",
                     nodeCount,
                     existingNodes,
                     mismatchCount,
@@ -583,18 +610,76 @@ final class ForgeOriginalVoxyAsyncNodeGeometrySync {
                     this.nodeManager.getActiveNodeRequestCount(),
                     requestInFlightNodes,
                     inFlightEmptyMeshNoChildren,
+                    zeroMaskTopLevelSentinels,
+                    satisfiedNonSentinelRequests,
+                    requestsWithOutstandingChildren,
                     orphanedRequestFlags,
                     !this.hasWork() && this.results.get() == null,
                     mismatchSamples.toString().trim(),
                     duplicateSamples.toString().trim(),
                     metadataSamples.toString().trim(),
                     inFlightSamples.toString().trim());
+            if (target != null) {
+                VoxyForge.LOGGER.info(
+                        "Node target audit: block=[{},{},{}] chain=[{}]",
+                        target.blockX,
+                        target.blockY,
+                        target.blockZ,
+                        this.buildTargetNodeChain(target));
+            }
         } finally {
             gpuNodes.free();
             expectedNode.free();
             if (gpuMetadata != null) {
                 gpuMetadata.free();
             }
+        }
+    }
+
+    private String buildTargetNodeChain(BlockAuditTarget target) {
+        StringBuilder chain = new StringBuilder();
+        for (int level = WorldEngine.MAX_LOD_LAYER; level >= 0; level--) {
+            int shift = 5 + level;
+            long position = WorldEngine.getWorldSectionId(
+                    level,
+                    target.blockX >> shift,
+                    target.blockY >> shift,
+                    target.blockZ >> shift);
+            if (!chain.isEmpty()) {
+                chain.append(" | ");
+            }
+            chain.append("L").append(level).append(' ')
+                    .append(this.nodeManager.auditPositionDetail(position));
+            if (level > 0) {
+                int childShift = shift - 1;
+                int childX = target.blockX >> childShift;
+                int childY = target.blockY >> childShift;
+                int childZ = target.blockZ >> childShift;
+                int targetChild = (childX & 1) | ((childZ & 1) << 1) | ((childY & 1) << 2);
+                chain.append(" targetChild=").append(targetChild)
+                        .append(" targetBit=0x").append(Integer.toHexString(1 << targetChild));
+            }
+        }
+        return chain.toString();
+    }
+
+    private static final class BlockAuditTarget {
+        private final int blockX;
+        private final int blockY;
+        private final int blockZ;
+
+        private BlockAuditTarget(int blockX, int blockY, int blockZ) {
+            this.blockX = blockX;
+            this.blockY = blockY;
+            this.blockZ = blockZ;
+        }
+    }
+
+    private static final class ConsistencyAuditRequest {
+        private final BlockAuditTarget target;
+
+        private ConsistencyAuditRequest(BlockAuditTarget target) {
+            this.target = target;
         }
     }
 

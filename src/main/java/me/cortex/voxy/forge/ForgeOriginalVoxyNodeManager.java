@@ -281,9 +281,9 @@ final class ForgeOriginalVoxyNodeManager {
         return ptr != -1 && ptr != SENTINEL_EMPTY_CHILD_PTR;
     }
 
-    //Detail for an in-flight node request: the outstanding (unsatisfied) child mask, or ORPHANED
-    // when the request-in-flight flag is set but the request object was already released — a
-    // bookkeeping desync that would permanently block re-requests for the node.
+    //Detail for an in-flight node request. getMsk() is the required-child mask, not the
+    //outstanding mask; outstanding is required & ~results. A zero-mask top-level request is an
+    //original-Voxy sentinel that waits for a later child-existence update and is not orphaned.
     String auditNodeRequestDetail(int nodeId) {
         if (!this.nodeData.isNodeRequestInFlight(nodeId)) {
             return "";
@@ -291,10 +291,130 @@ final class ForgeOriginalVoxyNodeManager {
         int requestId = this.nodeData.getNodeRequest(nodeId);
         try {
             ForgeOriginalVoxyNodeChildRequest request = this.childRequests.get(requestId);
-            return " req=" + requestId + " outstanding=" + Integer.toBinaryString(Byte.toUnsignedInt(request.getMsk()));
+            long pos = this.nodeData.nodePosition(nodeId);
+            return " req=" + requestId
+                    + " required=" + Integer.toBinaryString(request.requiredMask())
+                    + " results=" + Integer.toBinaryString(request.resultMask())
+                    + " outstanding=" + Integer.toBinaryString(request.outstandingMask())
+                    + " existenceResults=" + Integer.toBinaryString(request.existenceResultMask())
+                    + " satisfied=" + request.isSatisfied()
+                    + " topLevel=" + this.topLevelNodes.contains(pos)
+                    + " nodeChildExistence=" + Integer.toBinaryString(
+                            Byte.toUnsignedInt(this.nodeData.getNodeChildExistence(nodeId)));
         } catch (IllegalArgumentException e) {
             return " req=" + requestId + " ORPHANED";
         }
+    }
+
+    int auditNodeRequestOutstandingMask(int nodeId) {
+        if (!this.nodeData.isNodeRequestInFlight(nodeId)) {
+            return -1;
+        }
+        int requestId = this.nodeData.getNodeRequest(nodeId);
+        try {
+            return this.childRequests.get(requestId).outstandingMask();
+        } catch (IllegalArgumentException e) {
+            return -1;
+        }
+    }
+
+    boolean auditNodeIsZeroMaskTopLevelSentinel(int nodeId) {
+        if (!this.nodeData.isNodeRequestInFlight(nodeId)) {
+            return false;
+        }
+        long pos = this.nodeData.nodePosition(nodeId);
+        if (!this.topLevelNodes.contains(pos)
+                || this.nodeData.getNodeChildExistence(nodeId) != 0) {
+            return false;
+        }
+        int active = this.activeSectionMap.get(pos);
+        if ((active & NODE_TYPE_MSK) != NODE_TYPE_LEAF
+                || (active & NODE_ID_MSK) != nodeId) {
+            return false;
+        }
+        int requestId = this.nodeData.getNodeRequest(nodeId);
+        try {
+            ForgeOriginalVoxyNodeChildRequest request = this.childRequests.get(requestId);
+            return request.getPosition() == pos && request.requiredMask() == 0;
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
+    }
+
+    String auditPositionDetail(long pos) {
+        int encoded = this.activeSectionMap.get(pos);
+        int watcherFlags = this.watcher.get(pos);
+        if (encoded == -1) {
+            return WorldEngine.pprintPos(pos) + " active=ABSENT watcher=" + watcherFlags;
+        }
+        int type = encoded & NODE_TYPE_MSK;
+        int id = encoded & NODE_ID_MSK;
+        if (type == NODE_TYPE_REQUEST) {
+            if ((encoded & REQUEST_TYPE_MSK) == REQUEST_TYPE_SINGLE) {
+                try {
+                    ForgeOriginalVoxySingleNodeRequest request = this.singleRequests.get(id);
+                    return WorldEngine.pprintPos(pos)
+                            + " active=SINGLE_REQUEST req=" + id
+                            + " mesh=" + request.getMesh()
+                            + " meshSet=" + request.hasMeshSet()
+                            + " childExistenceSet=" + request.hasChildExistenceSet()
+                            + " childExistence=" + Integer.toBinaryString(
+                                    Byte.toUnsignedInt(request.getChildExistence()))
+                            + " satisfied=" + request.isSatisfied()
+                            + " watcher=" + watcherFlags;
+                } catch (IllegalArgumentException e) {
+                    return WorldEngine.pprintPos(pos)
+                            + " active=SINGLE_REQUEST req=" + id
+                            + " ORPHANED watcher=" + watcherFlags;
+                }
+            }
+            if ((encoded & REQUEST_TYPE_MSK) == REQUEST_TYPE_CHILD) {
+                try {
+                    ForgeOriginalVoxyNodeChildRequest request = this.childRequests.get(id);
+                    int childIdx = getChildIdx(pos);
+                    return WorldEngine.pprintPos(pos)
+                            + " active=CHILD_REQUEST req=" + id
+                            + " parent=" + WorldEngine.pprintPos(request.getPosition())
+                            + " child=" + childIdx
+                            + request.auditMasks()
+                            + request.auditChild(childIdx)
+                            + " watcher=" + watcherFlags;
+                } catch (IllegalArgumentException e) {
+                    return WorldEngine.pprintPos(pos)
+                            + " active=CHILD_REQUEST req=" + id
+                            + " ORPHANED watcher=" + watcherFlags;
+                }
+            }
+            return WorldEngine.pprintPos(pos)
+                    + " active=UNKNOWN_REQUEST encoded=" + encoded
+                    + " watcher=" + watcherFlags;
+        }
+        if (type != NODE_TYPE_LEAF && type != NODE_TYPE_INNER) {
+            return WorldEngine.pprintPos(pos)
+                    + " active=UNKNOWN_NODE encoded=" + encoded
+                    + " watcher=" + watcherFlags;
+        }
+        if (!this.nodeData.nodeExists(id)) {
+            return WorldEngine.pprintPos(pos)
+                    + " active=INVALID_NODE type=" + type
+                    + " node=" + id
+                    + " watcher=" + watcherFlags;
+        }
+        String requestDetail = this.nodeData.isNodeRequestInFlight(id)
+                ? this.auditNodeRequestDetail(id)
+                : "";
+        return WorldEngine.pprintPos(pos)
+                + " active=" + (type == NODE_TYPE_LEAF ? "LEAF" : "INNER")
+                + " node=" + id
+                + " geometry=" + this.nodeData.getNodeGeometry(id)
+                + " childExistence=" + Integer.toBinaryString(
+                        Byte.toUnsignedInt(this.nodeData.getNodeChildExistence(id)))
+                + " childPtr=" + this.nodeData.getChildPtr(id)
+                + " childCount=" + this.nodeData.getChildPtrCount(id)
+                + " requestInFlight=" + this.nodeData.isNodeRequestInFlight(id)
+                + " topLevel=" + this.topLevelNodes.contains(pos)
+                + " watcher=" + watcherFlags
+                + requestDetail;
     }
 
     int getCurrentMaxNodeId() {
@@ -1181,6 +1301,44 @@ final class ForgeOriginalVoxyNodeManager {
 
         private byte getMsk() {
             return this.mask;
+        }
+
+        private int requiredMask() {
+            return Byte.toUnsignedInt(this.mask);
+        }
+
+        private int resultMask() {
+            return Byte.toUnsignedInt(this.results);
+        }
+
+        private int outstandingMask() {
+            return this.requiredMask() & ~this.resultMask() & 0xFF;
+        }
+
+        private int existenceResultMask() {
+            return Byte.toUnsignedInt(this.existenceMask);
+        }
+
+        private String auditMasks() {
+            return " required=" + Integer.toBinaryString(this.requiredMask())
+                    + " results=" + Integer.toBinaryString(this.resultMask())
+                    + " outstanding=" + Integer.toBinaryString(this.outstandingMask())
+                    + " existenceResults=" + Integer.toBinaryString(this.existenceResultMask())
+                    + " satisfied=" + this.isSatisfied();
+        }
+
+        private String auditChild(int childIdx) {
+            int childBit = 1 << childIdx;
+            boolean required = (this.requiredMask() & childBit) != 0;
+            boolean resultPresent = (this.resultMask() & childBit) != 0;
+            boolean existencePresent = (this.existenceResultMask() & childBit) != 0;
+            return " childRequired=" + required
+                    + " childResultPresent=" + resultPresent
+                    + " childMesh=" + (resultPresent ? Integer.toString(this.childStates[childIdx]) : "UNSET")
+                    + " childExistencePresent=" + existencePresent
+                    + " childExistence=" + (existencePresent
+                            ? Integer.toBinaryString(Byte.toUnsignedInt(this.childChildExistence[childIdx]))
+                            : "UNSET");
         }
     }
 }

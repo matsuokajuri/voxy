@@ -31,9 +31,34 @@ final class ForgeVoxyParityCommands {
                 .then(Commands.literal("original_voxy_mdic_cmdgen_status")
                         .executes(ctx -> originalVoxyMdicCmdgenStatus(ctx.getSource())))
                 .then(Commands.literal("original_voxy_mdic_cmdgen_request_audit")
-                        .executes(ctx -> originalVoxyMdicCmdgenRequestAudit(ctx.getSource())))
+                        .executes(ctx -> originalVoxyMdicCmdgenRequestAudit(ctx.getSource()))
+                        .then(Commands.argument("blockX", IntegerArgumentType.integer())
+                                .then(Commands.argument("blockY", IntegerArgumentType.integer())
+                                        .then(Commands.argument("blockZ", IntegerArgumentType.integer())
+                                                .executes(ctx -> originalVoxyMdicCmdgenRequestAudit(
+                                                        ctx.getSource(),
+                                                        IntegerArgumentType.getInteger(ctx, "blockX"),
+                                                        IntegerArgumentType.getInteger(ctx, "blockY"),
+                                                        IntegerArgumentType.getInteger(ctx, "blockZ")))))))
                 .then(Commands.literal("original_voxy_node_consistency_audit")
-                        .executes(ctx -> originalVoxyNodeConsistencyAudit(ctx.getSource())))
+                        .executes(ctx -> originalVoxyNodeConsistencyAudit(ctx.getSource()))
+                        .then(Commands.argument("blockX", IntegerArgumentType.integer())
+                                .then(Commands.argument("blockY", IntegerArgumentType.integer())
+                                        .then(Commands.argument("blockZ", IntegerArgumentType.integer())
+                                                .executes(ctx -> originalVoxyNodeConsistencyAudit(
+                                                        ctx.getSource(),
+                                                        IntegerArgumentType.getInteger(ctx, "blockX"),
+                                                        IntegerArgumentType.getInteger(ctx, "blockY"),
+                                                        IntegerArgumentType.getInteger(ctx, "blockZ")))))))
+                .then(Commands.literal("original_voxy_block_model_audit")
+                        .then(Commands.argument("blockX", IntegerArgumentType.integer())
+                                .then(Commands.argument("blockY", IntegerArgumentType.integer())
+                                        .then(Commands.argument("blockZ", IntegerArgumentType.integer())
+                                                .executes(ctx -> originalVoxyBlockModelAudit(
+                                                        ctx.getSource(),
+                                                        IntegerArgumentType.getInteger(ctx, "blockX"),
+                                                        IntegerArgumentType.getInteger(ctx, "blockY"),
+                                                        IntegerArgumentType.getInteger(ctx, "blockZ")))))))
                 .then(Commands.literal("original_voxy_model_pipeline_clear")
                         .executes(ctx -> originalVoxyModelPipelineClear(ctx.getSource())));
     }
@@ -92,6 +117,20 @@ final class ForgeVoxyParityCommands {
         return 1;
     }
 
+    private static int originalVoxyMdicCmdgenRequestAudit(
+            CommandSourceStack source,
+            int blockX,
+            int blockY,
+            int blockZ) {
+        ForgeOriginalVoxyMdicCommandGenerationStats status = ForgeVoxyInstance.INSTANCE
+                .getOriginalVoxyModelPipeline()
+                .requestMdicCommandGenerationReadbackAudit(blockX, blockY, blockZ);
+        source.sendSuccess(() -> Component.literal(
+                "Voxy original MDIC cmdgen audit requested for block ["
+                        + blockX + "," + blockY + "," + blockZ + "]: " + format(status)), false);
+        return 1;
+    }
+
     private static int originalVoxyNodeConsistencyAudit(CommandSourceStack source) {
         ForgeOriginalVoxyModelPipelineStats status = ForgeVoxyInstance.INSTANCE
                 .getOriginalVoxyModelPipeline()
@@ -99,6 +138,36 @@ final class ForgeVoxyParityCommands {
         source.sendSuccess(() -> Component.literal(
                 "Voxy original node consistency audit requested (result is logged on the next quiescent render tick): "
                         + format(status)), false);
+        return 1;
+    }
+
+    private static int originalVoxyNodeConsistencyAudit(
+            CommandSourceStack source,
+            int blockX,
+            int blockY,
+            int blockZ) {
+        ForgeOriginalVoxyModelPipelineStats status = ForgeVoxyInstance.INSTANCE
+                .getOriginalVoxyModelPipeline()
+                .requestNodeConsistencyAudit(blockX, blockY, blockZ);
+        source.sendSuccess(() -> Component.literal(
+                "Voxy original node consistency audit requested for block ["
+                        + blockX + "," + blockY + "," + blockZ
+                        + "] (result is logged on the next quiescent render tick): "
+                        + format(status)), false);
+        return 1;
+    }
+
+    private static int originalVoxyBlockModelAudit(
+            CommandSourceStack source,
+            int blockX,
+            int blockY,
+            int blockZ) {
+        ForgeOriginalVoxyModelPipelineStats status = ForgeVoxyInstance.INSTANCE
+                .getOriginalVoxyModelPipeline()
+                .requestBlockModelAudit(blockX, blockY, blockZ);
+        source.sendSuccess(() -> Component.literal(
+                "Voxy original block-model audit requested for block ["
+                        + blockX + "," + blockY + "," + blockZ + "]: " + format(status)), false);
         return 1;
     }
 

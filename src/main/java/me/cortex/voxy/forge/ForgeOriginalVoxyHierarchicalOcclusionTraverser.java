@@ -9,6 +9,8 @@ import org.joml.Vector4f;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
 
+import java.util.concurrent.atomic.AtomicReference;
+
 import static org.lwjgl.opengl.GL11.GL_FALSE;
 import static org.lwjgl.opengl.GL11.GL_TEXTURE_MAG_FILTER;
 import static org.lwjgl.opengl.GL11.GL_TEXTURE_MIN_FILTER;
@@ -115,7 +117,7 @@ final class ForgeOriginalVoxyHierarchicalOcclusionTraverser {
     private int topNodeCount;
     private long traversalRunCount;
     private long requestBatchForwardCount;
-    private boolean readbackAuditRequested;
+    private final AtomicReference<ReadbackAuditRequest> readbackAuditRequest = new AtomicReference<>();
     private long readbackAuditRuns;
     private String lastLifecycleEvent = "created";
     private String lastFailureReason = "none";
@@ -196,7 +198,12 @@ final class ForgeOriginalVoxyHierarchicalOcclusionTraverser {
     }
 
     void requestReadbackAudit() {
-        this.readbackAuditRequested = true;
+        this.readbackAuditRequest.set(new ReadbackAuditRequest(null));
+    }
+
+    void requestReadbackAudit(int blockX, int blockY, int blockZ) {
+        this.readbackAuditRequest.set(new ReadbackAuditRequest(
+                new BlockAuditTarget(blockX, blockY, blockZ)));
     }
 
     void doTraversal(ForgeOriginalVoxyMdicViewport viewport) {
@@ -227,14 +234,13 @@ final class ForgeOriginalVoxyHierarchicalOcclusionTraverser {
     }
 
     void runReadbackAuditIfRequested(ForgeOriginalVoxyMdicViewport viewport) {
-        if (!this.readbackAuditRequested) {
+        ReadbackAuditRequest request = this.readbackAuditRequest.getAndSet(null);
+        if (request == null) {
             return;
         }
-        if (this.readbackAuditRuns >= MAX_AUTO_READBACK_AUDITS) {
-            this.readbackAuditRequested = false;
+        if (request.target == null && this.readbackAuditRuns >= MAX_AUTO_READBACK_AUDITS) {
             return;
         }
-        this.readbackAuditRequested = false;
         this.readbackAuditRuns++;
         glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT | GL_COMMAND_BARRIER_BIT | GL_BUFFER_UPDATE_BARRIER_BIT);
         try (MemoryStack stack = MemoryStack.stackPush()) {
@@ -271,6 +277,9 @@ final class ForgeOriginalVoxyHierarchicalOcclusionTraverser {
                 renderListCounter = MemoryUtil.memGetInt(renderListPtr);
             }
             this.auditRenderListContent(viewport, renderListCounter);
+            if (request.target != null) {
+                this.auditTargetChain(stack, viewport, renderListCounter, request.target);
+            }
 
             AuditNodeSample sample = this.sampleTopNodes(stack, viewport);
             long hocAuditPtr = stack.nmalloc(HOC_AUDIT_COUNTER_COUNT * Integer.BYTES);
@@ -474,6 +483,132 @@ final class ForgeOriginalVoxyHierarchicalOcclusionTraverser {
         return sample;
     }
 
+    private void auditTargetChain(
+            MemoryStack stack,
+            ForgeOriginalVoxyMdicViewport viewport,
+            int renderListCounter,
+            BlockAuditTarget target) {
+        int nodeCount = Math.min(
+                this.nodeSync.currentMaxNodeId() + 1,
+                (int) (this.nodeBuffer.size() / 16L));
+        if (nodeCount <= 0 || viewport == null || viewport.renderListBufferId() == 0) {
+            VoxyForge.LOGGER.info(
+                    "Original HOC target audit: block=[{},{},{}] unavailable nodeCount={} viewportReady={}",
+                    target.blockX,
+                    target.blockY,
+                    target.blockZ,
+                    nodeCount,
+                    viewport != null);
+            return;
+        }
+
+        int maxEntries = (int) (viewport.renderListBufferSize() / Integer.BYTES) - 1;
+        int entryCount = Math.max(0, Math.min(renderListCounter, maxEntries));
+        long nodesPtr = 0L;
+        long renderListPtr = 0L;
+        try {
+            nodesPtr = MemoryUtil.nmemAllocChecked(nodeCount * 16L);
+            if (entryCount != 0) {
+                renderListPtr = MemoryUtil.nmemAllocChecked(entryCount * (long) Integer.BYTES);
+            }
+            nglGetNamedBufferSubData(this.nodeBuffer.id, 0L, nodeCount * 16L, nodesPtr);
+            if (renderListPtr != 0L) {
+                nglGetNamedBufferSubData(
+                        viewport.renderListBufferId(),
+                        Integer.BYTES,
+                        entryCount * (long) Integer.BYTES,
+                        renderListPtr);
+            }
+            long lastRenderFramePtr = stack.nmalloc(Integer.BYTES);
+            int currentVisibilityId = this.nodeCleaner.visibilityId();
+            int selectedCount = 0;
+            StringBuilder chain = new StringBuilder();
+            for (int level = WorldEngine.MAX_LOD_LAYER; level >= 0; level--) {
+                int shift = 5 + level;
+                int expectedX = target.blockX >> shift;
+                int expectedY = target.blockY >> shift;
+                int expectedZ = target.blockZ >> shift;
+                int foundNodeId = -1;
+                int mesh = NULL_MESH;
+                int child = NULL_NODE;
+                int flags = 0;
+                for (int nodeId = 0; nodeId < nodeCount; nodeId++) {
+                    long nodePtr = nodesPtr + nodeId * 16L;
+                    int word0 = MemoryUtil.memGetInt(nodePtr);
+                    int word1 = MemoryUtil.memGetInt(nodePtr + 4L);
+                    int word2 = MemoryUtil.memGetInt(nodePtr + 8L);
+                    int word3 = MemoryUtil.memGetInt(nodePtr + 12L);
+                    if (word0 == -1 && word1 == -1 && word2 == -1 && word3 == -1) {
+                        continue;
+                    }
+                    if (decodeLod(word0) == level
+                            && decodeX(word1) == expectedX
+                            && decodeY(word0) == expectedY
+                            && decodeZ(word0, word1) == expectedZ) {
+                        foundNodeId = nodeId;
+                        mesh = word2 & 0xFFFFFF;
+                        child = word3 & 0xFFFFFF;
+                        flags = ((word2 >>> 24) & 0xFF) | (((word3 >>> 24) & 0xFF) << 8);
+                        break;
+                    }
+                }
+
+                int lastRenderFrame = -1;
+                boolean selectedThisFrame = false;
+                int renderListIndex = -1;
+                if (foundNodeId >= 0) {
+                    nglGetNamedBufferSubData(
+                            this.nodeCleaner.visibilityBufferId(),
+                            foundNodeId * (long) Integer.BYTES,
+                            Integer.BYTES,
+                            lastRenderFramePtr);
+                    lastRenderFrame = MemoryUtil.memGetInt(lastRenderFramePtr);
+                    selectedThisFrame = lastRenderFrame == currentVisibilityId;
+                    if (selectedThisFrame) {
+                        selectedCount++;
+                    }
+                    if (renderListPtr != 0L && mesh != NULL_MESH && mesh != EMPTY_MESH) {
+                        for (int i = 0; i < entryCount; i++) {
+                            if (MemoryUtil.memGetInt(renderListPtr + i * (long) Integer.BYTES) == mesh) {
+                                renderListIndex = i;
+                                break;
+                            }
+                        }
+                    }
+                }
+                if (!chain.isEmpty()) {
+                    chain.append(" | ");
+                }
+                chain.append("L").append(level)
+                        .append(" pos=").append(level).append("@[")
+                        .append(expectedX).append(',').append(expectedY).append(',').append(expectedZ).append(']')
+                        .append(" node=").append(foundNodeId)
+                        .append(" mesh=").append(mesh)
+                        .append(" child=").append(child)
+                        .append(" flags=0x").append(Integer.toHexString(flags))
+                        .append(" lastRenderFrame=").append(lastRenderFrame)
+                        .append(" currentVisibilityId=").append(currentVisibilityId)
+                        .append(" selectedThisFrame=").append(selectedThisFrame)
+                        .append(" renderListIndex=").append(renderListIndex);
+            }
+            VoxyForge.LOGGER.info(
+                    "Original HOC target audit: block=[{},{},{}] renderListEntries={} selectedCount={} chain=[{}]",
+                    target.blockX,
+                    target.blockY,
+                    target.blockZ,
+                    entryCount,
+                    selectedCount,
+                    chain);
+        } finally {
+            if (nodesPtr != 0L) {
+                MemoryUtil.nmemFree(nodesPtr);
+            }
+            if (renderListPtr != 0L) {
+                MemoryUtil.nmemFree(renderListPtr);
+            }
+        }
+    }
+
     private static boolean outsideFrustum(ForgeOriginalVoxyMdicViewport viewport, int nodeX, int nodeY, int nodeZ, int lod) {
         float baseX = (float) ((((nodeX << lod) - viewport.section.x) << 5) - viewport.innerTranslation.x);
         float baseY = (float) ((((nodeY << lod) - viewport.section.y) << 5) - viewport.innerTranslation.y);
@@ -564,6 +699,26 @@ final class ForgeOriginalVoxyHierarchicalOcclusionTraverser {
 
         AuditNodeSample(int sampled) {
             this.sampled = sampled;
+        }
+    }
+
+    private static final class BlockAuditTarget {
+        private final int blockX;
+        private final int blockY;
+        private final int blockZ;
+
+        private BlockAuditTarget(int blockX, int blockY, int blockZ) {
+            this.blockX = blockX;
+            this.blockY = blockY;
+            this.blockZ = blockZ;
+        }
+    }
+
+    private static final class ReadbackAuditRequest {
+        private final BlockAuditTarget target;
+
+        private ReadbackAuditRequest(BlockAuditTarget target) {
+            this.target = target;
         }
     }
 

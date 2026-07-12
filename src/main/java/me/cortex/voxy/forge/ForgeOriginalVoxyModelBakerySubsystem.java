@@ -17,8 +17,8 @@ import java.util.concurrent.locks.ReentrantLock;
  *
  * Forge adaptations: the store/factory GL setup requires the Minecraft instance and reports
  * error strings instead of throwing, so store build failures are rethrown here as construction
- * failures; upload draining is exposed with the Forge render-thread upload budget instead of
- * the ignored original nanosecond budget parameter.
+ * failures; tick returns a processed count for the Forge stats layer while preserving the
+ * original drain-all upload contract and its ignored nanosecond budget parameter.
  */
 final class ForgeOriginalVoxyModelBakerySubsystem {
     private final ForgeOriginalVoxyModelStore storage = new ForgeOriginalVoxyModelStore();
@@ -46,10 +46,9 @@ final class ForgeOriginalVoxyModelBakerySubsystem {
         this.factory.prepareOnRenderThread(minecraft);
         this.processingThread = new Thread(() -> {
             while (this.isRunning) {
-                //Unlike the original ModelFactory, the Forge factory reports the render-thread
-                // drained upload queue as in-flight work, so the drain loop must observe
-                // shutdown: otherwise it spins here while the render thread joins this thread
-                // inside shutdown() and the uploads can never drain (client deadlock).
+                //Mirror original ModelFactory.processAllThings(): only worker-owned bake/biome
+                //work keeps this inner loop running. The render-thread upload queue is tracked
+                //separately by areQueuesEmpty(), and the shutdown guard prevents a join deadlock.
                 while (this.isRunning && this.factory.processAllThings());
                 if (this.isRunning) {
                     LockSupport.park();
@@ -69,11 +68,11 @@ final class ForgeOriginalVoxyModelBakerySubsystem {
      * Original {@code tick(long totalBudget)}: propagate worker death, then drain render-thread
      * uploads. Returns the processed upload count for the Forge stats layer.
      */
-    int tick(int maxUploads) {
+    int tick() {
         if (this.processingThreadException != null) {
             throw new RuntimeException(this.processingThreadException);
         }
-        return this.factory.processUploadsOnRenderThread(maxUploads);
+        return this.factory.processUploadsOnRenderThread();
     }
 
     void shutdown() {
