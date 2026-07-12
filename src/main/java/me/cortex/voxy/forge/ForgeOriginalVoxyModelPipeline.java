@@ -532,6 +532,9 @@ public final class ForgeOriginalVoxyModelPipeline {
         ForgeOriginalVoxyHierarchicalOcclusionTraverserStats hoc = renderSystem == null
                 ? ForgeOriginalVoxyHierarchicalOcclusionTraverserStats.unavailable("hierarchical-occlusion-traverser-not-started")
                 : renderSystem.traversal().createStatusSnapshot();
+        ForgeOriginalVoxyMdicCommandGenerationStats mdic = renderSystem == null
+                ? ForgeOriginalVoxyMdicCommandGenerationStats.unavailable("original-mdic-command-generator-not-started")
+                : renderSystem.sectionRenderer().createStatusSnapshot();
         boolean workerReady = modelBakery != null && modelBakery.workerReady();
         boolean viewportSelectorReady = viewportSelector != null && viewportSelector.ready();
         boolean viewportSelectorDefaultReady = viewportSelector != null && viewportSelector.defaultViewportReady();
@@ -550,6 +553,33 @@ public final class ForgeOriginalVoxyModelPipeline {
                 && renderPipeline != null
                 && renderPipeline.ready()
                 && renderSystem.sectionRenderer().ready();
+        //Original AsyncNodeManager owns NodeManager and feeds BasicAsyncGeometryManager;
+        //the geometry manager's historical status slot is not an ownership/readiness signal.
+        boolean formalRendererReady = visibleRendererOwnerReady
+                && workerReady
+                && factory.factoryReady()
+                && factory.originalModelFactoryUsed()
+                && factory.originalSoftwareModelTextureBakeryUsed()
+                && factory.originalModelStoreUsed()
+                && renderGeneration.renderGenerationServiceReady()
+                && renderGeneration.originalRenderDataFactoryUsed()
+                && renderGeneration.originalServiceManagerParityReady()
+                && geometry.originalBasicAsyncGeometryManagerUsed()
+                && geometry.renderGenerationResultConsumerAttached()
+                && geometryData.originalBasicSectionGeometryDataReady()
+                && geometryData.renderThreadGeometryDataStoreReady()
+                && nodeSync.originalAsyncNodeManagerSyncShapeReady()
+                && nodeSync.originalNodeManagerParityReady()
+                && nodeSync.originalGeometryCacheReady()
+                && hocExecutableReady
+                && this.originalServiceThreadConfigOwnerReady;
+        boolean actualRendererDrawEnabled = formalRendererReady
+                && mdic.formalDrawPipelineReady()
+                && this.originalVoxyRunPipelineOrderUsed
+                && this.originalVisibleMdicDrawSubmissionUsed
+                && this.originalPipelineFinishCalled
+                && this.originalVisibleRendererStateRestoreUsed
+                && this.originalVisibleFrameDrawSubmissionCount > 0L;
         boolean finalBlitEnvironmentalFogEnabled = renderPipeline != null
                 ? renderPipeline.useEnvironmentalFog()
                 : this.originalFinalBlitEnvironmentalFogEnabled;
@@ -603,8 +633,8 @@ public final class ForgeOriginalVoxyModelPipeline {
                 false,
                 true,
                 true,
-                false,
-                false,
+                formalRendererReady,
+                actualRendererDrawEnabled,
                 new ForgeOriginalVoxyVisibleRendererStats(
                         "VIII_ORIGINAL_VISIBLE_RENDERER_CHAIN",
                         visibleRendererOwnerReady,
@@ -675,7 +705,7 @@ public final class ForgeOriginalVoxyModelPipeline {
                 renderGeneration.originalRenderDataFactoryUsed(),
                 geometry.originalBasicAsyncGeometryManagerUsed(),
                 geometryData.originalBasicSectionGeometryDataReady(),
-                geometry.originalNodeManagerParityReady(),
+                nodeSync.originalNodeManagerParityReady(),
                 nodeSync.originalGeometryCacheReady(),
                 renderSystem != null && this.ownerReady && !this.stale,
                 viewportSelectorReady && this.ownerReady && !this.stale,
@@ -1025,6 +1055,20 @@ public final class ForgeOriginalVoxyModelPipeline {
         }
         synchronized (this) {
             this.renderSystem = renderSystem;
+            //Readiness is current-lifecycle evidence. Do not let a successful draw from the
+            //previous Oculus/reload generation make a newly constructed owner report ready
+            //before it has executed its own original MDIC frame.
+            this.originalVoxyRunPipelineOrderUsed = false;
+            this.originalVisibleMdicDrawSubmissionUsed = false;
+            this.originalPostFrameDynamicWorkUsed = false;
+            this.originalMdicOpaqueDrawSubmitted = false;
+            this.originalMdicTemporalDrawSubmitted = false;
+            this.originalMdicTranslucentDrawSubmitted = false;
+            this.originalPipelineFinishCalled = false;
+            this.originalVisibleRendererStateRestoreUsed = false;
+            this.originalViewportFogParametersUsed = false;
+            this.originalFinalBlitEnvironmentalFogUniformsUsed = false;
+            this.originalChunkBoundDepthPassUsed = false;
             this.ownerReady = true;
             this.mapperBiomeCallbackAttached = true;
             this.existingBiomeEntriesQueued = true;
@@ -1223,9 +1267,9 @@ public final class ForgeOriginalVoxyModelPipeline {
             sectionRenderer.postOpaquePreperation(viewport);
             renderPipeline.postOpaquePreTranslucent(viewport, oldFramebuffer, true);
             sectionRenderer.renderTranslucent(viewport, geometryData, modelStore, renderPipeline);
-            opaqueSubmitted = sectionRenderer.hasOpaqueDrawCountReadback();
-            temporalSubmitted = sectionRenderer.hasTemporalOpaqueDrawCountReadback();
-            translucentSubmitted = sectionRenderer.hasTranslucentDrawCountReadback();
+            opaqueSubmitted = sectionRenderer.hasOpaqueDrawSubmission();
+            temporalSubmitted = sectionRenderer.hasTemporalDrawSubmission();
+            translucentSubmitted = sectionRenderer.hasTranslucentDrawSubmission();
             renderPipeline.finish(viewport, oldFramebuffer, sourceWidth, sourceHeight, true);
             finishCalled = true;
             visibleFrameCompleted = true;

@@ -19,8 +19,9 @@ import static org.lwjgl.opengl.GL15C.glDeleteBuffers;
  * command ordering on one buffer object, so late reads from the old lifecycle order correctly
  * against the new lifecycle's writes.
  *
- * The model-atlas texture reuse half of the original class was already ported into
- * {@code ForgeOriginalVoxyModelStore}'s static texture cache.
+ * The model-atlas texture reuse half of the original class is adapted through
+ * {@code ForgeOriginalVoxyModelStore}'s static texture cache; {@link #clearResources()} owns its
+ * terminal deletion together with the geometry cache, matching the original instance shutdown.
  */
 final class ForgeOriginalVoxyRenderResourceReuse {
     record ReusedGeometryBuffer(
@@ -69,6 +70,7 @@ final class ForgeOriginalVoxyRenderResourceReuse {
 
     //Clears and frees any cached resources (used when the entire instance is shutdown)
     static void clearResources() {
+        ForgeOriginalVoxyModelStore.clearCachedModelStoreTextureAtlases();
         ReusedGeometryBuffer buffer = GEOMETRY_BUFFER_CACHE.poll();
         while (buffer != null) {
             if (buffer.sparse() && buffer.committedSparseBytes() > 0L) {

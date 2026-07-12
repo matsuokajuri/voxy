@@ -19,13 +19,19 @@ public final class ForgeVoxyCommands {
     }
 
     private static int parityRouteStatus(CommandSourceStack source) {
+        ForgeOriginalVoxyModelPipeline pipeline = ForgeVoxyInstance.INSTANCE.getOriginalVoxyModelPipeline();
+        ForgeOriginalVoxyModelPipelineStats model = pipeline.createStatusSnapshot();
+        ForgeOriginalVoxyMdicCommandGenerationStats mdic = pipeline.createMdicCommandGenerationStatusSnapshot();
         String message = String.join(" ",
                 "Voxy parity route:",
                 "originalVoxySourceBaseline=true",
                 "deprecatedPrototypeRoutesAbsent=true",
-                "formalRendererReady=false",
-                "actualRendererDrawEnabled=false",
-                "newWorkTarget=original-voxy-parity");
+                "formalRendererReady=" + model.formalRendererReady(),
+                "actualRendererDrawEnabled=" + model.actualRendererDrawEnabled(),
+                "formalDrawPipelineReady=" + mdic.formalDrawPipelineReady(),
+                "earlyUsableLodRendererReady=retired",
+                "wholeOriginalModParity=false",
+                "newWorkTarget=original-storage-parity");
         source.sendSuccess(() -> Component.literal(message), false);
         return 1;
     }

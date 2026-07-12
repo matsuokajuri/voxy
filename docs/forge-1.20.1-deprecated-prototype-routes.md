@@ -186,34 +186,22 @@ are now part of the active parity route, not the deprecated preview route.
 The original model upload path also has committed readback proof and the
 Oculus custom block-state id hook.
 
-Remaining lower-renderer blockers are full integrated `VoxyRenderSystem`
-lifecycle, patched shaderpack terrain compile parity, the shaderpack far-LoD
-white/bright visual artifact seen in the 2026-06-21 runtime passes, and
-movement/update performance parity. Production
-`cmdgen.comp`, `MDICSectionRenderer`, the original terrain shader hook
-boundary, render-thread geometry ownership, node ownership, RenderDistanceTracker,
-HiZ, HOC traversal, ViewportSelector, MDICViewport, and the Oculus shaderpack
-patch bridge now belong to the active Roman-route parity path.
+XX.7 current status: the earlier full-`VoxyRenderSystem`, patched-shader,
+white/bright-artifact, and movement/runtime blockers are retired. Production
+`cmdgen.comp`, `MDICSectionRenderer`, the terrain pipeline, render-thread
+geometry, node/tracker/viewport/HiZ/HOC owners, and Oculus patch bridge belong
+to the single active original-parity route. The post-XX.6 full regression passed
+shaderpack/dimension/reload/logout/exit coverage and restored Photon LOD water.
 
-The 2026-06-21 real-pack check with `ComplementaryUnbound_r5.8.1.zip` is
-active-route evidence only: the post-repair pass validates Oculus shaderpack
-loading, Voxy shaderpack sidecar discovery, world entry, formal owner startup,
-Oculus shaderpack pipeline data consumption, and original MDIC draw submission.
-It does not flip formal renderer readiness, because the full `VoxyRenderSystem`
-owner is still incomplete and the patched opaque/translucent shaderpack terrain
-programs currently fall back to the normal shader path.
-
-The follow-up drift audit in
-`docs/forge-1.20.1-deep-runtime-drift-audit-2026-06-21.md` confirms that the
-visible LoD pixels in that run were submitted by `ForgeSimpleGpuMeshRenderer`,
-not by the formal original MDIC renderer. Runtime presets such as `lod`,
-`overlay`, and `gl_heap_readback` therefore remain legacy/debug validation
-routes even when they produce on-screen LoD-like pixels. The simple GPU
-renderer is now suppressed while the formal original model pipeline start is
-requested, queued, or active, but that suppression is only route isolation; it
-does not make the simple GPU renderer part of formal readiness. In the later
-post-repair pass, formal MDIC submission replaced simple-GPU evidence, but the
-shaderpack patched shader fallback remains a degraded active-route blocker.
+The 2026-06-21 drift audit below is historical evidence explaining why those
+preview pixels did not count at the time. The cited `ForgeSimpleGpuMeshRenderer`
+and its `lod`/`overlay`/`gl_heap_readback` routes were subsequently deleted; they
+cannot submit or suppress current pixels. The visible output now comes from the
+formal MDIC renderer. The user-approved XX.7 wiring now derives live readiness
+from the current original owner and production MDIC draw path; no preview route
+can satisfy those conditions. Final runtime confirmation reported all three live
+renderer readiness fields true; whole-mod parity remains separately false for
+the persistent-storage migration.
 
 The 2026-06-22 lifecycle/light repair retires two more non-original shortcuts
 from the active route:

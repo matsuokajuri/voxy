@@ -104,8 +104,8 @@ VoxyRenderSystem
 | Geometry ownership | Forge debug/simple heap paths are not original `BasicAsyncGeometryManager` | Port allocation, 128-record alignment, section id reuse, upload/free lifecycle |
 | Visibility | radius/frustum/preview snapshots are not original traversal | `RenderDistanceTracker` is now Forge-ported; next correction is the original `HierarchicalOcclusionTraverser` with its `Viewport` / HiZ / render-list dependencies |
 | Command generation | validation compute shaders are not production `cmdgen.comp` | Fixed for the active Roman route: production `prep.comp`, cull raster, `cmdgen.comp`, prefix sum, and `buildtranslucents.comp` now run from `ForgeOriginalVoxyMdicSectionRenderer` against real `MDICViewport` and `BasicSectionGeometryData` resources. |
-| Draw owner | visible preview owner is not `MDICSectionRenderer` | Fixed for the active Roman VIII route: the Embeddium cutout hook now delegates to `ForgeOriginalVoxyModelPipeline.renderEmbeddiumCutout(...)`, which runs the original-shaped `AbstractRenderPipeline.runPipeline(...)` order through `ForgeOriginalVoxyMdicSectionRenderer.renderOpaque(...)`, HOC inner work, production `buildDrawCalls(...)`, `renderTemporal(...)`, `postOpaquePreTranslucent(...)`, `renderTranslucent(...)`, and `finish(...)`. This is still an Embeddium hook adapter, not full `VoxyRenderSystem` lifecycle parity. |
-| Shader semantics | adapter/subset shader is not full original terrain shader contract | Partially fixed in Roman VII/VIII/IX/X: `ForgeOriginalVoxyRenderPipeline` now provides the original `AbstractRenderPipeline`-shaped shader hook owner, and `ForgeOriginalVoxyMdicSectionRenderer` builds original `quads3.vert` / `quads.frag` terrain and translucent programs through the original TAA hook, shader patch hook, directional face tint injection, and patched-or-normal fallback shape. The original `NormalRenderPipeline` target owner shape is present for non-shaderpack rendering. Roman X ports the original Iris/Oculus `voxy.json` patch parser, uniform struct layout, sampler/image binding declarations, SSBO binding declarations, shaderpack draw target attachment, TAA hook, blend setup, texture barrier, depth-hack fix, and depth blit path. The 2026-06-21 post-repair `runClient` pass validates real Oculus shaderpack load/world entry, formal owner startup, Oculus shaderpack pipeline data consumption, and original MDIC draw submission. Remaining gaps: full outer `VoxyRenderSystem` ownership and patched shaderpack terrain compile parity; `opaquePatchedShaderUsed=false` and `translucentPatchedShaderUsed=false` because ComplementaryUnbound currently references missing Forge/Oculus patch uniforms and samplers, so renderer readiness remains false. |
+| Draw owner | visible preview owner is not `MDICSectionRenderer` | Fixed: the Embeddium cutout hook is only a platform entry adapter and delegates to the single `ForgeOriginalVoxyRenderSystem` owner through `ForgeOriginalVoxyModelPipeline.renderEmbeddiumCutout(...)`. The active frame follows original `AbstractRenderPipeline.runPipeline(...)` order and the real `ForgeOriginalVoxyMdicSectionRenderer` submits opaque, temporal, and translucent indirect draws. Full regression passed after XX.6. |
+| Shader semantics | adapter/subset shader is not full original terrain shader contract | Fixed for renderer parity: `ForgeOriginalVoxyRenderPipeline` and `ForgeOriginalVoxyMdicSectionRenderer` own the original normal/patched terrain contract, TAA, shaderpack targets/bindings/blend/depth transfer, SSAO, and final blit. The earlier Complementary patched-program fallback blocker was retired on 2026-07-02; the expanded post-XX.6 shaderpack regression passed except IterationT, which has no upstream Voxy adaptation and is classified as a post-parity compatibility TODO. |
 
 ## Corrections already started
 
@@ -586,23 +586,18 @@ This is not a license to substitute behavior. The Forge implementation must
 still match original ownership, data layout, lifecycle, and performance
 semantics.
 
-## Remaining bottom-up parity work
+## Remaining parity work after the renderer regression
 
-1. Continue classifying/removing legacy CPU/BuiltSection/cache compatibility
-   surfaces that are not part of the original Voxy owner chain. The isolated
-   placeholder model-store family has been removed; the original model pipeline
-   uses `ForgeOriginalVoxyModelStore`.
-2. Continue runtime validation of original `Viewport` / `MDICViewport` / HiZ /
-   render-list ownership, production `cmdgen.comp`, and MDIC draw submission
-   after real render frames.
-3. Runtime-validate the Roman X Oculus shaderpack patch bridge against real
-   shaderpacks that ship `voxy.json`, including uniform/sampler/SSBO bindings,
-   draw target attachments, TAA, blend state, and depth transfer.
-4. Port full `VoxyRenderSystem` lifecycle around the completed lower owners.
-   Done in Roman XX (2026-07-03): `ForgeOriginalVoxyRenderSystem` is the single
-   outer owner; see the XX section at the end of this ledger.
-5. Validate movement/update performance under the original-shaped owner and
-   continue deleting isolated historical preview/prototype command paths.
+1. Port persistent WorldEngine storage and id-mapping ownership. The active
+   renderer currently consumes an original `WorldEngine` backed by
+   `MemoryStorageBackend`, so whole-mod parity is not complete even though the
+   renderer/draw chain is qualified.
+2. Triage the remaining unported-content inventory and optional compatibility
+   integrations after the renderer readiness round.
+3. Perform non-functional cleanup of unused MDIC config keys and the active
+   `ForgeCpuMeshLayer` name without deleting that model-bakery enum.
+4. Investigate IterationT only after original Voxy migration is complete; it is
+   absent from upstream and is not a renderer-parity blocker.
 
 ## Current documented Forge deviations
 
@@ -620,14 +615,14 @@ semantics.
 | `AsyncNodeManager` render-side traversal producers | original Voxy receives top-level node adds/removes from `RenderDistanceTracker`, and request batches from `HierarchicalOcclusionTraverser` | Forge now ports the geometry-result queue, `SyncResults`, `ComputeMemoryCopy`, `UploadStream`, `DownloadStream`, `memcpy.comp`, `scatter.comp`, `SectionUpdateRouter`, `SingleNodeRequest`, `NodeChildRequest`, leaf-to-inner transitions, inner-node compaction, top-level node id deltas, cleaner reset/clear deltas, request batch entry points, remove batch entry points, render-side `NodeCleaner`, `GeometryCache`, `RenderDistanceTracker`, and the HOC owner/request-buffer path. `originalNodeManagerParityReady=true` is limited to this ownership layer. `originalHierarchicalOcclusionTraverserOwnerReady=true` does not imply HiZ traversal execution until `originalHizTraversalExecutableReady=true`. |
 | `AsyncNodeManager` GeometryCache | original Voxy has a CPU-side `GeometryCache` inside `AsyncNodeManager`; initial render generation first tries `geometryCache.remove(pos)`, and dirty world events clear cached geometry for the changed section | Fixed for the Forge parity route: `ForgeOriginalVoxyGeometryCache` mirrors original cache semantics, initial render callbacks consume cached geometry before queueing render generation, and world dirty callbacks clear stale cached geometry before forwarding router/remesh events. |
 | `RenderDistanceTracker` | original Voxy uses `RingTracker` to feed top-level LoD node add/remove events into `AsyncNodeManager` | Fixed for the Forge parity route: `ForgeOriginalVoxyRingTracker` and `ForgeOriginalVoxyRenderDistanceTracker` mirror the original algorithm and feed `AsyncNodeManager.addTopLevel/removeTopLevel`; render distance is now sourced from `originalVoxySectionRenderDistance`, the Forge config equivalent of original `VoxyConfig.CONFIG.sectionRenderDistance`. |
-| `HierarchicalOcclusionTraverser` / `ViewportSelector` / `MDICViewport` / HiZ | original Voxy selects a per-pass viewport, copies vanilla depth into a Voxy-owned `DepthFramebuffer(GL_DEPTH24_STENCIL8)` through `setup_stencil_depth.frag`, builds a HiZ depth pyramid, then runs GPU HOC traversal to produce render-list entries and node request batches | Fixed for the Forge owner route: `ForgeOriginalVoxyHierarchicalOcclusionTraverser` ports the original request buffer, node buffer ownership, top-node GPU list, queue metadata, scratch queues, shader import loading, `traversal_dev.comp` compile path, render-list binding contract, mip-nearest HiZ sampler, and request download into `AsyncNodeManager.submitRequestBatch()`. `ForgeOriginalVoxyViewportSelector` now mirrors default / Vivecraft-pass / Oculus-shadow viewport selection. `ForgeOriginalVoxyMdicViewport` owns the original-shaped MDIC buffers plus `ForgeOriginalVoxyHiZBuffer`; `ForgeOriginalVoxyPipelineDepthStage` mirrors original `AbstractRenderPipeline.initDepthStencil(...)` with `ForgeOriginalVoxyDepthFramebuffer` and `setup_stencil_depth.frag` before building the HiZ texture. Runtime audit now shows a non-empty HOC render-list (`renderListCounter=146`) and request batches. Remaining adapter: until `VoxyRenderSystem` owns the render pipeline, the Forge Embeddium hook must restore external GL state after the original depth/stencil setup because there is no immediate `MDICSectionRenderer.renderOpaque(...)` call to consume that stencil state. Historical CPU candidate snapshots/debug planners remain explicitly unacceptable as parity. |
-| `MDICViewport` -> `MDICSectionRenderer.buildDrawCalls(...)` | original `MDICSectionRenderer.buildDrawCalls(...)` uploads the MDIC scene uniform, runs `prep.comp`, rasterizes section AABBs into the viewport visibility buffer with color/depth writes disabled, dispatches production `cmdgen.comp`, runs prefix sum for translucent distance buckets, and dispatches `buildtranslucents.comp` | Fixed for the active Roman V/VI/VIII owner route: `ForgeOriginalVoxyMdicSectionRenderer` replaces the command-generator-only owner and now owns original-shaped uniform, distance-count, shared-index, terrain/translucent terrain programs, prep, cull-raster, cmdgen, prefix-sum, translucent-build, and MDIC draw submission resources. It binds real `ForgeOriginalVoxyMdicViewport` buffers and real `ForgeOriginalVoxyBasicSectionGeometryData` metadata/geometry buffers, not K-era synthetic validators or debug command buffers. Runtime readback after the depth/stencil parity fix verifies a non-empty render-list (`renderListSectionCount=146`), production `cmdgen.comp` output (`opaqueDrawCount=545`), original draw-count layout, cull indirect command layout, 20-byte `DrawCommand`, position scratch output, and barrier path. It deliberately does not call `VoxyRenderSystem`; remaining adapter work is outer lifecycle/reload/performance parity, not a preview route. |
-| `AbstractRenderPipeline` -> terrain shader owner | original `MDICSectionRenderer` receives a render pipeline, asks it for TAA and shader patches, compiles patched-or-normal opaque and translucent terrain programs, and then relies on the pipeline to bind opaque/translucent draw targets | Partially fixed in Roman VII/VIII/IX/X: `ForgeOriginalVoxyRenderPipeline` owns the original-shaped shader hook boundary and reuses `ForgeOriginalVoxyPipelineDepthStage` for depth/stencil setup. `ForgeOriginalVoxyNormalPipelineTargets` mirrors the original `NormalRenderPipeline` colour target ownership for non-shaderpack rendering and can now switch to external Oculus shaderpack draw targets without owning or deleting them. `ForgeOriginalVoxySSAO` mirrors original SSAO shader compilation, sampler setup, AUTO capability selection, matrix uniforms, image/texture bindings, and dispatch for the normal path. The shaderpack path now mirrors original `IrisVoxyRenderPipeline`: pre-setup custom uniform upload, UBO binding point 7, SSBO base binding 10, sampler base binding 6, opaque/translucent framebuffer binding, shaderpack blend setup, optional depth-hack transform blit, `glTextureBarrier`, translucent depth/stencil blit, and vanilla-depth blit when allowed. The 2026-06-21 post-repair real-pack pass reaches Oculus shaderpack load/world entry, starts the formal owner, consumes shaderpack pipeline data, and submits original MDIC draws. Remaining gap: full outer `VoxyRenderSystem` lifecycle and patched shaderpack terrain compile parity; the patched programs fall back to normal terrain shaders until the missing uniform/sampler namespace is ported. |
+| `HierarchicalOcclusionTraverser` / `ViewportSelector` / `MDICViewport` / HiZ | original Voxy selects a per-pass viewport, copies vanilla depth into a Voxy-owned `DepthFramebuffer(GL_DEPTH24_STENCIL8)` through `setup_stencil_depth.frag`, builds a HiZ depth pyramid, then runs GPU HOC traversal to produce render-list entries and node request batches | Fixed: the Forge owners port the original buffers, traversal, selector, depth/HiZ, request download, and shadow-pass selection. The active outer `ForgeOriginalVoxyRenderSystem` now runs `MDICSectionRenderer.renderOpaque(...)` immediately in the original frame order; the Embeddium adapter restores external GL state only because it enters from another renderer's pass. Historical CPU planners remain excluded. |
+| `MDICViewport` -> `MDICSectionRenderer.buildDrawCalls(...)` | original `MDICSectionRenderer.buildDrawCalls(...)` uploads the MDIC scene uniform, runs `prep.comp`, rasterizes section AABBs into the viewport visibility buffer with color/depth writes disabled, dispatches production `cmdgen.comp`, runs prefix sum for translucent distance buckets, and dispatches `buildtranslucents.comp` | Fixed: `ForgeOriginalVoxyMdicSectionRenderer` owns the production programs, original buffers/layouts, command generation, and visible opaque/temporal/translucent indirect submissions. Targeted readbacks and the post-XX.6 visual regression confirm the real path rather than debug command buffers. |
+| `AbstractRenderPipeline` -> terrain shader owner | original `MDICSectionRenderer` receives a render pipeline, asks it for TAA and shader patches, compiles patched-or-normal opaque and translucent terrain programs, and then relies on the pipeline to bind opaque/translucent draw targets | Fixed for renderer parity: the Forge normal and Oculus paths own the original shader hooks, targets, SSAO, TAA, patch bindings, blend, depth transfers, and final blit. Roman XVIII/XX completed adapter state coverage and outer lifecycle ownership; the 2026-07-02 audit retired the patched-program fallback blocker. |
 | Embeddium render hook entry | original Voxy drives this chain from one `VoxyRenderSystem` owner; Forge must hook Embeddium until that owner is fully ported | The active mixin config uses one `DefaultChunkRenderer` cutout-pass hook. A stale, unregistered `SodiumWorldRenderer.drawChunkLayer` hook source was removed so it cannot be accidentally enabled as a second route. `ForgeOriginalVoxyModelPipeline.renderEmbeddiumCutout(...)` now also guards reentrant entry and only runs post-command-generation dynamic work after command generation actually completes. |
 | `SoftwareModelTextureBakery` model collection and dark-cutout metadata | Forge 1.20.1 lacks the newer original `BlockStateModelPart` and public `BakedQuad.materialInfo()` API, but Embeddium injects the equivalent `BakedQuadView` and sprite transparency data used by its own chunk mesher | fixed for the active Forge/Embeddium route: `originalSoftwareModelTextureBakeryUsed=true`; the adaptation is constrained to Embeddium source-equivalent material and transparency signals |
 | `ModelStore` ownership and audit | fixed: the original model pipeline now owns `ForgeOriginalVoxyModelStore` instead of historical `ForgeFormalModelStore`; uploads use original-style `MemoryBuffer` results, persistent `UploadStream`, DSA texture mip uploads, block-atlas-derived sampler max LOD, and post-commit readback audit for modelData/modelColour/atlas mip-chain regions | `originalModelStoreUsed=true` is reported when the owner is built; `originalModelStoreReadbackAuditReady=true` is reported after a committed upload readback matches the CPU payload |
 | Iris/Oculus custom block-state ids | original Voxy receives `WorldRenderingSettings.INSTANCE.getBlockStateIds()` from the Iris pipeline; Forge cannot compile against Oculus source directly in this source set | Forge reads the same Oculus singleton through `ForgeOculusWorldRenderingSettingsBridge`; null maps write custom id zero, matching original behavior |
-| Iris/Oculus shaderpack pipeline data | original Voxy receives `IrisShaderPatch` from `ProgramSet`, stores `IrisVoxyRenderPipelineData` on `IrisRenderingPipeline`, and uses the data to patch/bind MDIC terrain rendering | Fixed for the active Forge/Oculus route in Roman X: `ForgeOriginalVoxyOculusProgramSetMixin`, `ForgeOriginalVoxyOculusIrisRenderingPipelineMixin`, and `ForgeOriginalVoxyOculusRenderPipelineData` mirror the original parser/data owner and bind path. Oculus 1.20.1 passes `GlSampler` directly instead of a sampler supplier, so the Forge bridge adapts only that signature. Forge/Oculus constructor timing requires both bridge mixins to read/store patch data from constructor `TAIL` hooks; an attempted original `INVOKE`-point constructor hook is rejected by Forge/Mixin for this Oculus 1.20.1 target and is documented as a platform hook-shape blocker, not a data-flow shortcut. Oculus 1.20.1 `sourceProvider` only exposes IncludeGraph-discovered starts, so `ForgeOriginalVoxyOculusShaderPackSourceNamesMixin` now adds `voxy.json`, `voxy_opaque.glsl`, `voxy_translucent.glsl`, and `voxy_taa.glsl` to the shaderpack source-start set. The original parser's `JSON_DUMP.txt` side effect is intentionally not ported; parse failures are logged/thrown without creating local artifacts. Runtime validation with `ComplementaryUnbound_r5.8.1.zip` now reports `originalOculusShaderpackPipelineDataReady=true` and `originalOculusShaderpackSource=oculus-shaderpack-voxy-patch`. Remaining blocker: patched opaque/translucent terrain programs are requested but fall back because the current bridge still lacks the full patch uniform/sampler namespace expected by the shaderpack. |
+| Iris/Oculus shaderpack pipeline data | original Voxy receives `IrisShaderPatch` from `ProgramSet`, stores `IrisVoxyRenderPipelineData` on `IrisRenderingPipeline`, and uses the data to patch/bind MDIC terrain rendering | Fixed for the active Forge/Oculus route: the program-set/pipeline mixins, source sidecars, patch parser, uniforms, samplers, SSBOs, images, targets, blend, TAA, and depth transfers mirror the original contract with documented Oculus 1.20.1 signature/timing adaptations. Patched opaque/translucent programs are used for compatible packs; Complementary, BSL, Photon, and multiple additional packs passed the final regression. IterationT has no upstream sidecar/adaptation and is post-parity work. |
 | Oculus `WorldRenderingSettings` reload | original Oculus `PipelineManager.preparePipeline(...)` observes `WorldRenderingSettings.INSTANCE.isReloadRequired()`, calls `levelRenderer.allChanged()`, then clears the flag | Forge Voxy now observes the same reload flag and also receives a mixin callback when Oculus clears it. The Voxy owner responds through the existing `markStaleAndClear(...)` path and requests restart when it was already started or pending start. It does not call `clearReloadRequired()` itself, preserving Oculus ownership of that flag. |
 
 ### VI/VII audit corrections
@@ -1605,11 +1600,91 @@ The same grass target's model 24 now had `expectedCustomId=10132`,
 and successful record/texture readbacks. The client then completed normal
 render-system, world, and instance shutdown with no upload failure, drop, or
 diagnostic exception. This resolves XX.4's shaderpack-switch/new-lifecycle
-block-type holes. The wider dimension/F3+T/logout regression checklist remains
-separate, so readiness flags stay unchanged.
+block-type holes.
 
-Separate non-causal cleanup note: Forge's full client shutdown clears the
-reused geometry cache but does not yet explicitly delete the static cached
-model-atlas texture as original `RenderResourceReuse.clearResources()` does.
-That terminal GL-resource parity gap cannot cause reload-time model-24 zeroing
-and is not mixed into XX.6.
+Full regression follow-up (2026-07-12): the user completed shaderpack switching,
+dimension switching, standalone F3+T reload, logout/login, and client-exit tests
+without finding a regression. Photon LOD water is visible again, and multiple
+additional shaderpacks render correctly. Readiness flags remain unchanged until
+the user makes the separate readiness decision required by this port.
+
+Post-parity compatibility TODO — IterationT 3.2.0 is the only shaderpack in this
+expanded test set reported to render incorrectly. This is not an identified
+Forge port omission: neither the original source snapshot in this tree, local
+`dev`, `origin/dev`, nor current upstream MCRcortex/voxy `dev` at `72fb44a1`
+contains an IterationT/Iteration T special case. Original Voxy exposes the
+generic pack-side `voxy.json`, `voxy_opaque.glsl`, `voxy_translucent.glsl`, and
+`voxy_taa.glsl` contract; the tested `iterationT 3.2.0.zip` contains none of
+those sidecars. After the original Voxy route is completely ported, investigate
+IterationT as a new, non-upstream shaderpack compatibility task. Do not invent a
+pack-specific substitute inside the parity phase, and do not treat this TODO as
+a readiness blocker for original-behavior parity.
+
+### XX.7 renderer-readiness closure audit and terminal atlas cleanup
+
+The readiness audit re-read the current source rather than inheriting the
+preview-era status documents. The active visible route has one entry
+(`DefaultChunkRenderer` CUTOUT adapter) and one original-equivalent owner chain:
+`ForgeOriginalVoxyRenderSystem` owns the model, generation, geometry, node,
+tracker, viewport/HiZ/HOC, MDIC, terrain-pipeline, and lifecycle resources;
+`ForgeOriginalVoxyModelPipeline` supplies only Forge event/hook/status policy.
+The visible frame order matches original `VoxyRenderSystem.renderOpaque()` and
+`AbstractRenderPipeline.runPipeline()`, and the real MDIC renderer submits the
+pixels. The old preview/simple-GPU/legacy geometry-MDIC owners are absent from
+active source; retained audits only read real active buffers.
+
+The user approved the separate renderer-readiness decision. The three live
+fields now derive from current owner and draw evidence rather than unconditional
+constants: owner construction resets lifecycle draw evidence; formal readiness
+requires the complete live owner chain; actual draw readiness requires the
+current generation's MDIC submission, finish, and state restore; formal draw
+pipeline readiness requires production prep/cull/cmdgen and a successful terrain
+indirect submission. `earlyUsableLodRendererReady` remains retired.
+
+One exact terminal resource deviation was found and ported before that decision.
+Original `RenderResourceReuse.clearResources()` deletes both cached model
+atlases and cached geometry buffers after every render owner is shut down. Forge
+already returned atlases to `ForgeOriginalVoxyModelStore`'s static cache across
+owner rebuilds, but terminal `ForgeOriginalVoxyRenderResourceReuse.clearResources()`
+deleted only geometry buffers. XX.7 now deletes cached atlas texture ids first,
+then frees/decommits cached geometry buffers in the original shutdown order.
+This cannot affect steady-state pixels and is not the XX.4 root cause; it closes
+the known full-instance render-resource lifetime gap.
+
+Renderer readiness is deliberately separated from whole-mod parity. The active
+`WorldEngine` still uses `MemoryStorageBackend`, so persistent section/id-mapping
+storage remains a major post-renderer migration. IterationT, optional integration
+inventory, unused config-key cleanup, and the active `ForgeCpuMeshLayer` rename
+are also later work, not substitutes or renderer-readiness blockers.
+
+Validation passed: `gradlew compileJava`, full `gradlew build`, and the final
+`runClient` smoke test all completed successfully. The client rebuilt the formal
+owner four times, reused the same geometry buffer, then completed render-system,
+WorldEngine, instance, and Minecraft shutdown normally. `latest.log` contains no
+Voxy warning/error, model upload/drop, `FAILED_SAFE`, OOM, or GL-invalid event.
+The user subsequently approved that decision and the three live fields were
+wired as described above. A post-wiring `runClient` pass was required to confirm
+all three reported true in the active world before XX.7 was committed.
+
+The first post-wiring status run exposed one audit-wiring error rather than a
+renderer failure: `formalDrawPipelineReady=true`, all live draw and owner
+evidence was true, but the aggregate model predicate consumed
+`BasicAsyncGeometryManager`'s historical hardcoded-false
+`originalNodeManagerParityReady` slot. The same snapshot's authoritative
+`AsyncNodeManager` owner reported `originalAsyncNodeManagerFullParityReady=true`;
+it had completed 8,207 HOC traversals and 8,118 visible MDIC draw frames with no
+visible-frame failure. This matches original ownership, where `AsyncNodeManager`
+owns `NodeManager` and passes the geometry manager into it, not the reverse.
+XX.7 therefore removes the stale geometry proxy from the formal predicate and
+maps the aggregate `originalNodeManagerParityReady` field from the live async
+node owner. Final runtime confirmation of all three readiness fields was still
+required before commit.
+
+Final XX.7 runtime confirmation passed on 2026-07-12. In the active world,
+`/voxy parity_route_status` reported `formalRendererReady=true`,
+`actualRendererDrawEnabled=true`, and `formalDrawPipelineReady=true`, while
+retaining `earlyUsableLodRendererReady=retired` and
+`wholeOriginalModParity=false`. The client then shut down the render system,
+WorldEngine, Forge instance, and Minecraft normally; `runClient` exited 0. The
+original in-flight-request warnings remain the already audited upstream
+NodeManager behavior and did not coincide with a renderer failure.

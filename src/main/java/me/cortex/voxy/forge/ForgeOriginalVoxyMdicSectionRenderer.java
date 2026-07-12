@@ -141,6 +141,9 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
     private long opaqueRenderCallCount;
     private long translucentRenderCallCount;
     private long temporalRenderCallCount;
+    private long opaqueDrawSubmissionCount;
+    private long translucentDrawSubmissionCount;
+    private long temporalDrawSubmissionCount;
     private long prepDispatchCount;
     private long cullRasterCount;
     private long cmdgenDispatchCount;
@@ -359,7 +362,7 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
         }
         this.uploadUniformBuffer(viewport);
         int maxDrawCount = Math.min((int) (geometryData.sectionCount() * 4.4D + 128), OPAQUE_DRAW_COUNT);
-        this.renderTerrain(
+        if (this.renderTerrain(
                 viewport,
                 geometryData,
                 modelStore,
@@ -367,7 +370,9 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
                 this.terrainProgramId,
                 0L,
                 4L * 3L,
-                maxDrawCount);
+                maxDrawCount)) {
+            this.opaqueDrawSubmissionCount++;
+        }
         this.opaqueRenderCallCount++;
     }
 
@@ -379,7 +384,7 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
         if (geometryData == null || geometryData.sectionCount() == 0) {
             return;
         }
-        this.renderTerrain(
+        if (this.renderTerrain(
                 viewport,
                 geometryData,
                 modelStore,
@@ -387,7 +392,9 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
                 this.terrainProgramId,
                 TEMPORAL_OFFSET * 5L * 4L,
                 4L * 5L,
-                Math.min(geometryData.sectionCount(), ForgeOriginalVoxyMdicViewport.TEMPORAL_DRAW_COUNT));
+                Math.min(geometryData.sectionCount(), ForgeOriginalVoxyMdicViewport.TEMPORAL_DRAW_COUNT))) {
+            this.temporalDrawSubmissionCount++;
+        }
         this.temporalRenderCallCount++;
     }
 
@@ -431,6 +438,10 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
         glBindSampler(1, 0);
         glBindTextureUnit(1, 0);
         glDisable(GL_BLEND);
+        this.lastGlError = glGetError();
+        if (this.lastGlError == GL_NO_ERROR) {
+            this.translucentDrawSubmissionCount++;
+        }
         this.translucentRenderCallCount++;
     }
 
@@ -481,6 +492,27 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
 
     ForgeOriginalVoxyMdicCommandGenerationStats createStatusSnapshot() {
         boolean ownerReady = this.ready();
+        boolean mdicSectionRendererCalled = this.opaqueRenderCallCount > 0L
+                || this.temporalRenderCallCount > 0L
+                || this.translucentRenderCallCount > 0L;
+        boolean terrainDrawCalled = this.opaqueDrawSubmissionCount > 0L
+                || this.temporalDrawSubmissionCount > 0L
+                || this.translucentDrawSubmissionCount > 0L;
+        //The active Forge call graph has one caller for these render methods: the original-shaped
+        //VoxyRenderSystem frame owned by ForgeOriginalVoxyModelPipeline's Embeddium adapter.
+        boolean voxyRenderSystemCalled = mdicSectionRendererCalled;
+        boolean productionCommandPathReady = ownerReady
+                && this.inputParityReady
+                && this.barrierAuditReady
+                && this.prepDispatchCount > 0L
+                && this.cullRasterCount > 0L
+                && this.cmdgenDispatchCount > 0L;
+        boolean formalDrawPipelineReady = productionCommandPathReady
+                && mdicSectionRendererCalled
+                && terrainDrawCalled
+                && this.pipeline != null
+                && this.pipeline.ready()
+                && this.lastGlError == GL_NO_ERROR;
         boolean drawCountLayoutMatches = this.cmdGenDispatchY == 1
                 && this.cmdGenDispatchZ == 1
                 && this.cmdGenDispatchX == ((this.renderListSectionCount + 127) / 128);
@@ -497,10 +529,10 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
                 this.cmdgenProgramId != 0,
                 this.prepProgramId != 0,
                 this.cullProgramId != 0,
-                false,
-                false,
-                false,
-                false,
+                mdicSectionRendererCalled,
+                voxyRenderSystemCalled,
+                terrainDrawCalled,
+                terrainDrawCalled,
                 this.prepProgramId != 0,
                 this.cullProgramId != 0,
                 this.cmdgenProgramId != 0,
@@ -541,9 +573,9 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
                 cullLayoutMatches,
                 this.positionScratchReadbackOk,
                 true,
-                false,
-                false,
-                false,
+                formalDrawPipelineReady,
+                terrainDrawCalled,
+                formalDrawPipelineReady,
                 this.opaquePatchedShaderRequested,
                 this.opaquePatchedShaderUsed,
                 this.opaquePatchedShaderFallbackUsed,
@@ -586,7 +618,7 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
         glBindBuffer(GL_PARAMETER_BUFFER_ARB, viewport.drawCountCallBuffer.id);
     }
 
-    private void renderTerrain(
+    private boolean renderTerrain(
             ForgeOriginalVoxyMdicViewport viewport,
             ForgeOriginalVoxyBasicSectionGeometryData geometryData,
             ForgeOriginalVoxyModelStore modelStore,
@@ -597,23 +629,23 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
             int maxDrawCount) {
         if (!this.ready()) {
             this.recordFailure("original-mdic-section-renderer-not-ready");
-            return;
+            return false;
         }
         if (viewport == null || !viewport.ready()) {
             this.recordFailure("original-mdic-section-renderer-viewport-not-ready");
-            return;
+            return false;
         }
         if (geometryData == null || geometryData.geometryBufferId() == 0 || geometryData.metadataBufferId() == 0) {
             this.recordFailure("original-mdic-section-renderer-geometry-not-ready");
-            return;
+            return false;
         }
         if (modelStore == null) {
             this.recordFailure("original-mdic-section-renderer-model-store-not-ready");
-            return;
+            return false;
         }
         if (!pipeline.opaqueDrawTargetReady()) {
             this.recordFailure("original-mdic-section-renderer-opaque-target-not-ready");
-            return;
+            return false;
         }
         glDisable(GL_CULL_FACE);
         glDisable(GL_BLEND);
@@ -641,6 +673,19 @@ final class ForgeOriginalVoxyMdicSectionRenderer {
         glBindSampler(1, 0);
         glBindTextureUnit(1, 0);
         this.lastGlError = glGetError();
+        return this.lastGlError == GL_NO_ERROR;
+    }
+
+    boolean hasOpaqueDrawSubmission() {
+        return this.opaqueDrawSubmissionCount > 0L;
+    }
+
+    boolean hasTemporalDrawSubmission() {
+        return this.temporalDrawSubmissionCount > 0L;
+    }
+
+    boolean hasTranslucentDrawSubmission() {
+        return this.translucentDrawSubmissionCount > 0L;
     }
 
     private void uploadUniformBuffer(ForgeOriginalVoxyMdicViewport viewport) {

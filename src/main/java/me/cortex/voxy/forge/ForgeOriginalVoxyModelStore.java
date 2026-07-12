@@ -349,6 +349,14 @@ final class ForgeOriginalVoxyModelStore {
         MODEL_TEXTURE_CACHE.add(texture);
     }
 
+    //Original RenderResourceReuse.clearResources(): cached atlases survive renderer rebuilds but
+    //are deleted when the entire client instance shuts down.
+    static void clearCachedModelStoreTextureAtlases() {
+        while (!MODEL_TEXTURE_CACHE.isEmpty()) {
+            GL11C.glDeleteTextures(MODEL_TEXTURE_CACHE.remove(MODEL_TEXTURE_CACHE.size() - 1));
+        }
+    }
+
     private static int resolveBlockAtlasMipLevel(Minecraft minecraft) {
         if (minecraft == null || minecraft.getTextureManager() == null) {
             return ForgeOriginalVoxyMipGen.LAYERS - 1;
