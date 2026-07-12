@@ -588,12 +588,11 @@ semantics.
 
 ## Remaining parity work after the renderer regression
 
-1. Port the remaining optional storage/config types. XXI.1 replaced the formal
-   active-world route's `MemoryStorageBackend` with original Voxy's default
-   persistent Serializer/ZSTD/RocksDB chain and verified restart recovery;
-   XXI.2 ports the matching `StorageConfigUtil` JSON lifecycle, `ConfigBuildCtx`,
-   and polymorphic TYPE registry for that production chain. LMDB, Redis,
-   conditional/fragmented/cache adaptors, and LZ4/LZMA remain.
+1. Port the remaining optional external storage backends. XXI.1-XXI.2 completed
+   the persistent default chain and its original JSON lifecycle; XXI.3 adds the
+   active local optional TYPE surface and records the upstream-incomplete types.
+   LMDB and Redis remain separate because they require native-library and
+   external-service validation respectively.
 2. Triage the remaining unported-content inventory and optional compatibility
    integrations after the renderer readiness round.
 3. Perform non-functional cleanup of unused MDIC config keys and the active
@@ -1822,3 +1821,73 @@ path, load source, and disabled state independently of storage counters. This
 closes the original default-chain config creation/reload gap without claiming
 the unported optional TYPE inventory. `wholeOriginalModParity` therefore remains
 false; renderer readiness is unchanged.
+
+### XXI.3 original local optional storage/compressor TYPE surface
+
+XXI.3 audits every remaining original config class before choosing the local
+runtime scope. The following active, locally testable TYPE names and mechanisms
+are now registered:
+
+```text
+CompressorConfig: LZ4
+StorageConfig:    BasicPathConfig
+                  FragmentationAdaptor
+                  AutoFragmentationAdaptor
+```
+
+The LZ4 port preserves original `LZ4Factory.nativeInstance()` selection, the
+four-byte native-endian uncompressed-size prefix, fast compression/decompression,
+and original thread-local scratch sizing. ForgeGradle embeds original
+`org.lz4:lz4-java:1.8.0` through Jar-in-Jar.
+
+The fragmentation port preserves original double `RandomSupport.mixStafford13`
+segment selection, power-of-two backend count check, per-segment section
+operations, Mapper-id replication to every fragment, majority recovery if
+fragment mappings disagree, child iteration, flush, and close order.
+`BasicPathConfig` and `AutoFragmentationAdaptor` push/pop the same
+`ConfigBuildCtx` path components as original.
+
+The audit also closed three misleading inventory entries without inventing
+working substitutes:
+
+```text
+LZMA2:
+  the entire original LZMACompressor implementation is inside a block comment;
+  no class or TYPE is emitted by the original build, so Forge does not register it
+
+ConditionalConfig:
+  original Serialization registers it, but build() unconditionally throws
+  NotImplementedException; Forge registers and preserves that exact behavior
+
+ReadonlyCachingLayer:
+  original is registered, but iteratePositions() is unimplemented and flush()
+  closes both children instead of flushing them; Forge ports that exact behavior,
+  marks it upstream-incomplete, and does not use or recommend it as production
+```
+
+Runtime validation used a backed-up config and an isolated
+`storage/xxi3/fragment_0..3` path, leaving the default ZSTD database untouched:
+
+```text
+first JVM, explicit FragmentationAdaptor with four BasicPathConfig children:
+  backendChain=Serializer->LZ4->Fragmentation(count=4)
+  sectionWrites=30498
+  mappingWrites=384
+  all four RocksDB fragments created (about 43-52 MiB each)
+  no LZ4/native/RocksDB/mapping-consistency/shutdown failure
+
+second JVM, AutoFragmentationAdaptor targeting the same four paths:
+  backendChain=Serializer->LZ4->AutoFragmentation(basePath=xxi3/fragment,count=4)->RocksDB
+  mappingEntriesLoaded=384
+  sectionLoadHits=4925
+  sectionLoadMisses=3603
+  sectionWrites=354
+  no LZ4/native/RocksDB/mapping-consistency/shutdown failure
+```
+
+This proves explicit and automatic fragmentation use the same original hash/path
+contract and that LZ4 data survives a real JVM restart. After validation the
+pre-test `config.json` was restored and verified byte-for-byte by SHA-256. The
+isolated test database remains under ignored `run/` only. Whole-mod parity stays
+false for LMDB, Redis, and the remaining non-storage migration inventory;
+renderer readiness is unchanged.

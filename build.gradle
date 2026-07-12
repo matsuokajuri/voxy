@@ -169,6 +169,9 @@ dependencies {
     minecraftLibrary("org.rocksdb:rocksdbjni:10.2.1") {
         transitive = false
     }
+    minecraftLibrary("org.lz4:lz4-java:1.8.0") {
+        transitive = false
+    }
     zstdJarJarNative("org.lwjgl:lwjgl-zstd:3.3.1:natives-windows") {
         transitive = false
     }
@@ -182,6 +185,10 @@ dependencies {
     jarJar(group: 'org.rocksdb', name: 'rocksdbjni', version: '[10.2.1,10.3)') {
         transitive = false
         jarJar.pin(it, '10.2.1')
+    }
+    jarJar(group: 'org.lz4', name: 'lz4-java', version: '[1.8.0,1.9)') {
+        transitive = false
+        jarJar.pin(it, '1.8.0')
     }
 
     for (def embeddiumDevJar : embeddiumDevJars) {

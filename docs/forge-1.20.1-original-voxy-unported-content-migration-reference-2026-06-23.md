@@ -87,11 +87,11 @@ The most important unported or incomplete areas are:
 
 ## 1. Instance, world storage, and service root
 
-Status after XXI.2:
+Status after XXI.3:
 
 ```text
-partial: original default persistent backend, restart recovery, and its dynamic
-JSON config path complete; optional backend/config TYPE inventory remains
+partial: original default persistent backend, dynamic JSON config, and local
+optional TYPE surface complete; LMDB/Redis remain
 ```
 
 Original Voxy source areas:
@@ -118,19 +118,19 @@ processes loaded the same database; the XXI.1 restart run loaded 448 mappings
 and recorded 5,676 stored-section hits. XXI.2 ports original `StorageConfigUtil`
 creation/reload semantics, original `ConfigBuildCtx`, and the exact polymorphic
 TYPE JSON for Serializer, CompressionAdaptor, ZSTD, and RocksDB. Its reload run
-loaded 1,384 mappings and recorded 5,989 stored-section hits. The optional
-storage inventory is not yet migrated.
+loaded 1,384 mappings and recorded 5,989 stored-section hits. XXI.3 adds LZ4,
+BasicPathConfig, explicit/automatic fragmentation, and exact registrations for
+the upstream-incomplete ConditionalConfig/ReadonlyCachingLayer paths.
 
 Not yet migrated:
 
 ```text
-- optional LMDB/Redis/conditional/fragmented/cache storage configurations
-- optional LZ4/LZMA compressor configurations
+- optional LMDB and Redis storage configurations
 - full `VoxyInstance.activeWorlds` map parity beyond the active/closing Forge
   adapter (the currently required same-world reuse behavior is ported)
 ```
 
-XXI.1-XXI.2 completed:
+XXI.1-XXI.3 completed:
 
 ```text
 - read original instance/storage ownership through shutdown
@@ -149,19 +149,25 @@ XXI.1-XXI.2 completed:
 - exact Serializer/CompressionAdaptor/ZSTD/RocksDB polymorphic TYPE names and
   JSON shape
 - storage disabled gate before active-world creation
+- LZ4 compressor binary format and lz4-java 1.8.0 packaging
+- BasicPathConfig, FragmentationAdaptor, and AutoFragmentationAdaptor
+- fragment hash routing, Mapper-id replication/recovery, child flush/close
+- exact ConditionalConfig and ReadonlyCachingLayer upstream-incomplete behavior
+- LZMA2 excluded by ground truth: its entire original implementation is commented
+  out and does not produce a config TYPE
 ```
 
 Remaining migration steps:
 
 ```text
-1. Add optional backends/adaptors/compressors and register their original TYPE
-   names with their original dependencies.
-2. Validate those optional custom configurations, multiplayer server isolation,
-   and corrupted-section deletion. Dimension isolation, relog, and shutdown passed
-   in XXI.1; default config creation/reload passed in XXI.2.
+1. Port and independently validate LMDB with original LWJGL native packaging.
+2. Port and independently validate Redis with an external test service.
+3. Validate multiplayer server isolation and corrupted-section deletion.
+   Dimension isolation, relog, and shutdown passed in XXI.1; default config
+   creation/reload passed in XXI.2; LZ4 and fragmentation restart passed in XXI.3.
 ```
 
-XXI.1-XXI.2 validation:
+XXI.1-XXI.3 validation:
 
 ```text
 rtk test .\gradlew compileJava
@@ -169,6 +175,9 @@ new world -> generate LoD -> leave world -> re-enter same world
 confirmed storage files/id mappings are reused rather than regenerated from RAM
 first config run created the exact production TYPE JSON
 second JVM reported storageConfigSource=loaded and reused the same database
+isolated LZ4 explicit-fragment run wrote four RocksDB databases
+AutoFragmentationAdaptor restart loaded 384 mappings and hit 4,925 sections
+original ZSTD config restored byte-for-byte after the isolated test
 ```
 
 ## 2. Full VoxyRenderSystem outer lifecycle owner

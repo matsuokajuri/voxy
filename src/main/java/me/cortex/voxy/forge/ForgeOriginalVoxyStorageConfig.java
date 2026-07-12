@@ -19,7 +19,9 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /** Forge registry adapter for original Voxy's polymorphic storage config JSON. */
@@ -36,7 +38,13 @@ final class ForgeOriginalVoxyStorageConfig {
         SECTION_TYPES.register("Serializer", SerializerConfig.class);
         STORAGE_TYPES.register("RocksDB", RocksDbConfig.class);
         STORAGE_TYPES.register("CompressionAdaptor", CompressionAdaptorConfig.class);
+        STORAGE_TYPES.register("BasicPathConfig", BasicPathConfig.class);
+        STORAGE_TYPES.register("FragmentationAdaptor", FragmentationAdaptorConfig.class);
+        STORAGE_TYPES.register("AutoFragmentationAdaptor", AutoFragmentationAdaptorConfig.class);
+        STORAGE_TYPES.register("ReadonlyCachingLayer", ReadonlyCachingLayerConfig.class);
+        STORAGE_TYPES.register("ConditionalConfig", ConditionalStorageConfig.class);
         COMPRESSOR_TYPES.register("ZSTD", ZstdConfig.class);
+        COMPRESSOR_TYPES.register("LZ4", Lz4Config.class);
         GSON = new GsonBuilder()
                 .setPrettyPrinting()
                 .registerTypeAdapterFactory(SECTION_TYPES)
@@ -198,6 +206,116 @@ final class ForgeOriginalVoxyStorageConfig {
         @Override
         String describe() {
             return "ZSTD(level=" + this.compressionLevel + ")";
+        }
+    }
+
+    static final class Lz4Config extends CompressorConfig {
+        @Override
+        StorageCompressor build(ConfigBuildCtx context) {
+            return new ForgeOriginalVoxyLz4Compressor();
+        }
+
+        @Override
+        String describe() {
+            return "LZ4";
+        }
+    }
+
+    static final class BasicPathConfig extends StorageConfig {
+        String path = "";
+        StorageConfig delegate;
+
+        @Override
+        StorageBackend build(ConfigBuildCtx context) {
+            if (this.delegate == null) {
+                throw new IllegalStateException("Basic path delegate is null");
+            }
+            context.pushPath(this.path);
+            StorageBackend storage = this.delegate.build(context);
+            context.popPath();
+            return storage;
+        }
+
+        @Override
+        String describe() {
+            return "BasicPath(" + this.path + ")->" + (this.delegate == null ? "none" : this.delegate.describe());
+        }
+    }
+
+    static final class FragmentationAdaptorConfig extends StorageConfig {
+        List<StorageConfig> backends = new ArrayList<>();
+
+        @Override
+        StorageBackend build(ConfigBuildCtx context) {
+            StorageBackend[] builtBackends = new StorageBackend[this.backends.size()];
+            for (int i = 0; i < this.backends.size(); i++) {
+                builtBackends[i] = this.backends.get(i).build(context);
+            }
+            return new ForgeOriginalVoxyFragmentedStorageBackendAdaptor(builtBackends);
+        }
+
+        @Override
+        String describe() {
+            return "Fragmentation(count=" + this.backends.size() + ")";
+        }
+    }
+
+    static final class AutoFragmentationAdaptorConfig extends StorageConfig {
+        StorageConfig delegate;
+        String basePath;
+        int count;
+
+        @Override
+        StorageBackend build(ConfigBuildCtx context) {
+            if (this.delegate == null) {
+                throw new IllegalStateException("Auto fragmentation delegate is null");
+            }
+            StorageBackend[] builtBackends = new StorageBackend[this.count];
+            for (int i = 0; i < this.count; i++) {
+                context.pushPath(this.basePath + "_" + i);
+                builtBackends[i] = this.delegate.build(context);
+                context.popPath();
+            }
+            return new ForgeOriginalVoxyFragmentedStorageBackendAdaptor(builtBackends);
+        }
+
+        @Override
+        String describe() {
+            return "AutoFragmentation(basePath=" + this.basePath + ",count=" + this.count + ")->"
+                    + (this.delegate == null ? "none" : this.delegate.describe());
+        }
+    }
+
+    static final class ReadonlyCachingLayerConfig extends StorageConfig {
+        StorageConfig cache;
+        StorageConfig onMiss;
+
+        @Override
+        StorageBackend build(ConfigBuildCtx context) {
+            if (this.cache == null || this.onMiss == null) {
+                throw new IllegalStateException("Readonly caching layer config is incomplete");
+            }
+            return new ForgeOriginalVoxyReadonlyCachingLayer(
+                    this.cache.build(context),
+                    this.onMiss.build(context));
+        }
+
+        @Override
+        String describe() {
+            return "ReadonlyCachingLayer(cache=" + (this.cache == null ? "none" : this.cache.describe())
+                    + ",onMiss=" + (this.onMiss == null ? "none" : this.onMiss.describe()) + ")";
+        }
+    }
+
+    static final class ConditionalStorageConfig extends StorageConfig {
+        @Override
+        StorageBackend build(ConfigBuildCtx context) {
+            throw new org.apache.commons.lang3.NotImplementedException();
+        }
+
+        @Override
+        String describe() {
+            return "ConditionalConfig(upstream-not-implemented)";
         }
     }
 
