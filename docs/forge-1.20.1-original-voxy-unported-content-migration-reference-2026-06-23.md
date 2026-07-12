@@ -87,11 +87,11 @@ The most important unported or incomplete areas are:
 
 ## 1. Instance, world storage, and service root
 
-Status after XXI.4:
+Status after XXI.5:
 
 ```text
-partial: original default persistent backend, dynamic JSON config, local
-optional TYPE surface, and LMDB complete; Redis remains
+partial instance parity: original storage backend/config TYPE inventory is
+complete; full active-world map parity and remaining storage regressions remain
 ```
 
 Original Voxy source areas:
@@ -122,17 +122,18 @@ loaded 1,384 mappings and recorded 5,989 stored-section hits. XXI.3 adds LZ4,
 BasicPathConfig, explicit/automatic fragmentation, and exact registrations for
 the upstream-incomplete ConditionalConfig/ReadonlyCachingLayer paths. XXI.4
 ports original LMDB transactions/backend/native packaging and validates restart
-recovery with 386 mappings and 3,037 stored-section hits.
+recovery with 386 mappings and 3,037 stored-section hits. XXI.5 ports Redis with
+Jedis 5.1.0, validates 382 mapping reloads and 2,814 section hits against an
+isolated local service, and closes the emitted storage TYPE inventory.
 
 Not yet migrated:
 
 ```text
-- optional Redis storage configuration
 - full `VoxyInstance.activeWorlds` map parity beyond the active/closing Forge
   adapter (the currently required same-world reuse behavior is ported)
 ```
 
-XXI.1-XXI.4 completed:
+XXI.1-XXI.5 completed:
 
 ```text
 - read original instance/storage ownership through shutdown
@@ -162,19 +163,24 @@ XXI.1-XXI.4 completed:
 - LWJGL LMDB 3.3.1 plus official Windows/Linux x64 native packaging
 - isolated LMDB restart recovery; original iteratePositions remains upstream
   unimplemented
+- Redis hash/key/value format, prefix substitution, Jedis pool lifecycle, and
+  original upstream-unimplemented iteratePositions behavior
+- Jedis 5.1.0 and commons-pool2 2.12.0 packaging
+- isolated Redis two-JVM recovery and direct server-side hash-count verification
 ```
 
 Remaining migration steps:
 
 ```text
-1. Port and independently validate Redis with an external test service.
-2. Validate multiplayer server isolation and corrupted-section deletion.
+1. Validate multiplayer server isolation and corrupted-section deletion.
+2. Audit remaining full `VoxyInstance.activeWorlds` semantics beyond the current
+   active/closing adapter.
    Dimension isolation, relog, and shutdown passed in XXI.1; default config
    creation/reload passed in XXI.2; LZ4 and fragmentation restart passed in XXI.3;
-   LMDB restart passed in XXI.4.
+   LMDB restart passed in XXI.4; Redis restart passed in XXI.5.
 ```
 
-XXI.1-XXI.4 validation:
+XXI.1-XXI.5 validation:
 
 ```text
 rtk test .\gradlew compileJava
@@ -188,6 +194,9 @@ original ZSTD config restored byte-for-byte after the isolated test
 isolated LMDB run wrote data.mdb/lock.mdb and 386 mappings
 second LMDB JVM loaded all 386 mappings and hit 3,037 stored sections
 original ZSTD config restored byte-for-byte after the LMDB test
+isolated Redis first run created 4,432 section fields and 382 mappings
+second Redis JVM loaded all 382 mappings and hit 2,814 stored sections
+temporary Redis shut down normally; original config restored byte-for-byte
 ```
 
 ## 2. Full VoxyRenderSystem outer lifecycle owner

@@ -38,6 +38,7 @@ final class ForgeOriginalVoxyStorageConfig {
         SECTION_TYPES.register("Serializer", SerializerConfig.class);
         STORAGE_TYPES.register("RocksDB", RocksDbConfig.class);
         STORAGE_TYPES.register("LMDB", LmdbConfig.class);
+        STORAGE_TYPES.register("Redis", RedisConfig.class);
         STORAGE_TYPES.register("CompressionAdaptor", CompressionAdaptorConfig.class);
         STORAGE_TYPES.register("BasicPathConfig", BasicPathConfig.class);
         STORAGE_TYPES.register("FragmentationAdaptor", FragmentationAdaptorConfig.class);
@@ -184,6 +185,25 @@ final class ForgeOriginalVoxyStorageConfig {
         @Override
         String describe() {
             return "LMDB";
+        }
+    }
+
+    static final class RedisConfig extends StorageConfig {
+        String host;
+        int port;
+        String prefix;
+
+        @Override
+        StorageBackend build(ConfigBuildCtx context) {
+            return new ForgeOriginalVoxyRedisStorageBackend(
+                    this.host,
+                    this.port,
+                    context.substituteString(this.prefix));
+        }
+
+        @Override
+        String describe() {
+            return "Redis(host=" + this.host + ",port=" + this.port + ",prefix=" + this.prefix + ")";
         }
     }
 

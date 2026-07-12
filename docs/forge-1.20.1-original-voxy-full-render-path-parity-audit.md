@@ -588,13 +588,11 @@ semantics.
 
 ## Remaining parity work after the renderer regression
 
-1. Port the remaining Redis external storage backend. XXI.1-XXI.2 completed the
-   persistent default chain and its original JSON lifecycle; XXI.3 added the
-   active local optional TYPE surface and recorded upstream-incomplete types;
-   XXI.4 ports and restart-validates LMDB. Redis remains because it requires an
-   external service for honest runtime validation.
-2. Triage the remaining unported-content inventory and optional compatibility
+1. Triage the remaining unported-content inventory and optional compatibility
    integrations after the renderer readiness round.
+2. Validate multiplayer storage isolation, corrupted-section deletion, and any
+   remaining `VoxyInstance.activeWorlds` behavior beyond the active/closing Forge
+   adapter. XXI.1-XXI.5 complete the original storage backend/config TYPE surface.
 3. Perform non-functional cleanup of unused MDIC config keys and the active
    `ForgeCpuMeshLayer` name without deleting that model-bakery enum.
 4. Investigate IterationT only after original Voxy migration is complete; it is
@@ -1954,3 +1952,65 @@ The pre-test default ZSTD/RocksDB `config.json` was restored and verified
 byte-for-byte by SHA-256. LMDB test data remains only under ignored `run/`.
 Whole-mod parity remains false for Redis and the remaining non-storage migration
 inventory; renderer readiness is unchanged.
+
+### XXI.5 original Redis backend and storage TYPE inventory closure
+
+XXI.5 ports original `RedisStorageBackend` and registers the exact `Redis` TYPE.
+The Forge namespace implementation preserves the original contract:
+
+```text
+JedisPool(host, port)
+hash key = substituted prefix + world_sections
+hash key = substituted prefix + id_mappings
+section fields = big-endian 8-byte keys
+mapping fields = big-endian 4-byte keys
+section/mapping values = exact byte arrays copied to/from native buffers
+optional per-resource AUTH path retained by the backend constructors
+flush = no-op
+close = JedisPool.close
+```
+
+The original JSON Config exposes only `host`, `port`, and `prefix`; it does not
+expose the backend constructor's optional user/password fields, and Forge keeps
+that exact surface. `iteratePositions()` remains `Not yet implemented`, matching
+upstream rather than inventing a Redis scan route.
+
+ForgeGradle packages the same original dependencies:
+
+```text
+redis.clients:jedis:5.1.0
+org.apache.commons:commons-pool2:2.12.0
+```
+
+Runtime validation used Redis 7.0.15 unpacked into ignored `run/redis-test`
+without installing packages into WSL. The temporary service listened only on
+`127.0.0.1:16379`; Windows connectivity and Redis `PING` were verified before
+Minecraft started. The config prefix
+`xxi5:{world_identifier}:` also exercised original `ConfigBuildCtx` token
+substitution.
+
+```text
+first JVM:
+  backendChain=Serializer->ZSTD(level=1)->Redis(127.0.0.1:16379, isolated prefix)
+  sectionWrites=24183
+  mappingWrites=382
+  Redis HLEN after exit: world_sections=4432, id_mappings=382
+  no Jedis connection/pool/class-loading or shutdown failure
+
+second JVM, same Redis service and prefix:
+  mappingEntriesLoaded=382
+  sectionLoadHits=2814
+  sectionLoadMisses=2852
+  sectionWrites=1238
+  final Redis HLEN: world_sections=4432, id_mappings=384
+  normal WorldEngine/render/client shutdown, runClient exit 0
+```
+
+The default ZSTD/RocksDB config was restored byte-for-byte by SHA-256, and the
+temporary Redis process exited through `SHUTDOWN NOSAVE`. Together XXI.1-XXI.5
+now cover every storage/compressor/config TYPE actually emitted by the original
+build. `LZMA2` is not emitted because its entire source implementation is
+commented out; `ConditionalConfig` and `ReadonlyCachingLayer` retain their
+documented upstream-incomplete behavior. Whole-mod parity remains false for the
+remaining non-storage inventory and targeted regressions; renderer readiness is
+unchanged.

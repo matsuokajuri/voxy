@@ -184,6 +184,12 @@ dependencies {
     minecraftLibrary("org.lz4:lz4-java:1.8.0") {
         transitive = false
     }
+    minecraftLibrary("redis.clients:jedis:5.1.0") {
+        transitive = false
+    }
+    minecraftLibrary("org.apache.commons:commons-pool2:2.12.0") {
+        transitive = false
+    }
     zstdJarJarNative("org.lwjgl:lwjgl-zstd:3.3.1:natives-windows") {
         transitive = false
     }
@@ -211,6 +217,14 @@ dependencies {
     jarJar(group: 'org.lz4', name: 'lz4-java', version: '[1.8.0,1.9)') {
         transitive = false
         jarJar.pin(it, '1.8.0')
+    }
+    jarJar(group: 'redis.clients', name: 'jedis', version: '[5.1.0,5.2)') {
+        transitive = false
+        jarJar.pin(it, '5.1.0')
+    }
+    jarJar(group: 'org.apache.commons', name: 'commons-pool2', version: '[2.12.0,2.13)') {
+        transitive = false
+        jarJar.pin(it, '2.12.0')
     }
 
     for (def embeddiumDevJar : embeddiumDevJars) {
