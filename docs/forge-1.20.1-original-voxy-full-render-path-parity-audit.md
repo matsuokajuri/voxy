@@ -588,11 +588,12 @@ semantics.
 
 ## Remaining parity work after the renderer regression
 
-1. Port the remaining dynamic `StorageConfigUtil` configuration surface and
-   optional storage backends. XXI.1 has replaced the formal active-world route's
-   `MemoryStorageBackend` with original Voxy's default persistent
-   Serializer/ZSTD/RocksDB chain and verified restart recovery, but the full
-   configurable storage inventory is not complete.
+1. Port the remaining optional storage/config types. XXI.1 replaced the formal
+   active-world route's `MemoryStorageBackend` with original Voxy's default
+   persistent Serializer/ZSTD/RocksDB chain and verified restart recovery;
+   XXI.2 ports the matching `StorageConfigUtil` JSON lifecycle, `ConfigBuildCtx`,
+   and polymorphic TYPE registry for that production chain. LMDB, Redis,
+   conditional/fragmented/cache adaptors, and LZ4/LZMA remain.
 2. Triage the remaining unported-content inventory and optional compatibility
    integrations after the renderer readiness round.
 3. Perform non-functional cleanup of unused MDIC config keys and the active
@@ -1760,6 +1761,64 @@ This proves section data and Mapper ids survive a real JVM restart and are read
 from disk rather than regenerated from an in-process cache. The read-only
 `/voxy original_voxy_storage_status` command reports this active backend and its
 load/write counters. Whole-mod parity deliberately remains false: the default
-production backend is now persistent, but original dynamic `StorageConfigUtil`
-JSON loading and the optional storage/compressor/adaptor inventory still require
-separate migration and regression coverage.
+production backend is now persistent, while original dynamic configuration and
+the optional storage/compressor/adaptor inventory are handled separately below.
+
+### XXI.2 original storage config JSON and production TYPE registry
+
+XXI.2 ports the original configuration mechanism around the XXI.1 production
+backend rather than adding a Forge-only toggle. Because original
+`Serialization.init()` discovers config classes through FabricLoader, the Forge
+adapter uses an explicit registry for the exact production types currently
+compiled into the Forge source set:
+
+```text
+SectionStorageConfig: Serializer
+StorageConfig:        CompressionAdaptor, RocksDB
+CompressorConfig:     ZSTD
+```
+
+The adapter preserves original polymorphic JSON semantics: `TYPE` is emitted as
+the first field of each configured object, deserialization dispatches through
+the matching abstract config family, and the default remains
+`Serializer -> CompressionAdaptor(ZSTD level 1, RocksDB)`. It also compiles and
+uses original `ConfigBuildCtx`; `{base_save_path}`, `{world_identifier}`, and
+`{player_uuid}` are populated exactly where original `VoxyClientInstance` does,
+then `{base_save_path}/{world_identifier}/storage/` is pushed before building
+the configured section storage.
+
+`<base>/config.json` now follows original `StorageConfigUtil` lifecycle:
+
+```text
+create base directory
+ -> load existing JSON when present
+ -> require version == 1 and non-null sectionStorageConfig
+ -> fall back to the original default on null/invalid/load failure
+ -> pretty-print the effective config back to config.json
+ -> honor disabled before creating an active WorldEngine
+```
+
+Runtime ground truth across two separate client processes using the XXI.1
+database:
+
+```text
+first process:
+  storageConfigSource=default-created
+  config JSON TYPE chain = Serializer / CompressionAdaptor / ZSTD / RocksDB
+  mappingEntriesLoaded=1384
+  sectionLoadHits=8550
+  normal storage/render/client shutdown, runClient exit 0
+
+second process:
+  storageConfigSource=loaded
+  same config path, world identifier, and RocksDB storage path
+  mappingEntriesLoaded=1384
+  sectionLoadHits=5989
+  normal storage/render/client shutdown, runClient exit 0
+```
+
+The `/voxy original_voxy_storage_status` command now exposes config readiness,
+path, load source, and disabled state independently of storage counters. This
+closes the original default-chain config creation/reload gap without claiming
+the unported optional TYPE inventory. `wholeOriginalModParity` therefore remains
+false; renderer readiness is unchanged.

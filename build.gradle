@@ -50,6 +50,7 @@ sourceSets {
             include 'me/cortex/voxy/common/world/service/VoxelIngestService.java'
             include 'me/cortex/voxy/common/config/IMappingStorage.java'
             include 'me/cortex/voxy/common/config/IStoredSectionPositionIterator.java'
+            include 'me/cortex/voxy/common/config/ConfigBuildCtx.java'
             include 'me/cortex/voxy/common/config/section/SectionStorage.java'
             include 'me/cortex/voxy/common/config/section/SectionSerializationStorage.java'
             include 'me/cortex/voxy/common/config/storage/StorageBackend.java'

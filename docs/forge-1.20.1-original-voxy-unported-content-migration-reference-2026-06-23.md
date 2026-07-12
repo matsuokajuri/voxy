@@ -87,11 +87,11 @@ The most important unported or incomplete areas are:
 
 ## 1. Instance, world storage, and service root
 
-Status after XXI.1:
+Status after XXI.2:
 
 ```text
-partial: original default persistent backend and restart recovery complete;
-dynamic config and optional backend inventory remain
+partial: original default persistent backend, restart recovery, and its dynamic
+JSON config path complete; optional backend/config TYPE inventory remains
 ```
 
 Original Voxy source areas:
@@ -114,21 +114,23 @@ The active Forge world route now uses original Voxy's default persistent
 `SectionSerializationStorage -> ZSTD(level 1) -> RocksDBStorageBackend` chain,
 with original world identity/path hashing, Mapper id persistence, idle-world
 reclaim, saving/ingest services, and shutdown ordering. Two separate client
-processes loaded the same database; the second loaded 448 mappings and recorded
-5,676 stored-section hits. Original dynamic `StorageConfigUtil` loading and the
-optional storage inventory are not yet migrated.
+processes loaded the same database; the XXI.1 restart run loaded 448 mappings
+and recorded 5,676 stored-section hits. XXI.2 ports original `StorageConfigUtil`
+creation/reload semantics, original `ConfigBuildCtx`, and the exact polymorphic
+TYPE JSON for Serializer, CompressionAdaptor, ZSTD, and RocksDB. Its reload run
+loaded 1,384 mappings and recorded 5,989 stored-section hits. The optional
+storage inventory is not yet migrated.
 
 Not yet migrated:
 
 ```text
-- StorageConfigUtil-backed sectionStorageConfig creation/loading
 - optional LMDB/Redis/conditional/fragmented/cache storage configurations
 - optional LZ4/LZMA compressor configurations
 - full `VoxyInstance.activeWorlds` map parity beyond the active/closing Forge
   adapter (the currently required same-world reuse behavior is ported)
 ```
 
-XXI.1 completed:
+XXI.1-XXI.2 completed:
 
 ```text
 - read original instance/storage ownership through shutdown
@@ -141,26 +143,32 @@ XXI.1 completed:
 - no active formal-route MemoryStorageBackend construction
 - dimension-isolated RocksDB paths and idle close/reopen
 - rapid logout/login reuse without a RocksDB LOCK conflict
+- StorageConfigUtil-compatible config.json creation, validation, fallback, and
+  reload
+- original ConfigBuildCtx token/path construction
+- exact Serializer/CompressionAdaptor/ZSTD/RocksDB polymorphic TYPE names and
+  JSON shape
+- storage disabled gate before active-world creation
 ```
 
 Remaining migration steps:
 
 ```text
-1. Port FabricLoader config-type discovery to a Forge registry without changing
-   original TYPE names or JSON shape.
-2. Port StorageConfigUtil/ConfigBuildCtx config creation and loading.
-3. Add optional backends/adaptors/compressors with their original dependencies.
-4. Validate custom config reload, multiplayer server isolation, and
-   corrupted-section deletion. Dimension isolation, relog, and shutdown passed
-   in XXI.1.
+1. Add optional backends/adaptors/compressors and register their original TYPE
+   names with their original dependencies.
+2. Validate those optional custom configurations, multiplayer server isolation,
+   and corrupted-section deletion. Dimension isolation, relog, and shutdown passed
+   in XXI.1; default config creation/reload passed in XXI.2.
 ```
 
-XXI.1 validation:
+XXI.1-XXI.2 validation:
 
 ```text
 rtk test .\gradlew compileJava
 new world -> generate LoD -> leave world -> re-enter same world
 confirmed storage files/id mappings are reused rather than regenerated from RAM
+first config run created the exact production TYPE JSON
+second JVM reported storageConfigSource=loaded and reused the same database
 ```
 
 ## 2. Full VoxyRenderSystem outer lifecycle owner

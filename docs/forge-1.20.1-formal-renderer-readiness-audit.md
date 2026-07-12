@@ -101,7 +101,8 @@ Voxy sidecars.
 Not a renderer-readiness blocker:
 
 ```text
-dynamic storage configuration and optional backends (whole-mod parity; default persistent chain ported in XXI.1)
+optional storage/config types (whole-mod parity; default persistent chain ported
+and made JSON-configurable in XXI.1-XXI.2)
 IterationT pack-specific compatibility (post-parity, absent upstream)
 optional compatibility/content items from the unported-content inventory
 unused MDIC config-key cleanup and ForgeCpuMeshLayer naming cleanup
@@ -148,12 +149,13 @@ Minecraft shutdown with `runClient` exit code 0.
    the real MDIC renderer, a successful indirect terrain submission, and a ready
    render pipeline. It does not depend on a manual readback command.
 4. `/voxy parity_route_status` reports these live values and separately reports
-   `wholeOriginalModParity=false`; XXI.1 has ported the default persistent
-   backend, while configurable/optional storage remains.
+   `wholeOriginalModParity=false`; XXI.1-XXI.2 have ported the default persistent
+   backend and its original JSON config lifecycle, while optional storage types
+   remain.
 5. `earlyUsableLodRendererReady` was not recreated; it remains an obsolete
    preview-era document flag.
 
-Whole-mod parity remains separately false until storage configuration and the
-remaining accepted migration inventory are completed. The post-wiring
+Whole-mod parity remains separately false until the optional storage/config
+types and remaining accepted migration inventory are completed. The post-wiring
 `runClient` validation confirmed all three live renderer fields before the XX.7
 commit.

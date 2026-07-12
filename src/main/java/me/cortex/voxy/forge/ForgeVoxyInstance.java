@@ -105,9 +105,16 @@ public final class ForgeVoxyInstance {
 
     public PersistentStorageStatus createPersistentStorageStatusSnapshot() {
         ForgeOriginalVoxyPersistentStorage.Identity identity = this.activeStorageIdentity;
+        ForgeOriginalVoxyStorageConfig.Loaded config = identity == null
+                ? null
+                : ForgeOriginalVoxyPersistentStorage.configuration(identity);
         return new PersistentStorageStatus(
                 identity != null && this.activeWorld != null && this.activeWorld.isLive(),
-                "Serializer->ZSTD(level=1)->RocksDB",
+                config != null && config.ready(),
+                config == null ? "none" : config.path().toString(),
+                config == null ? "none" : config.source(),
+                config != null && config.config().disabled,
+                config == null ? "none" : config.backendChain(),
                 identity == null ? "none" : identity.worldIdentifier().toString(),
                 identity == null ? "none" : identity.storagePath().toString(),
                 this.storageLoadHitCount.get(),
@@ -215,8 +222,7 @@ public final class ForgeVoxyInstance {
         }
 
         this.activeClientDimension = minecraft.level.dimension().location().toString();
-        this.createActiveWorldSkeleton();
-        return true;
+        return this.createActiveWorldSkeleton();
     }
 
     public boolean ensureOriginalVoxyActiveWorldForCurrentWorld() {
@@ -236,14 +242,16 @@ public final class ForgeVoxyInstance {
         }
 
         this.activeClientDimension = minecraft.level.dimension().location().toString();
-        this.createActiveWorldSkeleton();
-        return true;
+        return this.createActiveWorldSkeleton();
     }
 
-    private void createActiveWorldSkeleton() {
+    private boolean createActiveWorldSkeleton() {
         Minecraft minecraft = Minecraft.getInstance();
         ForgeOriginalVoxyPersistentStorage.Identity identity =
                 ForgeOriginalVoxyPersistentStorage.identityForCurrentWorld(minecraft);
+        if (ForgeOriginalVoxyPersistentStorage.disabled(identity)) {
+            return false;
+        }
         this.storageWriteCount.set(0);
         this.storageLoadHitCount.set(0);
         this.storageLoadMissCount.set(0);
@@ -263,7 +271,7 @@ public final class ForgeVoxyInstance {
                         "Reused original Voxy persistent WorldEngine {} at {}.",
                         identity.worldIdentifier(),
                         identity.storagePath());
-                return;
+                return true;
             }
         }
 
@@ -283,6 +291,7 @@ public final class ForgeVoxyInstance {
                 "Created Voxy WorldEngine using original persistent storage chain {} at {}.",
                 identity.worldIdentifier(),
                 identity.storagePath());
+        return true;
     }
 
     private void onClientLogout(ClientPlayerNetworkEvent.LoggingOut event) {
@@ -471,6 +480,10 @@ public final class ForgeVoxyInstance {
 
     public record PersistentStorageStatus(
             boolean persistentStorageReady,
+            boolean storageConfigReady,
+            String storageConfigPath,
+            String storageConfigSource,
+            boolean storageDisabled,
             String backendChain,
             String worldIdentifier,
             String storagePath,

@@ -1,16 +1,19 @@
 package me.cortex.voxy.forge;
 
-import me.cortex.voxy.common.config.section.SectionSerializationStorage;
+import me.cortex.voxy.common.config.ConfigBuildCtx;
 import me.cortex.voxy.common.config.section.SectionStorage;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.world.level.storage.LevelResource;
 
-import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
-/** Original Voxy's default Serializer -> ZSTD(level 1) -> RocksDB storage chain. */
+/** Original Voxy's configured section-storage owner and default persistent chain. */
 final class ForgeOriginalVoxyPersistentStorage {
+    private static final Map<Path, ForgeOriginalVoxyStorageConfig.Loaded> CONFIGS = new ConcurrentHashMap<>();
+
     record Identity(Path basePath, ForgeOriginalVoxyWorldIdentifier worldIdentifier) {
         Identity {
             basePath = basePath.toAbsolutePath().normalize();
@@ -38,16 +41,28 @@ final class ForgeOriginalVoxyPersistentStorage {
     }
 
     static SectionStorage open(Identity identity) {
-        try {
-            Files.createDirectories(identity.storagePath());
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to create original Voxy storage path " + identity.storagePath(), e);
+        ForgeOriginalVoxyStorageConfig.Loaded loaded = configuration(identity);
+        if (loaded.config().disabled) {
+            throw new IllegalStateException("Original Voxy storage is disabled by " + loaded.path());
         }
-        var backend = new ForgeOriginalVoxyRocksDBStorageBackend(identity.storagePath().toString());
-        var compressed = new ForgeOriginalVoxyCompressionStorageAdaptor(
-                new ForgeOriginalVoxyZstdCompressor(1),
-                backend);
-        return new SectionSerializationStorage(compressed);
+        ConfigBuildCtx context = new ConfigBuildCtx();
+        context.setProperty(ConfigBuildCtx.BASE_SAVE_PATH, identity.basePath().toString());
+        context.setProperty(ConfigBuildCtx.WORLD_IDENTIFIER, identity.worldIdentifier().getWorldId());
+        context.setProperty(
+                ConfigBuildCtx.PLAYER_UUID,
+                Minecraft.getInstance().getUser().getGameProfile().getId().toString().replace(':', '-'));
+        context.pushPath(ConfigBuildCtx.DEFAULT_STORAGE_PATH);
+        return loaded.config().sectionStorageConfig.build(context);
+    }
+
+    static ForgeOriginalVoxyStorageConfig.Loaded configuration(Identity identity) {
+        return CONFIGS.computeIfAbsent(
+                identity.basePath(),
+                ForgeOriginalVoxyStorageConfig::loadOrCreate);
+    }
+
+    static boolean disabled(Identity identity) {
+        return configuration(identity).config().disabled;
     }
 
     private static Path resolveBasePath(Minecraft minecraft) {
