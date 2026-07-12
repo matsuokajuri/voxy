@@ -87,10 +87,11 @@ The most important unported or incomplete areas are:
 
 ## 1. Instance, world storage, and service root
 
-Status:
+Status after XXI.1:
 
 ```text
-partial
+partial: original default persistent backend and restart recovery complete;
+dynamic config and optional backend inventory remain
 ```
 
 Original Voxy source areas:
@@ -109,58 +110,57 @@ Current Forge state:
 src/main/java/me/cortex/voxy/forge/ForgeVoxyInstance.java
 ```
 
-The active Forge world route still includes an in-memory active-world skeleton
-using `MemoryStorageBackend`. Original Voxy creates configured persistent
-section storage through `StorageConfigUtil`, owns active worlds in
-`VoxyInstance`, and owns `UnifiedServiceThreadPool`, `SectionSavingService`,
-`VoxelIngestService`, and the idle-world cleaner at the instance level.
+The active Forge world route now uses original Voxy's default persistent
+`SectionSerializationStorage -> ZSTD(level 1) -> RocksDBStorageBackend` chain,
+with original world identity/path hashing, Mapper id persistence, idle-world
+reclaim, saving/ingest services, and shutdown ordering. Two separate client
+processes loaded the same database; the second loaded 448 mappings and recorded
+5,676 stored-section hits. Original dynamic `StorageConfigUtil` loading and the
+optional storage inventory are not yet migrated.
 
 Not yet migrated:
 
 ```text
-- configured persistent storage creation for Forge client worlds
-- original world identity to storage-path mapping
 - StorageConfigUtil-backed sectionStorageConfig creation/loading
-- id-mapping persistence through the configured storage backend
-- VoxyInstance activeWorlds ownership and cleanIdle behavior
-- instance-owned SectionSavingService and VoxelIngestService lifecycle
-- shutdown ordering for active worlds, storage, services, and thread pool
+- optional LMDB/Redis/conditional/fragmented/cache storage configurations
+- optional LZ4/LZMA compressor configurations
+- full `VoxyInstance.activeWorlds` map parity beyond the active/closing Forge
+  adapter (the currently required same-world reuse behavior is ported)
 ```
 
-Migration steps:
+XXI.1 completed:
 
 ```text
-1. Read original VoxyClientInstance and VoxyInstance from constructor through
-   shutdown.
-2. Define the Forge world identifier mapping:
-   - single-player world root -> <world>/voxy
-   - multiplayer server identity -> .voxy/saves/<server>
-   - unknown server state -> documented fallback, not a silent fake identity.
-3. Create a Forge client-instance owner that mirrors VoxyClientInstance:
-   - load/create config with StorageConfigUtil
-   - create SectionStorage through ConfigBuildCtx
-   - own service threads and saving/ingest services at instance scope.
-4. Replace createActiveWorldSkeleton() with original-style world acquisition.
-5. Wire WorldEngine save callbacks to the instance-owned SectionSavingService.
-6. Remove MemoryStorageBackend from the formal active-world route. Keep it only
-   for tests or explicitly documented historical code if still required.
-7. Port cleanIdle/shutdown ordering:
-   - stop accepting new work
-   - shut down render systems
-   - flush saving service
-   - close storage
-   - stop thread pool
-   - clear render resource reuse only after render owners are freed.
-8. Compile and audit for no new direct MemoryStorageBackend use in the formal
-   active world path.
+- read original instance/storage ownership through shutdown
+- original single-player, multiplayer, Realms, and unknown fallback base paths
+- original world identifier and SHA-256 directory mapping
+- original default Serializer/ZSTD/RocksDB chain
+- Mapper id persistence and stored-section reads
+- same-world closing-owner reuse
+- saving/ingest service and terminal flush/close ordering
+- no active formal-route MemoryStorageBackend construction
+- dimension-isolated RocksDB paths and idle close/reopen
+- rapid logout/login reuse without a RocksDB LOCK conflict
 ```
 
-Validation:
+Remaining migration steps:
+
+```text
+1. Port FabricLoader config-type discovery to a Forge registry without changing
+   original TYPE names or JSON shape.
+2. Port StorageConfigUtil/ConfigBuildCtx config creation and loading.
+3. Add optional backends/adaptors/compressors with their original dependencies.
+4. Validate custom config reload, multiplayer server isolation, and
+   corrupted-section deletion. Dimension isolation, relog, and shutdown passed
+   in XXI.1.
+```
+
+XXI.1 validation:
 
 ```text
 rtk test .\gradlew compileJava
 new world -> generate LoD -> leave world -> re-enter same world
-confirm storage files/id mappings are reused rather than regenerated from RAM
+confirmed storage files/id mappings are reused rather than regenerated from RAM
 ```
 
 ## 2. Full VoxyRenderSystem outer lifecycle owner

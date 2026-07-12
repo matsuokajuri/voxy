@@ -13,7 +13,7 @@ FORMAL_RENDERER_READY=live-owner-derived
 ACTUAL_RENDERER_DRAW_ENABLED=live-MDIC-draw-derived
 FORMAL_DRAW_PIPELINE_READY=live-production-path-derived
 EARLY_USABLE_LOD_RENDERER_READY=retired     # historical document flag; no runtime field
-WHOLE_ORIGINAL_MOD_PARITY=false             # persistent storage and other content remain
+WHOLE_ORIGINAL_MOD_PARITY=false             # storage configuration and other content remain
 ```
 
 The original-equivalent renderer owners now exist, are connected, submit the
@@ -101,7 +101,7 @@ Voxy sidecars.
 Not a renderer-readiness blocker:
 
 ```text
-persistent WorldEngine storage and id-mapping backend (whole-mod parity)
+dynamic storage configuration and optional backends (whole-mod parity; default persistent chain ported in XXI.1)
 IterationT pack-specific compatibility (post-parity, absent upstream)
 optional compatibility/content items from the unported-content inventory
 unused MDIC config-key cleanup and ForgeCpuMeshLayer naming cleanup
@@ -148,11 +148,12 @@ Minecraft shutdown with `runClient` exit code 0.
    the real MDIC renderer, a successful indirect terrain submission, and a ready
    render pipeline. It does not depend on a manual readback command.
 4. `/voxy parity_route_status` reports these live values and separately reports
-   `wholeOriginalModParity=false` with persistent storage as the next target.
+   `wholeOriginalModParity=false`; XXI.1 has ported the default persistent
+   backend, while configurable/optional storage remains.
 5. `earlyUsableLodRendererReady` was not recreated; it remains an obsolete
    preview-era document flag.
 
-Whole-mod parity remains separately false until persistent storage and the
+Whole-mod parity remains separately false until storage configuration and the
 remaining accepted migration inventory are completed. The post-wiring
 `runClient` validation confirmed all three live renderer fields before the XX.7
 commit.

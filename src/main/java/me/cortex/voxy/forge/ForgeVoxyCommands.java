@@ -12,7 +12,9 @@ public final class ForgeVoxyCommands {
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         var root = Commands.literal("voxy")
                 .then(Commands.literal("parity_route_status")
-                        .executes(ctx -> parityRouteStatus(ctx.getSource())));
+                        .executes(ctx -> parityRouteStatus(ctx.getSource())))
+                .then(Commands.literal("original_voxy_storage_status")
+                        .executes(ctx -> originalVoxyStorageStatus(ctx.getSource())));
 
         ForgeVoxyParityCommands.register(root);
         dispatcher.register(root);
@@ -32,6 +34,27 @@ public final class ForgeVoxyCommands {
                 "earlyUsableLodRendererReady=retired",
                 "wholeOriginalModParity=false",
                 "newWorkTarget=original-storage-parity");
+        source.sendSuccess(() -> Component.literal(message), false);
+        return 1;
+    }
+
+    private static int originalVoxyStorageStatus(CommandSourceStack source) {
+        ForgeVoxyInstance.PersistentStorageStatus status =
+                ForgeVoxyInstance.INSTANCE.createPersistentStorageStatusSnapshot();
+        String message = String.join(" ",
+                "Voxy original storage:",
+                "persistentStorageReady=" + status.persistentStorageReady(),
+                "backendChain=" + status.backendChain(),
+                "worldIdentifier=" + status.worldIdentifier(),
+                "storagePath=" + status.storagePath(),
+                "sectionLoadHits=" + status.sectionLoadHits(),
+                "sectionLoadMisses=" + status.sectionLoadMisses(),
+                "sectionWrites=" + status.sectionWrites(),
+                "mappingEntriesLoaded=" + status.mappingEntriesLoaded(),
+                "mappingWrites=" + status.mappingWrites(),
+                "openCount=" + status.openCount(),
+                "reuseCount=" + status.reuseCount(),
+                "closingWorldCount=" + status.closingWorldCount());
         source.sendSuccess(() -> Component.literal(message), false);
         return 1;
     }

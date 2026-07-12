@@ -2,8 +2,6 @@ package me.cortex.voxy.forge;
 
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import me.cortex.voxy.common.config.section.SectionStorage;
-import me.cortex.voxy.common.config.section.SectionSerializationStorage;
-import me.cortex.voxy.common.config.storage.inmemory.MemoryStorageBackend;
 import me.cortex.voxy.common.world.WorldEngine;
 import me.cortex.voxy.common.world.WorldSection;
 import me.cortex.voxy.common.world.service.SectionSavingService;
@@ -27,7 +25,8 @@ public final class ForgeVoxyInstance {
     public static final ForgeVoxyInstance INSTANCE = new ForgeVoxyInstance();
 
     private WorldEngine activeWorld;
-    private final ArrayDeque<WorldEngine> closingWorlds = new ArrayDeque<>();
+    private ForgeOriginalVoxyPersistentStorage.Identity activeStorageIdentity;
+    private final ArrayDeque<ClosingWorld> closingWorlds = new ArrayDeque<>();
     private final ForgeOriginalVoxyModelPipeline originalVoxyModelPipeline = new ForgeOriginalVoxyModelPipeline(this);
     private final SectionSavingService originalVoxySectionSavingService =
             new SectionSavingService(this.originalVoxyModelPipeline.getServiceManager());
@@ -36,6 +35,12 @@ public final class ForgeVoxyInstance {
     private final ForgeChunkIngestManager chunkIngestManager = new ForgeChunkIngestManager(this);
     private final ForgeModelBridgeResourceReloadTracker modelBridgeResourceReloadTracker = new ForgeModelBridgeResourceReloadTracker(this);
     private final AtomicInteger storageWriteCount = new AtomicInteger();
+    private final AtomicInteger storageLoadHitCount = new AtomicInteger();
+    private final AtomicInteger storageLoadMissCount = new AtomicInteger();
+    private final AtomicInteger storageMappingLoadCount = new AtomicInteger();
+    private final AtomicInteger storageMappingWriteCount = new AtomicInteger();
+    private long persistentStorageOpenCount;
+    private long persistentStorageReuseCount;
     private String activeClientDimension;
     private boolean shuttingDown;
 
@@ -96,6 +101,23 @@ public final class ForgeVoxyInstance {
 
     public int getStorageWriteCount() {
         return this.storageWriteCount.get();
+    }
+
+    public PersistentStorageStatus createPersistentStorageStatusSnapshot() {
+        ForgeOriginalVoxyPersistentStorage.Identity identity = this.activeStorageIdentity;
+        return new PersistentStorageStatus(
+                identity != null && this.activeWorld != null && this.activeWorld.isLive(),
+                "Serializer->ZSTD(level=1)->RocksDB",
+                identity == null ? "none" : identity.worldIdentifier().toString(),
+                identity == null ? "none" : identity.storagePath().toString(),
+                this.storageLoadHitCount.get(),
+                this.storageLoadMissCount.get(),
+                this.storageWriteCount.get(),
+                this.storageMappingLoadCount.get(),
+                this.storageMappingWriteCount.get(),
+                this.persistentStorageOpenCount,
+                this.persistentStorageReuseCount,
+                this.closingWorlds.size());
     }
 
     public ForgeOriginalVoxyModelPipeline getOriginalVoxyModelPipeline() {
@@ -219,14 +241,48 @@ public final class ForgeVoxyInstance {
     }
 
     private void createActiveWorldSkeleton() {
+        Minecraft minecraft = Minecraft.getInstance();
+        ForgeOriginalVoxyPersistentStorage.Identity identity =
+                ForgeOriginalVoxyPersistentStorage.identityForCurrentWorld(minecraft);
         this.storageWriteCount.set(0);
+        this.storageLoadHitCount.set(0);
+        this.storageLoadMissCount.set(0);
+        this.storageMappingLoadCount.set(0);
+        this.storageMappingWriteCount.set(0);
+
+        Iterator<ClosingWorld> iterator = this.closingWorlds.iterator();
+        while (iterator.hasNext()) {
+            ClosingWorld closing = iterator.next();
+            if (closing.identity().equals(identity) && closing.world().isLive()) {
+                iterator.remove();
+                this.activeWorld = closing.world();
+                this.activeStorageIdentity = identity;
+                this.activeWorld.markActive();
+                this.persistentStorageReuseCount++;
+                VoxyForge.LOGGER.info(
+                        "Reused original Voxy persistent WorldEngine {} at {}.",
+                        identity.worldIdentifier(),
+                        identity.storagePath());
+                return;
+            }
+        }
+
         var storage = new CountingSectionStorage(
-                new SectionSerializationStorage(new MemoryStorageBackend()),
-                this.storageWriteCount);
+                ForgeOriginalVoxyPersistentStorage.open(identity),
+                this.storageWriteCount,
+                this.storageLoadHitCount,
+                this.storageLoadMissCount,
+                this.storageMappingLoadCount,
+                this.storageMappingWriteCount);
         this.originalVoxyModelPipeline.ensureOriginalServiceThreads();
         this.activeWorld = new WorldEngine(storage, this);
+        this.activeStorageIdentity = identity;
         this.activeWorld.setSaveCallback(this.originalVoxySectionSavingService::enqueueSave);
-        VoxyForge.LOGGER.info("Created Voxy WorldEngine using original section saving service.");
+        this.persistentStorageOpenCount++;
+        VoxyForge.LOGGER.info(
+                "Created Voxy WorldEngine using original persistent storage chain {} at {}.",
+                identity.worldIdentifier(),
+                identity.storagePath());
     }
 
     private void onClientLogout(ClientPlayerNetworkEvent.LoggingOut event) {
@@ -293,16 +349,21 @@ public final class ForgeVoxyInstance {
 
     public void closeActiveWorld() {
         if (this.activeWorld != null) {
-            this.closingWorlds.add(this.activeWorld);
+            if (this.activeStorageIdentity == null) {
+                throw new IllegalStateException("Active Voxy world has no persistent storage identity");
+            }
+            this.closingWorlds.add(new ClosingWorld(this.activeStorageIdentity, this.activeWorld));
             this.activeWorld = null;
+            this.activeStorageIdentity = null;
         }
         this.drainClosingWorlds();
     }
 
     private void drainClosingWorlds() {
-        Iterator<WorldEngine> iterator = this.closingWorlds.iterator();
+        Iterator<ClosingWorld> iterator = this.closingWorlds.iterator();
         while (iterator.hasNext()) {
-            WorldEngine world = iterator.next();
+            ClosingWorld closing = iterator.next();
+            WorldEngine world = closing.world();
             if (!world.isLive()) {
                 iterator.remove();
                 continue;
@@ -311,15 +372,16 @@ public final class ForgeVoxyInstance {
                 continue;
             }
             world.free();
-            VoxyForge.LOGGER.info("Closed Voxy WorldEngine.");
+            VoxyForge.LOGGER.info("Closed Voxy persistent WorldEngine at {}.", closing.identity().storagePath());
             iterator.remove();
         }
     }
 
     private void drainClosingWorldsForShutdown() {
-        Iterator<WorldEngine> iterator = this.closingWorlds.iterator();
+        Iterator<ClosingWorld> iterator = this.closingWorlds.iterator();
         while (iterator.hasNext()) {
-            WorldEngine world = iterator.next();
+            ClosingWorld closing = iterator.next();
+            WorldEngine world = closing.world();
             if (!world.isLive()) {
                 iterator.remove();
                 continue;
@@ -328,23 +390,48 @@ public final class ForgeVoxyInstance {
                 continue;
             }
             world.free();
-            VoxyForge.LOGGER.info("Closed Voxy WorldEngine during client shutdown.");
+            VoxyForge.LOGGER.info(
+                    "Closed Voxy persistent WorldEngine during client shutdown at {}.",
+                    closing.identity().storagePath());
             iterator.remove();
         }
+    }
+
+    private record ClosingWorld(ForgeOriginalVoxyPersistentStorage.Identity identity, WorldEngine world) {
     }
 
     private static final class CountingSectionStorage extends SectionStorage {
         private final SectionStorage delegate;
         private final AtomicInteger storageWriteCount;
+        private final AtomicInteger storageLoadHitCount;
+        private final AtomicInteger storageLoadMissCount;
+        private final AtomicInteger storageMappingLoadCount;
+        private final AtomicInteger storageMappingWriteCount;
 
-        private CountingSectionStorage(SectionStorage delegate, AtomicInteger storageWriteCount) {
+        private CountingSectionStorage(
+                SectionStorage delegate,
+                AtomicInteger storageWriteCount,
+                AtomicInteger storageLoadHitCount,
+                AtomicInteger storageLoadMissCount,
+                AtomicInteger storageMappingLoadCount,
+                AtomicInteger storageMappingWriteCount) {
             this.delegate = delegate;
             this.storageWriteCount = storageWriteCount;
+            this.storageLoadHitCount = storageLoadHitCount;
+            this.storageLoadMissCount = storageLoadMissCount;
+            this.storageMappingLoadCount = storageMappingLoadCount;
+            this.storageMappingWriteCount = storageMappingWriteCount;
         }
 
         @Override
         public int loadSection(WorldSection into) {
-            return this.delegate.loadSection(into);
+            int result = this.delegate.loadSection(into);
+            if (result == 0) {
+                this.storageLoadHitCount.incrementAndGet();
+            } else if (result == 1) {
+                this.storageLoadMissCount.incrementAndGet();
+            }
+            return result;
         }
 
         @Override
@@ -356,11 +443,14 @@ public final class ForgeVoxyInstance {
         @Override
         public void putIdMapping(int id, ByteBuffer data) {
             this.delegate.putIdMapping(id, data);
+            this.storageMappingWriteCount.incrementAndGet();
         }
 
         @Override
         public Int2ObjectOpenHashMap<byte[]> getIdMappingsData() {
-            return this.delegate.getIdMappingsData();
+            Int2ObjectOpenHashMap<byte[]> mappings = this.delegate.getIdMappingsData();
+            this.storageMappingLoadCount.addAndGet(mappings.size());
+            return mappings;
         }
 
         @Override
@@ -377,5 +467,20 @@ public final class ForgeVoxyInstance {
         public void iteratePositions(int level, LongConsumer callback) {
             this.delegate.iteratePositions(level, callback);
         }
+    }
+
+    public record PersistentStorageStatus(
+            boolean persistentStorageReady,
+            String backendChain,
+            String worldIdentifier,
+            String storagePath,
+            int sectionLoadHits,
+            int sectionLoadMisses,
+            int sectionWrites,
+            int mappingEntriesLoaded,
+            int mappingWrites,
+            long openCount,
+            long reuseCount,
+            int closingWorldCount) {
     }
 }

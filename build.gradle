@@ -31,6 +31,7 @@ sourceSets {
             include 'me/cortex/voxy/common/util/UnsafeUtil.java'
             include 'me/cortex/voxy/common/util/MemoryBuffer.java'
             include 'me/cortex/voxy/common/util/ThreadLocalMemoryBuffer.java'
+            include 'me/cortex/voxy/common/util/ResizingThreadLocalMemoryBuffer.java'
             include 'me/cortex/voxy/common/Logger.java'
             include 'me/cortex/voxy/common/thread/**'
             include 'me/cortex/voxy/client/compat/SemaphoreBlockImpersonator.java'
@@ -63,6 +64,12 @@ sourceSets {
             include 'assets/voxy/shaders/**'
         }
     }
+}
+
+jarJar.enable()
+
+configurations {
+    zstdJarJarNative
 }
 
 minecraft {
@@ -152,6 +159,29 @@ def oculusDevJars = optionalFrontendJars('voxyOculusDevJar', 'oculus*.jar')
 dependencies {
     minecraft "net.minecraftforge:forge:${project.minecraft_version}-${project.forge_version}"
     implementation "it.unimi.dsi:fastutil:${project.fastutil_version}"
+    minecraftLibrary("org.lwjgl:lwjgl-zstd:3.3.1") {
+        transitive = false
+    }
+    minecraftLibrary("org.lwjgl:lwjgl-zstd:3.3.1:natives-windows") {
+        transitive = false
+    }
+    minecraftLibrary("org.rocksdb:rocksdbjni:10.2.1") {
+        transitive = false
+    }
+    zstdJarJarNative("org.lwjgl:lwjgl-zstd:3.3.1:natives-windows") {
+        transitive = false
+    }
+    zstdJarJarNative("org.lwjgl:lwjgl-zstd:3.3.1:natives-linux") {
+        transitive = false
+    }
+    jarJar(group: 'org.lwjgl', name: 'lwjgl-zstd', version: '[3.3.1,3.4)') {
+        transitive = false
+        jarJar.pin(it, '3.3.1')
+    }
+    jarJar(group: 'org.rocksdb', name: 'rocksdbjni', version: '[10.2.1,10.3)') {
+        transitive = false
+        jarJar.pin(it, '10.2.1')
+    }
 
     for (def embeddiumDevJar : embeddiumDevJars) {
         compileOnly fg.deobf(embeddiumDevJar)
@@ -161,6 +191,15 @@ dependencies {
     for (def oculusDevJar : oculusDevJars) {
         compileOnly fg.deobf(oculusDevJar)
         runtimeOnly fg.deobf(oculusDevJar)
+    }
+}
+
+// Forge Jar-in-Jar identifies artifacts by group/name, so a second lwjgl-zstd classifier entry
+// would collide with the class jar. Preserve the official native resource path in the outer jar.
+tasks.named('jarJar') {
+    from({ project.configurations.zstdJarJarNative.collect { zipTree(it) } }) {
+        include 'windows/**'
+        include 'linux/**'
     }
 }
 

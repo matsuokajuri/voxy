@@ -3,6 +3,8 @@ package me.cortex.voxy.forge.mixin;
 import me.cortex.voxy.common.world.service.VoxelIngestService;
 import me.cortex.voxy.config.ForgeVoxyConfig;
 import me.cortex.voxy.forge.ForgeVoxyInstance;
+import me.cortex.voxy.forge.ForgeOriginalVoxyWorldIdentifier;
+import me.cortex.voxy.forge.ForgeOriginalVoxyWorldIdentifierAccess;
 import net.minecraft.client.multiplayer.ClientChunkCache;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.multiplayer.ClientPacketListener;
@@ -30,9 +32,11 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import java.util.function.Supplier;
 
 @Mixin(ClientLevel.class)
-public abstract class ForgeOriginalVoxyClientLevelMixin {
+public abstract class ForgeOriginalVoxyClientLevelMixin implements ForgeOriginalVoxyWorldIdentifierAccess {
     @Unique
     private int voxy$bottomSectionY;
+    @Unique
+    private ForgeOriginalVoxyWorldIdentifier voxy$worldIdentifier;
 
     @Shadow
     @Final
@@ -55,6 +59,15 @@ public abstract class ForgeOriginalVoxyClientLevelMixin {
             long biomeZoomSeed,
             CallbackInfo ci) {
         this.voxy$bottomSectionY = ((Level) (Object) this).getMinBuildHeight() >> 4;
+        this.voxy$worldIdentifier = new ForgeOriginalVoxyWorldIdentifier(
+                dimension,
+                biomeZoomSeed,
+                dimensionType == null ? null : dimensionType.unwrapKey().orElse(null));
+    }
+
+    @Override
+    public ForgeOriginalVoxyWorldIdentifier voxy$getOriginalVoxyWorldIdentifier() {
+        return this.voxy$worldIdentifier;
     }
 
     @Inject(method = "setBlocksDirty", at = @At("TAIL"))

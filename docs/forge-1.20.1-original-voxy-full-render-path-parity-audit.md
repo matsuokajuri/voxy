@@ -588,10 +588,11 @@ semantics.
 
 ## Remaining parity work after the renderer regression
 
-1. Port persistent WorldEngine storage and id-mapping ownership. The active
-   renderer currently consumes an original `WorldEngine` backed by
-   `MemoryStorageBackend`, so whole-mod parity is not complete even though the
-   renderer/draw chain is qualified.
+1. Port the remaining dynamic `StorageConfigUtil` configuration surface and
+   optional storage backends. XXI.1 has replaced the formal active-world route's
+   `MemoryStorageBackend` with original Voxy's default persistent
+   Serializer/ZSTD/RocksDB chain and verified restart recovery, but the full
+   configurable storage inventory is not complete.
 2. Triage the remaining unported-content inventory and optional compatibility
    integrations after the renderer readiness round.
 3. Perform non-functional cleanup of unused MDIC config keys and the active
@@ -1651,11 +1652,12 @@ then frees/decommits cached geometry buffers in the original shutdown order.
 This cannot affect steady-state pixels and is not the XX.4 root cause; it closes
 the known full-instance render-resource lifetime gap.
 
-Renderer readiness is deliberately separated from whole-mod parity. The active
-`WorldEngine` still uses `MemoryStorageBackend`, so persistent section/id-mapping
-storage remains a major post-renderer migration. IterationT, optional integration
-inventory, unused config-key cleanup, and the active `ForgeCpuMeshLayer` rename
-are also later work, not substitutes or renderer-readiness blockers.
+Renderer readiness is deliberately separated from whole-mod parity. At the XX.7
+boundary the active `WorldEngine` still used `MemoryStorageBackend`; XXI.1 below
+ports the original default persistent chain, while dynamic storage configuration
+and optional backends remain. IterationT, optional integration inventory, unused
+config-key cleanup, and the active `ForgeCpuMeshLayer` rename are also later
+work, not substitutes or renderer-readiness blockers.
 
 Validation passed: `gradlew compileJava`, full `gradlew build`, and the final
 `runClient` smoke test all completed successfully. The client rebuilt the formal
@@ -1688,3 +1690,76 @@ retaining `earlyUsableLodRendererReady=retired` and
 WorldEngine, Forge instance, and Minecraft normally; `runClient` exited 0. The
 original in-flight-request warnings remain the already audited upstream
 NodeManager behavior and did not coincide with a renderer failure.
+
+### XXI.1 original default persistent storage and restart recovery
+
+The formal active-world route no longer constructs `MemoryStorageBackend`.
+XXI.1 traces and ports original Voxy's default chain without changing its stored
+section or mapping formats:
+
+```text
+WorldIdentifier(dimension key, biome seed, dimension-type key)
+ -> <base>/<first 32 hex chars of SHA-256(seed + dimension key)>/storage
+ -> SectionSerializationStorage
+ -> CompressionStorageAdaptor
+ -> ZSTDCompressor(level 1)
+ -> RocksDBStorageBackend
+    column families: default, world_sections, id_mappings
+```
+
+The Forge mapping adapter captures the original identifier inputs from the
+1.20.1 `ClientLevel` constructor. Single-player uses
+`<world root>/voxy`; multiplayer uses `.voxy/saves/<server>` and Realms uses
+`.voxy/saves/realms`, matching original `VoxyClientInstance.getBasePath()`.
+Because the Forge port retains one process-lifetime instance rather than
+original `VoxyInstance.activeWorlds`, closing worlds are keyed by both normalized
+base path and original world identifier and may be reclaimed on a rapid relog.
+This preserves original idle-world reuse and avoids opening the same RocksDB path
+twice while its previous owner is still live.
+
+The storage implementation was ported into the Forge namespace because the
+reference config classes use FabricLoader discovery and the current reference
+RocksDB file contains unreachable `Long.expand` code unavailable on the required
+Java 17 runtime. The active methods, byte order, column-family options, WAL
+flush, ZSTD contexts, serialization, mapping keys, and close order remain the
+original mechanisms. ForgeGradle packages original RocksDB JNI 10.2.1 and LWJGL
+ZSTD 3.3.1 through Jar-in-Jar. Forge Jar-in-Jar identifies classifier siblings
+by the same group/name, so the official Windows/Linux native resources are
+preserved at their original LWJGL resource paths in the outer mod jar instead of
+creating conflicting metadata entries.
+
+Runtime ground truth across two separate client processes:
+
+```text
+first process:
+  same-world storage path = .../74d2036cf9ebdb83178e6f984bd8904e/storage
+  sectionWrites=26409
+  mappingWrites=448
+  normal RocksDB/WorldEngine/client shutdown, runClient exit 0
+
+second process:
+  identical world identifier and storage path
+  mappingEntriesLoaded=448
+  mappingWrites=0
+  sectionLoadHits=5676
+  sectionLoadMisses=4014
+  sectionWrites=501
+  normal RocksDB/WorldEngine/client shutdown, runClient exit 0
+
+third process lifecycle regression:
+  overworld path = .../74d2036cf9ebdb83178e6f984bd8904e/storage
+  nether path    = .../ecbd3f9d84cf72a2a82c7569cd0da279/storage
+  each dimension opened and closed its independent RocksDB owner
+  rapid logout/login reused the still-live overworld owner
+  final status openCount=3 reuseCount=1 closingWorldCount=0
+  no RocksDB LOCK, duplicate-open, native, renderer, or shutdown failure
+  runClient exit 0
+```
+
+This proves section data and Mapper ids survive a real JVM restart and are read
+from disk rather than regenerated from an in-process cache. The read-only
+`/voxy original_voxy_storage_status` command reports this active backend and its
+load/write counters. Whole-mod parity deliberately remains false: the default
+production backend is now persistent, but original dynamic `StorageConfigUtil`
+JSON loading and the optional storage/compressor/adaptor inventory still require
+separate migration and regression coverage.
