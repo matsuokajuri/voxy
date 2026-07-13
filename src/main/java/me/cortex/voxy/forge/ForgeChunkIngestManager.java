@@ -114,16 +114,15 @@ public final class ForgeChunkIngestManager {
             return;
         }
 
-        var engine = this.instance.getCurrentEngineOptional();
-        if (engine.isEmpty()) {
-            this.clear();
-            return;
-        }
-
         var minecraft = Minecraft.getInstance();
         var level = minecraft.level;
         var player = minecraft.player;
         if (level == null || player == null) {
+            this.clear();
+            return;
+        }
+        var engine = this.instance.getEngineForLevel(level);
+        if (engine.isEmpty()) {
             this.clear();
             return;
         }
@@ -208,7 +207,7 @@ public final class ForgeChunkIngestManager {
     }
 
     private void ingestLoadedChunk(String dimension, int chunkX, int chunkZ, LevelChunk chunk) {
-        var engine = this.instance.getCurrentEngineOptional();
+        var engine = this.instance.getEngineForLevel((ClientLevel) chunk.getLevel());
         if (engine.isEmpty()) {
             return;
         }

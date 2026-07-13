@@ -15,11 +15,9 @@ import net.minecraft.core.SectionPos;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.util.profiling.ProfilerFiller;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.ChunkStatus;
 import net.minecraft.world.level.chunk.LevelChunk;
-import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.minecraft.world.level.dimension.DimensionType;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -33,8 +31,6 @@ import java.util.function.Supplier;
 
 @Mixin(ClientLevel.class)
 public abstract class ForgeOriginalVoxyClientLevelMixin implements ForgeOriginalVoxyWorldIdentifierAccess {
-    @Unique
-    private int voxy$bottomSectionY;
     @Unique
     private ForgeOriginalVoxyWorldIdentifier voxy$worldIdentifier;
 
@@ -58,7 +54,6 @@ public abstract class ForgeOriginalVoxyClientLevelMixin implements ForgeOriginal
             boolean debug,
             long biomeZoomSeed,
             CallbackInfo ci) {
-        this.voxy$bottomSectionY = ((Level) (Object) this).getMinBuildHeight() >> 4;
         this.voxy$worldIdentifier = new ForgeOriginalVoxyWorldIdentifier(
                 dimension,
                 biomeZoomSeed,
@@ -78,7 +73,7 @@ public abstract class ForgeOriginalVoxyClientLevelMixin implements ForgeOriginal
         if (!ForgeVoxyConfig.ENABLED.get()) {
             return;
         }
-        var engine = ForgeVoxyInstance.INSTANCE.getCurrentEngineOptional();
+        var engine = ForgeVoxyInstance.INSTANCE.getEngineForLevel((ClientLevel) (Object) this);
         if (engine.isEmpty()) {
             return;
         }
@@ -97,22 +92,7 @@ public abstract class ForgeOriginalVoxyClientLevelMixin implements ForgeOriginal
         if (!(level.getChunk(pos.getX() >> 4, pos.getZ() >> 4, ChunkStatus.FULL, false) instanceof LevelChunk chunk)) {
             return;
         }
-        int sectionIndex = sectionPos.y() - this.voxy$bottomSectionY;
-        LevelChunkSection[] sections = chunk.getSections();
-        if (sectionIndex < 0 || sectionIndex >= sections.length) {
-            return;
-        }
-        LevelChunkSection section = sections[sectionIndex];
-        var lightEngine = level.getLightEngine();
-        var blockLight = lightEngine.getLayerListener(LightLayer.BLOCK).getDataLayerData(sectionPos);
-        var skyLight = lightEngine.getLayerListener(LightLayer.SKY).getDataLayerData(sectionPos);
-        VoxelIngestService.rawIngest(
-                engine.get(),
-                section,
-                sectionPos.x(),
-                sectionPos.y(),
-                sectionPos.z(),
-                blockLight == null ? null : blockLight.copy(),
-                skyLight == null ? null : skyLight.copy());
+        boolean updated = VoxelIngestService.ingestChunkSection(engine.get(), chunk, sectionPos.y());
+        ForgeVoxyInstance.INSTANCE.getChunkIngestManager().recordMixinSectionIngest(updated);
     }
 }

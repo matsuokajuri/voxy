@@ -192,7 +192,7 @@ public class ForgeOriginalVoxyEmbeddiumRenderSectionManagerMixin {
             return;
         }
 
-        WorldEngine engine = ForgeVoxyInstance.INSTANCE.getCurrentEngineOptional().orElse(null);
+        WorldEngine engine = ForgeVoxyInstance.INSTANCE.getEngineForLevel(this.world).orElse(null);
         if (engine == null) {
             return;
         }

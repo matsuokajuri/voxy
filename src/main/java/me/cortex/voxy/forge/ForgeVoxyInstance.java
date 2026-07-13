@@ -8,6 +8,7 @@ import me.cortex.voxy.common.world.service.SectionSavingService;
 import me.cortex.voxy.common.world.service.VoxelIngestService;
 import me.cortex.voxy.config.ForgeVoxyConfig;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
 import net.minecraftforge.client.event.RegisterClientCommandsEvent;
 import net.minecraftforge.common.MinecraftForge;
@@ -15,8 +16,9 @@ import net.minecraftforge.event.GameShuttingDownEvent;
 import net.minecraftforge.event.TickEvent;
 
 import java.nio.ByteBuffer;
-import java.util.ArrayDeque;
+import java.util.HashMap;
 import java.util.Iterator;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.LongConsumer;
@@ -24,9 +26,11 @@ import java.util.function.LongConsumer;
 public final class ForgeVoxyInstance {
     public static final ForgeVoxyInstance INSTANCE = new ForgeVoxyInstance();
 
-    private WorldEngine activeWorld;
     private ForgeOriginalVoxyPersistentStorage.Identity activeStorageIdentity;
-    private final ArrayDeque<ClosingWorld> closingWorlds = new ArrayDeque<>();
+    //Original VoxyInstance owns all live worlds in a WorldIdentifier-keyed map. The Forge
+    //renderer still has one selected world, but late events from another ClientLevel must be
+    //routed through their own identifier instead of whichever renderer happens to be active.
+    private final Map<ForgeOriginalVoxyPersistentStorage.Identity, OwnedWorld> activeWorlds = new HashMap<>();
     private final ForgeOriginalVoxyModelPipeline originalVoxyModelPipeline = new ForgeOriginalVoxyModelPipeline(this);
     private final SectionSavingService originalVoxySectionSavingService =
             new SectionSavingService(this.originalVoxyModelPipeline.getServiceManager());
@@ -34,21 +38,18 @@ public final class ForgeVoxyInstance {
             new VoxelIngestService(this.originalVoxyModelPipeline.getServiceManager());
     private final ForgeChunkIngestManager chunkIngestManager = new ForgeChunkIngestManager(this);
     private final ForgeModelBridgeResourceReloadTracker modelBridgeResourceReloadTracker = new ForgeModelBridgeResourceReloadTracker(this);
-    private final AtomicInteger storageWriteCount = new AtomicInteger();
-    private final AtomicInteger storageLoadHitCount = new AtomicInteger();
-    private final AtomicInteger storageLoadMissCount = new AtomicInteger();
-    private final AtomicInteger storageMappingLoadCount = new AtomicInteger();
-    private final AtomicInteger storageMappingWriteCount = new AtomicInteger();
     private long persistentStorageOpenCount;
     private long persistentStorageReuseCount;
     private String activeClientDimension;
-    private boolean shuttingDown;
+    private volatile boolean shuttingDown;
 
     private ForgeVoxyInstance() {
     }
 
     public void register() {
-        VoxelIngestService.setAutoIngestTarget(chunk -> this.getCurrentEngineOptional().orElse(null));
+        VoxelIngestService.setAutoIngestTarget(chunk -> chunk.getLevel() instanceof ClientLevel level
+                ? this.getEngineForLevel(level).orElse(null)
+                : null);
         VoxelIngestService.setActiveService(this.originalVoxyIngestService);
         MinecraftForge.EVENT_BUS.addListener(this::onClientLogin);
         MinecraftForge.EVENT_BUS.addListener(this::onClientLogout);
@@ -86,21 +87,45 @@ public final class ForgeVoxyInstance {
         event.setCanceled(true);
     }
 
-    public WorldEngine getActiveWorld() {
-        return this.activeWorld;
+    public synchronized WorldEngine getActiveWorld() {
+        OwnedWorld owned = this.activeStorageIdentity == null
+                ? null
+                : this.activeWorlds.get(this.activeStorageIdentity);
+        return owned != null && owned.world().isLive() ? owned.world() : null;
     }
 
-    public Optional<WorldEngine> getCurrentEngineOptional() {
+    public synchronized Optional<WorldEngine> getCurrentEngineOptional() {
         if (this.shuttingDown) {
             return Optional.empty();
         }
-        return this.activeWorld != null && this.activeWorld.isLive()
-                ? Optional.of(this.activeWorld)
-                : Optional.empty();
+        return Optional.ofNullable(this.getActiveWorld());
+    }
+
+    public Optional<WorldEngine> getEngineForLevel(ClientLevel level) {
+        if (this.shuttingDown) {
+            return Optional.empty();
+        }
+        ForgeOriginalVoxyPersistentStorage.Identity identity =
+                ForgeOriginalVoxyPersistentStorage.identityForLevel(Minecraft.getInstance(), level);
+        synchronized (this) {
+            if (this.shuttingDown) {
+                return Optional.empty();
+            }
+            OwnedWorld owned = this.activeWorlds.get(identity);
+            if (owned == null || !owned.world().isLive()) {
+                if (ForgeOriginalVoxyPersistentStorage.disabled(identity)) {
+                    return Optional.empty();
+                }
+                owned = this.createOwnedWorld(identity);
+            }
+            owned.world().markActive();
+            return Optional.of(owned.world());
+        }
     }
 
     public int getStorageWriteCount() {
-        return this.storageWriteCount.get();
+        OwnedWorld owned = this.getActiveOwnedWorld();
+        return owned == null ? 0 : owned.counters().storageWriteCount().get();
     }
 
     public PersistentStorageStatus createPersistentStorageStatusSnapshot() {
@@ -108,8 +133,10 @@ public final class ForgeVoxyInstance {
         ForgeOriginalVoxyStorageConfig.Loaded config = identity == null
                 ? null
                 : ForgeOriginalVoxyPersistentStorage.configuration(identity);
+        OwnedWorld owned = this.getActiveOwnedWorld();
+        StorageCounters counters = owned == null ? null : owned.counters();
         return new PersistentStorageStatus(
-                identity != null && this.activeWorld != null && this.activeWorld.isLive(),
+                identity != null && owned != null && owned.world().isLive(),
                 config != null && config.ready(),
                 config == null ? "none" : config.path().toString(),
                 config == null ? "none" : config.source(),
@@ -117,14 +144,14 @@ public final class ForgeVoxyInstance {
                 config == null ? "none" : config.backendChain(),
                 identity == null ? "none" : identity.worldIdentifier().toString(),
                 identity == null ? "none" : identity.storagePath().toString(),
-                this.storageLoadHitCount.get(),
-                this.storageLoadMissCount.get(),
-                this.storageWriteCount.get(),
-                this.storageMappingLoadCount.get(),
-                this.storageMappingWriteCount.get(),
+                counters == null ? 0 : counters.storageLoadHitCount().get(),
+                counters == null ? 0 : counters.storageLoadMissCount().get(),
+                counters == null ? 0 : counters.storageWriteCount().get(),
+                counters == null ? 0 : counters.storageMappingLoadCount().get(),
+                counters == null ? 0 : counters.storageMappingWriteCount().get(),
                 this.persistentStorageOpenCount,
                 this.persistentStorageReuseCount,
-                this.closingWorlds.size());
+                this.getInactiveWorldCount());
     }
 
     public ForgeOriginalVoxyModelPipeline getOriginalVoxyModelPipeline() {
@@ -173,32 +200,28 @@ public final class ForgeVoxyInstance {
 
         var minecraft = Minecraft.getInstance();
         if (minecraft.level == null || minecraft.player == null) {
-            this.drainClosingWorlds();
+            this.cleanIdleWorlds();
             return;
         }
-        this.drainClosingWorlds();
-        if (ForgeVoxyConfig.ENABLED.get()) {
-            this.ensureOriginalVoxyActiveWorldForCurrentWorld();
-        }
+        this.cleanIdleWorlds();
 
         String dimension = minecraft.level.dimension().location().toString();
         if (this.activeClientDimension == null) {
             this.activeClientDimension = dimension;
-            this.originalVoxyModelPipeline.clientTick();
-            return;
+        } else if (!this.activeClientDimension.equals(dimension)) {
+            //Detect and detach the old renderer owner before ensure/select. Previously ensure returned
+            //the old global pointer first, allowing new-dimension chunks to enter the old WorldEngine.
+            this.activeClientDimension = dimension;
+            this.chunkIngestManager.clear();
+            this.modelBridgeResourceReloadTracker.clear();
+            this.originalVoxyModelPipeline.markDimensionSwitch();
+            this.closeActiveWorld();
+            VoxyForge.LOGGER.info("Cleared Voxy parity pipeline state after client dimension switch to {}.", dimension);
         }
-        if (this.activeClientDimension.equals(dimension)) {
-            this.originalVoxyModelPipeline.clientTick();
-            return;
+        if (ForgeVoxyConfig.ENABLED.get()) {
+            this.ensureOriginalVoxyActiveWorldForCurrentWorld();
         }
-
-        this.activeClientDimension = dimension;
-        this.chunkIngestManager.clear();
-        this.modelBridgeResourceReloadTracker.clear();
-        this.originalVoxyModelPipeline.markDimensionSwitch();
-        this.closeActiveWorld();
-        this.ensureOriginalVoxyActiveWorldForCurrentWorld();
-        VoxyForge.LOGGER.info("Cleared Voxy parity pipeline state after client dimension switch to {}.", dimension);
+        this.originalVoxyModelPipeline.clientTick();
     }
 
     private void onClientLogin(ClientPlayerNetworkEvent.LoggingIn event) {
@@ -212,17 +235,12 @@ public final class ForgeVoxyInstance {
         if (!ForgeVoxyRuntimeOverrides.enabledWorldEngineSkeleton()) {
             return false;
         }
-        if (this.activeWorld != null && this.activeWorld.isLive()) {
-            return true;
-        }
-
         var minecraft = Minecraft.getInstance();
         if (minecraft.level == null || minecraft.player == null) {
             return false;
         }
 
-        this.activeClientDimension = minecraft.level.dimension().location().toString();
-        return this.createActiveWorldSkeleton();
+        return this.selectOrCreateWorld(ForgeOriginalVoxyPersistentStorage.identityForCurrentWorld(minecraft));
     }
 
     public boolean ensureOriginalVoxyActiveWorldForCurrentWorld() {
@@ -232,66 +250,68 @@ public final class ForgeVoxyInstance {
         if (!ForgeVoxyConfig.ENABLED.get()) {
             return false;
         }
-        if (this.activeWorld != null && this.activeWorld.isLive()) {
-            return true;
-        }
-
         var minecraft = Minecraft.getInstance();
         if (minecraft.level == null || minecraft.player == null) {
             return false;
         }
 
-        this.activeClientDimension = minecraft.level.dimension().location().toString();
-        return this.createActiveWorldSkeleton();
+        return this.selectOrCreateWorld(ForgeOriginalVoxyPersistentStorage.identityForCurrentWorld(minecraft));
     }
 
-    private boolean createActiveWorldSkeleton() {
-        Minecraft minecraft = Minecraft.getInstance();
-        ForgeOriginalVoxyPersistentStorage.Identity identity =
-                ForgeOriginalVoxyPersistentStorage.identityForCurrentWorld(minecraft);
+    private synchronized boolean selectOrCreateWorld(ForgeOriginalVoxyPersistentStorage.Identity identity) {
+        if (this.shuttingDown) {
+            return false;
+        }
         if (ForgeOriginalVoxyPersistentStorage.disabled(identity)) {
             return false;
         }
-        this.storageWriteCount.set(0);
-        this.storageLoadHitCount.set(0);
-        this.storageLoadMissCount.set(0);
-        this.storageMappingLoadCount.set(0);
-        this.storageMappingWriteCount.set(0);
+        //The original renderer chooses a WorldEngine by identifier. Forge's single model-pipeline
+        //adapter must first receive markDimensionSwitch(), so an early render callback may not
+        //silently retarget that adapter before the END-tick lifecycle transition runs.
+        if (this.activeStorageIdentity != null && !this.activeStorageIdentity.equals(identity)) {
+            return false;
+        }
 
-        Iterator<ClosingWorld> iterator = this.closingWorlds.iterator();
-        while (iterator.hasNext()) {
-            ClosingWorld closing = iterator.next();
-            if (closing.identity().equals(identity) && closing.world().isLive()) {
-                iterator.remove();
-                this.activeWorld = closing.world();
-                this.activeStorageIdentity = identity;
-                this.activeWorld.markActive();
+        OwnedWorld existing = this.activeWorlds.get(identity);
+        if (existing != null && existing.world().isLive()) {
+            boolean newlySelected = !identity.equals(this.activeStorageIdentity);
+            this.activeStorageIdentity = identity;
+            existing.world().markActive();
+            if (newlySelected) {
                 this.persistentStorageReuseCount++;
                 VoxyForge.LOGGER.info(
                         "Reused original Voxy persistent WorldEngine {} at {}.",
                         identity.worldIdentifier(),
                         identity.storagePath());
-                return true;
             }
+            return true;
         }
 
+        OwnedWorld created = this.createOwnedWorld(identity);
+        this.activeStorageIdentity = identity;
+        return created.world().isLive();
+    }
+
+    private OwnedWorld createOwnedWorld(ForgeOriginalVoxyPersistentStorage.Identity identity) {
+        StorageCounters counters = new StorageCounters();
         var storage = new CountingSectionStorage(
                 ForgeOriginalVoxyPersistentStorage.open(identity),
-                this.storageWriteCount,
-                this.storageLoadHitCount,
-                this.storageLoadMissCount,
-                this.storageMappingLoadCount,
-                this.storageMappingWriteCount);
+                counters.storageWriteCount(),
+                counters.storageLoadHitCount(),
+                counters.storageLoadMissCount(),
+                counters.storageMappingLoadCount(),
+                counters.storageMappingWriteCount());
         this.originalVoxyModelPipeline.ensureOriginalServiceThreads();
-        this.activeWorld = new WorldEngine(storage, this);
-        this.activeStorageIdentity = identity;
-        this.activeWorld.setSaveCallback(this.originalVoxySectionSavingService::enqueueSave);
+        WorldEngine world = new WorldEngine(storage, this);
+        world.setSaveCallback(this.originalVoxySectionSavingService::enqueueSave);
+        OwnedWorld owned = new OwnedWorld(world, counters);
+        this.activeWorlds.put(identity, owned);
         this.persistentStorageOpenCount++;
         VoxyForge.LOGGER.info(
                 "Created Voxy WorldEngine using original persistent storage chain {} at {}.",
                 identity.worldIdentifier(),
                 identity.storagePath());
-        return true;
+        return owned;
     }
 
     private void onClientLogout(ClientPlayerNetworkEvent.LoggingOut event) {
@@ -342,12 +362,7 @@ public final class ForgeVoxyInstance {
         } catch (Exception e) {
             VoxyForge.LOGGER.error("Failed to shut down Voxy section saving service.", e);
         }
-        this.drainClosingWorldsForShutdown();
-        if (!this.closingWorlds.isEmpty()) {
-            VoxyForge.LOGGER.warn(
-                    "Skipped freeing {} Voxy world(s) during client shutdown because they still had live references.",
-                    this.closingWorlds.size());
-        }
+        this.freeAllWorldsForShutdown();
         try {
             this.originalVoxyModelPipeline.shutdownOriginalServiceThreads();
         } catch (Exception e) {
@@ -356,23 +371,17 @@ public final class ForgeVoxyInstance {
         VoxyForge.LOGGER.info("Voxy Forge original-parity instance shutdown complete.");
     }
 
-    public void closeActiveWorld() {
-        if (this.activeWorld != null) {
-            if (this.activeStorageIdentity == null) {
-                throw new IllegalStateException("Active Voxy world has no persistent storage identity");
-            }
-            this.closingWorlds.add(new ClosingWorld(this.activeStorageIdentity, this.activeWorld));
-            this.activeWorld = null;
-            this.activeStorageIdentity = null;
-        }
-        this.drainClosingWorlds();
+    public synchronized void closeActiveWorld() {
+        this.activeStorageIdentity = null;
+        this.cleanIdleWorlds();
     }
 
-    private void drainClosingWorlds() {
-        Iterator<ClosingWorld> iterator = this.closingWorlds.iterator();
+    private synchronized void cleanIdleWorlds() {
+        Iterator<Map.Entry<ForgeOriginalVoxyPersistentStorage.Identity, OwnedWorld>> iterator =
+                this.activeWorlds.entrySet().iterator();
         while (iterator.hasNext()) {
-            ClosingWorld closing = iterator.next();
-            WorldEngine world = closing.world();
+            Map.Entry<ForgeOriginalVoxyPersistentStorage.Identity, OwnedWorld> entry = iterator.next();
+            WorldEngine world = entry.getValue().world();
             if (!world.isLive()) {
                 iterator.remove();
                 continue;
@@ -381,32 +390,61 @@ public final class ForgeVoxyInstance {
                 continue;
             }
             world.free();
-            VoxyForge.LOGGER.info("Closed Voxy persistent WorldEngine at {}.", closing.identity().storagePath());
+            if (entry.getKey().equals(this.activeStorageIdentity)) {
+                this.activeStorageIdentity = null;
+            }
+            VoxyForge.LOGGER.info("Closed idle Voxy persistent WorldEngine at {}.", entry.getKey().storagePath());
             iterator.remove();
         }
     }
 
-    private void drainClosingWorldsForShutdown() {
-        Iterator<ClosingWorld> iterator = this.closingWorlds.iterator();
-        while (iterator.hasNext()) {
-            ClosingWorld closing = iterator.next();
-            WorldEngine world = closing.world();
+    private void freeAllWorldsForShutdown() {
+        this.activeStorageIdentity = null;
+        for (Map.Entry<ForgeOriginalVoxyPersistentStorage.Identity, OwnedWorld> entry : this.activeWorlds.entrySet()) {
+            WorldEngine world = entry.getValue().world();
             if (!world.isLive()) {
-                iterator.remove();
                 continue;
             }
-            if (world.isWorldUsed()) {
-                continue;
+            while (world.isWorldUsed()) {
+                try {
+                    Thread.sleep(10L);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException("Interrupted while waiting for Voxy world references to drain", e);
+                }
             }
             world.free();
             VoxyForge.LOGGER.info(
                     "Closed Voxy persistent WorldEngine during client shutdown at {}.",
-                    closing.identity().storagePath());
-            iterator.remove();
+                    entry.getKey().storagePath());
         }
+        this.activeWorlds.clear();
     }
 
-    private record ClosingWorld(ForgeOriginalVoxyPersistentStorage.Identity identity, WorldEngine world) {
+    private synchronized OwnedWorld getActiveOwnedWorld() {
+        return this.activeStorageIdentity == null ? null : this.activeWorlds.get(this.activeStorageIdentity);
+    }
+
+    private synchronized int getInactiveWorldCount() {
+        return this.activeWorlds.size() - (this.getActiveWorld() == null ? 0 : 1);
+    }
+
+    public boolean isRunning() {
+        return !this.shuttingDown;
+    }
+
+    private record OwnedWorld(WorldEngine world, StorageCounters counters) {
+    }
+
+    private record StorageCounters(
+            AtomicInteger storageWriteCount,
+            AtomicInteger storageLoadHitCount,
+            AtomicInteger storageLoadMissCount,
+            AtomicInteger storageMappingLoadCount,
+            AtomicInteger storageMappingWriteCount) {
+        private StorageCounters() {
+            this(new AtomicInteger(), new AtomicInteger(), new AtomicInteger(), new AtomicInteger(), new AtomicInteger());
+        }
     }
 
     private static final class CountingSectionStorage extends SectionStorage {

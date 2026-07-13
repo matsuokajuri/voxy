@@ -114,6 +114,9 @@ minecraft {
             if (project.hasProperty('voxyAuditSourceDepth')) {
                 property 'voxy.forge.auditSourceDepth', 'true'
             }
+            if (project.hasProperty('voxyAuditLighting')) {
+                property 'voxy.forge.auditLighting', 'true'
+            }
             if (project.hasProperty('voxySkipVanillaDepthFeedback')) {
                 property 'voxy.forge.skipVanillaDepthFeedback', 'true'
             }

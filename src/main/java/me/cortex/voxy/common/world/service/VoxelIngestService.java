@@ -13,6 +13,7 @@ import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.level.chunk.DataLayer;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.LevelChunkSection;
+import net.minecraft.world.level.lighting.LayerLightSectionStorage;
 import net.minecraft.world.level.lighting.LevelLightEngine;
 import org.slf4j.LoggerFactory;
 
@@ -174,7 +175,7 @@ public class VoxelIngestService {
                 var sectionPos = SectionPos.of(chunk.getPos().x, sectionY, chunk.getPos().z);
                 var blockLight = lightEngine.getLayerListener(LightLayer.BLOCK).getDataLayerData(sectionPos);
                 var skyLight = lightEngine.getLayerListener(LightLayer.SKY).getDataLayerData(sectionPos);
-                boolean missingSkyLight = skyLight == null && chunk.getLevel().dimensionType().hasSkyLight();
+                boolean missingSkyLight = !hasUsableSkyLight(chunk, lightEngine, sectionPos, section);
                 if (missingSkyLight && !section.hasOnlyAir()) {
                     missingNonAirBlockLightSections += blockLight == null ? 1 : 0;
                     missingNonAirSkyLightSections++;
@@ -194,7 +195,7 @@ public class VoxelIngestService {
                 var blockLight = lightEngine.getLayerListener(LightLayer.BLOCK).getDataLayerData(sectionPos);
                 var skyLight = lightEngine.getLayerListener(LightLayer.SKY).getDataLayerData(sectionPos);
                 boolean missingBlockLight = blockLight == null;
-                boolean missingSkyLight = skyLight == null && chunk.getLevel().dimensionType().hasSkyLight();
+                boolean missingSkyLight = !hasUsableSkyLight(chunk, lightEngine, sectionPos, section);
                 if (missingSkyLight && !section.hasOnlyAir()) {
                     stats = stats.add(IngestStats.EMPTY
                             .withMissingLightSections(missingBlockLight ? 1 : 0, 1)
@@ -248,7 +249,7 @@ public class VoxelIngestService {
         var blockLight = lightEngine.getLayerListener(LightLayer.BLOCK).getDataLayerData(sectionPos);
         var skyLight = lightEngine.getLayerListener(LightLayer.SKY).getDataLayerData(sectionPos);
         boolean missingBlockLight = blockLight == null;
-        boolean missingSkyLight = skyLight == null && chunk.getLevel().dimensionType().hasSkyLight();
+        boolean missingSkyLight = !hasUsableSkyLight(chunk, lightEngine, sectionPos, section);
         if (missingSkyLight && !section.hasOnlyAir()) {
             return IngestStats.EMPTY
                     .withMissingLightSections(missingBlockLight ? 1 : 0, 1)
@@ -276,12 +277,27 @@ public class VoxelIngestService {
     }
 
     private static boolean shouldIngestLoadedChunkSection(LevelChunkSection section, DataLayer blockLight, DataLayer skyLight, int skyDefault) {
-        return shouldIngestSection(section, 0, 0, 0)
-                && (!section.hasOnlyAir() || hasLightData(blockLight) || hasLightData(skyLight) || skyDefault > 0);
+        //Original enqueueIngest queues every section once the chunk's lighting is usable. Its
+        //worker explicitly inserts vs.zero() for an all-air section without light data; that write
+        //is required to erase older/persisted non-air voxels. Skipping the section leaves stale
+        //terrain in WorldEngine forever, even after the real client chunk has become all air.
+        return shouldIngestSection(section, 0, 0, 0);
     }
 
-    private static boolean hasLightData(DataLayer light) {
-        return light != null && !light.isEmpty();
+    private static boolean hasUsableSkyLight(
+            LevelChunk chunk,
+            LevelLightEngine lightEngine,
+            SectionPos sectionPos,
+            LevelChunkSection section) {
+        if (!chunk.getLevel().dimensionType().hasSkyLight() || section.hasOnlyAir()) {
+            return true;
+        }
+        //Original enqueueIngest does not use DataLayer nullability as its readiness signal: it
+        //waits until Minecraft's light storage reports LIGHT_AND_DATA. Forge can expose a non-null
+        //but still-empty sky layer while a client chunk/light packet is being applied. Treating that
+        //placeholder as complete permanently bakes sky=0 into otherwise valid water/terrain cells.
+        return lightEngine.getDebugSectionType(LightLayer.SKY, sectionPos)
+                == LayerLightSectionStorage.SectionType.LIGHT_AND_DATA;
     }
 
     // When a section has no stored sky DataLayer, Minecraft leaves its sky light implicit: a fully

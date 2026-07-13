@@ -32,6 +32,10 @@ final class ForgeOriginalVoxyPersistentStorage {
         if (level == null) {
             throw new IllegalStateException("Client level is unavailable");
         }
+        return identityForLevel(minecraft, level);
+    }
+
+    static Identity identityForLevel(Minecraft minecraft, ClientLevel level) {
         ForgeOriginalVoxyWorldIdentifier identifier =
                 ((ForgeOriginalVoxyWorldIdentifierAccess) level).voxy$getOriginalVoxyWorldIdentifier();
         if (identifier == null) {

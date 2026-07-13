@@ -2014,3 +2014,194 @@ commented out; `ConditionalConfig` and `ReadonlyCachingLayer` retain their
 documented upstream-incomplete behavior. Whole-mod parity remains false for the
 remaining non-storage inventory and targeted regressions; renderer readiness is
 unchanged.
+
+### XXI.6 original active-world ownership and identifier-routed ingest
+
+XXI.6 audits the Forge singleton's world lifecycle against original
+`VoxyInstance.activeWorlds`. Original ground truth is:
+
+```text
+owner = HashMap<WorldIdentifier, WorldEngine> guarded by StampedLock
+getNullable(identifier) = weak-cache/map lookup, instance validation, markActive
+getOrCreate(identifier) = identity-specific reuse or creation under write lock
+cleanIdle() = rechecked removal/free after WorldEngine's exact 10-second idle test
+shutdown() = stop ingest/save, wait in 10 ms steps for every used world, free all
+MixinClientLevel#setBlocksDirty = derive WorldIdentifier from that ClientLevel
+```
+
+The pre-XXI.6 Forge adapter instead held one `activeWorld` pointer and an
+identity-tagged closing deque. That preserved delayed idle close and rapid
+logout/login reuse, but it was not equivalent to the original map. Five concrete
+divergences were confirmed before editing:
+
+```text
+1. VoxelIngestService auto target ignored its LevelChunk and returned activeWorld.
+2. ForgeChunkIngestManager held a ClientLevel/LevelChunk but returned activeWorld.
+3. ClientLevel#setBlocksDirty and Embeddium section rebuild held their owner level
+   but returned activeWorld.
+4. END-tick called ensure before comparing dimensions; ensure accepted any live
+   pointer, so a new-dimension chunk could be submitted to the old WorldEngine.
+5. terminal shutdown skipped worlds with live refs instead of waiting/freeing all.
+```
+
+This was a real ownership race, not a theoretical container preference: during a
+dimension transition Forge can keep callbacks from two `ClientLevel` instances
+alive concurrently. A global pointer makes their late/early events
+indistinguishable, while the original `WorldIdentifier` route cannot cross-write.
+
+XXI.6 replaces the deque/pointer owner with an identity-keyed live-world map. The
+Forge renderer still selects one identity because its model-pipeline adapter is a
+single lifecycle owner, but all inputs that possess a concrete level now call
+`getEngineForLevel(level)`. `identityForLevel` uses the exact identifier captured
+from that `ClientLevel` plus the connection/save base path. The route reuses or
+creates that identity's owner and marks it active, matching original
+`tryIngestChunk`/`rawIngest` through `VoxyInstance.getOrCreate`; it never falls
+back to or prematurely selects the renderer world.
+
+The lifecycle adaptation now:
+
+```text
+END tick: detect dimension change -> clear/markDimensionSwitch -> detach selection
+          -> select/create by current identifier -> model pipeline tick
+early render callback with a different identity: do not retarget the single
+          pipeline before markDimensionSwitch has run
+idle cleanup: recheck WorldEngine.isWorldIdle(), free and remove from the map
+shutdown: stop ingest/save, wait in 10 ms steps until every world is unused,
+          free every owner, clear the map, then stop original service threads
+```
+
+Storage counters moved into each map entry. Consequently, an old dimension still
+finishing saves cannot pollute the current dimension's storage status. The
+existing `closingWorldCount` command field is retained for compatibility and now
+reports live map entries other than the selected renderer world.
+
+Initial static validation:
+
+```text
+gradlew compileJava: BUILD SUCCESSFUL
+git diff --check: clean
+```
+
+Runtime validation exercised the full owner lifecycle with Complementary Unbound
+active:
+
+```text
+overworld owner created at .../74d2036cf9ebdb83178e6f984bd8904e/storage
+overworld -> nether: old render owner shut down before the nether owner opened
+nether owner created at .../ecbd3f9d84cf72a2a82c7569cd0da279/storage
+overworld owner passed the exact 10-second idle threshold and was freed
+nether -> overworld: nether render owner shut down before overworld opened
+overworld owner recreated; nether owner then passed the idle threshold and freed
+logout -> rapid login: live overworld owner reused, not opened a second time
+final shutdown: remaining overworld owner freed; instance shutdown complete
+runClient: BUILD SUCCESSFUL, exit 0
+```
+
+Targeted log screening found no Voxy error/exception, dead-world access,
+negative reference count, skipped world free, missing active engine, duplicate
+storage open, or shutdown stall. The shaderpack emitted its pre-existing Oculus
+unknown-uniform/block-map warnings, which are outside active-world ownership and
+did not interrupt any transition.
+
+The follow-up visual pass found one to three transient 16x16 black rectangles at
+the vanilla/LOD boundary on fresh entry or after returning from the Nether.
+Approaching one rectangle made it disappear after the vanilla boundary chunk
+finished building. Two F3 screenshots from the same camera position were fitted
+against the 16-block grid, yielding target cell `x=112..127, z=-112..-97`.
+The live target audits at `block=[120,47,-104]` established:
+
+```text
+client chunk loaded = true
+client block = void_air
+WorldEngine block = gravel (mapping 0x48000000)
+modelId = 4, correct gravel bake/customId/atlas alpha
+HOC selected exactly one L0 node; tree/GPU/metadata consistency clean
+MDIC emitted the section and found one covering UP quad, modelId 4
+patched opaque/translucent programs used; glError=0
+```
+
+At `block=[120,40,-104]`, the client likewise held `void_air` while WorldEngine
+held `dirt`. Thus the visual rectangle was real stale opaque LOD terrain, not a
+random transparent texture, zero light, missing geometry, wrong model upload,
+HOC selection, or cmdgen failure. The gated lighting probe showed its small
+initial translucent sample at sky light 14-15, but that sample did not cover
+the later exact black water cells and therefore did not globally exclude a
+lighting race.
+Moving close and back hid the rectangle because the vanilla boundary section
+then covered it; a second audit proved WorldEngine still contained gravel.
+
+The stale data survived correct chunk re-ingest because Forge's XI-era
+`shouldIngestLoadedChunkSection` skipped an all-air section with no explicit
+light layer. Original `VoxelIngestService.enqueueIngest` does the opposite: it
+queues every section and its worker calls `WorldUpdater.insertUpdate(...,
+vs.zero())` for all-air/no-light input, explicitly clearing old data. XXI.6
+restores that contract by allowing all non-null loaded sections through; the
+existing `convertSection` zero fast path performs the original clearing write.
+
+The documented `-PvoxyAuditLighting` probe was also found missing from the
+ForgeGradle run-property bridge. XXI.6 wires it to
+`voxy.forge.auditLighting=true`; this changes diagnostics only.
+
+The first post-fix fresh-entry regression confirmed that the restored zero
+clears are active (`enqueuedSections=4056`, `storageWrites=1131`, versus the
+smaller pre-fix section set), but black 16x16 rectangles still appeared. A
+second fixed-camera screenshot pair resolved the first grid fit: the left-hand
+two-cell rectangle was `block=[104,62,-88]` plus `[104,62,-72]`, not the earlier
+approximation at `z=-136`. Live audits while both cells were still black found:
+
+```text
+black -88: client/world water modelId=21, worldMapping=0x0000000020000000
+           covering translucent UP quad raw=0x00000000541e07f9
+black -72: client/world water modelId=21, worldMapping=0x0000000020000000
+           covering translucent UP quad raw=0x00000000541e87f9
+normal -56: same water/model/biome, worldMapping=0x0e00000020000000
+            covering translucent UP quad raw=0x07800000541e07f9
+all three: L0 selected, valid render-list/MDIC command, covering 16x16 quad
+node audit: gpuRealMismatch=0, no duplicate/stale/out-of-range mesh or request
+```
+
+The high mapping/quad bits are the voxel light payload. The black cells had sky
+light 0 while the adjacent visually normal water had sky light 14. This is the
+exact visual root cause: correct water geometry and texture were drawn, but
+Forge captured two chunk light layers before their sky data was populated.
+
+Original `VoxelIngestService.enqueueIngest` gates chunk ingestion with
+`getDebugSectionType(...)=LIGHT_AND_DATA`. The Forge adaptation had replaced
+that readiness contract with `DataLayer != null`; Forge can expose a non-null
+but still-empty sky `DataLayer` while client chunk/light packets are being
+applied, so those chunks passed, baked sky 0, and were permanently entered in
+`ingestedChunks`. The Forge `ClientLevel#setBlocksDirty` adapter also called
+`rawIngest` directly and could bypass the newer deferred-light checks.
+
+XXI.6 restores the original storage-state signal for every non-air section in a
+sky-lit dimension: ingestion defers until SKY reports `LIGHT_AND_DATA`, whether
+the temporary layer object is null or merely empty. The border-removal adapter
+now calls the same `ingestChunkSection` route as the Embeddium callback, so it
+cannot overwrite a section through a zero-light bypass. All-air zero clears and
+implicit uniform sky handling remain intact. Static validation after this fix:
+
+```text
+gradlew compileJava: BUILD SUCCESSFUL
+git diff --check: clean
+```
+
+Post-fix runtime regression passed. A fresh client entry at the same fixed
+camera produced no black rectangles, and two complete overworld/nether return
+cycles remained visually clean at the former cells and the vanilla/LOD
+boundary. The earlier XXI.6 lifecycle pass had already exercised same-client
+logout/login reuse; that ownership code was unchanged by the lighting fix. The
+final client exit cleanly shut down the render pipeline and freed both remaining
+overworld/nether owners. Log screening found no Voxy exception, dead-world
+access, reference-count failure, duplicate storage open, or shutdown stall.
+Oculus retained only its pre-existing shaderpack unknown-variable/block-map
+warnings.
+
+Final review found no remaining actionable defect in the XXI.6 diff. The
+identity-routed map follows original `VoxyInstance` ownership and shutdown
+semantics; every callback that owns a `ClientLevel` now routes by that level;
+the lighting fix uses the original storage readiness signal and does not add a
+water/model/shader special case. Final `compileJava` passed and
+`git diff --check` was clean. XXI.6 is runtime-validated and ready to commit
+when requested.
+
+Whole-mod parity and every renderer readiness flag remain unchanged.
