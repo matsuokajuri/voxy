@@ -2399,3 +2399,150 @@ in-memory-storage and staged-switch findings are historical. They now point to
 this audit as canonical current status, and the XI investigation header now
 acknowledges the later regression closure. No code change was required by the
 review.
+
+## XXIII original user features
+
+Status: implementation and the consolidated user runtime regression are
+complete. The original importer, user-command, F3, reload, and configuration
+owners have been mapped, compiled, packaged, and exercised in game. The sole
+regression found during that pass, no-shader black cherry leaves, was repaired
+and passed its focused visual recheck. No whole-mod parity flag is flipped by
+this work; that remains the user-approved XXIV decision.
+
+### Import manager, world importer, and client progress owner
+
+XXIII first re-read original `ImportManager`, `IDataImporter`, `WorldImporter`,
+`ClientImportManager`, `VoxyCommands`, and the import/shutdown portions of
+`VoxyInstance`. The platform-free original `ImportManager` and `IDataImporter`
+now compile directly. Forge owns API adapters only where 1.20.1 differs:
+
+```text
+ForgeOriginalVoxyWorldImporter
+ -> original MCA sector table and RegionFileVersion decompression
+ -> original weighted ServiceManager service (weight 3)
+ -> original 10,000 queued-chunk pressure bound
+ -> 1.20.1 PalettedContainer/NBT decoding adapter
+ -> WorldConversionFactory / WorldVoxilizedSectionMipper / WorldUpdater
+
+ForgeOriginalVoxyClientImportManager
+ -> original 50 ms progress throttle
+ -> LerpingBossEvent progress/name updates
+ -> completion chat message and chunks-per-second result
+```
+
+`/voxy import current`, `world`, `raw`, `zip`, and `cancel` now follow the
+original path selection and single-import-per-WorldEngine ownership. Importers
+acquire a WorldEngine reference while running. Instance shutdown cancels every
+active importer before ingest/saving service and shared service-pool shutdown,
+matching original `VoxyInstance.shutdown()` ordering. The Forge Access
+Transformer opens `BossHealthOverlay.events`, the 1.20.1 equivalent of the
+field original `ClientImportManager` updates directly.
+
+### Reload, F3, and Forge configuration entry point
+
+`/voxy reload` now clears the active chunk/model reload adapters, tears down the
+formal render owner through the existing world-unload lifecycle, reselects the
+current persistent WorldEngine, reapplies the original service-thread policy,
+and asks `LevelRenderer` to rebuild. This is the Forge singleton-lifecycle
+adapter for original Voxy's instance recreation; it does not construct a second
+renderer or substitute a preview path.
+
+Forge's `CustomizeGuiOverlayEvent.DebugText` supplies the 1.20.1 F3 extension
+point. It now shows the original instance diagnostics (`MemoryBuffer` count and
+size, ingest/saving queue counts, active-world section counts) plus formal
+renderer/draw/lifecycle state. The newer original `DebugScreenEntryList` API is
+not available in Minecraft 1.20.1.
+
+The Forge Mod List config-screen extension replaces the Fabric-only ModMenu
+entrypoint. Its controls and apply semantics are mapped from original
+`VoxyConfigMenu`: enable, rendering, ingest, service threads, Embeddium builder
+thread sharing, subdivision threshold, LoD distance, environmental fog, and
+SSAO mode. Thread-policy changes resize the original shared service pool;
+distance changes update the original `RenderDistanceTracker`; settings that
+original marks for renderer reload rebuild the formal render owner. Original
+language/icon resources are now packaged for this entry point.
+
+### Optional integration classification
+
+The original optional integrations were compared to the active Forge 1.20.1
+dependency and Mixin surfaces:
+
+| Integration | Original behavior | Forge 1.20.1 classification |
+| --- | --- | --- |
+| Bobby | imports `.bobby` region cache and changes Fabric/Sodium unload-ingest timing | Fabric-only; no Bobby dependency or Forge owner is present, so no false command is registered |
+| Distant Horizons | optional direct SQLite/XZ/ZSTD importer | no real Forge 1.20.1 DH API/dependency exists in project scope; direct database coupling is deliberately not exposed |
+| Flashback | records/replays Voxy storage paths through Flashback metadata and Fabric mixins | Fabric-only Flashback classes are absent; platform-N/A |
+| FREX flawless frames | repeats GPU traversal until queued work drains during a Fabric entrypoint callback | Fabric rendering entrypoint is absent; explicit platform-N/A false state replaces the stale reflection to excluded Fabric source |
+| Nvidium | injects Voxy draw after Nvidium's Fabric/Sodium render pipeline | Fabric/Sodium-specific and absent from Forge/Embeddium runtime; platform-N/A |
+| ModMenu | opens Voxy's Sodium config page | replaced by Forge `ConfigScreenHandler.ConfigScreenFactory`, preserving configuration behavior without copying ModMenu |
+
+Embeddium and Oculus integrations remain the real Forge equivalents already
+ported and regression-tested by earlier rounds. Optional platform-N/A findings
+do not block the formal renderer or XXIII completion.
+
+### No-shader cherry leaves tint parity repair
+
+The consolidated regression found one block-specific failure: with shaderpacks
+disabled, LOD cherry leaves rendered pure black, while the shaderpack path and
+all other tested XXIII behavior remained correct. The shader toggle log showed
+the expected Oculus pipeline transition and Voxy render-owner rebuild without a
+lifecycle or GL failure, so this was traced through the original and Forge model
+tint contracts rather than treated as a reload issue.
+
+Minecraft 1.20.1 `cherry_leaves.json` inherits `leaves.json`, whose faces carry
+`tintindex: 0`, but `BlockColors.createDefault()` deliberately registers no
+`BlockColor` for `CHERRY_LEAVES`. Original Voxy asks
+`BlockColors.getTintSources(state)` and therefore classifies this model as
+untinted. The Forge adapter instead treated the baked-quad tint index alone as
+proof that a tint source existed. Its later `BlockColors.getColor(...)` lookup
+correctly returned the canonical `-1` no-tint value, but the model remained
+marked tinted. In the unpatched shader, `quad_util.glsl` converts `-1` to the
+zero `conditionalTinting` sentinel and `quads.frag` multiplies tinted faces by
+that zero, producing black. The patched shaderpack contract passes the raw
+`-1`, explaining why the defect was specific to shaderpacks being disabled.
+
+`ForgeOriginalVoxyModelFactory.createTintPlan()` now accepts a baked-quad tint
+index only when the 1.20.1 `BlockColors` lookup supplies a real constant colour
+or invokes the biome resolver. A non-biome `-1` result is classified as
+untinted, matching original Voxy's empty tint-source behavior. This also keeps
+white/no-op tint callbacks visually equivalent while avoiding a Forge-only
+model metadata state. The repair changes neither the atlas texture nor the
+lighting payload.
+
+Validation checkpoint: `gradlew compileJava` passed, and the focused runtime
+recheck confirmed that LOD cherry leaves retain their normal pink texture with
+shaderpacks disabled. Re-enabling the shaderpack and normal client shutdown also
+completed without a Voxy lifecycle or resource-cleanup failure.
+
+### Automated checkpoint before runtime regression
+
+```text
+compileJava: passed after importer, reload/F3, and config-screen integration
+gradlew test build: BUILD SUCCESSFUL, 11 actionable tasks
+git diff --check: clean
+final JAR: importer/config classes, ImportManager/IDataImporter, Access Transformer,
+  icon, and language resources present
+wholeOriginalModParity: false
+XXIII consolidated runtime gate: passed, including no-shader cherry leaves repair
+```
+
+### Final XXIII review
+
+The post-regression review re-read every changed importer, command, client UI,
+reload, F3, optional-integration, and shutdown path against the original source.
+`ImportManager` and `IDataImporter` remain the original implementations;
+`ForgeOriginalVoxyWorldImporter` changes only the Minecraft 1.20.1 codec,
+registry, and ZIP-construction APIs while retaining the original worker,
+weighted service, pressure bound, completion, and WorldEngine reference rules.
+The command syntax/path selection, boss-bar progress owner, service-rate limiter,
+and instance shutdown order likewise match their original owners.
+
+The review also checked the Forge-specific entry points: client-only command and
+config registration, the Access Transformer field, live render-distance/thread
+updates, renderer reload triggers, and 1.20.1 F3 event. The packaged language and
+icon resources are reachable through the restricted source set. The FREX change
+removes a stale reflection into excluded Fabric source and records the genuine
+Forge platform-N/A result instead of inventing an integration. No actionable
+code defect remained. One status defect was corrected before commit:
+`parity_route_status.newWorkTarget` now points to the XXIV final whole-mod audit
+and release regression rather than the completed XXIII user-feature round.

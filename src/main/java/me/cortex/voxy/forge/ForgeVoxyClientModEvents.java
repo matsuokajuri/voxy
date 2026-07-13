@@ -1,7 +1,9 @@
 package me.cortex.voxy.forge;
 
 import net.minecraftforge.client.event.RegisterClientReloadListenersEvent;
+import net.minecraftforge.client.ConfigScreenHandler;
 import net.minecraftforge.eventbus.api.IEventBus;
+import net.minecraftforge.fml.ModLoadingContext;
 import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
 
 final class ForgeVoxyClientModEvents {
@@ -9,6 +11,9 @@ final class ForgeVoxyClientModEvents {
     }
 
     static void register(IEventBus modBus) {
+        ModLoadingContext.get().registerExtensionPoint(
+                ConfigScreenHandler.ConfigScreenFactory.class,
+                () -> new ConfigScreenHandler.ConfigScreenFactory(ForgeOriginalVoxyConfigScreen::new));
         modBus.addListener(ForgeVoxyClientModEvents::onClientSetup);
         modBus.addListener(ForgeVoxyClientModEvents::onRegisterClientReloadListeners);
     }

@@ -2,14 +2,17 @@ package me.cortex.voxy.forge;
 
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import me.cortex.voxy.common.config.section.SectionStorage;
+import me.cortex.voxy.common.util.MemoryBuffer;
 import me.cortex.voxy.common.world.WorldEngine;
 import me.cortex.voxy.common.world.WorldSection;
 import me.cortex.voxy.common.world.service.SectionSavingService;
 import me.cortex.voxy.common.world.service.VoxelIngestService;
+import me.cortex.voxy.commonImpl.ImportManager;
 import me.cortex.voxy.config.ForgeVoxyConfig;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
+import net.minecraftforge.client.event.CustomizeGuiOverlayEvent;
 import net.minecraftforge.client.event.RegisterClientCommandsEvent;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.GameShuttingDownEvent;
@@ -17,9 +20,11 @@ import net.minecraftforge.event.TickEvent;
 
 import java.nio.ByteBuffer;
 import java.util.HashMap;
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Optional;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.LongConsumer;
 
@@ -36,6 +41,7 @@ public final class ForgeVoxyInstance {
             new SectionSavingService(this.originalVoxyModelPipeline.getServiceManager());
     private final VoxelIngestService originalVoxyIngestService =
             new VoxelIngestService(this.originalVoxyModelPipeline.getServiceManager());
+    private final ImportManager originalVoxyImportManager = new ForgeOriginalVoxyClientImportManager();
     private final ForgeChunkIngestManager chunkIngestManager = new ForgeChunkIngestManager(this);
     private final ForgeModelBridgeResourceReloadTracker modelBridgeResourceReloadTracker = new ForgeModelBridgeResourceReloadTracker(this);
     private long persistentStorageOpenCount;
@@ -59,6 +65,7 @@ public final class ForgeVoxyInstance {
         MinecraftForge.EVENT_BUS.addListener(this::onRegisterClientCommands);
         MinecraftForge.EVENT_BUS.addListener(this::onGameShuttingDown);
         MinecraftForge.EVENT_BUS.addListener(this::onRenderFog);
+        MinecraftForge.EVENT_BUS.addListener(this::onDebugText);
         this.chunkIngestManager.register();
     }
 
@@ -184,8 +191,62 @@ public final class ForgeVoxyInstance {
         return this.originalVoxyIngestService;
     }
 
+    public ImportManager getImportManager() {
+        return this.originalVoxyImportManager;
+    }
+
+    boolean canRunOriginalVoxyImportWork() {
+        return this.originalVoxySectionSavingService.getTaskCount() < 1200;
+    }
+
     public ForgeModelBridgeResourceReloadTracker getModelBridgeResourceReloadTracker() {
         return this.modelBridgeResourceReloadTracker;
+    }
+
+    public boolean reloadOriginalVoxyRuntime() {
+        Minecraft minecraft = Minecraft.getInstance();
+        if (this.shuttingDown || minecraft.level == null || minecraft.player == null) {
+            return false;
+        }
+
+        this.cancelAllImports();
+        this.chunkIngestManager.clear();
+        this.modelBridgeResourceReloadTracker.clear();
+        this.originalVoxyModelPipeline.markWorldUnload();
+        this.activeClientDimension = minecraft.level.dimension().location().toString();
+        this.closeActiveWorld();
+        this.originalVoxyModelPipeline.refreshOriginalServiceThreadPolicy();
+        boolean selected = this.ensureOriginalVoxyActiveWorldForCurrentWorld();
+        minecraft.levelRenderer.allChanged();
+        VoxyForge.LOGGER.info("Reloaded Voxy Forge original-parity runtime for the current client world.");
+        return selected;
+    }
+
+    private void onDebugText(CustomizeGuiOverlayEvent.DebugText event) {
+        List<String> left = event.getLeft();
+        ForgeOriginalVoxyModelPipeline.DebugStatus renderer = this.originalVoxyModelPipeline.createDebugStatus();
+        left.add((renderer.rendererActive()
+                ? net.minecraft.ChatFormatting.GREEN
+                : net.minecraft.ChatFormatting.YELLOW) + "voxy-forge");
+        this.addDebug(left);
+        left.add("Voxy renderer: active=" + renderer.rendererActive()
+                + " drawObserved=" + renderer.visibleDrawObserved()
+                + " lifecycle=" + renderer.lifecycleState());
+    }
+
+    private synchronized void addDebug(List<String> debug) {
+        debug.add("MemoryBuffer, Count/Size (mb): " + MemoryBuffer.getCount()
+                + "/" + MemoryBuffer.getTotalSize() / 1_000_000);
+        StringBuilder activeSections = new StringBuilder();
+        for (OwnedWorld owned : this.activeWorlds.values()) {
+            if (!activeSections.isEmpty()) {
+                activeSections.append(", ");
+            }
+            activeSections.append(owned.world().getActiveSectionCount());
+        }
+        debug.add("I/S/AWSC: " + this.originalVoxyIngestService.getTaskCount()
+                + "/" + this.originalVoxySectionSavingService.getTaskCount()
+                + "/[" + activeSections + "]");
     }
 
     private void onRegisterClientCommands(RegisterClientCommandsEvent event) {
@@ -327,6 +388,10 @@ public final class ForgeVoxyInstance {
         this.chunkIngestManager.clear();
         this.modelBridgeResourceReloadTracker.clear();
 
+        //Original VoxyInstance.shutdown() cancels every active import before the ingest/saving
+        //services and the shared service pool are stopped. Import tasks own WorldEngine refs.
+        this.cancelAllImports();
+
         boolean renderCleanupComplete = this.originalVoxyModelPipeline.shutdownForClientStop();
         this.activeClientDimension = null;
         this.closeActiveWorld();
@@ -406,6 +471,19 @@ public final class ForgeVoxyInstance {
                     entry.getKey().storagePath());
         }
         this.activeWorlds.clear();
+    }
+
+    private void cancelAllImports() {
+        ArrayList<WorldEngine> worlds;
+        synchronized (this) {
+            worlds = new ArrayList<>(this.activeWorlds.size());
+            for (OwnedWorld owned : this.activeWorlds.values()) {
+                worlds.add(owned.world());
+            }
+        }
+        for (WorldEngine world : worlds) {
+            this.originalVoxyImportManager.cancelImport(world);
+        }
     }
 
     private synchronized OwnedWorld getActiveOwnedWorld() {

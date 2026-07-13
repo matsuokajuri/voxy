@@ -81,4 +81,8 @@ public final class ForgeVoxyConfig {
     private static int maxServiceThreads() {
         return Math.max(ForgeOriginalVoxyCpuLayout.getCoreCount(), 1);
     }
+
+    public static int serviceThreadMaximum() {
+        return maxServiceThreads();
+    }
 }

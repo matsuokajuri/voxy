@@ -35,6 +35,8 @@ sourceSets {
             include 'me/cortex/voxy/common/Logger.java'
             include 'me/cortex/voxy/common/thread/**'
             include 'me/cortex/voxy/client/compat/SemaphoreBlockImpersonator.java'
+            include 'me/cortex/voxy/commonImpl/ImportManager.java'
+            include 'me/cortex/voxy/commonImpl/importers/IDataImporter.java'
             include 'me/cortex/voxy/common/voxelization/VoxelizedSection.java'
             include 'me/cortex/voxy/common/voxelization/ILightingSupplier.java'
             include 'me/cortex/voxy/common/voxelization/WorldConversionFactory.java'
@@ -69,6 +71,8 @@ sourceSets {
             include 'voxy.forge.mixins.json'
             include 'pack.mcmeta'
             include 'assets/voxy/shaders/**'
+            include 'assets/voxy/icon.png'
+            include 'assets/voxy/lang/**'
         }
     }
 }

@@ -201,6 +201,26 @@ public final class ForgeOriginalVoxyModelPipeline {
         this.updateDedicatedThreads();
     }
 
+    void refreshOriginalServiceThreadPolicy() {
+        this.updateDedicatedThreads();
+    }
+
+    synchronized void updateOriginalRenderDistance(float renderDistance) {
+        if (this.renderSystem != null && this.ownerReady && !this.stale) {
+            this.renderSystem.setRenderDistance(renderDistance);
+        }
+    }
+
+    synchronized DebugStatus createDebugStatus() {
+        return new DebugStatus(
+                this.ownerReady && !this.stale && this.renderSystem != null,
+                this.ownerReady && !this.stale && this.originalVisibleFrameDrawSubmissionCount > 0L,
+                this.lifecycleState);
+    }
+
+    record DebugStatus(boolean rendererActive, boolean visibleDrawObserved, String lifecycleState) {
+    }
+
     boolean shutdownForClientStop() {
         if (!RenderSystem.isOnRenderThread()) {
             this.markStaleAndClear("client-shutdown-deferred");
@@ -1594,13 +1614,9 @@ public final class ForgeOriginalVoxyModelPipeline {
     }
 
     private static boolean originalFrexActive() {
-        try {
-            Class<?> type = Class.forName("me.cortex.voxy.client.VoxyClient");
-            Object result = type.getMethod("isFrexActive").invoke(null);
-            return Boolean.TRUE.equals(result);
-        } catch (ReflectiveOperationException | LinkageError | RuntimeException ignored) {
-            return false;
-        }
+        //FREX flawless-frames is a Fabric entrypoint contract. There is no Forge 1.20.1
+        //equivalent in the project dependency/runtime surface, so this optional loop is N/A.
+        return false;
     }
 
     private static boolean activeShaderpackMissingBlockStateIds(ForgeOculusWorldRenderingSettingsBridge.Result blockStateIds) {

@@ -798,7 +798,17 @@ final class ForgeOriginalVoxyModelFactory {
         }
         Biome defaultBiome = defaultBiome(minecraft);
         boolean biomeDependent = isBiomeDependentColour(minecraft, state, tintIndex);
-        int constant = biomeDependent ? -1 : captureColourConstant(minecraft, state, tintIndex, defaultBiome) | 0xFF000000;
+        int capturedColour = biomeDependent ? -1 : captureColourConstant(minecraft, state, tintIndex, defaultBiome);
+        // A baked quad tint index only selects a possible BlockColors entry. It
+        // does not prove that one exists: vanilla cherry leaves inherit the
+        // tinted leaves model but deliberately have no BlockColor registration.
+        // Original Voxy queries BlockColors.getTintSources(), which treats that
+        // case as untinted. Forge 1.20.1 exposes no equivalent source list, so
+        // preserve the same contract through BlockColors' -1 no-tint result.
+        if (!biomeDependent && capturedColour == -1) {
+            return new TintPlan(false, false, -1, -1, -1, null, -1);
+        }
+        int constant = biomeDependent ? -1 : capturedColour | 0xFF000000;
         if (!biomeDependent) {
             return new TintPlan(true, false, tintIndex, constant, constant, null, -1);
         }

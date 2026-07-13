@@ -36,8 +36,8 @@ receive one consolidated manual regression before its single commit.
 | 8. Terrain shader contract | renderer parity complete | original packed attributes, patched/normal program defines, light/tint/depth, and state restore |
 | 9. Water/translucency | renderer parity complete | original bake/metadata/translucent command route; Photon water regression passed |
 | 10. Ingest/removal/light | core parity complete in XXII | original `LIGHT_AND_DATA` readiness, dirty-section route, and last-loaded removal snapshot |
-| 11. Compatibility integrations | XXIII / platform classification pending | importers, UI and real Forge equivalents remain; Fabric-only integrations must be marked platform-N/A rather than copied |
-| 12. Config/readiness/cleanup | core config complete in XXII; whole-mod status pending | original enabled/rendering/ingest/SSAO semantics and defaults are ported; user features and XXIV final parity decision remain |
+| 11. Compatibility integrations | XXIII complete | original importers/UI are ported through Forge adapters; real Embeddium/Oculus equivalents remain active and Fabric-only integrations are classified platform-N/A |
+| 12. Config/readiness/cleanup | config and user features complete; XXIV whole-mod status pending | original enabled/rendering/ingest/SSAO semantics, defaults, diagnostics, reload, and config UI are ported; final source/JAR audit and user parity decision remain |
 
 The detailed bodies below are retained as the 2026-06-23 source inventory and
 migration rationale. Their old `partial` wording is superseded by this table and
@@ -62,13 +62,15 @@ the updated per-section status blocks.
 ### XXIII original user features and importers
 
 ```text
-[ ] port ImportManager and client import task/reference lifecycle
-[ ] port current-world, named-world, raw-region, ZIP, cancel, and progress UI
-[ ] port /voxy reload and applicable original diagnostics/F3 statistics
-[ ] expose Forge/Embeddium configuration UI without copying ModMenu literally
-[ ] map Distant Horizons only through a real Forge 1.20.1 API
-[ ] classify Bobby, Flashback, FREX, Nvidium, ModMenu, and other Fabric-only hooks
-[ ] perform one consolidated importer/config/lifecycle/render smoke regression
+[x] port ImportManager and client import task/reference lifecycle
+[x] port current-world, named-world, raw-region, ZIP, cancel, and progress UI
+[x] port /voxy reload and applicable original diagnostics/F3 statistics
+[x] expose Forge/Embeddium configuration UI without copying ModMenu literally
+[x] map Distant Horizons only through a real Forge 1.20.1 API (none is present;
+    command remains unavailable instead of directly reading an unsupported DB)
+[x] classify Bobby, Flashback, FREX, Nvidium, ModMenu, and other Fabric-only hooks
+[x] perform one consolidated importer/config/lifecycle/render smoke regression,
+    including the focused no-shader cherry-leaves repair recheck
 ```
 
 ### XXIV final whole-mod audit and release regression
