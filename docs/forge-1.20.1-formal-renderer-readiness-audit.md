@@ -13,16 +13,17 @@ FORMAL_RENDERER_READY=live-owner-derived
 ACTUAL_RENDERER_DRAW_ENABLED=live-MDIC-draw-derived
 FORMAL_DRAW_PIPELINE_READY=live-production-path-derived
 EARLY_USABLE_LOD_RENDERER_READY=retired     # historical document flag; no runtime field
-WHOLE_ORIGINAL_MOD_PARITY=false             # storage configuration and other content remain
+WHOLE_ORIGINAL_MOD_PARITY=true              # XXIV passed; explicitly user-approved
 ```
 
 The original-equivalent renderer owners now exist, are connected, submit the
-visible LOD pixels, and passed the required runtime regression. After explicit
-user approval, the three live readiness fields are wired to current-lifecycle
-owner/production-command/draw evidence. They are true in a qualified active
+visible LOD pixels, and passed the required runtime regression. The three live
+readiness fields are wired to current-lifecycle owner/production-command/draw
+evidence. They are true in a qualified active
 world after the current owner submits its own MDIC frame, and correctly remain
 false while no owner exists, during a rebuild, or before the first real draw.
-This verdict is not a claim that every non-renderer Voxy feature has been ported.
+Whole-mod parity was separately promoted to true after the XXIV final regression
+passed and the user explicitly approved it.
 
 ## Required Forge frontends
 
@@ -71,10 +72,11 @@ Forge platform entry adapter and owns no renderer resources.
 ## Deprecated-route isolation
 
 The historical preview/sample/direct-GL/simple-GPU/legacy geometry-MDIC owners
-have been physically removed from active source. The only retained
-`ForgeCpuMeshLayer` is an active model-bakery layer enum, not a CPU preview
-renderer. Current command readbacks inspect the real original-parity buffers and
-do not submit substitute pixels.
+have been physically removed from active source. The live model-bakery layer
+enum is accurately named `ForgeOriginalVoxyModelLayer`; it is not a CPU preview
+renderer. XXIV also removes the final zero-reference legacy model-id mapper and
+constant proof-era absence fields. Current command readbacks inspect the real
+original-parity buffers and do not submit substitute pixels.
 
 ## Runtime qualification
 
@@ -101,11 +103,11 @@ Voxy sidecars.
 Not a renderer-readiness blocker:
 
 ```text
-storage backend/config TYPE inventory is complete in XXI.1-XXI.5; XXI.6/XXII
-complete active-world ownership plus isolated identity/corrupt-entry validation
+storage backend/config TYPE inventory, active-world ownership, and isolated
+identity/corrupt-entry validation are complete in XXI.1-XXII
 IterationT pack-specific compatibility (post-parity, absent upstream)
-optional compatibility/content items from the unported-content inventory
-XXIII importer/config-UI/compatibility work and XXIV final whole-mod audit
+Fabric-only optional integrations classified platform-N/A
+XXIV source/JAR audit and consolidated regression complete; whole-mod parity user-approved
 ```
 
 Terminal render-resource parity found and closed by this audit:
@@ -149,13 +151,13 @@ Minecraft shutdown with `runClient` exit code 0.
    the real MDIC renderer, a successful indirect terrain submission, and a ready
    render pipeline. It does not depend on a manual readback command.
 4. `/voxy parity_route_status` reports these live values and separately reports
-   `wholeOriginalModParity=false`; XXI.1-XXI.5 have ported and restart-validated
-   the default persistent backend, original JSON lifecycle, local optional TYPE
-   surface, LMDB, and Redis. Remaining whole-mod work is outside TYPE coverage.
+   `wholeOriginalModParity=true`; XXI-XXIII have ported and regression-tested
+   persistent storage, active-world lifecycle, config, importer, diagnostics,
+   and user features. XXIV completed the final audit/regression, and the user
+   explicitly approved the whole-mod parity promotion.
 5. `earlyUsableLodRendererReady` was not recreated; it remains an obsolete
    preview-era document flag.
 
-Whole-mod parity remains separately false until the remaining accepted migration
-inventory and storage regressions are completed. The post-wiring
-`runClient` validation confirmed all three live renderer fields before the XX.7
-commit.
+Whole-mod parity is explicitly user-approved. The XXIV consolidated
+client/multiplayer regression passed, and the earlier post-wiring `runClient`
+validation confirmed all three live renderer fields before the XX.7 commit.

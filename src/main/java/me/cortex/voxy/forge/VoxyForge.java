@@ -25,6 +25,6 @@ public final class VoxyForge {
 
         DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> ForgeVoxyClientModEvents.register(modBus));
 
-        LOGGER.info("Voxy Forge 1.20.1 original-parity route loaded. Formal renderer readiness remains gated by runtime validation.");
+        LOGGER.info("Voxy Forge 1.20.1 original-parity route loaded. Whole-mod parity is user-approved.");
     }
 }

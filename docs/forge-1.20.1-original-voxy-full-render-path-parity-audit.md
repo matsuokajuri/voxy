@@ -62,13 +62,19 @@ back to the normal shader path.
 ## Current verdict
 
 ```text
-VOXY_PARITY_INCOMPLETE
-FORMAL_RENDERER_READY=false
-ACTUAL_RENDERER_DRAW_ENABLED=false
+RENDERER_PARITY_COMPLETE
+FORMAL_RENDERER_READY=live-owner-derived
+ACTUAL_RENDERER_DRAW_ENABLED=live-MDIC-draw-derived
+FORMAL_DRAW_PIPELINE_READY=live-production-path-derived
+WHOLE_ORIGINAL_MOD_PARITY=true   # XXIV passed; explicitly user-approved
 ```
 
-The project has visible historical proof paths, but those are deprecated. The
-renderer is not parity-complete until the original Voxy chain is ported.
+The original-equivalent renderer chain is the only visible route and has passed
+its dedicated readiness regression. Storage, lifecycle, config, importer, and
+user-feature migrations are also implemented through XXIII. XXIV completed the
+final source/JAR/documentation audit and consolidated runtime gate, then received
+explicit user approval; it does not treat historical proof paths as readiness
+evidence.
 
 ## Authoritative original chain
 
@@ -94,7 +100,11 @@ VoxyRenderSystem
  -> quads3.vert / quads.frag / block_model.glsl / quad_util.glsl
 ```
 
-## Confirmed drift
+## Historical confirmed drift (resolved by XII-XXIII)
+
+This table records the initial gaps that drove the migration. Its current-status
+column and the later Roman-round sections are authoritative; the gaps are not
+active substitute routes.
 
 | Area | Drift | Required correction |
 | --- | --- | --- |
@@ -107,9 +117,10 @@ VoxyRenderSystem
 | Draw owner | visible preview owner is not `MDICSectionRenderer` | Fixed: the Embeddium cutout hook is only a platform entry adapter and delegates to the single `ForgeOriginalVoxyRenderSystem` owner through `ForgeOriginalVoxyModelPipeline.renderEmbeddiumCutout(...)`. The active frame follows original `AbstractRenderPipeline.runPipeline(...)` order and the real `ForgeOriginalVoxyMdicSectionRenderer` submits opaque, temporal, and translucent indirect draws. Full regression passed after XX.6. |
 | Shader semantics | adapter/subset shader is not full original terrain shader contract | Fixed for renderer parity: `ForgeOriginalVoxyRenderPipeline` and `ForgeOriginalVoxyMdicSectionRenderer` own the original normal/patched terrain contract, TAA, shaderpack targets/bindings/blend/depth transfer, SSAO, and final blit. The earlier Complementary patched-program fallback blocker was retired on 2026-07-02; the expanded post-XX.6 shaderpack regression passed except IterationT, which has no upstream Voxy adaptation and is classified as a post-parity compatibility TODO. |
 
-## Corrections already started
+## Historical correction trail
 
-These are directionally correct but not complete readiness:
+These were the first directionally correct pieces before the later Roman rounds
+completed ownership and readiness:
 
 - Forge-adapted `ForgeSoftwareModelTextureBakery` exists.
 - Forge-local `ForgeModelQueries` exists.
@@ -586,20 +597,16 @@ This is not a license to substitute behavior. The Forge implementation must
 still match original ownership, data layout, lifecycle, and performance
 semantics.
 
-## Remaining parity work after XXII
+## Remaining parity work after XXIII
 
-1. XXIII ports original user-facing importers, reload/debug/F3/config entry
-   points, and classifies optional integrations through real Forge equivalents
-   or explicit platform-N/A findings.
-2. XXIV performs the final source-area/JAR/documentation audit and one complete
+1. XXIV performs the final source-area/JAR/documentation audit and one complete
    user regression before any whole-mod parity decision.
-3. IterationT remains a post-parity compatibility TODO: it is absent from
+2. IterationT remains a post-parity compatibility TODO: it is absent from
    original Voxy and is not a migration blocker.
 
-The previously listed storage isolation/corrupt-entry checks, original config
-semantics, prototype config/runtime cleanup, and active model-layer rename are
-implemented by XXII. Runtime validation for the XXII code batch remains a user
-gate until recorded below.
+Storage isolation/corrupt-entry checks, original config semantics, deprecated
+route cleanup, model-layer rename, importers, reload/F3 diagnostics, and the
+Forge config entry point are implemented and runtime-regressed by XXII-XXIII.
 
 ## Current documented Forge deviations
 
@@ -882,7 +889,11 @@ manual refresh commands as lifecycle substitute
 adapter shader as production terrain shader
 ```
 
-## Current next work
+## Historical next-work trail (superseded)
+
+The following investigation plan is preserved only as the evidence trail that
+led to the completed renderer. The current work is the XXIV closure section at
+the end of this document.
 
 The active runtime bug is now tracked separately in:
 
@@ -2546,3 +2557,120 @@ Forge platform-N/A result instead of inventing an integration. No actionable
 code defect remained. One status defect was corrected before commit:
 `parity_route_status.newWorkTarget` now points to the XXIV final whole-mod audit
 and release regression rather than the completed XXIII user-feature round.
+
+## XXIV final whole-mod audit and release regression
+
+### Final original-source area classification
+
+The twelve-area inventory was reconciled once more against the original source,
+the compiled Forge source set, and the completed XXI-XXIII owners. Every area is
+now classified as directly ported, Forge-adapted through a real platform owner,
+platform-N/A, or upstream-incomplete. No genuinely missing original source area
+was found. The authoritative matrix is recorded in
+`forge-1.20.1-original-voxy-unported-content-migration-reference-2026-06-23.md`.
+
+The two upstream-incomplete findings do not create a Forge substitute route:
+the original HOC/request bookkeeping retains its audited author `FIXTHIS`
+behavior, and IterationT has no upstream Voxy sidecar/adaptation. The latter
+remains a post-parity compatibility TODO.
+
+### Final deprecated-route and status cleanup
+
+CodeGraph reported no external caller for `ForgeVoxyModelIdMapper`; it supplied
+no ID to ingest, the original model factory/store, geometry, or visible MDIC
+rendering. XXIV therefore physically removes it. The same pass removes the
+zero-reference `shouldSuppressDeprecatedVisibleRoutes()` helper, the constant
+`deprecated*RouteAbsent` snapshot fields, their command output, and the unused
+atlas `SKELETON`/known-layout/format labels. None of these values participated in
+a readiness predicate or renderer data contract.
+
+`/voxy parity_route_status` now reports
+`deprecatedPrototypeRoutesAbsent=true`. The startup log no longer says renderer
+readiness is pending after its XX.7 approval. After the passed final regression
+and explicit user approval, it now truthfully reports whole-mod parity complete.
+Active docs distinguish current status from the retained historical investigation
+trail.
+
+### Mixin, dependency, clean-config, and final JAR audit
+
+Automated and artifact inspection passed:
+
+```text
+gradlew compileJava: passed
+gradlew test build: passed (11 tasks)
+clean-config defaults test: enabled/rendering/ingest true; SSAO AUTO
+registered Forge mixins: 17
+missing registered mixin classes in all JAR: 0
+Embeddium target classes checked: 4, missing: 0
+Oculus target classes checked: 9, missing: 0
+development frontends: Embeddium 0.3.32 and Oculus 1.8.0
+declared bounds: Minecraft [1.20.1,1.20.2), Forge [47.3.0,48),
+  Embeddium [0.3.31,0.4), Oculus [1.8.0,1.9)
+Jar-in-Jar metadata: zstd/lmdb 3.3.1, RocksDB JNI 10.2.1,
+  LZ4 1.8.0, Jedis 5.1.0, commons-pool2 2.12.0
+required Windows/Linux zstd+lmdb native libraries: 4, missing: 0
+required manifest/AT/mixin/icon/lang/shader/importer/renderer entries: 11,
+  missing: 0
+forbidden Fabric descriptors/access widener/common-client mixin configs and
+  deleted legacy mapper: 5, unexpectedly present: 0
+final all JAR: voxy-forge-0.2.17-beta-forge-poc-all.jar, 75,583,616 bytes
+```
+
+The mixin set resolves to three Minecraft owners, four Embeddium owners, and
+nine distinct Oculus owners; the two Oculus pipeline mixins intentionally share
+`IrisRenderingPipeline`. Compilation verifies hook signatures, and the passed
+final runtime regression supplies the load-time qualification for the exact
+frontend versions above.
+
+### Consolidated final user regression gate
+
+`wholeOriginalModParity` is true after explicit user approval. The XXIV runtime
+gate is complete:
+
+```text
+[x] no shaderpack
+[x] multiple shaderpacks and shader toggle
+[x] overworld <-> nether dimension switch
+[x] standalone F3+T reload
+[x] logout/login
+[x] multiplayer join and identity isolation
+[x] persistent-storage restart recovery
+[x] importer start/progress/cancel or completion
+[x] normal client and local-server shutdown
+[x] /voxy parity_route_status live renderer fields true and
+    deprecatedPrototypeRoutesAbsent=true
+```
+
+The user completed the consolidated client regression without a visual or
+functional defect. The log proves repeated shaderpack and owner rebuilds,
+overworld/nether switching, resource reload, logout/relogin, reuse of the
+persistent singleplayer engine, all three live renderer fields true, and
+`deprecatedPrototypeRoutesAbsent=true`. The client shut down the renderer,
+persistent world, Voxy instance, and Minecraft normally; `runClient` exited 0.
+
+The multiplayer follow-up connected the Forge client to the isolated vanilla
+1.20.1 server at `127.0.0.1:25565`, created the server-specific persistent
+identity path, switched overworld/nether and back while reusing the overworld
+engine, completed F3+T, and exited normally. The server recorded the `Dev` join,
+command, disconnect, then accepted `stop`, saved all three dimensions, and exited
+0. Port 25565 no longer has a listener. The development `runServer` task itself
+is not a valid dedicated-server fixture because it puts the client-only Oculus
+development JAR on the server runtime and Oculus attempts to load `Screen`; the
+isolated server avoids that external frontend defect and tests the actual Voxy
+client-to-server contract.
+
+Oculus emitted pack-authored custom-uniform/block-map warnings during shaderpack
+reloads, including a missing BSL `endFlashIntensity`. The Voxy owner reported the
+missing input, rebuilt successfully, and the user observed no visual defect;
+there was no Voxy lifecycle, ingest, storage, Mixin, GL, or shutdown failure.
+
+The user explicitly approved whole-mod parity after reviewing the completed
+regression. `/voxy parity_route_status` now reports
+`wholeOriginalModParity=true` and advances the target to the non-blocking
+`post-parity-iterationt-compatibility-todo`; IterationT remains outside the
+original Voxy migration completion gate because no upstream adaptation exists.
+
+The post-approval verification passed: CodeGraph re-read the live status method
+with the promoted value and post-parity target, `gradlew test build` completed
+all 11 tasks successfully, and `git diff --check` remained clean. This closes
+XXIV and the original Voxy migration scope.

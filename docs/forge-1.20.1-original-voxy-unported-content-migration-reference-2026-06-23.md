@@ -1,4 +1,4 @@
-# Forge 1.20.1 original Voxy unported-content migration reference, 2026-06-23
+# Forge 1.20.1 original Voxy source-area migration reference, 2026-06-23
 
 This document is a post-bugfix migration reference. It lists the original Voxy
 content that is still missing, only partially adapted, or present but not yet
@@ -37,7 +37,7 @@ receive one consolidated manual regression before its single commit.
 | 9. Water/translucency | renderer parity complete | original bake/metadata/translucent command route; Photon water regression passed |
 | 10. Ingest/removal/light | core parity complete in XXII | original `LIGHT_AND_DATA` readiness, dirty-section route, and last-loaded removal snapshot |
 | 11. Compatibility integrations | XXIII complete | original importers/UI are ported through Forge adapters; real Embeddium/Oculus equivalents remain active and Fabric-only integrations are classified platform-N/A |
-| 12. Config/readiness/cleanup | config and user features complete; XXIV whole-mod status pending | original enabled/rendering/ingest/SSAO semantics, defaults, diagnostics, reload, and config UI are ported; final source/JAR audit and user parity decision remain |
+| 12. Config/readiness/cleanup | complete; whole-mod parity user-approved | original enabled/rendering/ingest/SSAO semantics, defaults, diagnostics, reload, config UI, final source/JAR audit, consolidated regression, and user approval are complete |
 
 The detailed bodies below are retained as the 2026-06-23 source inventory and
 migration rationale. Their old `partial` wording is superseded by this table and
@@ -76,18 +76,40 @@ the updated per-section status blocks.
 ### XXIV final whole-mod audit and release regression
 
 ```text
-[ ] classify every original source area as ported, Forge-adapted, platform-N/A,
+[x] classify every original source area as ported, Forge-adapted, platform-N/A,
     upstream-incomplete, or genuinely missing
-[ ] remove final preview/skeleton/status wording and update all active docs
-[ ] verify mixins, dependency bounds, native libraries, clean config, and final JAR
-[ ] run the complete no-shader/multi-shader/dimension/reload/relog/multiplayer/
+[x] remove final preview/skeleton/status wording and update all active docs
+[x] verify mixins, dependency bounds, native libraries, clean config, and final JAR
+[x] run the complete no-shader/multi-shader/dimension/reload/relog/multiplayer/
     storage/importer/shutdown regression once
-[ ] after user approval, flip wholeOriginalModParity and verify status/build
+[x] after user approval, flip wholeOriginalModParity and verify status/build
 ```
 
 Accepted upstream behavior and platform-N/A integrations are not completion
 blockers. IterationT remains a post-parity compatibility TODO because original
 Voxy has no adaptation for it.
+
+### XXIV authoritative final source-area classification
+
+This table supersedes every dated `partial`, `pending`, or suggested-round block
+in the historical inventory bodies below.
+
+| Original source area | Final classification | Forge owner / decision |
+| --- | --- | --- |
+| Instance, world engine, storage, service root | ported + Forge-adapted | original `WorldEngine`, mapper, save/ingest services, storage TYPE registry, identity-keyed active-world map, and idle/shutdown order; Forge supplies login/dimension/game-shutdown event routing |
+| `VoxyRenderSystem` outer lifecycle | ported + Forge-adapted | `ForgeOriginalVoxyRenderSystem` owns the original renderer chain; the Embeddium cutout Mixin is only the Forge frontend entry adapter |
+| Model bakery/factory/store/software bake | ported + Forge-adapted | original ownership, queue, atlas/model layout, dedupe, biome colour, and upload/readback contracts; the adapter maps Minecraft 1.20.1/Embeddium baked-model APIs |
+| Render generation, `BuiltSection`, async geometry | ported | original generation service/thread policy, render-data contract, allocation, metadata, sparse upload/removal, and node geometry synchronization |
+| `RenderResourceReuse` and GL lifetime | ported | geometry/model resources survive owner rebuilds and are deleted at terminal instance shutdown in original order |
+| Render distance, viewport, HiZ, HOC, MDIC | ported + Forge-adapted | original tracker/traversal/cmdgen/draw owners and frame rhythm; Forge restores external GL state because entry occurs inside Embeddium |
+| Iris shaderpack/render pipeline | Forge-adapted | original Iris patch/data/target/uniform/sampler/image/TAA contract is mapped to the real Oculus 1.20.1 equivalents |
+| Terrain shaders and visual contract | ported + Forge-adapted | original resources, packed attributes, stage defines, tint/light/depth semantics, normal/patched paths, SSAO and final blit; frontend binding signatures are Oculus/Forge-specific |
+| Water and translucent route | ported | original fluid bake/metadata, translucent command construction, blend/depth targets, and draws; Photon regression passed |
+| Chunk ingest, removal, and light | ported + Forge-adapted | original readiness/ingest/dirty/remove contracts use Embeddium chunk events plus the Minecraft client chunk-cache snapshot required on Forge 1.20.1 |
+| Importers, reload, diagnostics, F3, config UI | ported + Forge-adapted | original import manager/world importer/progress lifecycle and reload/debug behavior; Forge commands and config-screen factory replace Fabric/ModMenu entry surfaces |
+| Optional compatibility integrations | platform-N/A where no real equivalent exists | Bobby, Flashback, FREX, Nvidium and Fabric entrypoints are Fabric-only; direct DH database coupling is out of scope without a project dependency/API; Embeddium/Oculus equivalents are ported |
+| Known upstream limitations | upstream-incomplete | original HOC/request bookkeeping retains its audited author `FIXTHIS` behavior; IterationT has no original Voxy sidecar/adaptation and remains post-parity compatibility work |
+| Genuinely missing original source area | none found | the twelve-area source inventory has an active owner, a documented Forge adaptation, or an explicit platform/upstream classification |
 
 Use this document after the confirmed visual/runtime bugs are fixed, especially
 after black LoD terrain, missing water/translucency, reload churn, and new-world
@@ -143,26 +165,12 @@ platform-blocked
 
 ## Current high-level state
 
-Several lower-level original-shaped pieces exist in Forge now, especially under
-`src/main/java/me/cortex/voxy/forge/**`. However, the port is still not a full
-original Voxy renderer migration. The main remaining work is not more isolated
-patching; it is converging owners, lifecycles, and data contracts back onto the
-original chain.
-
-The most important unported or incomplete areas are:
-
-```text
-1. VoxyClientInstance / VoxyInstance storage and service root
-2. VoxyRenderSystem outer lifecycle owner
-3. ModelBakerySubsystem as the model-baking owner
-4. shaderpack/Oculus pipeline data and patch-output contract
-5. terrain shader visual contract, including light/material/target bindings
-6. water/translucent model and draw route
-7. chunk ingest, chunk removal, and light-update parity
-8. RenderResourceReuse and resource shutdown parity
-9. full viewport/HOC/MDIC frame rhythm parity
-10. status/config/docs cleanup so no preview-era route can look formal
-```
+The original owner chain, storage/lifecycle root, config, importers, and user
+features all have active Forge owners through XXIII. XXIV found no genuinely
+missing original source area, passed the final packaging/mixin audit and
+consolidated regression, and received explicit user approval for
+`wholeOriginalModParity=true`. IterationT remains a post-parity TODO because the
+original project has no adaptation for it.
 
 ## 1. Instance, world storage, and service root
 
@@ -965,10 +973,11 @@ re-enter world and verify no stale light/ingest work crashes or corrupts LoD
 
 ## 11. Compatibility integrations and platform blockers
 
-Status for XXIII:
+Status after XXIII implementation and completed runtime regression:
 
 ```text
-pending real Forge-equivalent migration or explicit platform-N/A classification
+complete: required Embeddium/Oculus equivalents are active; Fabric-only optional
+integrations are explicitly platform-N/A and do not report false readiness
 ```
 
 Original Voxy has Fabric-side integrations that must not be copied literally
@@ -1014,12 +1023,13 @@ Migration steps:
    with fake status or no-op success.
 ```
 
-## 12. Config, readiness status, and deprecated route cleanup
+## 12. Config, readiness status, deprecated-route cleanup, and user features
 
-Status after XXII implementation and completed runtime regression:
+Status after XXIII implementation and completed runtime regression:
 
 ```text
-core config/cleanup complete; user features and whole-mod parity remain pending
+config, reload, diagnostics, importer, progress UI, deprecated-route cleanup,
+XXIV final audit/regression, and user-approved whole-mod parity are complete
 ```
 
 Original Voxy source areas:
@@ -1036,18 +1046,15 @@ src/main/java/me/cortex/voxy/forge/** config/status classes
 docs/forge-1.20.1-deprecated-prototype-routes.md
 ```
 
-The project still has staged flags, historical status names, and old preview or
-placeholder concepts that can mislead future work. These should not be treated
-as original Voxy migration content.
-
-Not yet migrated or not yet complete:
+Completed migration result:
 
 ```text
-- Forge runtime config aligned with original Voxy config semantics
-- readiness flags tied to real original-equivalent owners
-- status output that cannot report formal readiness from placeholder/debug data
-- old stage-roadmap wording rewritten or marked superseded
-- broad/unbounded Embeddium/Oculus dependency and mixin assumptions documented
+- Forge runtime config matches original enabled/rendering/ingest/SSAO semantics
+- clean defaults start the formal route without historical switches
+- renderer readiness derives only from current original-equivalent owners
+- deprecated renderer/config/status routes are absent from active source
+- original importer/reload/F3 diagnostics and Forge config UI are active
+- Embeddium/Oculus version bounds and Mixin ownership are explicitly audited
 ```
 
 Migration steps:
@@ -1067,7 +1074,10 @@ Migration steps:
    round.
 ```
 
-## Recommended post-bugfix migration order
+## Historical recommended migration order (superseded)
+
+The following was the 2026-06-23 planning snapshot. The authoritative completed
+rounds are XXI-XXIV at the top of this document.
 
 The active XI repair plan should finish first. After that, use coherent Roman
 rounds rather than tiny ad hoc commits.
@@ -1111,7 +1121,9 @@ or visual output must be validated.
 
 ## Final readiness checklist
 
-The original-chain migration is not complete until all of these are true:
+The implementation, packaging-audit, consolidated-regression, and explicit
+user-approval conditions below are satisfied through XXIV. The project now
+claims whole-mod completion for the original Voxy migration scope:
 
 ```text
 - active worlds use configured persistent storage, not MemoryStorageBackend

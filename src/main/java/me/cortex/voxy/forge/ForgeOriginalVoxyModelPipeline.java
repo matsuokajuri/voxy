@@ -299,10 +299,6 @@ public final class ForgeOriginalVoxyModelPipeline {
         }
     }
 
-    synchronized boolean shouldSuppressDeprecatedVisibleRoutes() {
-        return this.startRequested || this.startQueuedOnRenderThread || (this.ownerReady && !this.stale);
-    }
-
     synchronized void resetChunkBoundTracker() {
         this.pendingChunkBoundAdds.clear();
         this.pendingChunkBoundRemoves.clear();
@@ -664,8 +660,6 @@ public final class ForgeOriginalVoxyModelPipeline {
                 this.existingBiomeEntriesQueued && this.ownerReady && !this.stale,
                 renderGeneration.originalRenderDataFactoryUsed(),
                 false,
-                true,
-                true,
                 formalRendererReady,
                 actualRendererDrawEnabled,
                 new ForgeOriginalVoxyVisibleRendererStats(
@@ -702,8 +696,7 @@ public final class ForgeOriginalVoxyModelPipeline {
                         this.originalVisibleFrameDrawSubmissionCount,
                         this.originalVisibleFrameLastFramebuffer,
                         this.originalVisibleFrameLastViewportWidth,
-                        this.originalVisibleFrameLastViewportHeight,
-                        true),
+                        this.originalVisibleFrameLastViewportHeight),
                 this.stale,
                 this.requiresRebuild,
                 mapperBlockStateCount,

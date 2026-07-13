@@ -22,8 +22,6 @@ record ForgeOriginalVoxyModelPipelineStats(
         boolean existingBiomeEntriesQueued,
         boolean renderDataFactoryRequestPathExpected,
         boolean safeSetRouteUsed,
-        boolean deprecatedPreviewRouteAbsent,
-        boolean deprecatedModelSampleRouteAbsent,
         boolean formalRendererReady,
         boolean actualRendererDrawEnabled,
         ForgeOriginalVoxyVisibleRendererStats visibleRenderer,

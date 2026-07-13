@@ -34,7 +34,6 @@ record ForgeOriginalVoxyVisibleRendererStats(
         long originalVisibleFrameDrawSubmissionCount,
         int originalVisibleFrameLastFramebuffer,
         int originalVisibleFrameLastViewportWidth,
-        int originalVisibleFrameLastViewportHeight,
-        boolean deprecatedVisiblePreviewRouteAbsent
+        int originalVisibleFrameLastViewportHeight
 ) {
 }

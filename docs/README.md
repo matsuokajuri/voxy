@@ -16,7 +16,7 @@ Consult these for the current route:
 - [embeddium-oculus-frontend-mapping](forge-1.20.1-embeddium-oculus-frontend-mapping.md)
   — Sodium→Embeddium / Iris→Oculus frontend mapping.
 - [original-voxy-unported-content-migration-reference](forge-1.20.1-original-voxy-unported-content-migration-reference-2026-06-23.md)
-  — what original Voxy content is still unported.
+  — original source-area inventory and final ported/adapted/platform-N/A classification.
 - [runclient-quickplay](forge-1.20.1-runclient-quickplay.md)
   — runClient quick-play workflow (default world `新的世界`).
 

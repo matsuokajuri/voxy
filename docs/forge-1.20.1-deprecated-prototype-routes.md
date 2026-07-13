@@ -139,13 +139,13 @@ ForgeMdicCommandPlanner.createFaceMaskPlanForAudit
 The simple-GPU / GL-heap visualization / readback-mesh / MDIC debug draw route
 families no longer have active Forge source files or config/runtime switches.
 
-XXII completes the deferred schema cleanup: the remaining thin
+XXII completed the deferred schema cleanup: the remaining thin
 `ForgeVoxyRuntimeOverrides` facade and all unused CPU/BuiltSection/GPU/MDIC
 prototype config keys are removed. The live model-bakery classification enum is
 retained under the accurate name `ForgeOriginalVoxyModelLayer`; this is a rename,
-not removal of model-layer behavior. The separate legacy `ForgeVoxy*` ingest
-adapter remains present but does not drive visible MDIC rendering, so status no
-longer makes the over-broad claim that every legacy route is absent.
+not removal of model-layer behavior. At that checkpoint, the zero-reference
+`ForgeVoxyModelIdMapper` was conservatively retained and status therefore did
+not yet claim every legacy route was absent.
 The retained low-level CPU geometry helpers are current original-Voxy
 model/geometry staging code, not the deleted simple-GPU preview renderer.
 
@@ -170,10 +170,12 @@ ForgeModelStoreLayoutAuditor
 ForgeModelStoreLayoutAuditResult
 ```
 
-`ForgeVoxyModelIdMapper` still exists only for legacy CPU-geometry
-compatibility/status paths. It is not the active original model-id owner; the
-active route uses `ForgeOriginalVoxyModelFactory` and
-`ForgeOriginalVoxyModelStore`.
+XXIV CodeGraph auditing found that `ForgeVoxyModelIdMapper` had no external
+caller and supplied no data to ingest, `ForgeOriginalVoxyModelFactory`,
+`ForgeOriginalVoxyModelStore`, or visible rendering. It is now physically
+removed. The constant proof-era `deprecated*RouteAbsent` status fields and the
+unused atlas `SKELETON` label are removed with it; `/voxy parity_route_status`
+now truthfully reports `deprecatedPrototypeRoutesAbsent=true`.
 
 ## Current non-deprecated parity entry
 
@@ -194,7 +196,7 @@ are now part of the active parity route, not the deprecated preview route.
 The original model upload path also has committed readback proof and the
 Oculus custom block-state id hook.
 
-XX.7 current status: the earlier full-`VoxyRenderSystem`, patched-shader,
+XXIV current status: the earlier full-`VoxyRenderSystem`, patched-shader,
 white/bright-artifact, and movement/runtime blockers are retired. Production
 `cmdgen.comp`, `MDICSectionRenderer`, the terrain pipeline, render-thread
 geometry, node/tracker/viewport/HiZ/HOC owners, and Oculus patch bridge belong
@@ -208,8 +210,9 @@ cannot submit or suppress current pixels. The visible output now comes from the
 formal MDIC renderer. The user-approved XX.7 wiring now derives live readiness
 from the current original owner and production MDIC draw path; no preview route
 can satisfy those conditions. Final runtime confirmation reported all three live
-renderer readiness fields true; whole-mod parity remains separately false for
-the persistent-storage migration.
+renderer readiness fields true. Persistent storage, config, importers, and user
+features were subsequently completed, the XXIV final regression passed, and
+whole-mod parity was promoted to true after explicit user approval.
 
 The 2026-06-22 lifecycle/light repair retires two more non-original shortcuts
 from the active route:

@@ -1,7 +1,6 @@
 package me.cortex.voxy.forge;
 
 final class ForgeModelAtlasLayout {
-    static final String LAYOUT_VERSION = "G6_14_VOXY_MODEL_ATLAS_SKELETON_V1";
     static final int MODEL_TEXTURE_SIZE = 16;
     static final int FACES_PER_MODEL_X = 3;
     static final int FACES_PER_MODEL_Y = 2;
@@ -11,8 +10,6 @@ final class ForgeModelAtlasLayout {
     static final int FACE_COUNT = 6;
     static final int ATLAS_WIDTH = MODEL_TEXTURE_SIZE * FACES_PER_MODEL_X * MODEL_GRID_WIDTH;
     static final int ATLAS_HEIGHT = MODEL_TEXTURE_SIZE * FACES_PER_MODEL_Y * MODEL_GRID_HEIGHT;
-    static final boolean FACE_TILE_ORDER_KNOWN = true;
-
     private ForgeModelAtlasLayout() {
     }
 
@@ -45,8 +42,5 @@ final class ForgeModelAtlasLayout {
     }
 
     record Tile(int x, int y) {
-        String format() {
-            return this.x + "," + this.y;
-        }
     }
 }

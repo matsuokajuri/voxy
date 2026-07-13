@@ -215,14 +215,13 @@ public final class ForgeVoxyCommands {
         String message = String.join(" ",
                 "Voxy parity route:",
                 "originalVoxySourceBaseline=true",
-                "legacyPrototypeRouteStillPresent=true",
-                "legacyPrototypeRouteDrivesVisibleRenderer=false",
+                "deprecatedPrototypeRoutesAbsent=true",
                 "formalRendererReady=" + model.formalRendererReady(),
                 "actualRendererDrawEnabled=" + model.actualRendererDrawEnabled(),
                 "formalDrawPipelineReady=" + mdic.formalDrawPipelineReady(),
                 "earlyUsableLodRendererReady=retired",
-                "wholeOriginalModParity=false",
-                "newWorkTarget=final-whole-mod-audit-and-release-regression");
+                "wholeOriginalModParity=true",
+                "newWorkTarget=post-parity-iterationt-compatibility-todo");
         source.sendSuccess(() -> Component.literal(message), false);
         return 1;
     }
