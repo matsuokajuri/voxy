@@ -87,25 +87,29 @@ Sample/Formal route names during the same cleanup pass:
 ForgeModelAtlasLayout
 ForgeModelAtlasPixelFormat
 ForgeOriginalUploadedModelSummary
-ForgeOriginalVoxyModelStoreLayoutSpec
+ForgeModelStoreLayoutSpec
 ```
 
-These retained helpers are active original-Voxy model/atlas layout utilities,
-not preview owners or debug renderers.
+These retained helpers are active model/atlas layout utilities, not preview
+owners or debug renderers. `ForgeModelStoreLayoutSpec` is explicitly a Forge
+helper for offsets owned by original `ModelStore`/`ModelFactory`; it is not
+presented as an independent original class.
 
 ## Command surface status
 
-`ForgeVoxyCommands` is no longer the legacy monolithic command surface. It now
-only registers the parity command surface:
+`ForgeVoxyCommands` is no longer the legacy monolithic parity/status surface.
+After XXV it registers only current user operations and the one original
+developer integrity command:
 
 ```text
-ForgeVoxyCommands
- -> ForgeVoxyParityCommands
+/voxy reload
+/voxy import world|bobby|distant_horizons|raw|zip|current|cancel
+/voxy debug verifyTLNChildMask [attemptRepair]
 ```
 
-The old debug/prototype/preview/preset/formal-owner command registrars were
-deleted. New original-Voxy parity work must stay in focused parity surfaces and
-must not recreate the old monolithic handler pattern.
+`ForgeVoxyParityCommands`, the old debug/prototype/preview/preset/formal-owner
+registrars, and their status DTOs are deleted. New original-Voxy work must not
+recreate a command-driven ownership or readiness model.
 
 ## Follow-up cleanup result, 2026-06-22
 
@@ -174,29 +178,26 @@ XXIV CodeGraph auditing found that `ForgeVoxyModelIdMapper` had no external
 caller and supplied no data to ingest, `ForgeOriginalVoxyModelFactory`,
 `ForgeOriginalVoxyModelStore`, or visible rendering. It is now physically
 removed. The constant proof-era `deprecated*RouteAbsent` status fields and the
-unused atlas `SKELETON` label are removed with it; `/voxy parity_route_status`
-now truthfully reports `deprecatedPrototypeRoutesAbsent=true`.
+unused atlas `SKELETON` label are removed with it. The XXIV
+`/voxy parity_route_status` report was historical proof; XXV removes that
+status-only command and its constant absence fields entirely.
 
-## Current non-deprecated parity entry
+## Current non-deprecated command entry
 
-The new parity command registrar is:
+The current command registrar is `ForgeVoxyCommands`; it exposes only:
 
 ```text
-ForgeVoxyParityCommands
+/voxy reload
+/voxy import world|bobby|distant_horizons|raw|zip|current|cancel
+/voxy debug verifyTLNChildMask [attemptRepair]
 ```
 
-It currently exposes `original_voxy_model_pipeline_*` commands for the active
-model-pipeline owner. This is not a preview route. The command surface now
-reports the Forge-port original `ModelFactory` mapping/upload state and the
-first original render-generation parity state. The original worker thread,
-upload-result queue, biome LUT upload, packed mip-chain atlas upload,
-persistent-mapped `UploadStream` staging, `RenderGenerationService`
-missing-model request/requeue, and `RenderDataFactory` raw-section mesh output
-are now part of the active parity route, not the deprecated preview route.
-The original model upload path also has committed readback proof and the
-Oculus custom block-state id hook.
+`verifyTLNChildMask` ports original `DebugUtils` behavior and does not submit
+pixels or determine readiness. Model/generation/geometry/render owners expose
+their formal F3 data through the original debug-data chain rather than a parity
+command snapshot.
 
-XXIV current status: the earlier full-`VoxyRenderSystem`, patched-shader,
+XXIV historical status: the earlier full-`VoxyRenderSystem`, patched-shader,
 white/bright-artifact, and movement/runtime blockers are retired. Production
 `cmdgen.comp`, `MDICSectionRenderer`, the terrain pipeline, render-thread
 geometry, node/tracker/viewport/HiZ/HOC owners, and Oculus patch bridge belong
@@ -211,8 +212,10 @@ formal MDIC renderer. The user-approved XX.7 wiring now derives live readiness
 from the current original owner and production MDIC draw path; no preview route
 can satisfy those conditions. Final runtime confirmation reported all three live
 renderer readiness fields true. Persistent storage, config, importers, and user
-features were subsequently completed, the XXIV final regression passed, and
-whole-mod parity was promoted to true after explicit user approval.
+features were subsequently completed, and the XXIV final regression received
+explicit user approval. XXV reopened closure for a deeper source/artifact audit
+and removed those status-only readiness fields; final runtime acceptance is
+pending.
 
 The 2026-06-22 lifecycle/light repair retires two more non-original shortcuts
 from the active route:

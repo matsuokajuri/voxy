@@ -13,9 +13,6 @@ public final class ForgeVoxyConfig {
     public static final ForgeConfigSpec.DoubleValue ORIGINAL_VOXY_SUBDIVISION_SIZE;
     public static final ForgeConfigSpec.BooleanValue ORIGINAL_VOXY_USE_ENVIRONMENTAL_FOG;
     public static final ForgeConfigSpec.ConfigValue<String> ORIGINAL_VOXY_SSAO_MODE;
-    public static final ForgeConfigSpec.IntValue AUTO_INGEST_RADIUS;
-    public static final ForgeConfigSpec.IntValue AUTO_INGEST_MAX_CHUNKS_PER_TICK;
-    public static final ForgeConfigSpec.IntValue AUTO_INGEST_COOLDOWN_TICKS;
 
     static {
         ForgeConfigSpec.Builder builder = new ForgeConfigSpec.Builder();
@@ -37,7 +34,7 @@ public final class ForgeVoxyConfig {
                 .define("originalVoxyUseEmbeddiumBuilderThreads", true);
         ORIGINAL_VOXY_SECTION_RENDER_DISTANCE = builder
                 .comment("Forge equivalent of original VoxyConfig.CONFIG.sectionRenderDistance, used by RenderDistanceTracker and hierarchical traversal.")
-                .defineInRange("originalVoxySectionRenderDistance", 16.0D, 1.0D, 512.0D);
+                .defineInRange("originalVoxySectionRenderDistance", 16.0D, 10.0D / 16.0D, 512.0D);
         ORIGINAL_VOXY_SUBDIVISION_SIZE = builder
                 .comment("Forge equivalent of original VoxyConfig.CONFIG.subDivisionSize, used by hierarchical traversal screen-space descent.")
                 .defineInRange("originalVoxySubDivisionSize", 64.0D, 1.0D, 512.0D);
@@ -48,17 +45,6 @@ public final class ForgeVoxyConfig {
                 .comment("Forge equivalent of original VoxyConfig.ssaoMode: AUTO, BASIC, BETTER, or BEST. Invalid values fall back to AUTO.")
                 .define("ssaoMode", "AUTO");
 
-        //Forge/Embeddium adapter controls: original Voxy receives chunk callbacks directly, while
-        // the 1.20.1 port also scans already-loaded chunks to cover Forge lifecycle ordering.
-        AUTO_INGEST_RADIUS = builder
-                .comment("Forge adapter chunk radius for rediscovering already-loaded chunks while ingest is enabled.")
-                .defineInRange("autoIngestRadius", 2, 0, 8);
-        AUTO_INGEST_MAX_CHUNKS_PER_TICK = builder
-                .comment("Maximum already-loaded chunks to ingest per client tick when auto ingest is enabled.")
-                .defineInRange("autoIngestMaxChunksPerTick", 1, 1, 8);
-        AUTO_INGEST_COOLDOWN_TICKS = builder
-                .comment("Ticks between stationary nearby-chunk scans. A scan also happens immediately when the player crosses into a new chunk, so this only bounds stationary rediscovery latency.")
-                .defineInRange("autoIngestCooldownTicks", 4, 0, 200);
         builder.pop();
         CLIENT_SPEC = builder.build();
     }

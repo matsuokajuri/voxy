@@ -14,7 +14,7 @@ import java.util.concurrent.ConcurrentHashMap;
 final class ForgeOriginalVoxyPersistentStorage {
     private static final Map<Path, ForgeOriginalVoxyStorageConfig.Loaded> CONFIGS = new ConcurrentHashMap<>();
 
-    record Identity(Path basePath, ForgeOriginalVoxyWorldIdentifier worldIdentifier) {
+    record Identity(Path basePath, WorldIdentifier worldIdentifier) {
         Identity {
             basePath = basePath.toAbsolutePath().normalize();
         }
@@ -36,8 +36,8 @@ final class ForgeOriginalVoxyPersistentStorage {
     }
 
     static Identity identityForLevel(Minecraft minecraft, ClientLevel level) {
-        ForgeOriginalVoxyWorldIdentifier identifier =
-                ((ForgeOriginalVoxyWorldIdentifierAccess) level).voxy$getOriginalVoxyWorldIdentifier();
+        WorldIdentifier identifier =
+                ((IWorldGetIdentifier) level).voxy$getIdentifier();
         if (identifier == null) {
             throw new IllegalStateException("Original Voxy world identifier was not captured");
         }

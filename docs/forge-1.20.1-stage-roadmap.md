@@ -1,5 +1,10 @@
 # Forge 1.20.1 Roman round roadmap
 
+> **HISTORICAL ROADMAP.** This file records the early Roman remediation plan and
+> is no longer the current status/implementation ledger. Use
+> `forge-1.20.1-original-voxy-full-render-path-parity-audit.md`; XXV supersedes
+> the partial-owner and `ForgeFrontendCompat` statements below.
+
 This document supersedes the old H/I/J/K/L and K10-preview-era roadmap.
 
 The project route is now strict original Voxy parity. Historical stages remain

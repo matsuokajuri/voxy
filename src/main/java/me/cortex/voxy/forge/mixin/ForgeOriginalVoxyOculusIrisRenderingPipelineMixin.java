@@ -4,7 +4,6 @@ import me.cortex.voxy.forge.ForgeOriginalVoxyOculusPatchDataAccess;
 import me.cortex.voxy.forge.ForgeOriginalVoxyOculusPipelineDataAccess;
 import me.cortex.voxy.forge.ForgeOriginalVoxyOculusRenderPipelineData;
 import me.cortex.voxy.forge.ForgeOriginalVoxyOculusShaderPatch;
-import me.cortex.voxy.forge.ForgeVoxyInstance;
 import net.irisshaders.iris.gl.buffer.ShaderStorageBufferHolder;
 import net.irisshaders.iris.pipeline.IrisRenderingPipeline;
 import net.irisshaders.iris.shaderpack.programs.ProgramSet;
@@ -44,17 +43,6 @@ public class ForgeOriginalVoxyOculusIrisRenderingPipelineMixin implements ForgeO
                     this.updateNotifier,
                     this.shaderStorageBufferHolder);
         }
-    }
-
-    @Inject(
-            method = "beginLevelRendering",
-            at = @At(
-                    value = "INVOKE",
-                    target = "Lcom/mojang/blaze3d/systems/RenderSystem;activeTexture(I)V",
-                    shift = At.Shift.BEFORE),
-            remap = false)
-    private void voxy$injectViewportSetup(CallbackInfo ci) {
-        ForgeVoxyInstance.INSTANCE.getOriginalVoxyModelPipeline().applyCapturedOculusViewport();
     }
 
     @Override

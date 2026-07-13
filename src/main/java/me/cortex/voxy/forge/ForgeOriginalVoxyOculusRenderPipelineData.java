@@ -846,10 +846,6 @@ public final class ForgeOriginalVoxyOculusRenderPipelineData {
             return this.lastTextureId;
         }
 
-        private boolean ready() {
-            return !this.requiredNonZeroTexture || this.textureId() != 0;
-        }
-
         private String failureReason() {
             return this.requiredNonZeroTexture && this.lastTextureId == 0
                     ? "oculus-image-binding-texture-zero:" + this.name
@@ -878,17 +874,6 @@ public final class ForgeOriginalVoxyOculusRenderPipelineData {
             return this.bindingFunction;
         }
 
-        boolean ready() {
-            this.lastFailureReason = "none";
-            for (TextureWithSampler sampler : this.samplers) {
-                if (!sampler.ready()) {
-                    this.lastFailureReason = sampler.failureReason();
-                    return false;
-                }
-            }
-            return true;
-        }
-
         String lastFailureReason() {
             return this.lastFailureReason;
         }
@@ -904,7 +889,7 @@ public final class ForgeOriginalVoxyOculusRenderPipelineData {
                     if (!this.textureZeroLogged) {
                         this.textureZeroLogged = true;
                         VoxyForge.LOGGER.warn(
-                                "Voxy Oculus shaderpack sampler '{}' resolved to texture id 0; status will report image bindings not ready.",
+                                "Voxy Oculus shaderpack sampler '{}' resolved to texture id 0; this image binding is unavailable.",
                                 sampler.name);
                     }
                 }

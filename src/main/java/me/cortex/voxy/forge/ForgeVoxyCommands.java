@@ -1,6 +1,7 @@
 package me.cortex.voxy.forge;
 
 import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.arguments.BoolArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.suggestion.Suggestions;
@@ -28,14 +29,10 @@ public final class ForgeVoxyCommands {
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         var root = Commands.literal("voxy")
                 .then(Commands.literal("reload")
-                        .executes(ctx -> reload(ctx.getSource())))
-                .then(Commands.literal("parity_route_status")
-                        .executes(ctx -> parityRouteStatus(ctx.getSource())))
-                .then(Commands.literal("original_voxy_storage_status")
-                        .executes(ctx -> originalVoxyStorageStatus(ctx.getSource())));
+                        .executes(ctx -> reload(ctx.getSource())));
 
-        ForgeVoxyParityCommands.register(root);
         root.then(importCommands());
+        root.then(debugCommands());
         dispatcher.register(root);
     }
 
@@ -53,6 +50,13 @@ public final class ForgeVoxyCommands {
                         .then(Commands.argument("world_name", StringArgumentType.string())
                                 .suggests(ForgeVoxyCommands::importWorldSuggester)
                                 .executes(ForgeVoxyCommands::importWorld)))
+                .then(Commands.literal("bobby")
+                        .then(Commands.argument("world_name", StringArgumentType.string())
+                                .suggests(ForgeVoxyCommands::importBobbySuggester)
+                                .executes(ForgeVoxyCommands::importBobby)))
+                .then(Commands.literal("distant_horizons")
+                        .then(Commands.argument("sqlDbPath", StringArgumentType.string())
+                                .executes(ForgeVoxyCommands::importDistantHorizons)))
                 .then(Commands.literal("raw")
                         .then(Commands.argument("path", StringArgumentType.string())
                                 .executes(ForgeVoxyCommands::importRaw)))
@@ -67,6 +71,29 @@ public final class ForgeVoxyCommands {
                         .executes(ForgeVoxyCommands::cancelImport));
     }
 
+    private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> debugCommands() {
+        return Commands.literal("debug")
+                .then(Commands.literal("verifyTLNChildMask")
+                        .executes(context -> verifyTopLevelNodeMasks(context, false))
+                        .then(Commands.argument("attemptRepair", BoolArgumentType.bool())
+                                .executes(context -> verifyTopLevelNodeMasks(
+                                        context,
+                                        BoolArgumentType.getBool(context, "attemptRepair")))));
+    }
+
+    private static int verifyTopLevelNodeMasks(
+            CommandContext<CommandSourceStack> context,
+            boolean attemptRepair) {
+        WorldEngine engine = ForgeVoxyInstance.INSTANCE.getCurrentEngineOptional().orElse(null);
+        if (engine == null) {
+            context.getSource().sendFailure(Component.literal(
+                    "Voxy must be enabled in an active client world to use this command"));
+            return 1;
+        }
+        DebugUtils.verifyAllTopLevelNodes(engine, attemptRepair);
+        return 0;
+    }
+
     private static boolean fileBasedImporter(File directory) {
         ForgeVoxyInstance instance = ForgeVoxyInstance.INSTANCE;
         Minecraft minecraft = Minecraft.getInstance();
@@ -75,7 +102,7 @@ public final class ForgeVoxyCommands {
             return false;
         }
         return instance.getImportManager().makeAndRunIfNone(engine, () -> {
-            ForgeOriginalVoxyWorldImporter importer = new ForgeOriginalVoxyWorldImporter(
+            WorldImporter importer = new WorldImporter(
                     engine,
                     minecraft.level,
                     instance.getOriginalVoxyModelPipeline().getServiceManager(),
@@ -130,6 +157,45 @@ public final class ForgeVoxyCommands {
         return fileBasedImporter(file.toFile()) ? 0 : 1;
     }
 
+    private static int importBobby(CommandContext<CommandSourceStack> context) {
+        String worldName = StringArgumentType.getString(context, "world_name");
+        Path directory = Minecraft.getInstance().gameDirectory.toPath().resolve(".bobby").resolve(worldName);
+        return fileBasedImporter(directory.toFile()) ? 0 : 1;
+    }
+
+    private static int importDistantHorizons(CommandContext<CommandSourceStack> context) {
+        File requestedPath = new File(StringArgumentType.getString(context, "sqlDbPath"));
+        File databaseFile = ForgeOriginalVoxyDhImporter.resolveDatabaseFile(requestedPath);
+        if (databaseFile == null || !databaseFile.isFile()) {
+            context.getSource().sendFailure(Component.literal(
+                    "Cannot find Distant Horizons database: "
+                            + (databaseFile == null ? "null" : databaseFile.getAbsolutePath())));
+            return 1;
+        }
+
+        ForgeVoxyInstance instance = ForgeVoxyInstance.INSTANCE;
+        Minecraft minecraft = Minecraft.getInstance();
+        WorldEngine engine = instance.getCurrentEngineOptional().orElse(null);
+        if (engine == null || minecraft.level == null) {
+            context.getSource().sendFailure(Component.literal(
+                    "Voxy must be enabled in an active client world to import Distant Horizons data"));
+            return 1;
+        }
+
+        boolean started = instance.getImportManager().makeAndRunIfNone(engine, () ->
+                new ForgeOriginalVoxyDhImporter(
+                        databaseFile,
+                        engine,
+                        minecraft.level,
+                        instance.getOriginalVoxyModelPipeline().getServiceManager(),
+                        instance::canRunOriginalVoxyImportWork));
+        if (!started) {
+            context.getSource().sendFailure(Component.literal("A Voxy import is already active"));
+            return 1;
+        }
+        return 0;
+    }
+
     private static int importZip(CommandContext<CommandSourceStack> context) {
         File zip = new File(StringArgumentType.getString(context, "zipPath"));
         String innerDirectory = "region/";
@@ -146,7 +212,7 @@ public final class ForgeVoxyCommands {
         }
         String finalInnerDirectory = innerDirectory;
         return instance.getImportManager().makeAndRunIfNone(engine, () -> {
-            ForgeOriginalVoxyWorldImporter importer = new ForgeOriginalVoxyWorldImporter(
+            WorldImporter importer = new WorldImporter(
                     engine,
                     minecraft.level,
                     instance.getOriginalVoxyModelPipeline().getServiceManager(),
@@ -165,6 +231,12 @@ public final class ForgeVoxyCommands {
             CommandContext<CommandSourceStack> context,
             SuggestionsBuilder builder) {
         return fileDirectorySuggester(Minecraft.getInstance().gameDirectory.toPath().resolve("saves"), builder);
+    }
+
+    private static CompletableFuture<Suggestions> importBobbySuggester(
+            CommandContext<CommandSourceStack> context,
+            SuggestionsBuilder builder) {
+        return fileDirectorySuggester(Minecraft.getInstance().gameDirectory.toPath().resolve(".bobby"), builder);
     }
 
     private static CompletableFuture<Suggestions> fileDirectorySuggester(Path directory, SuggestionsBuilder builder) {
@@ -206,49 +278,6 @@ public final class ForgeVoxyCommands {
         } catch (IOException ignored) {
         }
         return builder.buildFuture();
-    }
-
-    private static int parityRouteStatus(CommandSourceStack source) {
-        ForgeOriginalVoxyModelPipeline pipeline = ForgeVoxyInstance.INSTANCE.getOriginalVoxyModelPipeline();
-        ForgeOriginalVoxyModelPipelineStats model = pipeline.createStatusSnapshot();
-        ForgeOriginalVoxyMdicCommandGenerationStats mdic = pipeline.createMdicCommandGenerationStatusSnapshot();
-        String message = String.join(" ",
-                "Voxy parity route:",
-                "originalVoxySourceBaseline=true",
-                "deprecatedPrototypeRoutesAbsent=true",
-                "formalRendererReady=" + model.formalRendererReady(),
-                "actualRendererDrawEnabled=" + model.actualRendererDrawEnabled(),
-                "formalDrawPipelineReady=" + mdic.formalDrawPipelineReady(),
-                "earlyUsableLodRendererReady=retired",
-                "wholeOriginalModParity=true",
-                "newWorkTarget=post-parity-iterationt-compatibility-todo");
-        source.sendSuccess(() -> Component.literal(message), false);
-        return 1;
-    }
-
-    private static int originalVoxyStorageStatus(CommandSourceStack source) {
-        ForgeVoxyInstance.PersistentStorageStatus status =
-                ForgeVoxyInstance.INSTANCE.createPersistentStorageStatusSnapshot();
-        String message = String.join(" ",
-                "Voxy original storage:",
-                "persistentStorageReady=" + status.persistentStorageReady(),
-                "storageConfigReady=" + status.storageConfigReady(),
-                "storageConfigPath=" + status.storageConfigPath(),
-                "storageConfigSource=" + status.storageConfigSource(),
-                "storageDisabled=" + status.storageDisabled(),
-                "backendChain=" + status.backendChain(),
-                "worldIdentifier=" + status.worldIdentifier(),
-                "storagePath=" + status.storagePath(),
-                "sectionLoadHits=" + status.sectionLoadHits(),
-                "sectionLoadMisses=" + status.sectionLoadMisses(),
-                "sectionWrites=" + status.sectionWrites(),
-                "mappingEntriesLoaded=" + status.mappingEntriesLoaded(),
-                "mappingWrites=" + status.mappingWrites(),
-                "openCount=" + status.openCount(),
-                "reuseCount=" + status.reuseCount(),
-                "closingWorldCount=" + status.closingWorldCount());
-        source.sendSuccess(() -> Component.literal(message), false);
-        return 1;
     }
 
 }

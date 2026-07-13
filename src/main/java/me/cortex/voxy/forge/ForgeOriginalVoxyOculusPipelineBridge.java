@@ -1,19 +1,13 @@
 package me.cortex.voxy.forge;
 
 import me.cortex.voxy.config.ForgeVoxyConfig;
-import me.cortex.voxy.forge.mixin.ForgeOriginalVoxyOculusIrisRenderingPipelineAccessor;
 import net.irisshaders.iris.Iris;
 import net.irisshaders.iris.pipeline.IrisRenderingPipeline;
 import net.irisshaders.iris.pipeline.WorldRenderingPipeline;
-import net.irisshaders.iris.targets.RenderTarget;
-import net.irisshaders.iris.targets.RenderTargets;
 
-import java.util.Arrays;
-
-import static org.lwjgl.opengl.GL11C.glIsTexture;
+import java.io.IOException;
 
 public final class ForgeOriginalVoxyOculusPipelineBridge {
-    private static final boolean FORMAL_SHADERPACK_PATCH_OUTPUT_READY = true;
     private static volatile ForgeOriginalVoxyOculusShaderPatch currentShaderpackPatch;
 
     private ForgeOriginalVoxyOculusPipelineBridge() {
@@ -41,15 +35,23 @@ public final class ForgeOriginalVoxyOculusPipelineBridge {
         }
     }
 
+    //Forge/Oculus equivalent of original IrisUtil.reload(), used by enabled/rendering changes so
+    //the presence of the Voxy patch in ProgramSet is rebuilt from the newly saved configuration.
+    static void reloadShaders() {
+        var api = net.irisshaders.iris.api.v0.IrisApi.getInstance();
+        if (!api.isShaderPackInUse() && !api.getConfig().areShadersEnabled()) {
+            return;
+        }
+        try {
+            Iris.reload();
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to reload Oculus after applying Voxy configuration", e);
+        }
+    }
+
     public static boolean shouldExposeVoxyShaderpackPatch() {
-        /*
-         * Original Voxy exposes VOXY/patch data when rendering is enabled because
-         * its MDIC terrain path can already write the requested shaderpack buffers.
-         * The Forge port still audits zero MDIC output on the normal Oculus path,
-         * so exposing only the render-target table is the safe original-equivalent
-         * subset until the formal draw output owner is ready.
-         */
-        return ForgeVoxyConfig.isEnabledEarlySafe() && FORMAL_SHADERPACK_PATCH_OUTPUT_READY;
+        //The active MDIC path owns the complete original patch/output contract.
+        return ForgeVoxyConfig.isEnabledEarlySafe();
     }
 
     public static void captureCurrentShaderpackPatch(ForgeOriginalVoxyOculusShaderPatch patch) {
@@ -94,67 +96,6 @@ public final class ForgeOriginalVoxyOculusPipelineBridge {
         } catch (RuntimeException ignored) {
             return false;
         }
-    }
-
-    //Draw-target staleness audit: our FBOs attach texture ids BAKED at pipeline-data build time
-    // (main-vs-alt resolved via getFlippedAfterPrepare), while Iris recreates target textures on
-    // resize and creates targets lazily. Logs the baked ids' liveness and the live main/alt table
-    // so a mismatch (stale id, or flipped side) is directly visible per lifecycle.
-    static void auditDrawTargets(
-            int run,
-            Object capturedPipelineInstance,
-            ForgeOriginalVoxyOculusRenderPipelineData data,
-            int voxyOpaqueFramebufferId,
-            int voxyTranslucentFramebufferId) {
-        try {
-            WorldRenderingPipeline live = Iris.getPipelineManager().getPipelineNullable();
-            String liveTable = "pipeline-not-accessible";
-            int liveDepthTexture = -1;
-            int liveNoTranslucentsDepthTexture = -1;
-            if (live instanceof ForgeOriginalVoxyOculusIrisRenderingPipelineAccessor access) {
-                RenderTargets targets = access.voxy$getRenderTargets();
-                StringBuilder table = new StringBuilder();
-                for (int i = 0; i < targets.getRenderTargetCount(); i++) {
-                    RenderTarget target = targets.get(i);
-                    if (target == null) {
-                        continue;
-                    }
-                    table.append(i)
-                            .append(":m=").append(target.getMainTexture())
-                            .append(",a=").append(target.getAltTexture())
-                            .append(' ');
-                }
-                liveTable = table.toString().trim();
-                liveDepthTexture = targets.getDepthTexture();
-                liveNoTranslucentsDepthTexture = targets.getDepthTextureNoTranslucents().getTextureId();
-            }
-            VoxyForge.LOGGER.info(
-                    "Original Oculus draw-target audit: run={} samePipelineInstance={} voxyOpaqueFbo={} voxyTranslucentFbo={} opaqueBaked={} opaqueIsTexture={} translucentBaked={} translucentIsTexture={} liveDepthTex={} liveNoTransDepthTex={} liveTargets=[{}]",
-                    run,
-                    live == capturedPipelineInstance,
-                    voxyOpaqueFramebufferId,
-                    voxyTranslucentFramebufferId,
-                    Arrays.toString(data.opaqueDrawTargets),
-                    isTextureFlags(data.opaqueDrawTargets),
-                    Arrays.toString(data.translucentDrawTargets),
-                    isTextureFlags(data.translucentDrawTargets),
-                    liveDepthTexture,
-                    liveNoTranslucentsDepthTexture,
-                    liveTable);
-        } catch (RuntimeException | LinkageError e) {
-            VoxyForge.LOGGER.warn("Original Oculus draw-target audit failed: {}", e.toString());
-        }
-    }
-
-    private static String isTextureFlags(int[] textureIds) {
-        StringBuilder flags = new StringBuilder("[");
-        for (int i = 0; i < textureIds.length; i++) {
-            if (i > 0) {
-                flags.append(',');
-            }
-            flags.append(glIsTexture(textureIds[i]));
-        }
-        return flags.append(']').toString();
     }
 
     record Result(

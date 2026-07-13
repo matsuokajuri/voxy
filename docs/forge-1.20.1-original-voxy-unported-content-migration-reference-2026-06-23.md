@@ -17,10 +17,17 @@ not be read as current after XII-XXI.6: the formal renderer, model bakery,
 generation/geometry chain, HOC/MDIC frame route, terrain/shaderpack pipeline,
 water/translucency, resource reuse, persistent storage TYPE surface, and
 identifier-routed active-world map have since been ported and runtime-validated.
-XXII starts by reconciling every old label against current source.
+XXII reconciled every old label against current source. XXV reopened the XXIV
+closure for a stricter all-content, retired-code, exact-name, and final-artifact
+audit. Its broad visual/lifecycle acceptance passed. Two frontend gaps found by
+that acceptance are now implemented (F3 visibility and Voxy pages inside
+Embeddium), and the refreshed artifact audit passes. The focused F3/menu
+observation and the follow-up Rendering off/on config-Apply lifecycle also
+passed. Current XXV acceptance is closed with documented platform adaptations.
 
-Work is intentionally grouped into three large Roman rounds so each round can
-receive one consolidated manual regression before its single commit.
+Work was grouped into XXII-XXIV, then XXV was added as one exhaustive closure
+round so its complete implementation can receive one consolidated manual
+regression before a single commit.
 
 ### Authoritative twelve-section reconciliation at XXII
 
@@ -36,8 +43,8 @@ receive one consolidated manual regression before its single commit.
 | 8. Terrain shader contract | renderer parity complete | original packed attributes, patched/normal program defines, light/tint/depth, and state restore |
 | 9. Water/translucency | renderer parity complete | original bake/metadata/translucent command route; Photon water regression passed |
 | 10. Ingest/removal/light | core parity complete in XXII | original `LIGHT_AND_DATA` readiness, dirty-section route, and last-loaded removal snapshot |
-| 11. Compatibility integrations | XXIII complete | original importers/UI are ported through Forge adapters; real Embeddium/Oculus equivalents remain active and Fabric-only integrations are classified platform-N/A |
-| 12. Config/readiness/cleanup | complete; whole-mod parity user-approved | original enabled/rendering/ingest/SSAO semantics, defaults, diagnostics, reload, config UI, final source/JAR audit, consolidated regression, and user approval are complete |
+| 11. Compatibility integrations | implementation complete; F3/menu observation passed | DH/Bobby import, Chunky/Acedium/GPU selection, Embeddium/Oculus, and applicable original debug/timing owners are ported; genuinely Fabric-only hooks remain platform-N/A |
+| 12. Config/readiness/cleanup | frontend corrections/artifact/runtime acceptance complete | parity/status DTOs and commands are removed and exact names are converged; F3 now follows debug-screen visibility, the nine original settings are hosted by Embeddium, and the standalone config screen is retired; Rendering off/on Apply passed; enabled changes retain a documented non-blocking Forge event-shell lifecycle adaptation/TODO |
 
 The detailed bodies below are retained as the 2026-06-23 source inventory and
 migration rationale. Their old `partial` wording is superseded by this table and
@@ -65,10 +72,10 @@ the updated per-section status blocks.
 [x] port ImportManager and client import task/reference lifecycle
 [x] port current-world, named-world, raw-region, ZIP, cancel, and progress UI
 [x] port /voxy reload and applicable original diagnostics/F3 statistics
-[x] expose Forge/Embeddium configuration UI without copying ModMenu literally
-[x] map Distant Horizons only through a real Forge 1.20.1 API (none is present;
-    command remains unavailable instead of directly reading an unsupported DB)
-[x] classify Bobby, Flashback, FREX, Nvidium, ModMenu, and other Fabric-only hooks
+[x] expose the original settings through Forge (the initial standalone screen
+    was superseded in XXV by official Embeddium option pages)
+[x] port the original importer/config/lifecycle surface available in XXIII
+[x] classify then-known Fabric-only hooks without creating fake integrations
 [x] perform one consolidated importer/config/lifecycle/render smoke regression,
     including the focused no-shader cherry-leaves repair recheck
 ```
@@ -89,6 +96,44 @@ Accepted upstream behavior and platform-N/A integrations are not completion
 blockers. IterationT remains a post-parity compatibility TODO because original
 Voxy has no adaptation for it.
 
+### XXV exhaustive original-content and artifact re-audit
+
+```text
+[x] inventory every original source area and eligible Forge equivalent again
+[x] port DH and Bobby import, Chunky, Acedium, GPU selection, original
+    GL/printf/timing/capability owners, and formal F3 data where applicable
+[x] remove platform/status/probe shells and converge direct ports to original
+    simple owner names
+[x] restore production Mixin refmap/reobfuscated JarJar packaging
+[x] complete the first broad visual/lifecycle acceptance
+[x] gate F3 diagnostics and move all nine settings into Embeddium pages
+[x] refresh the final source/resource/JAR audit after the page-ID correction
+[x] pass the focused F3-visibility and Embeddium-page runtime observation
+[x] pass the focused config-Apply runtime acceptance
+```
+
+For the completed portion, the user ran the instructed F3/menu check and closed
+normally without reporting an anomaly. `latest.log` records Voxy page
+registration at `20:20:20.204`, Embeddium option-GUI construction at
+`20:21:07`, no Voxy option-identifier/initializer failure, renderer shutdown at
+`20:21:37.485`, and normal `WorldEngine`/instance closure at `20:21:39`. The
+The follow-up Apply run supplied the remaining evidence: Rendering off completed
+Voxy shutdown plus Oculus recreation at `20:33:39-20:33:40`; Rendering on was
+persisted at `20:34:13` and recreated Oculus, `ForgeOriginalVoxyRenderSystem`,
+and `MDICSectionRenderer` by `20:34:16`. The user confirmed LOD disappeared and
+returned without an anomaly. Clean shutdown followed at `20:34:22-20:34:23`,
+`runClient` exited 0 with `BUILD SUCCESSFUL`, and the targeted scan found no
+Voxy option/config failure.
+
+The direct DH database importer is an original feature, not an unsupported API
+guess: it remains optional, selects the real DH SQLite data, decodes supported
+DH formats/compression, and feeds the original import manager/WorldEngine
+lifecycle. Bobby likewise uses the real cache format and original importer
+ownership. Flashback/FREX/Fabric Nvidium hooks remain platform-N/A where no
+Forge owner exists. Fabric ModMenu itself is N/A, but its user-visible
+Sodium-options responsibility is mapped: the Forge Mod List entry opens
+Embeddium and Voxy adds pages through the official construction event.
+
 ### XXIV authoritative final source-area classification
 
 This table supersedes every dated `partial`, `pending`, or suggested-round block
@@ -106,10 +151,10 @@ in the historical inventory bodies below.
 | Terrain shaders and visual contract | ported + Forge-adapted | original resources, packed attributes, stage defines, tint/light/depth semantics, normal/patched paths, SSAO and final blit; frontend binding signatures are Oculus/Forge-specific |
 | Water and translucent route | ported | original fluid bake/metadata, translucent command construction, blend/depth targets, and draws; Photon regression passed |
 | Chunk ingest, removal, and light | ported + Forge-adapted | original readiness/ingest/dirty/remove contracts use Embeddium chunk events plus the Minecraft client chunk-cache snapshot required on Forge 1.20.1 |
-| Importers, reload, diagnostics, F3, config UI | ported + Forge-adapted | original import manager/world importer/progress lifecycle and reload/debug behavior; Forge commands and config-screen factory replace Fabric/ModMenu entry surfaces |
-| Optional compatibility integrations | platform-N/A where no real equivalent exists | Bobby, Flashback, FREX, Nvidium and Fabric entrypoints are Fabric-only; direct DH database coupling is out of scope without a project dependency/API; Embeddium/Oculus equivalents are ported |
+| Importers, reload, diagnostics, F3, config UI | ported + Forge-adapted; focused runtime acceptance passed | original import manager/world importer/progress lifecycle and reload behavior; F3 visibility follows the debug screen; Forge opens Embeddium and contributes the original-shaped General/Rendering pages through its official event; Rendering off/on saved-option effects passed runtime qualification |
+| Optional compatibility integrations | ported where a real format/Forge owner exists; otherwise platform-N/A | DH and Bobby import, Chunky, Acedium, GPU selection, Embeddium and Oculus are ported; Flashback/FREX/Fabric-only Nvidium hooks remain N/A; Fabric ModMenu is N/A but its option-host behavior is mapped to Forge/Embeddium |
 | Known upstream limitations | upstream-incomplete | original HOC/request bookkeeping retains its audited author `FIXTHIS` behavior; IterationT has no original Voxy sidecar/adaptation and remains post-parity compatibility work |
-| Genuinely missing original source area | none found | the twelve-area source inventory has an active owner, a documented Forge adaptation, or an explicit platform/upstream classification |
+| Genuinely missing original source area | none found in XXV inventory | every area has an active owner, a documented Forge adaptation, or an explicit platform/upstream classification; focused frontend runtime qualification passed |
 
 Use this document after the confirmed visual/runtime bugs are fixed, especially
 after black LoD terrain, missing water/translucency, reload churn, and new-world
@@ -166,11 +211,13 @@ platform-blocked
 ## Current high-level state
 
 The original owner chain, storage/lifecycle root, config, importers, and user
-features all have active Forge owners through XXIII. XXIV found no genuinely
-missing original source area, passed the final packaging/mixin audit and
-consolidated regression, and received explicit user approval for
-`wholeOriginalModParity=true`. IterationT remains a post-parity TODO because the
-original project has no adaptation for it.
+features have active Forge owners. XXIV passed its packaging/runtime gate and
+received explicit user approval, but XXV reopened completion and found further
+eligible optional content plus retired status/naming/packaging work. Those
+implementation changes and final source/JAR verification are now complete;
+focused F3/menu and config-Apply runtime acceptance passed. IterationT stays a
+post-migration TODO because
+the original project has no adaptation for it.
 
 ## 1. Instance, world storage, and service root
 
@@ -973,11 +1020,13 @@ re-enter world and verify no stale light/ingest work crashes or corrupts LoD
 
 ## 11. Compatibility integrations and platform blockers
 
-Status after XXIII implementation and completed runtime regression:
+Current XXV status after the broad runtime regression and frontend correction:
 
 ```text
 complete: required Embeddium/Oculus equivalents are active; Fabric-only optional
-integrations are explicitly platform-N/A and do not report false readiness
+integrations are explicitly platform-N/A and do not report false readiness;
+focused F3 visibility and Embeddium option-page observation passed; config Apply
+also passed through the Rendering off/on lifecycle
 ```
 
 Original Voxy has Fabric-side integrations that must not be copied literally
@@ -990,7 +1039,8 @@ Do not port literally:
 - Fabric Loader entrypoints
 - Fabric API-only client hooks
 - Fabric access wideners
-- ModMenu integration
+- Fabric ModMenu loader/entrypoint integration (its option-host behavior still
+  maps to Forge Mod List + Embeddium)
 - Sodium package-specific hooks where Embeddium has a different owner
 - Iris package-specific hooks where Oculus has a different owner
 ```
@@ -1000,6 +1050,7 @@ Port only through a real Forge equivalent:
 ```text
 - Sodium builder-thread sharing -> Embeddium builder-thread equivalent
 - Sodium chunk renderer hook -> Embeddium chunk renderer equivalent
+- Sodium option-page construction -> Embeddium `OptionGUIConstructionEvent`
 - Iris shader pipeline data -> Oculus shader pipeline equivalent
 - Iris shader reload lifecycle -> Oculus reload lifecycle equivalent
 - Flashback/replay storage override if a Forge-compatible equivalent is in
@@ -1025,11 +1076,13 @@ Migration steps:
 
 ## 12. Config, readiness status, deprecated-route cleanup, and user features
 
-Status after XXIII implementation and completed runtime regression:
+Current XXV status:
 
 ```text
 config, reload, diagnostics, importer, progress UI, deprecated-route cleanup,
-XXIV final audit/regression, and user-approved whole-mod parity are complete
+the post-correction artifact refresh, and broad visual/lifecycle acceptance are
+complete; focused F3/Embeddium page observation and Rendering off/on config-
+Apply runtime acceptance passed
 ```
 
 Original Voxy source areas:
@@ -1049,11 +1102,24 @@ docs/forge-1.20.1-deprecated-prototype-routes.md
 Completed migration result:
 
 ```text
-- Forge runtime config matches original enabled/rendering/ingest/SSAO semantics
+- Forge runtime config carries all nine current original settings: enabled,
+  service threads, Embeddium/Sodium builder-thread sharing, ingest, rendering,
+  subdivision size, render distance, environmental fog, and SSAO
 - clean defaults start the formal route without historical switches
 - renderer readiness derives only from current original-equivalent owners
 - deprecated renderer/config/status routes are absent from active source
-- original importer/reload/F3 diagnostics and Forge config UI are active
+- original importer/reload diagnostics are active; F3 diagnostics are gated by
+  Minecraft's debug-screen state
+- Embeddium's official option-construction event owns General/Rendering pages,
+  one shared repeated-Apply storage baseline, dynamic enabled predicates, and
+  the original render-distance minimum; the standalone Forge screen is absent
+- renderer-only settings retain the active WorldEngine; enabled/rendering
+  request Oculus shader reload
+- enabled immediately tears down the renderer, cancels imports, clears and
+  reselects the active world, but keeps the Forge event shell/service pool and
+  lets the released WorldEngine reach normal idle cleanup; unlike original
+  immediate `shutdownInstance/createInstance`, this is a documented non-blocking
+  strict lifecycle parity TODO
 - Embeddium/Oculus version bounds and Mixin ownership are explicitly audited
 ```
 
@@ -1121,9 +1187,10 @@ or visual output must be validated.
 
 ## Final readiness checklist
 
-The implementation, packaging-audit, consolidated-regression, and explicit
-user-approval conditions below are satisfied through XXIV. The project now
-claims whole-mod completion for the original Voxy migration scope:
+The renderer/core items below remain satisfied through XXIV and the broad XXV
+acceptance, and the post-frontend-correction artifact passes. The focused
+F3/Embeddium UI observation and config-Apply lifecycle also passed. Current
+whole-mod acceptance is closed with documented platform adaptations:
 
 ```text
 - active worlds use configured persistent storage, not MemoryStorageBackend
@@ -1138,4 +1205,8 @@ claims whole-mod completion for the original Voxy migration scope:
 - reload/world detach cannot mutate stale owners
 - old preview/debug/placeholder paths cannot report formal readiness
 - every unavoidable Forge-specific deviation is documented as a blocker
+- F3 diagnostics are absent while the debug screen is closed
+- Embeddium hosts both Voxy option pages
+- Rendering off/on Apply persists the latest saved baseline and rebuilds only
+  the required renderer/frontend owners while retaining the active WorldEngine
 ```

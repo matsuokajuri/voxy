@@ -17,7 +17,7 @@ public final class ForgeOriginalVoxyOculusVoxyUniforms {
     private ForgeOriginalVoxyOculusVoxyUniforms() {
     }
 
-    static void captureViewport(ForgeOriginalVoxyMdicViewport viewport) {
+    static void captureViewport(MDICViewport viewport) {
         synchronized (LOCK) {
             VIEW_PROJECTION.set(viewport.MVP);
             MODEL_VIEW.set(viewport.modelView);

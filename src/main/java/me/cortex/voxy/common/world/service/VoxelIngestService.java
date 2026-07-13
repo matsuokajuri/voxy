@@ -15,16 +15,11 @@ import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.minecraft.world.level.lighting.LayerLightSectionStorage;
 import net.minecraft.world.level.lighting.LevelLightEngine;
-import org.slf4j.LoggerFactory;
 
 import java.util.concurrent.ConcurrentLinkedDeque;
 
 public class VoxelIngestService {
-    private static final org.slf4j.Logger LOGGER = LoggerFactory.getLogger("Voxy");
     private static final ILightingSupplier NO_LIGHTING = (x, y, z) -> (byte) 0;
-    private static final boolean AUDIT_LIGHTING = Boolean.getBoolean("voxy.forge.auditLighting");
-    private static final int MAX_LIGHTING_AUDITS = 12;
-    private static int lightingAuditRuns;
     private static volatile AutoIngestTarget autoIngestTarget = chunk -> null;
 
     public interface AutoIngestTarget {
@@ -373,7 +368,6 @@ public class VoxelIngestService {
         if (voxelized == null) {
             return IngestStats.EMPTY;
         }
-        auditVoxelLighting(x, y, z, voxelized);
         engine.markActive();
         WorldUpdater.insertUpdate(engine, voxelized);
         return new IngestStats(
@@ -389,11 +383,15 @@ public class VoxelIngestService {
     }
 
     public static boolean tryAutoIngestChunk(LevelChunk chunk) {
+        return tryAutoIngestChunkWithStats(chunk).updated();
+    }
+
+    public static IngestStats tryAutoIngestChunkWithStats(LevelChunk chunk) {
         WorldEngine engine = autoIngestTarget.getEngine(chunk);
         if (engine == null) {
-            return false;
+            return IngestStats.EMPTY;
         }
-        return ingestChunk(engine, chunk);
+        return ingestChunkWithStats(engine, chunk);
     }
 
     public int getTaskCount() {
@@ -426,53 +424,6 @@ public class VoxelIngestService {
             int sky = hasSkyLight ? Math.min(15, skyLight.get(x, y, z)) : skyConstant;
             return (byte) (sky | (block << 4));
         };
-    }
-
-    private static void auditVoxelLighting(int sectionX, int sectionY, int sectionZ, VoxelizedSection voxelized) {
-        if (!AUDIT_LIGHTING || lightingAuditRuns >= MAX_LIGHTING_AUDITS || voxelized.lvl0NonAirCount == 0) {
-            return;
-        }
-        int minSky = 15;
-        int maxSky = 0;
-        int minBlock = 15;
-        int maxBlock = 0;
-        long sumSky = 0L;
-        long sumBlock = 0L;
-        int sampled = 0;
-        for (int i = 0; i < 16 * 16 * 16; i++) {
-            long id = voxelized.section[i];
-            if (me.cortex.voxy.common.world.other.Mapper.isAir(id)) {
-                continue;
-            }
-            int light = me.cortex.voxy.common.world.other.Mapper.getLightId(id);
-            int sky = light & 0x0F;
-            int block = (light >>> 4) & 0x0F;
-            minSky = Math.min(minSky, sky);
-            maxSky = Math.max(maxSky, sky);
-            minBlock = Math.min(minBlock, block);
-            maxBlock = Math.max(maxBlock, block);
-            sumSky += sky;
-            sumBlock += block;
-            sampled++;
-        }
-        if (sampled == 0) {
-            return;
-        }
-        lightingAuditRuns++;
-        LOGGER.info(
-                "Voxy lighting ingest audit: run={} section={},{},{} nonAir={} sampled={} skyMin={} skyMax={} skyAvg={} blockMin={} blockMax={} blockAvg={}",
-                lightingAuditRuns,
-                sectionX,
-                sectionY,
-                sectionZ,
-                voxelized.lvl0NonAirCount,
-                sampled,
-                minSky,
-                maxSky,
-                String.format("%.2f", (double) sumSky / sampled),
-                minBlock,
-                maxBlock,
-                String.format("%.2f", (double) sumBlock / sampled));
     }
 
 }

@@ -166,7 +166,7 @@ final class ForgeOriginalVoxyStorageConfig {
         @Override
         StorageBackend build(ConfigBuildCtx context) {
             String path = context.ensurePathExists(context.substituteString(context.resolvePath()));
-            return new ForgeOriginalVoxyRocksDBStorageBackend(path);
+            return new RocksDBStorageBackend(path);
         }
 
         @Override
@@ -179,7 +179,7 @@ final class ForgeOriginalVoxyStorageConfig {
         @Override
         StorageBackend build(ConfigBuildCtx context) {
             String path = context.ensurePathExists(context.substituteString(context.resolvePath()));
-            return new ForgeOriginalVoxyLmdbStorageBackend(path);
+            return new LMDBStorageBackend(path);
         }
 
         @Override
@@ -195,7 +195,7 @@ final class ForgeOriginalVoxyStorageConfig {
 
         @Override
         StorageBackend build(ConfigBuildCtx context) {
-            return new ForgeOriginalVoxyRedisStorageBackend(
+            return new RedisStorageBackend(
                     this.host,
                     this.port,
                     context.substituteString(this.prefix));
@@ -216,7 +216,7 @@ final class ForgeOriginalVoxyStorageConfig {
             if (this.compressor == null || this.delegate == null) {
                 throw new IllegalStateException("Compression adaptor config is incomplete");
             }
-            return new ForgeOriginalVoxyCompressionStorageAdaptor(
+            return new CompressionStorageAdaptor(
                     this.compressor.build(context),
                     this.delegate.build(context));
         }
@@ -234,7 +234,7 @@ final class ForgeOriginalVoxyStorageConfig {
 
         @Override
         StorageCompressor build(ConfigBuildCtx context) {
-            return new ForgeOriginalVoxyZstdCompressor(this.compressionLevel);
+            return new ZSTDCompressor(this.compressionLevel);
         }
 
         @Override
@@ -246,7 +246,7 @@ final class ForgeOriginalVoxyStorageConfig {
     static final class Lz4Config extends CompressorConfig {
         @Override
         StorageCompressor build(ConfigBuildCtx context) {
-            return new ForgeOriginalVoxyLz4Compressor();
+            return new LZ4Compressor();
         }
 
         @Override
@@ -285,7 +285,7 @@ final class ForgeOriginalVoxyStorageConfig {
             for (int i = 0; i < this.backends.size(); i++) {
                 builtBackends[i] = this.backends.get(i).build(context);
             }
-            return new ForgeOriginalVoxyFragmentedStorageBackendAdaptor(builtBackends);
+            return new FragmentedStorageBackendAdaptor(builtBackends);
         }
 
         @Override
@@ -310,7 +310,7 @@ final class ForgeOriginalVoxyStorageConfig {
                 builtBackends[i] = this.delegate.build(context);
                 context.popPath();
             }
-            return new ForgeOriginalVoxyFragmentedStorageBackendAdaptor(builtBackends);
+            return new FragmentedStorageBackendAdaptor(builtBackends);
         }
 
         @Override
@@ -329,7 +329,7 @@ final class ForgeOriginalVoxyStorageConfig {
             if (this.cache == null || this.onMiss == null) {
                 throw new IllegalStateException("Readonly caching layer config is incomplete");
             }
-            return new ForgeOriginalVoxyReadonlyCachingLayer(
+            return new ReadonlyCachingLayer(
                     this.cache.build(context),
                     this.onMiss.build(context));
         }

@@ -12,6 +12,7 @@ import net.minecraft.world.level.block.state.BlockState;
 
 import javax.annotation.Nullable;
 import java.util.Arrays;
+import java.util.List;
 
 import static org.lwjgl.opengl.GL11C.glFinish;
 import static org.lwjgl.opengl.GL13C.GL_TEXTURE0;
@@ -38,30 +39,29 @@ import static org.lwjgl.opengl.GL43C.GL_SHADER_STORAGE_BUFFER_BINDING;
  *   explicitly attaching the render-generation result consumer before {@code start()}.
  * - {@code pipeline.setupExtraModelBakeryData(modelService)} maps to applying the Oculus
  *   custom block-state id mapping on the model factory at the same constructor position.
- * - There is no Forge {@code RenderResourceReuse} geometry-buffer cache; the geometry buffer
- *   is owned per lifecycle.
+ * - Geometry storage is acquired from the ported {@code RenderResourceReuse} cache, matching
+ *   the original owner-reuse contract across renderer rebuilds.
  */
 final class ForgeOriginalVoxyRenderSystem {
     private static final int ORIGINAL_GEOMETRY_MAX_SECTION_COUNT = 1 << 20;
 
     private final WorldEngine worldIn;
 
-    private ForgeOriginalVoxyModelBakerySubsystem modelService;
-    private ForgeOriginalVoxyRenderGenerationService renderGen;
-    private ForgeOriginalVoxyBasicSectionGeometryData geometryData;
-    private ForgeOriginalVoxyBasicAsyncGeometryManager geometryManager;
-    private ForgeOriginalVoxyAsyncNodeGeometrySync nodeManager;
-    private ForgeOriginalVoxyNodeCleaner nodeCleaner;
-    private ForgeOriginalVoxyHierarchicalOcclusionTraverser traversal;
+    private ModelBakerySubsystem modelService;
+    private RenderGenerationService renderGen;
+    private BasicSectionGeometryData geometryData;
+    private AsyncNodeManager nodeManager;
+    private NodeCleaner nodeCleaner;
+    private HierarchicalOcclusionTraverser traversal;
 
-    private ForgeOriginalVoxyRenderDistanceTracker renderDistanceTracker;
-    private ForgeOriginalVoxyChunkBoundRenderer chunkBoundRenderer;
+    private RenderDistanceTracker renderDistanceTracker;
+    private ChunkBoundRenderer chunkBoundRenderer;
 
-    private ForgeOriginalVoxyViewportSelector viewportSelector;
+    private ViewportSelector viewportSelector;
 
     private ForgeOriginalVoxyRenderPipeline pipeline;
-    private ForgeOriginalVoxyMdicSectionRenderer sectionRenderer;
-    private final ForgeOriginalVoxyRenderProperties properties;
+    private MDICSectionRenderer sectionRenderer;
+    private final RenderProperties properties;
 
     ForgeOriginalVoxyRenderSystem(
             WorldEngine world,
@@ -94,32 +94,24 @@ final class ForgeOriginalVoxyRenderSystem {
             glFinish();
             //Construction often runs right after an Oculus pipeline reload; do not let its
             // latched GL errors fail the glGetError-based build audits of the owners below.
-            ForgeOriginalVoxyModelStore.drainLatchedGlErrors("original-render-system-construction");
+            ModelStore.drainLatchedGlErrors("original-render-system-construction");
 
             this.worldIn = world;
 
-            this.properties = ForgeOriginalVoxyRenderProperties.getRenderProperties();
+            this.properties = RenderProperties.getRenderProperties();
             {
-                this.modelService = new ForgeOriginalVoxyModelBakerySubsystem(world.getMapper(), minecraft);
-                this.renderGen = new ForgeOriginalVoxyRenderGenerationService(world, this.modelService, sm, false);
+                this.modelService = new ModelBakerySubsystem(world.getMapper(), minecraft);
+                this.renderGen = new RenderGenerationService(world, this.modelService, sm, false);
 
-                this.geometryData = new ForgeOriginalVoxyBasicSectionGeometryData(ORIGINAL_GEOMETRY_MAX_SECTION_COUNT);
+                this.geometryData = new BasicSectionGeometryData(ORIGINAL_GEOMETRY_MAX_SECTION_COUNT);
                 String geometryDataError = this.geometryData.buildOnRenderThread();
                 if (!"none".equals(geometryDataError)) {
                     throw new IllegalStateException(geometryDataError);
                 }
-                this.geometryManager = new ForgeOriginalVoxyBasicAsyncGeometryManager(
-                        ORIGINAL_GEOMETRY_MAX_SECTION_COUNT,
-                        this.geometryData.geometryCapacityBytes());
-
-                this.nodeManager = new ForgeOriginalVoxyAsyncNodeGeometrySync(this.geometryManager, this.geometryData, this.renderGen);
-                //Original AsyncNodeManager wires itself into the render generation service during
-                // construction; the Forge split attaches the consumer here, before the world dirty
-                // callback below can route the first build tasks to the service workers.
-                this.renderGen.setResultConsumer(this.nodeManager::submitGeometryResult);
-                this.nodeCleaner = new ForgeOriginalVoxyNodeCleaner(this.nodeManager.maxNodeCount());
+                this.nodeManager = new AsyncNodeManager(1 << 21, this.geometryData, this.renderGen);
+                this.nodeCleaner = new NodeCleaner(this.nodeManager);
                 this.nodeCleaner.buildOnRenderThread();
-                this.traversal = new ForgeOriginalVoxyHierarchicalOcclusionTraverser(this.nodeManager, this.nodeCleaner, this.renderGen);
+                this.traversal = new HierarchicalOcclusionTraverser(this.nodeManager, this.nodeCleaner, this.renderGen);
             }
 
             this.pipeline = new ForgeOriginalVoxyRenderPipeline(this.properties);
@@ -127,24 +119,24 @@ final class ForgeOriginalVoxyRenderSystem {
             this.modelService.factory.setCustomBlockStateMapping(customBlockStateIds, customBlockStateIdSource);
 
             //Late stage traversal compile for shaders with taa
-            String traversalError = this.traversal.buildOnRenderThread(this.properties, this.pipeline);
+            String traversalError = this.traversal.lateStageCompile(this.properties, this.pipeline);
             if (!"none".equals(traversalError)) {
                 throw new IllegalStateException(traversalError);
             }
 
-            this.sectionRenderer = new ForgeOriginalVoxyMdicSectionRenderer();
+            this.sectionRenderer = new MDICSectionRenderer();
             String sectionRendererError = this.sectionRenderer.buildOnRenderThread(this.pipeline);
             if (!"none".equals(sectionRendererError)) {
                 throw new IllegalStateException(sectionRendererError);
             }
-            this.viewportSelector = new ForgeOriginalVoxyViewportSelector(
-                    () -> new ForgeOriginalVoxyMdicViewport(this.properties, ORIGINAL_GEOMETRY_MAX_SECTION_COUNT));
+            this.viewportSelector = new ViewportSelector(
+                    () -> new MDICViewport(this.properties, ORIGINAL_GEOMETRY_MAX_SECTION_COUNT));
 
             {
                 int minSec = (minecraft.level.getMinBuildHeight() >> 4) >> 5;
                 int maxSec = ((minecraft.level.getMaxBuildHeight() >> 4) - 1) >> 5;
 
-                this.renderDistanceTracker = new ForgeOriginalVoxyRenderDistanceTracker(40,
+                this.renderDistanceTracker = new RenderDistanceTracker(40,
                         minSec,
                         maxSec,
                         this.nodeManager::addTopLevel,
@@ -153,7 +145,7 @@ final class ForgeOriginalVoxyRenderSystem {
                 this.setRenderDistance(ForgeVoxyConfig.ORIGINAL_VOXY_SECTION_RENDER_DISTANCE.get().floatValue());
             }
 
-            this.chunkBoundRenderer = new ForgeOriginalVoxyChunkBoundRenderer(this.properties, this.pipeline);
+            this.chunkBoundRenderer = new ChunkBoundRenderer(this.properties, this.pipeline);
 
             //Forge adaptation: original attaches the world dirty/biome callbacks and starts the
             // node manager in the middle of the constructor. On Forge the ingest services keep
@@ -205,8 +197,8 @@ final class ForgeOriginalVoxyRenderSystem {
     boolean shutdown(boolean flushDownloadStream) {
         boolean flushed = false;
         Logger.info("Flushing download stream");
-        if (flushDownloadStream && ForgeOriginalVoxyDownloadStream.isReady()) {
-            ForgeOriginalVoxyDownloadStream.instance().flushWaitClear();
+        if (flushDownloadStream && DownloadStream.isReady()) {
+            DownloadStream.instance().flushWaitClear();
             flushed = true;
         }
         Logger.info("Shutting down rendering");
@@ -216,28 +208,27 @@ final class ForgeOriginalVoxyRenderSystem {
             this.worldIn.getMapper().setBiomeCallback(null);
             this.worldIn.getMapper().setStateCallback(null);
 
-            this.nodeManager.stopOnRenderThread();
+            this.nodeManager.stop();
 
             this.modelService.shutdown();
             this.renderGen.shutdown();
-            this.traversal.freeOnRenderThread();
-            this.nodeCleaner.freeOnRenderThread();
-            this.geometryManager.clear();
-            this.geometryData.freeOnRenderThread();
+            this.traversal.free();
+            this.nodeCleaner.free();
+            this.geometryData.free();
 
-            this.chunkBoundRenderer.freeOnRenderThread();
+            this.chunkBoundRenderer.free();
 
             this.viewportSelector.free();
         } catch (Exception e) {Logger.error("Error shutting down renderer components", e);}
         Logger.info("Shutting down render pipeline");
         try {
-            this.sectionRenderer.freeOnRenderThread();
-            this.pipeline.freeOnRenderThread();
+            this.sectionRenderer.free();
+            this.pipeline.free();
         } catch (Exception e){Logger.error("Error releasing render pipeline", e);}
 
         Logger.info("Flushing download stream");
-        if (flushDownloadStream && ForgeOriginalVoxyDownloadStream.isReady()) {
-            ForgeOriginalVoxyDownloadStream.instance().flushWaitClear();
+        if (flushDownloadStream && DownloadStream.isReady()) {
+            DownloadStream.instance().flushWaitClear();
             flushed = true;
         }
 
@@ -253,60 +244,65 @@ final class ForgeOriginalVoxyRenderSystem {
             world.getMapper().setBiomeCallback(null);
             world.getMapper().setStateCallback(null);
         } catch (Exception e) {Logger.error("Error detaching callbacks after failed render system construction", e);}
-        try {if (this.nodeManager != null) this.nodeManager.stopOnRenderThread();} catch (Exception e) {Logger.error("Error stopping node manager after failed render system construction", e);}
+        try {if (this.nodeManager != null) this.nodeManager.stop();} catch (Exception e) {Logger.error("Error stopping node manager after failed render system construction", e);}
         try {if (this.modelService != null) this.modelService.shutdown();} catch (Exception e) {Logger.error("Error shutting down model bakery after failed render system construction", e);}
         try {if (this.renderGen != null) this.renderGen.shutdown();} catch (Exception e) {Logger.error("Error shutting down render generation after failed render system construction", e);}
-        try {if (this.traversal != null) this.traversal.freeOnRenderThread();} catch (Exception e) {Logger.error("Error freeing traversal after failed render system construction", e);}
-        try {if (this.nodeCleaner != null) this.nodeCleaner.freeOnRenderThread();} catch (Exception e) {Logger.error("Error freeing node cleaner after failed render system construction", e);}
-        try {if (this.geometryManager != null) this.geometryManager.clear();} catch (Exception e) {Logger.error("Error clearing geometry manager after failed render system construction", e);}
-        try {if (this.geometryData != null) this.geometryData.freeOnRenderThread();} catch (Exception e) {Logger.error("Error freeing geometry data after failed render system construction", e);}
-        try {if (this.chunkBoundRenderer != null) this.chunkBoundRenderer.freeOnRenderThread();} catch (Exception e) {Logger.error("Error freeing chunk-bound renderer after failed render system construction", e);}
+        try {if (this.traversal != null) this.traversal.free();} catch (Exception e) {Logger.error("Error freeing traversal after failed render system construction", e);}
+        try {if (this.nodeCleaner != null) this.nodeCleaner.free();} catch (Exception e) {Logger.error("Error freeing node cleaner after failed render system construction", e);}
+        try {if (this.geometryData != null) this.geometryData.free();} catch (Exception e) {Logger.error("Error freeing geometry data after failed render system construction", e);}
+        try {if (this.chunkBoundRenderer != null) this.chunkBoundRenderer.free();} catch (Exception e) {Logger.error("Error freeing chunk-bound renderer after failed render system construction", e);}
         try {if (this.viewportSelector != null) this.viewportSelector.free();} catch (Exception e) {Logger.error("Error freeing viewport selector after failed render system construction", e);}
-        try {if (this.sectionRenderer != null) this.sectionRenderer.freeOnRenderThread();} catch (Exception e) {Logger.error("Error freeing section renderer after failed render system construction", e);}
-        try {if (this.pipeline != null) this.pipeline.freeOnRenderThread();} catch (Exception e) {Logger.error("Error freeing render pipeline after failed render system construction", e);}
+        try {if (this.sectionRenderer != null) this.sectionRenderer.free();} catch (Exception e) {Logger.error("Error freeing section renderer after failed render system construction", e);}
+        try {if (this.pipeline != null) this.pipeline.free();} catch (Exception e) {Logger.error("Error freeing render pipeline after failed render system construction", e);}
     }
 
     WorldEngine getEngine() {
         return this.worldIn;
     }
 
-    ForgeOriginalVoxyModelBakerySubsystem modelService() {
+    void addDebugInfo(List<String> debug) {
+        this.modelService.addDebugData(debug);
+        this.renderGen.addDebugData(debug);
+        this.nodeManager.addDebug(debug);
+        this.sectionRenderer.addDebug(debug);
+        this.traversal.addDebug(debug);
+        RenderStatistics.addDebug(debug);
+        this.pipeline.addDebug(debug);
+    }
+
+    ModelBakerySubsystem modelService() {
         return this.modelService;
     }
 
-    ForgeOriginalVoxyRenderGenerationService renderGenerationService() {
+    RenderGenerationService renderGenerationService() {
         return this.renderGen;
     }
 
-    ForgeOriginalVoxyBasicSectionGeometryData geometryData() {
+    BasicSectionGeometryData geometryData() {
         return this.geometryData;
     }
 
-    ForgeOriginalVoxyBasicAsyncGeometryManager geometryManager() {
-        return this.geometryManager;
-    }
-
-    ForgeOriginalVoxyAsyncNodeGeometrySync nodeManager() {
+    AsyncNodeManager nodeManager() {
         return this.nodeManager;
     }
 
-    ForgeOriginalVoxyNodeCleaner nodeCleaner() {
+    NodeCleaner nodeCleaner() {
         return this.nodeCleaner;
     }
 
-    ForgeOriginalVoxyHierarchicalOcclusionTraverser traversal() {
+    HierarchicalOcclusionTraverser traversal() {
         return this.traversal;
     }
 
-    ForgeOriginalVoxyRenderDistanceTracker renderDistanceTracker() {
+    RenderDistanceTracker renderDistanceTracker() {
         return this.renderDistanceTracker;
     }
 
-    ForgeOriginalVoxyChunkBoundRenderer chunkBoundRenderer() {
+    ChunkBoundRenderer chunkBoundRenderer() {
         return this.chunkBoundRenderer;
     }
 
-    ForgeOriginalVoxyViewportSelector viewportSelector() {
+    ViewportSelector viewportSelector() {
         return this.viewportSelector;
     }
 
@@ -314,7 +310,7 @@ final class ForgeOriginalVoxyRenderSystem {
         return this.pipeline;
     }
 
-    ForgeOriginalVoxyMdicSectionRenderer sectionRenderer() {
+    MDICSectionRenderer sectionRenderer() {
         return this.sectionRenderer;
     }
 }

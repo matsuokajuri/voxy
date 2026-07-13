@@ -1,0 +1,782 @@
+package me.cortex.voxy.forge;
+
+import me.cortex.voxy.common.world.WorldEngine;
+import me.cortex.voxy.common.util.TrackedObject;
+import net.minecraft.client.Minecraft;
+import net.minecraft.core.Direction;
+import org.joml.Matrix4f;
+import org.lwjgl.opengl.GL;
+import org.lwjgl.system.MemoryStack;
+import org.lwjgl.system.MemoryUtil;
+
+import java.util.List;
+
+import static org.lwjgl.opengl.ARBIndirectParameters.GL_PARAMETER_BUFFER_ARB;
+import static org.lwjgl.opengl.ARBIndirectParameters.glMultiDrawElementsIndirectCountARB;
+import static org.lwjgl.opengl.GL11C.GL_BLEND;
+import static org.lwjgl.opengl.GL11C.GL_BACK;
+import static org.lwjgl.opengl.GL11C.GL_COLOR_WRITEMASK;
+import static org.lwjgl.opengl.GL11C.GL_CULL_FACE;
+import static org.lwjgl.opengl.GL11C.GL_CULL_FACE_MODE;
+import static org.lwjgl.opengl.GL11C.GL_CCW;
+import static org.lwjgl.opengl.GL11C.GL_DEPTH_FUNC;
+import static org.lwjgl.opengl.GL11C.GL_DEPTH_WRITEMASK;
+import static org.lwjgl.opengl.GL11C.GL_DEPTH_TEST;
+import static org.lwjgl.opengl.GL11C.GL_EQUAL;
+import static org.lwjgl.opengl.GL11C.GL_FALSE;
+import static org.lwjgl.opengl.GL11C.GL_FRONT_AND_BACK;
+import static org.lwjgl.opengl.GL11C.GL_FRONT_FACE;
+import static org.lwjgl.opengl.GL11C.GL_KEEP;
+import static org.lwjgl.opengl.GL11C.GL_LINE;
+import static org.lwjgl.opengl.GL11C.GL_SCISSOR_TEST;
+import static org.lwjgl.opengl.GL11C.GL_STENCIL_TEST;
+import static org.lwjgl.opengl.GL11C.GL_TRIANGLES;
+import static org.lwjgl.opengl.GL11C.GL_TRUE;
+import static org.lwjgl.opengl.GL11C.GL_UNSIGNED_BYTE;
+import static org.lwjgl.opengl.GL11C.GL_UNSIGNED_SHORT;
+import static org.lwjgl.opengl.GL11C.glColorMask;
+import static org.lwjgl.opengl.GL11C.glDepthFunc;
+import static org.lwjgl.opengl.GL11C.glDepthMask;
+import static org.lwjgl.opengl.GL11C.glDisable;
+import static org.lwjgl.opengl.GL11C.glEnable;
+import static org.lwjgl.opengl.GL11C.glCullFace;
+import static org.lwjgl.opengl.GL11C.glFrontFace;
+import static org.lwjgl.opengl.GL11C.glGetBoolean;
+import static org.lwjgl.opengl.GL11C.glGetBooleanv;
+import static org.lwjgl.opengl.GL11C.glGetInteger;
+import static org.lwjgl.opengl.GL11C.glIsEnabled;
+import static org.lwjgl.opengl.GL11C.glPolygonMode;
+import static org.lwjgl.opengl.GL11C.glStencilFunc;
+import static org.lwjgl.opengl.GL11C.glStencilMask;
+import static org.lwjgl.opengl.GL11C.glStencilOp;
+import static org.lwjgl.opengl.GL11C.GL_FILL;
+import static org.lwjgl.opengl.GL15C.GL_ELEMENT_ARRAY_BUFFER;
+import static org.lwjgl.opengl.GL15C.glBindBuffer;
+import static org.lwjgl.opengl.GL14C.GL_ONE;
+import static org.lwjgl.opengl.GL14C.GL_ONE_MINUS_SRC_ALPHA;
+import static org.lwjgl.opengl.GL14C.GL_SRC_ALPHA;
+import static org.lwjgl.opengl.GL14C.glBlendFuncSeparate;
+import static org.lwjgl.opengl.GL20C.GL_COMPILE_STATUS;
+import static org.lwjgl.opengl.GL20C.GL_FRAGMENT_SHADER;
+import static org.lwjgl.opengl.GL20C.GL_LINK_STATUS;
+import static org.lwjgl.opengl.GL20C.GL_VERTEX_SHADER;
+import static org.lwjgl.opengl.GL20C.glAttachShader;
+import static org.lwjgl.opengl.GL20C.glCreateProgram;
+import static org.lwjgl.opengl.GL20C.glCreateShader;
+import static org.lwjgl.opengl.GL20C.glDeleteProgram;
+import static org.lwjgl.opengl.GL20C.glDeleteShader;
+import static org.lwjgl.opengl.GL20C.glGetProgramInfoLog;
+import static org.lwjgl.opengl.GL20C.glGetProgrami;
+import static org.lwjgl.opengl.GL20C.glGetShaderInfoLog;
+import static org.lwjgl.opengl.GL20C.glGetShaderi;
+import static org.lwjgl.opengl.GL20C.glLinkProgram;
+import static org.lwjgl.opengl.GL20C.glShaderSource;
+import static org.lwjgl.opengl.GL20C.glUseProgram;
+import static org.lwjgl.opengl.GL20C.glCompileShader;
+import static org.lwjgl.opengl.GL30C.glBindBufferBase;
+import static org.lwjgl.opengl.GL30C.glBindVertexArray;
+import static org.lwjgl.opengl.GL30C.glDeleteVertexArrays;
+import static org.lwjgl.opengl.GL30C.glGenVertexArrays;
+import static org.lwjgl.opengl.GL31C.GL_UNIFORM_BUFFER;
+import static org.lwjgl.opengl.GL32C.GL_FIRST_VERTEX_CONVENTION;
+import static org.lwjgl.opengl.GL32C.glProvokingVertex;
+import static org.lwjgl.opengl.GL33C.glBindSampler;
+import static org.lwjgl.opengl.GL40C.GL_DRAW_INDIRECT_BUFFER;
+import static org.lwjgl.opengl.GL40C.glDrawElementsIndirect;
+import static org.lwjgl.opengl.GL42C.glMemoryBarrier;
+import static org.lwjgl.opengl.GL43C.GL_COMMAND_BARRIER_BIT;
+import static org.lwjgl.opengl.GL43C.GL_COMPUTE_SHADER;
+import static org.lwjgl.opengl.GL43C.GL_DISPATCH_INDIRECT_BUFFER;
+import static org.lwjgl.opengl.GL43C.GL_SHADER_STORAGE_BARRIER_BIT;
+import static org.lwjgl.opengl.GL43C.GL_SHADER_STORAGE_BUFFER;
+import static org.lwjgl.opengl.GL43C.glDispatchCompute;
+import static org.lwjgl.opengl.GL43C.glDispatchComputeIndirect;
+import static org.lwjgl.opengl.GL45C.glBindTextureUnit;
+import static org.lwjgl.opengl.GL30C.GL_RASTERIZER_DISCARD;
+import static org.lwjgl.opengl.NVRepresentativeFragmentTest.GL_REPRESENTATIVE_FRAGMENT_TEST_NV;
+
+final class MDICSectionRenderer extends TrackedObject {
+    private static final int OPAQUE_DRAW_COUNT = MDICViewport.OPAQUE_DRAW_COUNT;
+    private static final int TRANSLUCENT_DRAW_COUNT = MDICViewport.TRANSLUCENT_DRAW_COUNT;
+    private static final int TRANSLUCENT_OFFSET = OPAQUE_DRAW_COUNT;
+    private static final int TEMPORAL_OFFSET = TRANSLUCENT_OFFSET + TRANSLUCENT_DRAW_COUNT;
+    private static final int TRANSLUCENT_WRITE_BASE = 1024;
+    private static final int CULL_COMMAND_OFFSET_BYTES = 6 * Integer.BYTES;
+    private static final int DRAW_BUFFER_BINDING = 1;
+    private static final int DRAW_COUNT_BUFFER_BINDING = 2;
+    private static final int SECTION_METADATA_BUFFER_BINDING = 3;
+    private static final int VISIBILITY_BUFFER_BINDING = 4;
+    private static final int INDIRECT_SECTION_LOOKUP_BINDING = 5;
+    private static final int POSITION_SCRATCH_BINDING = 6;
+    private static final int TRANSLUCENT_DISTANCE_BUFFER_BINDING = 7;
+    private static final int STATISTICS_BUFFER_BINDING = 8;
+    private static final int TRANSLUCENT_INDIRECT_SECTION_LOOKUP_BINDING = 4;
+    private static final int TRANSLUCENT_BUILD_DISTANCE_BUFFER_BINDING = 5;
+
+    private final GlBuffer uniformBuffer = new GlBuffer(1024).zero();
+    private final GlBuffer distanceCountBuffer =
+            new GlBuffer(TRANSLUCENT_WRITE_BASE * 4L + TRANSLUCENT_DRAW_COUNT * 4L).zero();
+    private final GlBuffer statisticsBuffer = new GlBuffer(1024).zero();
+    private final SharedIndexBuffer sharedIndexBuffer = SharedIndexBuffer.INSTANCE;
+    private final int vertexArrayId = glGenVertexArrays();
+    private int terrainProgramId;
+    private int translucentTerrainProgramId;
+    private int prepProgramId;
+    private int cullProgramId;
+    private int cmdgenProgramId;
+    private int prefixSumProgramId;
+    private int translucentGenProgramId;
+    private RenderProperties properties;
+    private ForgeOriginalVoxyRenderPipeline pipeline;
+
+    String buildOnRenderThread(ForgeOriginalVoxyRenderPipeline pipeline) {
+        try {
+            this.freePrograms();
+            this.pipeline = pipeline;
+            this.properties = pipeline.properties();
+            String vertexSource = this.properties.injectDefines(ShaderLoader.parse("voxy:lod/gl46/quads3.vert"));
+            String taa = pipeline.taaFunction("taaShift");
+            if (taa != null) {
+                vertexSource += "\n" + taa;
+                vertexSource = withDefines(vertexSource, "TAA_PATCH", 1);
+            }
+            vertexSource = injectDirectionalFaceTint(vertexSource);
+            String fragmentSource = ShaderLoader.parse("voxy:lod/gl46/quads.frag");
+            String opaqueFragmentSource = pipeline.patchOpaqueShader(this, fragmentSource);
+            opaqueFragmentSource = opaqueFragmentSource == null ? fragmentSource : opaqueFragmentSource;
+            ShaderProgramBuildResult opaqueShader = compilePatchedOrNormal(
+                    vertexSource,
+                    opaqueFragmentSource,
+                    fragmentSource,
+                    "quads");
+            this.terrainProgramId = opaqueShader.programId();
+
+            String translucentVertexSource = withDefines(vertexSource, "TRANSLUCENT", 1);
+            String normalTranslucentFragmentSource = withDefines(fragmentSource, "TRANSLUCENT", 1);
+            String translucentFragmentSource = pipeline.patchTranslucentShader(this, fragmentSource);
+            translucentFragmentSource = translucentFragmentSource == null
+                    ? normalTranslucentFragmentSource
+                    : withDefines(translucentFragmentSource, "TRANSLUCENT", 1);
+            ShaderProgramBuildResult translucentShader = compilePatchedOrNormal(
+                    translucentVertexSource,
+                    translucentFragmentSource,
+                    normalTranslucentFragmentSource,
+                    "quads translucent");
+            this.translucentTerrainProgramId = translucentShader.programId();
+            this.prepProgramId = compileComputeProgram(ShaderLoader.parse("voxy:lod/gl46/prep.comp"), "prep.comp");
+            String cullVertexSource = ShaderLoader.parse("voxy:lod/gl46/cull/raster.vert");
+            String cullTaa = pipeline.taaFunction("getTAA");
+            if (cullTaa != null) {
+                cullVertexSource += "\n\n\n\n" + cullTaa;
+                cullVertexSource = withDefines(cullVertexSource, "TAA", 1);
+            }
+            cullVertexSource = this.properties.injectDefines(cullVertexSource);
+            String cullFragmentSource = ShaderLoader.parse("voxy:lod/gl46/cull/raster.frag");
+            this.cullProgramId = compileProgram(cullVertexSource, cullFragmentSource, "cull/raster");
+            String cmdgenSource = withDefines(
+                    ShaderLoader.parse("voxy:lod/gl46/cmdgen.comp"),
+                    "TRANSLUCENT_WRITE_BASE", TRANSLUCENT_WRITE_BASE,
+                    "TEMPORAL_OFFSET", TEMPORAL_OFFSET,
+                    "TRANSLUCENT_DISTANCE_BUFFER_BINDING", TRANSLUCENT_DISTANCE_BUFFER_BINDING);
+            if (RenderStatistics.enabled) {
+                cmdgenSource = withDefines(
+                        cmdgenSource,
+                        "HAS_STATISTICS", 1,
+                        "STATISTICS_BUFFER_BINDING", STATISTICS_BUFFER_BINDING);
+            }
+            this.cmdgenProgramId = compileComputeProgram(cmdgenSource, "cmdgen.comp");
+            String prefixSumSource = withDefines(
+                    ShaderLoader.parse(supportsSubgroupPrefixSum()
+                            ? "voxy:util/prefixsum/inital3.comp"
+                            : "voxy:util/prefixsum/simple.comp"),
+                    "IO_BUFFER", 0);
+            this.prefixSumProgramId = compileComputeProgram(prefixSumSource, "prefixsum");
+            String translucentGenSource = withDefines(
+                    ShaderLoader.parse("voxy:lod/gl46/buildtranslucents.comp"),
+                    "TRANSLUCENT_WRITE_BASE", TRANSLUCENT_WRITE_BASE,
+                    "TRANSLUCENT_DISTANCE_BUFFER_BINDING", TRANSLUCENT_BUILD_DISTANCE_BUFFER_BINDING,
+                    "TRANSLUCENT_OFFSET", TRANSLUCENT_OFFSET);
+            this.translucentGenProgramId = compileComputeProgram(translucentGenSource, "buildtranslucents.comp");
+            return "none";
+        } catch (RuntimeException e) {
+            this.freePrograms();
+            return this.recordFailure("original-mdic-cmdgen-build-" + e.getClass().getSimpleName() + ":" + e.getMessage());
+        }
+    }
+
+    boolean ready() {
+        return this.terrainProgramId != 0
+                && this.translucentTerrainProgramId != 0
+                && this.prepProgramId != 0
+                && this.cullProgramId != 0
+                && this.cmdgenProgramId != 0
+                && this.prefixSumProgramId != 0
+                && this.translucentGenProgramId != 0
+                && this.uniformBuffer.id != 0
+                && this.distanceCountBuffer.id != 0
+                && this.statisticsBuffer.id != 0
+                && this.sharedIndexBuffer.ready()
+                && this.vertexArrayId != 0;
+    }
+
+    void renderOpaque(
+            MDICViewport viewport,
+            BasicSectionGeometryData geometryData,
+            ModelStore modelStore,
+            ForgeOriginalVoxyRenderPipeline pipeline) {
+        if (geometryData == null || geometryData.getSectionCount() == 0) {
+            return;
+        }
+        this.uploadUniformBuffer(viewport);
+        int maxDrawCount = Math.min((int) (geometryData.getSectionCount() * 4.4D + 128), OPAQUE_DRAW_COUNT);
+        this.renderTerrain(
+                viewport,
+                geometryData,
+                modelStore,
+                pipeline,
+                this.terrainProgramId,
+                0L,
+                4L * 3L,
+                maxDrawCount);
+    }
+
+    void renderTemporal(
+            MDICViewport viewport,
+            BasicSectionGeometryData geometryData,
+            ModelStore modelStore,
+            ForgeOriginalVoxyRenderPipeline pipeline) {
+        if (geometryData == null || geometryData.getSectionCount() == 0) {
+            return;
+        }
+        this.renderTerrain(
+                viewport,
+                geometryData,
+                modelStore,
+                pipeline,
+                this.terrainProgramId,
+                TEMPORAL_OFFSET * 5L * 4L,
+                4L * 5L,
+                Math.min(geometryData.getSectionCount(), MDICViewport.TEMPORAL_DRAW_COUNT));
+    }
+
+    void postOpaquePreperation(MDICViewport viewport) {
+    }
+
+    void renderTranslucent(
+            MDICViewport viewport,
+            BasicSectionGeometryData geometryData,
+            ModelStore modelStore,
+            ForgeOriginalVoxyRenderPipeline pipeline) {
+        if (geometryData == null || geometryData.getSectionCount() == 0) {
+            return;
+        }
+        if (!pipeline.translucentDrawTargetReady()) {
+            this.recordFailure("original-mdic-section-renderer-translucent-target-not-ready");
+            return;
+        }
+        glEnable(GL_BLEND);
+        glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+        glDisable(GL_CULL_FACE);
+        glEnable(GL_DEPTH_TEST);
+        glDepthFunc(this.properties.closerEqualDepthCompare());
+        glUseProgram(this.translucentTerrainProgramId);
+        glBindVertexArray(this.vertexArrayId);
+        pipeline.setupAndBindTranslucent(viewport);
+        this.bindRenderingBuffers(viewport, geometryData, modelStore);
+        glMemoryBarrier(GL_COMMAND_BARRIER_BIT | GL_SHADER_STORAGE_BARRIER_BIT);
+        glProvokingVertex(GL_FIRST_VERTEX_CONVENTION);
+        glMultiDrawElementsIndirectCountARB(
+                GL_TRIANGLES,
+                GL_UNSIGNED_SHORT,
+                TRANSLUCENT_OFFSET * 5L * 4L,
+                4L * 4L,
+                Math.min(geometryData.getSectionCount(), TRANSLUCENT_DRAW_COUNT),
+                0);
+        glEnable(GL_CULL_FACE);
+        glBindVertexArray(0);
+        glBindSampler(0, 0);
+        glBindTextureUnit(0, 0);
+        glBindSampler(1, 0);
+        glBindTextureUnit(1, 0);
+        glDisable(GL_BLEND);
+    }
+
+    void buildDrawCalls(
+            MDICViewport viewport,
+            BasicSectionGeometryData geometryData,
+            RenderProperties properties) {
+        if (!this.ready()) {
+            this.recordFailure("original-mdic-cmdgen-not-ready");
+            return;
+        }
+        if (geometryData == null || geometryData.getMetadataBuffer() == 0 || geometryData.getGeometryBuffer() == 0) {
+            this.recordFailure("original-mdic-cmdgen-geometry-data-not-ready");
+            return;
+        }
+        if (viewport == null || !viewport.ready()) {
+            this.recordFailure("original-mdic-cmdgen-viewport-not-ready");
+            return;
+        }
+        try {
+            this.uploadUniformBuffer(viewport);
+            this.dispatchPrep(viewport);
+            GPUTiming.INSTANCE.marker("OT");
+            this.rasterCullVisibility(viewport, geometryData, properties);
+            GPUTiming.INSTANCE.marker("CG");
+            this.dispatchCmdgen(viewport, geometryData);
+            GPUTiming.INSTANCE.marker("TS");
+            this.dispatchTranslucentCommandGeneration(viewport, geometryData);
+        } catch (RuntimeException e) {
+            this.recordFailure("original-mdic-cmdgen-run-" + e.getClass().getSimpleName() + ":" + e.getMessage());
+        }
+    }
+
+    void addDebug(List<String> lines) {
+        // Original MDICSectionRenderer delegates to an empty base implementation.
+    }
+
+    @Override
+    public void free() {
+        this.free0();
+        this.freePrograms();
+        this.uniformBuffer.free();
+        this.distanceCountBuffer.free();
+        this.statisticsBuffer.free();
+        if (this.vertexArrayId != 0) {
+            glDeleteVertexArrays(this.vertexArrayId);
+        }
+    }
+
+    private void bindRenderingBuffers(
+            MDICViewport viewport,
+            BasicSectionGeometryData geometryData,
+            ModelStore modelStore) {
+        glBindBufferBase(GL_UNIFORM_BUFFER, 0, this.uniformBuffer.id);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, geometryData.getGeometryBuffer());
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, geometryData.getMetadataBuffer());
+        modelStore.bind(3, 4, 0);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 5, viewport.positionScratchBuffer.id);
+        bindLightmap(1);
+        glBindTextureUnit(2, viewport.depthBoundingTextureId());
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, this.sharedIndexBuffer.id());
+        glBindBuffer(GL_DRAW_INDIRECT_BUFFER, viewport.drawCallBuffer.id);
+        glBindBuffer(GL_PARAMETER_BUFFER_ARB, viewport.drawCountCallBuffer.id);
+    }
+
+    private void renderTerrain(
+            MDICViewport viewport,
+            BasicSectionGeometryData geometryData,
+            ModelStore modelStore,
+            ForgeOriginalVoxyRenderPipeline pipeline,
+            int programId,
+            long indirectOffset,
+            long drawCountOffset,
+            int maxDrawCount) {
+        if (!this.ready()) {
+            this.recordFailure("original-mdic-section-renderer-not-ready");
+            return;
+        }
+        if (viewport == null || !viewport.ready()) {
+            this.recordFailure("original-mdic-section-renderer-viewport-not-ready");
+            return;
+        }
+        if (geometryData == null || geometryData.getGeometryBuffer() == 0 || geometryData.getMetadataBuffer() == 0) {
+            this.recordFailure("original-mdic-section-renderer-geometry-not-ready");
+            return;
+        }
+        if (modelStore == null) {
+            this.recordFailure("original-mdic-section-renderer-model-store-not-ready");
+            return;
+        }
+        if (!pipeline.opaqueDrawTargetReady()) {
+            this.recordFailure("original-mdic-section-renderer-opaque-target-not-ready");
+            return;
+        }
+        glDisable(GL_CULL_FACE);
+        glDisable(GL_BLEND);
+        glEnable(GL_DEPTH_TEST);
+        glDepthFunc(this.properties.closerEqualDepthCompare());
+        glUseProgram(programId);
+        glBindVertexArray(this.vertexArrayId);
+        pipeline.setupAndBindOpaque(viewport);
+        this.bindRenderingBuffers(viewport, geometryData, modelStore);
+        glMemoryBarrier(GL_COMMAND_BARRIER_BIT | GL_SHADER_STORAGE_BARRIER_BIT);
+        glProvokingVertex(GL_FIRST_VERTEX_CONVENTION);
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+        glMultiDrawElementsIndirectCountARB(
+                GL_TRIANGLES,
+                GL_UNSIGNED_SHORT,
+                indirectOffset,
+                drawCountOffset,
+                maxDrawCount,
+                0);
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+        glEnable(GL_CULL_FACE);
+        glBindVertexArray(0);
+        glBindSampler(0, 0);
+        glBindTextureUnit(0, 0);
+        glBindSampler(1, 0);
+        glBindTextureUnit(1, 0);
+    }
+
+    private void uploadUniformBuffer(MDICViewport viewport) {
+        long ptr = UploadStream.instance().upload(this.uniformBuffer.id, 0L, 1024L);
+
+        Matrix4f mvp = new Matrix4f(viewport.MVP);
+        mvp.translate(-viewport.innerTranslation.x, -viewport.innerTranslation.y, -viewport.innerTranslation.z);
+        mvp.getToAddress(ptr);
+        ptr += 4L * 4L * 4L;
+
+        viewport.section.getToAddress(ptr);
+        ptr += 4L * 3L;
+        if (viewport.frameId < 0) {
+            VoxyForge.LOGGER.error("Original MDIC frame id is negative; wrapping as original renderer expects");
+            viewport.frameId &= 0x7fffffff;
+        }
+        MemoryUtil.memPutInt(ptr, viewport.frameId & 0x7fffffff);
+        ptr += 4L;
+        viewport.innerTranslation.getToAddress(ptr);
+        UploadStream.instance().commit();
+    }
+
+    private void dispatchPrep(MDICViewport viewport) {
+        glUseProgram(this.prepProgramId);
+        glBindBufferBase(GL_UNIFORM_BUFFER, 0, this.uniformBuffer.id);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, viewport.drawCountCallBuffer.id);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, viewport.renderListBufferId());
+        glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+        glDispatchCompute(1, 1, 1);
+        glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+        glUseProgram(0);
+    }
+
+    private void rasterCullVisibility(
+            MDICViewport viewport,
+            BasicSectionGeometryData geometryData,
+            RenderProperties properties) {
+        boolean depthWasEnabled = glIsEnabled(GL_DEPTH_TEST);
+        boolean cullWasEnabled = glIsEnabled(GL_CULL_FACE);
+        boolean scissorWasEnabled = glIsEnabled(GL_SCISSOR_TEST);
+        boolean rasterizerDiscardWasEnabled = glIsEnabled(GL_RASTERIZER_DISCARD);
+        boolean depthMask = glGetBoolean(GL_DEPTH_WRITEMASK);
+        int depthFunc = glGetInteger(GL_DEPTH_FUNC);
+        int cullFaceMode = glGetInteger(GL_CULL_FACE_MODE);
+        int frontFace = glGetInteger(GL_FRONT_FACE);
+        boolean representativeFragmentEnabled = false;
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            var colorMask = stack.malloc(4);
+            glGetBooleanv(GL_COLOR_WRITEMASK, colorMask);
+            boolean colorMaskR = colorMask.get(0) != 0;
+            boolean colorMaskG = colorMask.get(1) != 0;
+            boolean colorMaskB = colorMask.get(2) != 0;
+            boolean colorMaskA = colorMask.get(3) != 0;
+            try {
+                glUseProgram(this.cullProgramId);
+                if (this.pipeline != null && this.pipeline.hasTAA()) {
+                    this.pipeline.bindUniforms();
+                }
+                glBindVertexArray(this.vertexArrayId);
+                glBindBufferBase(GL_UNIFORM_BUFFER, 0, this.uniformBuffer.id);
+                glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, geometryData.getMetadataBuffer());
+                glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, viewport.visibilityBuffer.id);
+                glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, viewport.indirectLookupBuffer.id);
+                glBindBuffer(GL_DRAW_INDIRECT_BUFFER, viewport.drawCountCallBuffer.id);
+                glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, this.sharedIndexBuffer.id());
+                if (representativeFragmentTestSupported()) {
+                    glEnable(GL_REPRESENTATIVE_FRAGMENT_TEST_NV);
+                    representativeFragmentEnabled = true;
+                }
+                glDisable(GL_SCISSOR_TEST);
+                glDisable(GL_RASTERIZER_DISCARD);
+                glCullFace(GL_BACK);
+                glFrontFace(GL_CCW);
+                glEnable(GL_DEPTH_TEST);
+                glDepthFunc(properties.closerEqualDepthCompare());
+                glEnable(GL_STENCIL_TEST);
+                glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
+                glStencilFunc(GL_EQUAL, 1, 0xFF);
+                glStencilMask(0xFF);
+                glColorMask(false, false, false, false);
+                glDepthMask(false);
+                glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT | GL_COMMAND_BARRIER_BIT);
+                glDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_BYTE, CULL_COMMAND_OFFSET_BYTES);
+            } finally {
+                if (representativeFragmentEnabled) {
+                    glDisable(GL_REPRESENTATIVE_FRAGMENT_TEST_NV);
+                }
+                glDepthMask(depthMask);
+                glColorMask(colorMaskR, colorMaskG, colorMaskB, colorMaskA);
+            }
+        } finally {
+            if (!depthWasEnabled) {
+                glDisable(GL_DEPTH_TEST);
+            }
+            if (cullWasEnabled) {
+                glEnable(GL_CULL_FACE);
+            } else {
+                glDisable(GL_CULL_FACE);
+            }
+            if (scissorWasEnabled) {
+                glEnable(GL_SCISSOR_TEST);
+            } else {
+                glDisable(GL_SCISSOR_TEST);
+            }
+            if (rasterizerDiscardWasEnabled) {
+                glEnable(GL_RASTERIZER_DISCARD);
+            } else {
+                glDisable(GL_RASTERIZER_DISCARD);
+            }
+            glCullFace(cullFaceMode);
+            glFrontFace(frontFace);
+            glDepthFunc(depthFunc);
+            glBindVertexArray(0);
+            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+            glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
+            glUseProgram(0);
+        }
+    }
+
+    private void dispatchCmdgen(
+            MDICViewport viewport,
+            BasicSectionGeometryData geometryData) {
+        this.distanceCountBuffer.zeroRange(0L, TRANSLUCENT_WRITE_BASE * 4L);
+        glUseProgram(this.cmdgenProgramId);
+        glBindBufferBase(GL_UNIFORM_BUFFER, 0, this.uniformBuffer.id);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, DRAW_BUFFER_BINDING, viewport.drawCallBuffer.id);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, DRAW_COUNT_BUFFER_BINDING, viewport.drawCountCallBuffer.id);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, SECTION_METADATA_BUFFER_BINDING, geometryData.getMetadataBuffer());
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, VISIBILITY_BUFFER_BINDING, viewport.visibilityBuffer.id);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, INDIRECT_SECTION_LOOKUP_BINDING, viewport.indirectLookupBuffer.id);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, POSITION_SCRATCH_BINDING, viewport.positionScratchBuffer.id);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, TRANSLUCENT_DISTANCE_BUFFER_BINDING, this.distanceCountBuffer.id);
+        if (RenderStatistics.enabled) {
+            this.statisticsBuffer.zero();
+            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, STATISTICS_BUFFER_BINDING, this.statisticsBuffer.id);
+        }
+
+        glBindBuffer(GL_DISPATCH_INDIRECT_BUFFER, viewport.drawCountCallBuffer.id);
+        glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+        glDispatchComputeIndirect(0L);
+        glMemoryBarrier(GL_COMMAND_BARRIER_BIT | GL_SHADER_STORAGE_BARRIER_BIT);
+        if (RenderStatistics.enabled) {
+            DownloadStream.instance().download(
+                    this.statisticsBuffer.id,
+                    this.statisticsBuffer.size(),
+                    down -> {
+                        final int layers = WorldEngine.MAX_LOD_LAYER + 1;
+                        for (int i = 0; i < layers; i++) {
+                            RenderStatistics.visibleSections[i] = MemoryUtil.memGetInt(down.address + i * 4L);
+                        }
+                        for (int i = 0; i < layers; i++) {
+                            RenderStatistics.quadCount[i] = MemoryUtil.memGetInt(down.address + layers * 4L + i * 4L);
+                        }
+                    });
+        }
+        glBindBuffer(GL_DISPATCH_INDIRECT_BUFFER, 0);
+        glUseProgram(0);
+    }
+
+    private void dispatchTranslucentCommandGeneration(
+            MDICViewport viewport,
+            BasicSectionGeometryData geometryData) {
+        glUseProgram(this.prefixSumProgramId);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, this.distanceCountBuffer.id);
+        glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+        glDispatchCompute(1, 1, 1);
+        glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+
+        glUseProgram(this.translucentGenProgramId);
+        glBindBufferBase(GL_UNIFORM_BUFFER, 0, this.uniformBuffer.id);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, DRAW_BUFFER_BINDING, viewport.drawCallBuffer.id);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, DRAW_COUNT_BUFFER_BINDING, viewport.drawCountCallBuffer.id);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, SECTION_METADATA_BUFFER_BINDING, geometryData.getMetadataBuffer());
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, TRANSLUCENT_INDIRECT_SECTION_LOOKUP_BINDING, viewport.indirectLookupBuffer.id);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, TRANSLUCENT_BUILD_DISTANCE_BUFFER_BINDING, this.distanceCountBuffer.id);
+        glBindBuffer(GL_DISPATCH_INDIRECT_BUFFER, viewport.drawCountCallBuffer.id);
+        glMemoryBarrier(GL_COMMAND_BARRIER_BIT | GL_SHADER_STORAGE_BARRIER_BIT);
+        glDispatchComputeIndirect(0L);
+        glMemoryBarrier(GL_COMMAND_BARRIER_BIT | GL_SHADER_STORAGE_BARRIER_BIT);
+        glBindBuffer(GL_DISPATCH_INDIRECT_BUFFER, 0);
+        glUseProgram(0);
+    }
+
+    private void freePrograms() {
+        if (this.terrainProgramId != 0) {
+            glDeleteProgram(this.terrainProgramId);
+            this.terrainProgramId = 0;
+        }
+        if (this.translucentTerrainProgramId != 0) {
+            glDeleteProgram(this.translucentTerrainProgramId);
+            this.translucentTerrainProgramId = 0;
+        }
+        if (this.prepProgramId != 0) {
+            glDeleteProgram(this.prepProgramId);
+            this.prepProgramId = 0;
+        }
+        if (this.cullProgramId != 0) {
+            glDeleteProgram(this.cullProgramId);
+            this.cullProgramId = 0;
+        }
+        if (this.cmdgenProgramId != 0) {
+            glDeleteProgram(this.cmdgenProgramId);
+            this.cmdgenProgramId = 0;
+        }
+        if (this.prefixSumProgramId != 0) {
+            glDeleteProgram(this.prefixSumProgramId);
+            this.prefixSumProgramId = 0;
+        }
+        if (this.translucentGenProgramId != 0) {
+            glDeleteProgram(this.translucentGenProgramId);
+            this.translucentGenProgramId = 0;
+        }
+    }
+
+    private static String withDefines(String source, Object... defines) {
+        StringBuilder builder = new StringBuilder();
+        int split = source.indexOf('\n');
+        builder.append(source, 0, split + 1);
+        for (int i = 0; i < defines.length; i += 2) {
+            builder.append("#define ").append(defines[i]).append(' ').append(defines[i + 1]).append('\n');
+        }
+        builder.append(source.substring(split + 1));
+        return builder.toString();
+    }
+
+    private static String injectDirectionalFaceTint(String source) {
+        float noShade = 1.0F;
+        float up = 1.0F;
+        float down = 1.0F;
+        float zAxis = 1.0F;
+        float xAxis = 1.0F;
+        var level = Minecraft.getInstance().level;
+        if (level != null) {
+            noShade = level.getShade(Direction.UP, false);
+            up = level.getShade(Direction.UP, false);
+            down = level.getShade(Direction.DOWN, true);
+            zAxis = level.getShade(Direction.NORTH, true);
+            xAxis = level.getShade(Direction.EAST, true);
+        }
+        return withDefines(
+                source,
+                "NO_SHADE_FACE_TINT", floatLiteral(noShade),
+                "UP_FACE_TINT", floatLiteral(up),
+                "DOWN_FACE_TINT", floatLiteral(down),
+                "Z_AXIS_FACE_TINT", floatLiteral(zAxis),
+                "X_AXIS_FACE_TINT", floatLiteral(xAxis));
+    }
+
+    private static void bindLightmap(int lightingIndex) {
+        glBindSampler(lightingIndex, 0);
+        glBindTextureUnit(lightingIndex, ForgeOriginalVoxyRenderStateCapture.lightTextureId());
+    }
+
+    private static boolean representativeFragmentTestSupported() {
+        return GL.getCapabilities().GL_NV_representative_fragment_test;
+    }
+
+    private static boolean supportsSubgroupPrefixSum() {
+        if (!GL.getCapabilities().GL_KHR_shader_subgroup) {
+            return false;
+        }
+        int shader = 0;
+        try {
+            shader = compileShader(GL_COMPUTE_SHADER, """
+                    #version 430
+                    #extension GL_KHR_shader_subgroup_basic : require
+                    #extension GL_KHR_shader_subgroup_arithmetic : require
+                    layout(local_size_x=32) in;
+                    void main() {
+                        uint value = subgroupExclusiveAdd(gl_LocalInvocationIndex);
+                    }
+                    """, "subgroup-prefix-sum-probe");
+            return true;
+        } catch (RuntimeException ignored) {
+            return false;
+        } finally {
+            if (shader != 0) {
+                glDeleteShader(shader);
+            }
+        }
+    }
+
+    private static String floatLiteral(float value) {
+        if (Float.isNaN(value) || Float.isInfinite(value)) {
+            return "1.0";
+        }
+        return Float.toString(value);
+    }
+
+    private static ShaderProgramBuildResult compilePatchedOrNormal(
+            String vertexSource,
+            String fragmentSource,
+            String normalFragmentSource,
+            String name) {
+        boolean patched = fragmentSource != normalFragmentSource;
+        try {
+            int programId = compileProgram(
+                    patched ? withDefines(vertexSource, "PATCHED_SHADER", 1) : vertexSource,
+                    patched ? withDefines(fragmentSource, "PATCHED_SHADER", 1) : fragmentSource,
+                    name);
+            return new ShaderProgramBuildResult(programId);
+        } catch (RuntimeException e) {
+            if (patched) {
+                VoxyForge.LOGGER.error("Failed to compile original Voxy terrain shader patch; using normal shader path", e);
+                int programId = compileProgram(vertexSource, normalFragmentSource, name);
+                return new ShaderProgramBuildResult(programId);
+            }
+            throw e;
+        }
+    }
+
+    private record ShaderProgramBuildResult(int programId) {
+    }
+
+    private static int compileComputeProgram(String source, String name) {
+        int shader = compileShader(GL_COMPUTE_SHADER, source, name);
+        int program = glCreateProgram();
+        glAttachShader(program, shader);
+        glLinkProgram(program);
+        glDeleteShader(shader);
+        if (glGetProgrami(program, GL_LINK_STATUS) != GL_TRUE) {
+            String log = glGetProgramInfoLog(program);
+            glDeleteProgram(program);
+            throw new IllegalStateException(name + " link failed: " + log);
+        }
+        return program;
+    }
+
+    private static int compileProgram(String vertexSource, String fragmentSource, String name) {
+        int vertexShader = compileShader(GL_VERTEX_SHADER, vertexSource, name + " vertex");
+        int fragmentShader = compileShader(GL_FRAGMENT_SHADER, fragmentSource, name + " fragment");
+        int program = glCreateProgram();
+        glAttachShader(program, vertexShader);
+        glAttachShader(program, fragmentShader);
+        glLinkProgram(program);
+        glDeleteShader(vertexShader);
+        glDeleteShader(fragmentShader);
+        if (glGetProgrami(program, GL_LINK_STATUS) != GL_TRUE) {
+            String log = glGetProgramInfoLog(program);
+            glDeleteProgram(program);
+            throw new IllegalStateException(name + " link failed: " + log);
+        }
+        return program;
+    }
+
+    private static int compileShader(int type, String source, String name) {
+        int shader = glCreateShader(type);
+        glShaderSource(shader, ForgeOriginalVoxyShaderCompiler.prepareSource(source));
+        glCompileShader(shader);
+        if (glGetShaderi(shader, GL_COMPILE_STATUS) == GL_FALSE) {
+            String log = glGetShaderInfoLog(shader);
+            glDeleteShader(shader);
+            throw new IllegalStateException(name + " compile failed: " + log);
+        }
+        return shader;
+    }
+
+    private String recordFailure(String reason) {
+        String normalized = reason == null || reason.isBlank() ? "unspecified" : reason.replace(' ', '-');
+        VoxyForge.LOGGER.error("Original MDIC command generation failure: {}", normalized);
+        return normalized;
+    }
+}

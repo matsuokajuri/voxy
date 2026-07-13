@@ -47,34 +47,47 @@ Detailed frontend mapping is tracked in:
 docs/forge-1.20.1-embeddium-oculus-frontend-mapping.md
 ```
 
-The Forge source set now includes a small `ForgeFrontendCompat` status layer
-that uses Forge `ModList` to report Embeddium/Oculus presence and versions. The
-active renderer entry is still the Embeddium cutout hook adapter, and Roman X
-now adds the Oculus shaderpack patch/data/binding bridge for the original MDIC
-pipeline. The 2026-06-21 post-repair runtime pass now confirms Oculus can load
-`ComplementaryUnbound_r5.8.1.zip`, expose Voxy shaderpack sidecar sources to
-the Forge bridge, enter a world, start the formal original-shaped owner, consume
-Oculus shaderpack pipeline data, and submit original MDIC draws. This is still
-not full outer `VoxyRenderSystem` ownership, and shaderpack visual parity is not
-ready because the patched opaque/translucent terrain programs currently fall
-back to the normal shader path.
+The active renderer entry is the Embeddium cutout hook adapter. It delegates to
+the single Forge `VoxyRenderSystem` owner and the Oculus patch/data/binding
+adaptation of the original Iris MDIC pipeline. `ForgeFrontendCompat` and its
+version/status DTO were removed in XXV: dependency presence and bounds are a
+loader/packaging contract, not renderer ownership or readiness state. Embeddium
+and Oculus remain hard client prerequisites.
 
 ## Current verdict
 
 ```text
-RENDERER_PARITY_COMPLETE
-FORMAL_RENDERER_READY=live-owner-derived
-ACTUAL_RENDERER_DRAW_ENABLED=live-MDIC-draw-derived
-FORMAL_DRAW_PIPELINE_READY=live-production-path-derived
-WHOLE_ORIGINAL_MOD_PARITY=true   # XXIV passed; explicitly user-approved
+RENDERER_PARITY_IMPLEMENTED
+XXV_STATIC_SOURCE_AUDIT=passed
+XXV_FRONTEND_PARITY_CORRECTIONS=implemented
+XXV_FINAL_JAR_AUDIT=passed-after-option-id-correction
+XXV_BROAD_VISUAL_ACCEPTANCE=passed
+XXV_F3_VISIBILITY_RUNTIME_ACCEPTANCE=passed
+XXV_EMBEDDIUM_PAGE_RUNTIME_ACCEPTANCE=passed
+XXV_CONFIG_APPLY_RUNTIME_ACCEPTANCE=passed
+XXV_TARGETED_FRONTEND_RUNTIME_ACCEPTANCE=passed
+WHOLE_ORIGINAL_MOD_PARITY=passed-with-documented-platform-adaptations
 ```
 
-The original-equivalent renderer chain is the only visible route and has passed
-its dedicated readiness regression. Storage, lifecycle, config, importer, and
-user-feature migrations are also implemented through XXIII. XXIV completed the
-final source/JAR/documentation audit and consolidated runtime gate, then received
-explicit user approval; it does not treat historical proof paths as readiness
-evidence.
+The original-equivalent renderer chain remains the only visible route and its
+XXIV regression was explicitly user-approved. XXV deliberately reopened the
+completion claim after a byte-level source, API, optional-integration, packaging,
+and retired-code audit found additional original content and non-production
+status shells. The old `formal*Ready`, `wholeOriginalModParity`, and parity status
+command fields were write/read-only telemetry; they were not control-flow gates
+and have been removed. The first broad XXV visual/lifecycle acceptance passed,
+but it exposed two frontend-parity omissions after that run: Voxy diagnostics
+were not gated by the F3 screen, and the original Sodium-hosted Voxy option
+pages had been replaced by a standalone Forge screen instead of being embedded
+in Embeddium. Both corrections are now implemented. A final review then found
+and fixed Embeddium's global `OptionIdentifier` type collision by separating the
+page IDs from the Boolean option IDs. The post-fix production build/JAR audit
+passes. The user subsequently completed the focused F3/menu observation without
+reporting an anomaly, and the log proves the Voxy pages were registered and the
+Embeddium options GUI was constructed. A follow-up then exercised Rendering off
+and on through Apply: the user confirmed LOD disappeared and returned, the
+expected renderer/Oculus lifecycle completed, configuration persisted, and the
+client exited normally. The current XXV acceptance gate is therefore closed.
 
 ## Authoritative original chain
 
@@ -618,6 +631,9 @@ Forge config entry point are implemented and runtime-regressed by XXII-XXIII.
 | `RenderGenerationService` request/requeue | original request/requeue depends on `RenderDataFactory.generateMesh()` throwing `IdNotYetComputedException` from real section generation and on `ServiceManager.createService(...)` for worker execution | Fixed for the Forge parity route: `ForgeOriginalVoxyRenderGenerationService` now registers with original `ServiceManager` / `Service` / `UnifiedServiceThreadPool`, creates per-thread `RenderDataFactory` and missed-model sets through the service context supplier, uses `service.execute()` for enqueue/requeue, and drains/shuts down service permits in the original order. `originalServiceManagerParityReady=true` is now reported for this service stack. |
 | Service thread count / builder-thread sharing | original `VoxyClientInstance.updateDedicatedThreads()` subtracts Sodium chunk-builder threads, and original `MixinChunkJobQueue` lets Sodium builder workers share Voxy service jobs through `SemaphoreBlockImpersonator` | Fixed for the Forge/Embeddium route: `originalVoxyServiceThreads` mirrors the original `serviceThreads` target default, `originalVoxyUseEmbeddiumBuilderThreads` mirrors the original "Use sodium threads" option, `ForgeOriginalVoxyServiceThreadPolicy` subtracts Embeddium `ChunkBuilder.getTotalThreadCount()`, and `ForgeOriginalVoxyEmbeddiumChunkJobQueueMixin` replaces Embeddium `ChunkJobQueue`'s semaphore with the original `SemaphoreBlockImpersonator` / `groupSemaphore.createBlock()` mechanism. |
 | Service thread frontend access | original Voxy compiles against Sodium and uses a Sodium accessor mixin for `SodiumWorldRenderer.renderSectionManager`; Forge must target Embeddium without compiling its internals into this source set | Forge queries Embeddium's equivalent `SodiumWorldRenderer.instanceNullable()`, private `renderSectionManager`, `RenderSectionManager.getBuilder()`, and `ChunkBuilder.getTotalThreadCount()` reflectively. This preserves the original ownership/data source while avoiding a hard compile-time dependency on Embeddium internals inside the Forge source set. |
+| Sodium-hosted config pages | original Voxy adds General/Rendering pages to Sodium and ModMenu opens that frontend; Fabric ModMenu and the original Sodium config API are not Forge 1.20.1 owners | Voxy adds the same nine settings to Embeddium through official `OptionGUIConstructionEvent` pages. The Forge Mod List factory opens Embeddium's screen. Embeddium exposes no public initial-page selector, so it cannot force-select Voxy's page, but the page host, Apply lifecycle, enabled predicates, and setting effects are preserved. |
+| F3 diagnostic extension | original diagnostics exist only as debug-screen entries; Forge 1.20.1 exposes `CustomizeGuiOverlayEvent.DebugText` instead of the newer entry-list API | the event adapter returns whenever `Minecraft.options.renderDebug` is false, then appends the same owner diagnostics only while F3 is visible |
+| enabled-config instance lifecycle | original applies enabled changes through `VoxyCommon.shutdownInstance/createInstance`, immediately replacing all instance owners | Forge `reloadOriginalVoxyRuntime()` immediately closes the renderer, cancels imports, clears active selection, reapplies thread policy, and reselects the current world, but its event shell/service pool remain long-lived and the released `WorldEngine` is reclaimed by the existing idle cleanup. This stable event-shell adaptation is a non-blocking strict lifecycle parity TODO; it does not alter the F3/menu acceptance gate. |
 | `CpuLayout` default thread count | original Voxy's `CpuLayout` uses platform affinity helpers from the original LWJGL/JNA stack; the Forge 1.20.1 classpath lacks the same `org.lwjgl.system.windows.Kernel32` API | Forge uses OSHI physical core count and the same fallback-to-available-processors behavior to preserve the original `serviceThreads = max(coreCount / 1.5, 1)` default. This is a platform adapter, not a scheduler fallback. |
 | `common.Logger` client HUD branch | original common logger checks Fabric `VoxyCommon.IS_IN_MINECRAFT` / `IS_DEDICATED_SERVER`; pulling Fabric `commonImpl` into the Forge source set would reintroduce platform code that cannot compile here | Forge keeps the original logger API for the imported thread stack and adapts only the platform guard to `Minecraft.getInstance() != null` before posting client HUD messages. |
 | `RenderDataFactory` Java version helpers | original source uses `Integer.expand` / `Long.expand`, unavailable in Java 17 | Forge uses local equivalent bit-expansion helpers with the same mask/value semantics. |
@@ -1253,7 +1269,8 @@ pass confirms the outer owner in-game.
 
 The first XX runtime regression pass surfaced per-face LOD holes and black
 quads after in-game shaderpack toggles, worsening with each toggle. Ground
-truth (baseline vs post-toggle `/voxy original_voxy_model_pipeline_status`,
+truth (baseline vs post-toggle `/voxy original_voxy_model_pipeline_status`
+(historical command, removed in XXV),
 HOC readback audits, and an in-game re-ingest probe) excluded mesh coverage
 (post-rebuild completed meshes and live geometry matched baseline), world
 data loss (re-ingest still meshed), and the node tree (remesh worked but the
@@ -1398,7 +1415,8 @@ and a version bisect) reframed this defect:
   consistent with every persistence property observed (remesh-proof,
   render-list inflation, hasChildren tree anomalies).
 
-Current probe: `/voxy original_voxy_node_consistency_audit` — downloads the
+Historical XX.4 probe (removed in XXV):
+`/voxy original_voxy_node_consistency_audit` downloaded the
 GPU node buffer's active range and byte-compares every node against the CPU
 tree's own serialization (`ForgeOriginalVoxyNodeStore.writeNode` is the
 single source of truth for the 16-byte GPU layout), and independently
@@ -1443,7 +1461,8 @@ allocation working inferences above):
   child existence is an intentional original-Voxy sentinel, not a stuck
   completion. The audit now reports required/results/outstanding/existence
   masks separately and classifies these sentinels explicitly.
-- `/voxy original_voxy_node_consistency_audit <blockX> <blockY> <blockZ>` now
+- The removed `/voxy original_voxy_node_consistency_audit <blockX> <blockY>
+  <blockZ>` probe then
   adds a short L4-to-L0 target-chain record after the normal quiescent audit.
   Each level queries `activeSectionMap` directly, so it can distinguish
   absent, leaf, inner, single-request, and child-request entries and report the
@@ -2316,7 +2335,7 @@ and the now-empty `ForgeVoxyRuntimeOverrides` facade are removed. The active
 model-bakery enum was not deleted; it is renamed from `ForgeCpuMeshLayer` to
 `ForgeOriginalVoxyModelLayer`, with mechanical call-site changes only.
 
-`/voxy parity_route_status` continues to report
+At that historical XXII checkpoint, `/voxy parity_route_status` reported
 `wholeOriginalModParity=false`, advances `newWorkTarget` to
 `original-user-features-and-importers`, and no longer claims that every legacy
 route is physically absent. It instead states that the retained legacy adapter
@@ -2342,7 +2361,7 @@ This does not mutate any real `run/saves` or `.voxy` database.
 
 The first anchored XXII `runClient` reached integrated-server player login, then
 failed with `IllegalClassLoadError`: the ordinary
-`ForgeOriginalVoxyClientChunkCacheAccess` bridge had been placed under the
+then-named `ForgeOriginalVoxyClientChunkCacheAccess` bridge had been placed under the
 configured `me.cortex.voxy.forge.mixin.*` package. Mixin owns that package and
 rejects direct loading of non-Mixin helper types from transformed production
 classes. The failure therefore occurred before the new removal lookup could be
@@ -2353,7 +2372,9 @@ package, and removes the intermediate Storage invoker Mixin entirely. The Access
 Transformer now opens the same two members that original Voxy exposes through
 its access widener, so the merged `ClientChunkCache` method has no runtime
 reference to a second Mixin type. The failed attempt and correction remain part
-of uncommitted XXII; a fresh anchored runtime gate is still required.
+of uncommitted XXII; a fresh anchored runtime gate was still required. XXV later
+aligned the final bridge contract with original
+`ICheekyClientChunkCache.voxy$cheekyGetChunk(...)`.
 
 ### Automated validation
 
@@ -2459,19 +2480,39 @@ adapter for original Voxy's instance recreation; it does not construct a second
 renderer or substitute a preview path.
 
 Forge's `CustomizeGuiOverlayEvent.DebugText` supplies the 1.20.1 F3 extension
-point. It now shows the original instance diagnostics (`MemoryBuffer` count and
+point. It shows the original instance diagnostics (`MemoryBuffer` count and
 size, ingest/saving queue counts, active-world section counts) plus formal
 renderer/draw/lifecycle state. The newer original `DebugScreenEntryList` API is
-not available in Minecraft 1.20.1.
+not available in Minecraft 1.20.1. The initial XXIII adapter omitted the
+original visibility boundary and therefore also rendered this text while F3 was
+closed. XXV corrects that migration drift by gating the event handler on
+`Minecraft.options.renderDebug` before collecting any Voxy diagnostics.
 
-The Forge Mod List config-screen extension replaces the Fabric-only ModMenu
-entrypoint. Its controls and apply semantics are mapped from original
-`VoxyConfigMenu`: enable, rendering, ingest, service threads, Embeddium builder
-thread sharing, subdivision threshold, LoD distance, environmental fog, and
-SSAO mode. Thread-policy changes resize the original shared service pool;
-distance changes update the original `RenderDistanceTracker`; settings that
-original marks for renderer reload rebuild the formal render owner. Original
-language/icon resources are now packaged for this entry point.
+XXIII initially exposed the nine original controls through a standalone Forge
+Mod List screen. That preserved most setting values but did not preserve the
+original frontend ownership: original Voxy contributes pages to Sodium's video
+options. The XXV correction retires that standalone screen. Voxy now registers
+two pages (`voxy:general_page` and `voxy:rendering_page`) through Embeddium's official
+`OptionGUIConstructionEvent`, while the Forge Mod List factory opens the same
+Embeddium options host. The pages carry all nine current original settings:
+enabled, service threads, Embeddium/Sodium builder-thread sharing, ingest,
+rendering, subdivision size, LoD render distance, environmental fog, and SSAO
+mode. One shared `OptionStorage` owns both pages and updates its baseline after
+every save, so Embeddium's repeated Apply lifecycle cannot replay stale changes.
+
+Config effects are also aligned to original ownership. Service-thread changes
+resize the original shared service pool; distance updates the live
+`RenderDistanceTracker` when no rebuild supersedes it; rendering, builder-thread,
+fog, and SSAO changes rebuild only the renderer and retain the active
+`WorldEngine`. Enabled changes use the stable Forge runtime-reload adapter:
+renderer teardown, import cancellation, active-world deselection/reselection,
+and Oculus reload occur immediately, while the singleton event shell/service
+pool remain and the released world follows normal idle cleanup. This differs
+from original immediate `shutdownInstance/createInstance` replacement and is a
+non-blocking strict lifecycle parity TODO. The LoD-distance slider/config
+minimum is restored to original input 10
+(`10/16` sections internally), rather than the former Forge minimum of one
+section. Original language/icon resources remain packaged for the frontend.
 
 ### Optional integration classification
 
@@ -2480,12 +2521,14 @@ dependency and Mixin surfaces:
 
 | Integration | Original behavior | Forge 1.20.1 classification |
 | --- | --- | --- |
-| Bobby | imports `.bobby` region cache and changes Fabric/Sodium unload-ingest timing | Fabric-only; no Bobby dependency or Forge owner is present, so no false command is registered |
-| Distant Horizons | optional direct SQLite/XZ/ZSTD importer | no real Forge 1.20.1 DH API/dependency exists in project scope; direct database coupling is deliberately not exposed |
+| Bobby | imports `.bobby` region cache and changes Fabric/Sodium unload-ingest timing | XXV ports the real cache import through the original import lifecycle; Fabric unload timing itself remains N/A |
+| Distant Horizons | optional direct SQLite/XZ/ZSTD importer | XXV ports the optional direct DH database importer and supported decoders/compressors without requiring DH at runtime |
 | Flashback | records/replays Voxy storage paths through Flashback metadata and Fabric mixins | Fabric-only Flashback classes are absent; platform-N/A |
 | FREX flawless frames | repeats GPU traversal until queued work drains during a Fabric entrypoint callback | Fabric rendering entrypoint is absent; explicit platform-N/A false state replaces the stale reflection to excluded Fabric source |
-| Nvidium | injects Voxy draw after Nvidium's Fabric/Sodium render pipeline | Fabric/Sodium-specific and absent from Forge/Embeddium runtime; platform-N/A |
-| ModMenu | opens Voxy's Sodium config page | replaced by Forge `ConfigScreenHandler.ConfigScreenFactory`, preserving configuration behavior without copying ModMenu |
+| Nvidium | injects Voxy draw after Nvidium's Fabric/Sodium render pipeline | XXV maps the applicable intent to the real optional Acedium Forge owner; Fabric Nvidium itself remains N/A |
+| Chunky | ingests chunks generated by the integrated server | XXV ports the real Forge callback with active-client identity/dimension guards |
+| GPU selection | prefers the selected high-performance adapter and worker priority | XXV ports the original Windows selector/priority behavior through a safe optional mixin |
+| ModMenu | opens Voxy's Sodium config page | Fabric ModMenu is platform-N/A; Forge `ConfigScreenHandler.ConfigScreenFactory` opens Embeddium, whose official construction event receives the two Voxy option pages. Embeddium has no public initial-page selector, so the Voxy page is user-selectable rather than forcibly preselected. |
 
 Embeddium and Oculus integrations remain the real Forge equivalents already
 ported and regression-tested by earlier rounds. Optional platform-N/A findings
@@ -2555,7 +2598,8 @@ icon resources are reachable through the restricted source set. The FREX change
 removes a stale reflection into excluded Fabric source and records the genuine
 Forge platform-N/A result instead of inventing an integration. No actionable
 code defect remained. One status defect was corrected before commit:
-`parity_route_status.newWorkTarget` now points to the XXIV final whole-mod audit
+At that historical XXIII checkpoint, `parity_route_status.newWorkTarget`
+pointed to the XXIV final whole-mod audit
 and release regression rather than the completed XXIII user-feature round.
 
 ## XXIV final whole-mod audit and release regression
@@ -2584,7 +2628,7 @@ zero-reference `shouldSuppressDeprecatedVisibleRoutes()` helper, the constant
 atlas `SKELETON`/known-layout/format labels. None of these values participated in
 a readiness predicate or renderer data contract.
 
-`/voxy parity_route_status` now reports
+At that historical XXIV checkpoint, `/voxy parity_route_status` reported
 `deprecatedPrototypeRoutesAbsent=true`. The startup log no longer says renderer
 readiness is pending after its XX.7 approval. After the passed final regression
 and explicit user approval, it now truthfully reports whole-mod parity complete.
@@ -2665,7 +2709,7 @@ missing input, rebuilt successfully, and the user observed no visual defect;
 there was no Voxy lifecycle, ingest, storage, Mixin, GL, or shutdown failure.
 
 The user explicitly approved whole-mod parity after reviewing the completed
-regression. `/voxy parity_route_status` now reports
+regression. At that historical checkpoint, `/voxy parity_route_status` reported
 `wholeOriginalModParity=true` and advances the target to the non-blocking
 `post-parity-iterationt-compatibility-todo`; IterationT remains outside the
 original Voxy migration completion gate because no upstream adaptation exists.
@@ -2674,3 +2718,482 @@ The post-approval verification passed: CodeGraph re-read the live status method
 with the promoted value and post-parity target, `gradlew test build` completed
 all 11 tasks successfully, and `git diff --check` remained clean. This closes
 XXIV and the original Voxy migration scope.
+
+## XXV exhaustive original-content, retired-code, and artifact re-audit
+
+### Why XXIV was reopened
+
+The user requested a stronger closure than the XXIV area-level audit: inspect
+all original Voxy content and eligible Forge equivalents, remove every retired
+route and misleading API name, then audit the compiled project and final JAR
+before starting the client once for final acceptance. That request supersedes
+the XXIV completion sentence above without invalidating its historical runtime
+evidence. XXV is one round and remains uncommitted until its requested
+review/commit step; the final client validation is now complete.
+
+```text
+[x] authoritative original-source / Forge-source inventory
+[x] port missing original features and eligible Forge integrations
+[x] finish retired-code and exact-name convergence
+[x] complete the first broad visual/lifecycle acceptance
+[x] correct the newly exposed F3 and Embeddium-option frontend parity gaps
+[x] refresh whole-source/resource/final-JAR audit and exact artifact metadata
+[x] pass the focused F3-visibility and Embeddium-page runtime observation
+[x] pass the focused config-Apply runtime acceptance
+```
+
+### Newly completed original features and compatible integrations
+
+The original optional-content inventory was re-read rather than inheriting the
+old “Fabric-only” classification. XXV adds only real formats or real Forge
+owners; no preview or substitute route was introduced.
+
+| Original area | XXV Forge result |
+| --- | --- |
+| Distant Horizons import | Direct, optional DH SQLite import was ported with the original database-selection/task lifecycle and Forge-side decoders for supported DH data/compression versions. The importer remains classpath-optional and has focused decoder/import tests. |
+| Bobby import | `.bobby` region-cache import is exposed through the original import manager/world importer lifecycle. |
+| Chunky | The real Forge Chunky server-generation callback is bridged only for the integrated server dimension matching the active client identity. Dedicated/multiplayer server chunks cannot leak into the client engine. |
+| Acedium | A real optional rendering-pipeline mixin preserves the original compatibility intent when the Forge equivalent is installed. |
+| GPU selection | Original GPU priority/selection behavior is ported through a Windows mixin and capability owner rather than a diagnostic command. |
+| GL debug / printf / timing | Original `GlDebug`, shader printf, `GPUTiming`, `TimingStatistics`, capability and memory statistics owners are present and wired to the active renderer/F3 route. |
+| Embeddium / Oculus | Hard Forge prerequisites and active frontend adapters; not substitutes and not optional status probes. |
+| Flashback / FREX / Fabric Nvidium hooks | Platform-N/A where no equivalent owner exists. |
+| ModMenu / Sodium config host | Fabric ModMenu itself is platform-N/A, but its user-visible responsibility is not: the Forge Mod List entry opens Embeddium's video options and Voxy contributes original-shaped pages through Embeddium's official `OptionGUIConstructionEvent`. |
+
+Current supported command surface after removing the parity/status shell:
+
+```text
+/voxy reload
+/voxy import world|bobby|distant_horizons|raw|zip|current|cancel
+/voxy debug verifyTLNChildMask [attemptRepair]
+```
+
+### Ownership and lifecycle corrections
+
+- `HierarchicalOcclusionTraverser` is the sole owner of the GPU node buffer;
+  `AsyncNodeManager` owns the geometry manager and geometry-result consumer.
+- The formal original F3 chain is restored: instance/world/service/model/render
+  owners append their own debug data; Forge only supplies the event adapter and
+  now exits before timing/GPU/owner collection whenever
+  `Minecraft.options.renderDebug` is false, matching original debug-screen
+  visibility.
+- Chunk ingest retry is event-driven and keeps the same section-ingest contract;
+  the retired polling/counter shell is gone.
+- The no-op Oculus viewport capture injected at `beginLevelRendering` was
+  removed. The actual Forge draw boundary receives Embeddium matrices, camera,
+  projection, light texture and Oculus targets directly.
+- `CountingSectionStorage` and its five write-only counters were removed;
+  `WorldEngine` now owns the real persistent `SectionStorage` directly.
+- Original `RenderResourceReuse`, model store, generation, geometry, node,
+  traversal, MDIC, pipeline, importer and storage owners now use their original
+  simple names where the class is a direct port. Forge/Oculus/Minecraft adapters
+  retain an explicit Forge prefix.
+
+The planned direct-port name inventory is complete (62/62). Fifty-six tracked
+files are Git renames; six owners were introduced during XXV and therefore have
+no tracked preimage:
+
+```text
+ForgeOriginalVoxyAsyncNodeGeometrySync -> AsyncNodeManager
+ForgeOriginalVoxyBasicAsyncGeometryManager -> BasicAsyncGeometryManager
+ForgeOriginalVoxyBasicSectionGeometryData -> BasicSectionGeometryData
+ForgeOriginalVoxyBuiltSection -> BuiltSection
+ForgeOriginalVoxyGlCapabilities -> Capabilities
+ForgeOriginalVoxyChunkBoundRenderer -> ChunkBoundRenderer
+ForgeOriginalVoxyClientImportManager -> ClientImportManager
+ForgeOriginalVoxyColourDepthTextureData -> ColourDepthTextureData
+ForgeOriginalVoxyCompressionStorageAdaptor -> CompressionStorageAdaptor
+ForgeOriginalVoxyDepthFramebuffer -> DepthFramebuffer
+ForgeOriginalVoxyDownloadStream -> DownloadStream
+ForgeOriginalVoxyObjectAllocationList -> ExpandingObjectAllocationList
+ForgeOriginalVoxyFragmentedStorageBackendAdaptor -> FragmentedStorageBackendAdaptor
+ForgeOriginalVoxyFullscreenBlit -> FullscreenBlit
+ForgeOriginalVoxyGeometryCache -> GeometryCache
+ForgeOriginalVoxyGlBuffer -> GlBuffer
+ForgeOriginalVoxyHiZBuffer -> HiZBuffer
+ForgeOriginalVoxyHierarchicalOcclusionTraverser -> HierarchicalOcclusionTraverser
+ForgeOriginalVoxySectionWatcher -> ISectionWatcher
+ForgeOriginalVoxyIdNotYetComputedException -> IdNotYetComputedException
+ForgeOriginalVoxyLmdbStorageBackend -> LMDBStorageBackend
+ForgeOriginalVoxyLz4Compressor -> LZ4Compressor
+ForgeOriginalVoxyMdicSectionRenderer -> MDICSectionRenderer
+ForgeOriginalVoxyMdicViewport -> MDICViewport
+ForgeOriginalVoxyMipGen -> MipGen
+ForgeOriginalVoxyModelBakerySubsystem -> ModelBakerySubsystem
+ForgeOriginalVoxyModelFactory -> ModelFactory
+ForgeOriginalVoxyModelQueries -> ModelQueries
+ForgeOriginalVoxyModelStore -> ModelStore
+ForgeOriginalVoxyNodeCleaner -> NodeCleaner
+ForgeOriginalVoxyNodeManager -> NodeManager
+ForgeOriginalVoxyNodeStore -> NodeStore
+ForgeOriginalVoxyOccupancySet -> OccupancySet
+ForgeOriginalVoxyReadonlyCachingLayer -> ReadonlyCachingLayer
+ForgeOriginalVoxyRedisStorageBackend -> RedisStorageBackend
+ForgeOriginalVoxyRenderDataFactory -> RenderDataFactory
+ForgeOriginalVoxyRenderDistanceTracker -> RenderDistanceTracker
+ForgeOriginalVoxyRenderGenerationService -> RenderGenerationService
+ForgeOriginalVoxyRenderProperties -> RenderProperties
+ForgeOriginalVoxyRenderResourceReuse -> RenderResourceReuse
+ForgeOriginalVoxyRenderStatistics -> RenderStatistics
+ForgeOriginalVoxyReuseVertexConsumer -> ReuseVertexConsumer
+ForgeOriginalVoxyRingTracker -> RingTracker
+ForgeOriginalVoxyRocksDBStorageBackend -> RocksDBStorageBackend
+ForgeOriginalVoxySSAO -> SSAO
+ForgeOriginalVoxyScanMesher2D -> ScanMesher2D
+ForgeOriginalVoxySectionUpdateRouter -> SectionUpdateRouter
+ForgeOriginalVoxyShaderSource -> ShaderLoader
+ForgeOriginalVoxySharedIndexBuffer -> SharedIndexBuffer
+ForgeOriginalVoxySoftwareRasterizer -> SoftwareRasterizer
+ForgeOriginalVoxyTextureUtils -> TextureUtils
+ForgeOriginalVoxyUploadStream -> UploadStream
+ForgeOriginalVoxyViewportSelector -> ViewportSelector
+ForgeOriginalVoxyWorldIdentifier -> WorldIdentifier
+ForgeOriginalVoxyWorldImporter -> WorldImporter
+ForgeOriginalVoxyZstdCompressor -> ZSTDCompressor
+ForgeOriginalVoxyDebugUtils -> DebugUtils
+ForgeOriginalVoxyGlDebug -> GlDebug
+ForgeOriginalVoxyGpuSelectorWindows2 -> GPUSelectorWindows2
+ForgeOriginalVoxyGpuTiming -> GPUTiming
+ForgeOriginalVoxyPrintfDebug -> PrintfDebugUtil
+ForgeOriginalVoxyTimingStatistics -> TimingStatistics
+```
+
+Two runtime access contracts were separately aligned to the original API names:
+`IWorldGetIdentifier.voxy$getIdentifier()` and
+`ICheekyClientChunkCache.voxy$cheekyGetChunk(...)`. The Forge-only packed-offset
+helper is explicitly `ForgeModelStoreLayoutSpec`; calling it simply
+`ModelStoreLayoutSpec` would falsely imply an independent original owner.
+
+`ForgeOriginalVoxyRenderSystem` and `ForgeOriginalVoxyModelPipeline` intentionally
+retain their names. Forge splits original `VoxyRenderSystem` construction/resource
+ownership from the Embeddium event/frame adapter; merging or renaming only one
+half would conceal a real platform ownership deviation. The remaining
+`ForgeOriginalVoxy*` names are likewise Oculus, Embeddium, Minecraft, DH,
+optional-mod, GL-target, or lifecycle adapters rather than missed direct ports.
+
+### Retired proof/status surface removed
+
+XXV deletes the parity command registrar, frontend status DTO, model/reload
+status trackers, nine renderer/model/generation statistics DTOs, uploaded-model
+summary, reflection-field mapping record, and their snapshot methods. It also
+removes write-only lifecycle/stage counters, cached failure strings that were
+only returned in the same stack frame, zero-call readiness helpers, preset/debug
+clear aliases, storage counters, and other zero-call accessors. Runtime guards,
+actual failure returns/logging, queue counts used by scheduling, formal F3
+statistics, GL/GPU debug owners, importer progress, and live lifecycle methods
+remain.
+
+The removed `activeNodeRequestCount` deserves explicit classification. In the
+original it is consumed only by the optional `verifyNodeManager` developer
+integrity suite. Forge had copied the increments but not the flag, verifier, or
+worker call, leaving a zero-read fragment. XXV removes that fragment. If the
+developer verifier is ever ported, its flag, complete verification methods,
+worker gate, and counter must be ported together.
+
+### Shader and resource parity evidence
+
+The resource audit compares all original shader resources with the compiled
+Forge set. Forty-five of forty-seven shader files are byte-identical. The two
+intentional adaptations are:
+
+1. `outline.vsh`, whose frontend symbols map to Embeddium 1.20.1.
+2. `lod/hierarchical/screenspace.glsl`, whose reverse-AABB depth handling is the
+   documented Forge/Oculus depth-contract adaptation.
+
+The earlier one-stage `PATCHED_SHADER` defect remains fixed: the define is
+applied to both vertex and fragment stages. The final JAR audit must prove all
+registered mixins, refmap mappings, access transformer, shaders, metadata,
+language/icon assets, optional adapters, pinned JarJar payloads, and required
+native libraries are present, while deleted status/legacy classes and Fabric
+descriptors are absent.
+
+### Production packaging correction
+
+XXV enables the Mixin annotation processor/Gradle integration for the production
+artifact, generates the SRG refmap, adds it to the mixin configuration, and
+wires it through the reobfuscated JarJar task. The generated refmap contains
+four mapped Mixin classes: three non-identity vanilla SRG mappings
+(`renderLevel`, `setBlocksDirty`, and `ClientChunkCache.drop`) plus the GPU
+selector's exact `Minecraft(GameConfig)` constructor identity mapping.
+Embeddium/Oculus targets intentionally use `remap = false` against their shipped
+names.
+
+Pinned JarJar versions are resolved by ForgeGradle through a detached strict
+configuration; a normal `dependencies --configuration jarJar` report shows the
+un-pinned range candidate and is not the packaged payload. The final archive,
+not that report, is the acceptance authority.
+
+### Final-gate startup correction: Minecraft 1.20.1 GPU-selection anchor
+
+The first XXV final client launch stopped during Mixin application before the
+game window opened. `ForgeOriginalVoxyGpuSelectMixin` had ported original
+`MixinGPUSelect`'s `Options.save()` invocation anchor literally, but the mapped
+Forge 1.20.1 `Minecraft(GameConfig)` constructor has no such invocation. The
+runtime therefore correctly failed its required 1/1 injection check; the
+development-only missing-refmap warning was incidental and copying the refmap
+would not create a nonexistent target.
+
+Original commit `970b1cc7` describes this injection as “move and hoist gpu
+selection injection”: the GPU selector and Java/Win32 thread-priority changes
+must execute before backend/window creation. Forge 1.20.1's semantic equivalent
+is the constructor's sole
+`RenderSystem.initBackendSystem()Lnet/minecraft/util/TimeSource$NanoTimeSource;`
+invocation, immediately before `VirtualScreen.newWindow(...)`.
+
+The next startup established a second platform constraint: Forge 1.20.1 ships
+Mixin 0.8.5, whose callback injector rejects an `@Inject(INVOKE)` inside a
+constructor even after the superclass initialization. Mixin 0.8.5's standard
+method-call redirector explicitly permits this target. The final adaptation is
+therefore a required `@Redirect` of that one static invocation: its private,
+non-static, no-argument handler returns the exact
+`TimeSource.NanoTimeSource` type, executes the original GPU/priority body, then
+calls and returns `RenderSystem.initBackendSystem()` once. The redirect applies
+only to `Minecraft(GameConfig)`; the handler is outside that target and cannot
+recursively redirect itself. Default vanilla remapping and the mixin config's
+`defaultRequire = 1` remain intact. A TAIL fallback, `remap = false`, or
+`require = 0` would violate the original timing/validation contract.
+
+After the correction, the production refmap contains the exact constructor
+identity entry. Final `javap` output proves `@Redirect` is the only injector on
+the handler, its descriptor is
+`()Lnet/minecraft/util/TimeSource$NanoTimeSource;`, and its bytecode order is
+optional GPU selection, Java priority, Win32 priority, original backend call,
+then `areturn`. `@Inject`, `CallbackInfo`, the former `Options.save()` descriptor,
+and `m_92169_` are absent from the GPU Mixin/final project classes as applicable.
+No Gradle resource-copy workaround was added: MixinGradle continues to own the
+production refmap, while Forge userdev's missing-refmap message remains an
+expected development warning.
+
+### Final-gate startup correction: Bobby unload signature
+
+The next client run passed GPU selection, created the window, started the
+integrated server, and reached player login. Loading `ClientChunkCache` then
+exposed another source-version signature difference: original Voxy's current
+target has `drop(ChunkPos)`, while Forge 1.20.1 has `drop(int x, int z)`. The
+literal original handler descriptor was therefore invalid for the real 1.20.1
+method.
+
+The final Forge adapter keeps the original mechanism and timing: required
+`@Inject(method = "drop", at = @At("HEAD"))`, direct access to the current
+storage ring through `ICheekyClientChunkCache`, actual chunk-position validation,
+and optional Bobby ingestion before the slot is removed. Only the handler input
+is translated to `(int x, int z, CallbackInfo)`, and those coordinates feed the
+same `voxy$cheekyGetChunk(x, z)` contract. It does not substitute normal
+`getChunk`, the Forge unload event, or a post-unload lookup.
+
+Final `javap` proves descriptor `(IILorg/spongepowered/asm/mixin/injection/
+callback/CallbackInfo;)V`, `drop`/`HEAD`, and the expected guard -> storage
+lookup -> non-null ingest order. The old `(ChunkPos, CallbackInfo)` handler is
+absent. A complete audit of all four vanilla-target Mixin owners also confirms
+that the GPU redirect, `ClientLevel` constructor and `setBlocksDirty`, and
+`LevelRenderer.renderLevel` selectors/handlers exactly match Forge 1.20.1; no
+other vanilla signature adaptation remains.
+
+### Final-gate renderer construction correction: NodeCleaner printf processing
+
+The following client run passed every Mixin, created the window, started the
+integrated server, logged the player in, created the persistent `WorldEngine`,
+and reached original render-system construction. `NodeCleaner` then failed to
+compile `sort_visibility.comp`: expanded GLSL line 135 still contained the
+`debugDumpNode` `printf("Node %d, %d@...")` from `node.glsl`, so the NVIDIA
+compiler correctly rejected the undefined function, string literal, and `@`
+token.
+
+This was one exact Forge port omission, not a driver extension requirement.
+Original `NodeCleaner.sorter` is created through
+`Shader.makeAuto(PrintfDebugUtil.PRINTF_processor)`. Original `Shader.Builder`
+recursively expands imports, runs that processor while adding the source, then
+injects ordinary and environment defines before compilation. The Forge HOC
+compiler already preserved this contract for `traversal_dev.comp`, but the
+Forge `NodeCleaner` sorter had gone directly from `ShaderLoader.parse(...)` to
+defines and compilation.
+
+The corrected Forge chain is now:
+
+```text
+sort_visibility.comp
+ -> ShaderLoader.parse (expand node.glsl / pos_util.glsl)
+ -> PrintfDebugUtil.processShader
+ -> NodeCleaner defines
+ -> IS_WINDOWS / conditional IS_INTEL defines
+ -> compute-shader compilation
+```
+
+With shader printf debugging disabled, the processor performs the same original
+`printf` -> `//printf` replacement. With it enabled, the already-ported binding
+20 SSBO/atomic-write transformation remains in use. Only the sorter receives
+the processor, exactly like original Voxy; `result_transformer.comp` and
+`batch_visibility_set.comp` do not. A focused source-generation test proves the
+expanded sorter retains its expected defines and `debugDumpNode` body while no
+active `printf(` remains in the normal configuration. The packaged but unused
+`debug/node_outline.vert` import remains unchanged: original `DebugRenderer` is
+itself unreferenced and also does not attach the printf processor, so extending
+that dormant upstream path would not be a Forge parity correction.
+
+### Accepted non-blockers and final gate
+
+- The audited upstream HOC/request author `FIXTHIS` behavior remains original
+  behavior, not a Forge substitute.
+- IterationT compatibility remains a post-migration TODO because original Voxy
+  contains no pack-specific adaptation or sidecar.
+- Very fast spectator streaming holes and the original geometry throttling are
+  accepted upstream behavior.
+- Historical manual audit commands and RenderDoc probes remain evidence in old
+  sections only; they are not current commands or readiness mechanisms.
+
+The production acceptance build now passes:
+
+```text
+command: gradlew clean test build jarJar --console=plain
+result: BUILD SUCCESSFUL
+tests: 7 suites; 20 tests; 0 failures; 0 errors; 0 skipped
+git diff --check: passed
+```
+
+The final reobfuscated JarJar acceptance artifact is
+`build/libs/voxy-forge-0.2.17-beta-forge-all.jar`, 97,319,501 bytes, SHA-256
+`1cdfda276575b53a665c534bc1f00044c6ba8a05644b1d77c5b5ab5acc788485`.
+Its archive audit established all of the following:
+
+- all 9 JarJar payload filenames, metadata versions, and actual nested
+  dependencies match their strict pins;
+- all 4 packaged Windows/Linux x64 LWJGL native SHA-1 sidecars match their
+  binaries;
+- all 21 Mixin registrations and classes agree, the generated refmap contains
+  the 3 required non-identity vanilla SRG mappings and exact GPU constructor
+  identity mapping, and `javap` confirms the corrected required redirect,
+  handler bytecode order, and final reobfuscated Minecraft method references;
+- all 47 shaders match the current source byte-for-byte and all 42 Voxy shader
+  imports resolve;
+- all 105 Forge top-level source classes have exactly one final top-level class,
+  with no stale clean-build extras;
+- `ForgeOriginalVoxyConfigSnapshot`, `ForgeOriginalVoxyEmbeddiumOptions`, the
+  Voxy language resources, and registered Mixins are present, while the retired
+  standalone `ForgeOriginalVoxyConfigScreen` is absent;
+- the twentieth test initializes the Embeddium options class through
+  `Class.forName`, so a page/option `OptionIdentifier` type collision fails the
+  automated gate rather than first appearing in the options screen;
+- the new core interfaces/owners are present while the explicit legacy,
+  readiness/status, platform-shell, retired-command, Fabric-descriptor, access
+  widener, and XX.4 probe inventories are absent;
+- the manifest, Forge dependency metadata, pack metadata, access transformer,
+  nested services/native entries, and user-owned `capsettings.cap` exclusion
+  are correct.
+
+The only build diagnostics left are three Forge 1.20.1 API deprecation/removal
+warnings plus forward-looking Gradle/Eclipse-integration notices; none blocks
+Forge 1.20.1 execution. Static source, test, build, and artifact acceptance are
+therefore closed for the frontend corrections. The focused F3/menu runtime
+observation and config-Apply lifecycle acceptance are also closed.
+
+### Final client technical gate and broad visual acceptance: passed
+
+The anchored `D:\Projects\voxy` `runClient` acceptance run completed normally
+after the NodeCleaner correction. Its log proves all of the following against
+the current XXV classes:
+
+- all required Mixins applied, the integrated server admitted the player, and
+  the persistent original storage chain opened;
+- the initial no-shader route created `ForgeOriginalVoxyRenderPipeline` with
+  `MDICSectionRenderer`, reached the Embeddium cutout command-generation hook,
+  and grew sparse geometry commitment from zero;
+- enabling and repeatedly rebuilding Complementary applied both Voxy shader
+  patches, loaded the 24,056-entry Oculus block-state mapping, reused the same
+  4 GiB sparse geometry buffer, and recreated the same MDIC renderer each time;
+- overworld -> nether -> overworld and overworld -> end -> overworld transitions
+  all rebuilt the Oculus/Voxy pipelines successfully;
+- an F3+T resource reload rebuilt resources and the Voxy renderer successfully;
+- normal exit flushed downloads, shut down every active render pipeline and
+  worker owner, closed the persistent `WorldEngine`, saved all dimensions, and
+  ended the Gradle run successfully.
+
+The post-exit targeted scan found no `Original Voxy ... failure`, Voxy `ERROR`,
+NodeCleaner compile error, uncaught-thread exception, OOM, or crash-report line.
+The repeated `already has a request in flight` warnings occurred only during the
+intentional high-speed spectator streaming exercise and remain the previously
+audited original `FIXTHIS` behavior, not a new Forge deviation. Oculus warnings
+about shaderpack variables from newer Minecraft versions were pack/frontend
+diagnostics and did not prevent any Voxy pipeline recreation.
+
+The user then completed the broad visual acceptance and reported no renderer,
+shaderpack, water, dimension, reload, or lifecycle anomaly. That broad result is
+accepted evidence. It also exposed two narrower frontend-parity omissions: the
+Voxy diagnostic window remained visible with F3 closed, and Voxy settings were
+not presented as pages inside Embeddium as original Voxy presents them inside
+Sodium.
+
+### XXV frontend parity follow-up: targeted runtime acceptance passed
+
+The follow-up re-read original `VoxyConfigMenu`, its configuration effect flags,
+original debug-screen entry ownership, and Embeddium 0.3.32's actual option GUI
+construction path before changing the Forge route.
+
+The implementation now has these exact boundaries:
+
+```text
+ForgeVoxyInstance.onDebugText
+ -> return while Minecraft.options.renderDebug == false
+ -> append original owner diagnostics only while F3 is visible
+
+OptionGUIConstructionEvent.BUS
+ -> voxy:general_page
+ -> voxy:rendering_page
+ -> one shared OptionStorage and baseline across both pages
+ -> repeated Apply saves only the delta from the most recent baseline
+
+Forge Mod List config factory
+ -> Embeddium SodiumOptionsGUI entry
+ -> same event-built Voxy pages; no standalone Voxy screen
+```
+
+All nine current original settings are present: enabled, service threads, use
+Embeddium/Sodium builder threads, ingest, rendering, subdivision size, render
+distance, environmental fog, and SSAO mode. Dynamic enabled predicates follow
+the master enabled/rendering values; fog and SSAO are unavailable while a
+shaderpack owns those effects. The original render-distance input minimum 10 is
+restored (`10/16` internal sections), with original nonlinear subdivision and
+distance display/storage transforms.
+
+Apply behavior now preserves original ownership instead of restarting the
+entire in-memory world for renderer settings: service-thread count updates the
+thread policy, render distance updates live when no rebuild supersedes it,
+rendering rebuilds only the Voxy render owner, and builder-thread/fog/SSAO
+changes rebuild that owner plus vanilla `LevelRenderer`; all retain the active
+`WorldEngine`. Enabled uses `reloadOriginalVoxyRuntime()`: it immediately tears
+down the renderer, cancels imports, clears/reselects the active world, and uses
+the Oculus equivalent of original `IrisUtil.reload()`. The Forge event shell and
+service pool remain singleton-owned, and the released `WorldEngine` follows
+normal idle cleanup instead of original immediate full-instance destruction.
+That strict lifecycle difference is a non-blocking Forge adaptation/TODO and is
+outside the completed focused frontend acceptance gate. The old standalone
+`ForgeOriginalVoxyConfigScreen` is deleted.
+
+The refreshed production build/JAR evidence above includes these corrections.
+The user completed the instructed focused F3/menu run and closed the client
+normally without reporting an F3-visibility or Voxy-page anomaly. Runtime
+evidence agrees with that observation: at `20:20:20.204` Voxy registered its
+option pages with Embeddium; opening the options GUI at `20:21:07` reached
+Embeddium's page construction, with only Oculus's own shader page reporting a
+missing ID; and no `OptionIdentifier`, `IllegalArgumentException`,
+`ExceptionInInitializerError`, Voxy error, or Voxy warning was emitted. The
+renderer completed shutdown at `20:21:37.485`, followed by normal persistent
+`WorldEngine` and Voxy-instance closure at `20:21:39`.
+
+The required config-Apply follow-up then passed. Applying `Rendering` off while
+the client remained active flushed and shut down the Voxy renderer at
+`20:33:39.764-20:33:39.769`; Oculus destroyed its pipeline at `20:33:39.770`
+and recreated it at `20:33:40.214`, while Voxy correctly stayed absent. Applying
+`Rendering` on persisted `enableRendering=true` at `20:34:13`, destroyed and
+recreated the Oculus pipeline at `20:34:13.953-20:34:14.363`, then recreated
+`ForgeOriginalVoxyRenderSystem` and `MDICSectionRenderer` at
+`20:34:15.802-20:34:16.579`. The user confirmed the expected LOD disappearance
+and recovery without a visual anomaly.
+
+The client then completed clean renderer/server/`WorldEngine`/instance shutdown
+at `20:34:22-20:34:23`; `runClient` exited 0 with `BUILD SUCCESSFUL`. The
+targeted scan found no Voxy error/warning, option-identifier/initializer error,
+or config failure. `XXV_CONFIG_APPLY_RUNTIME_ACCEPTANCE`, the combined focused
+frontend gate, and current whole-mod acceptance therefore pass. The enabled-
+config strict lifecycle adaptation remains a separate documented TODO and is
+not claimed complete by this result; IterationT likewise remains the documented
+post-migration compatibility TODO.

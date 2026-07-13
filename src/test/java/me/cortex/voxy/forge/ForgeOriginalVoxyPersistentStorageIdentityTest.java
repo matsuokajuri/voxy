@@ -26,9 +26,9 @@ class ForgeOriginalVoxyPersistentStorageIdentityTest {
 
     @Test
     void serverAndWorldIdentitiesResolveToIsolatedStoragePaths() {
-        ForgeOriginalVoxyWorldIdentifier overworld = identifier("overworld", 41L);
-        ForgeOriginalVoxyWorldIdentifier nether = identifier("the_nether", 41L);
-        ForgeOriginalVoxyWorldIdentifier alternateSeed = identifier("overworld", 42L);
+        WorldIdentifier overworld = identifier("overworld", 41L);
+        WorldIdentifier nether = identifier("the_nether", 41L);
+        WorldIdentifier alternateSeed = identifier("overworld", 42L);
 
         Path serverA = this.temporaryDirectory.resolve("server-a");
         Path serverB = this.temporaryDirectory.resolve("server-b");
@@ -49,10 +49,10 @@ class ForgeOriginalVoxyPersistentStorageIdentityTest {
                 serverAOverworld.storagePath());
     }
 
-    private static ForgeOriginalVoxyWorldIdentifier identifier(String dimension, long biomeSeed) {
+    private static WorldIdentifier identifier(String dimension, long biomeSeed) {
         ResourceKey<Level> key = ResourceKey.create(
                 net.minecraft.core.registries.Registries.DIMENSION,
                 new ResourceLocation("minecraft", dimension));
-        return new ForgeOriginalVoxyWorldIdentifier(key, biomeSeed, null);
+        return new WorldIdentifier(key, biomeSeed, null);
     }
 }

@@ -17,6 +17,9 @@ import org.lwjgl.opengl.ARBDrawBuffersBlend;
 
 import java.lang.reflect.Modifier;
 import java.lang.reflect.Type;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -98,14 +101,14 @@ public final class ForgeOriginalVoxyOculusShaderPatch {
                 throw new IllegalStateException("voxy json patch not valid: " + invalidPatchDataReason);
             }
         } catch (RuntimeException e) {
-            VoxyForge.LOGGER.error("Failed to parse Voxy Oculus shaderpack patch data.", e);
-            throw e;
+            throw malformedPatch(voxyPatchData, e);
         }
 
         if (patchData.version != VERSION) {
-            throw new IllegalStateException(
+            throw new ForgeOriginalVoxyShaderLoadError(
                     "Shader has Voxy patch data, but patch version is incorrect. expected "
-                            + VERSION + " got " + patchData.version);
+                            + VERSION + " got " + patchData.version,
+                    null);
         }
         return new ForgeOriginalVoxyOculusShaderPatch(patchData, ipack);
     }
@@ -117,7 +120,12 @@ public final class ForgeOriginalVoxyOculusShaderPatch {
         if (voxyPatchData == null) {
             return Set.of();
         }
-        PatchGson patchData = parsePatchData(voxyPatchData);
+        PatchGson patchData;
+        try {
+            patchData = parsePatchData(voxyPatchData);
+        } catch (RuntimeException e) {
+            throw malformedPatch(voxyPatchData, e);
+        }
         Set<Integer> targets = new LinkedHashSet<>();
         collectDrawBufferTargets(patchData.opaqueDrawBuffers, targets);
         collectDrawBufferTargets(patchData.translucentDrawBuffers, targets);
@@ -130,6 +138,18 @@ public final class ForgeOriginalVoxyOculusShaderPatch {
             }
         }
         return targets;
+    }
+
+    private static ForgeOriginalVoxyShaderLoadError malformedPatch(String patchData, RuntimeException cause) {
+        VoxyForge.LOGGER.error("Failed to parse Voxy Oculus shaderpack patch data; dumping JSON.", cause);
+        try {
+            Files.writeString(Path.of("JSON_DUMP.txt"), patchData);
+        } catch (IOException dumpFailure) {
+            cause.addSuppressed(dumpFailure);
+        }
+        return new ForgeOriginalVoxyShaderLoadError(
+                "Failed to parse Voxy shaderpack patch data; dumped JSON_DUMP.txt",
+                cause);
     }
 
     private static String readPatchDataSource(

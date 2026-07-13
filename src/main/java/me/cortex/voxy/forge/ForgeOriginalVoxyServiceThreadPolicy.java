@@ -22,16 +22,12 @@ final class ForgeOriginalVoxyServiceThreadPolicy {
             return new Selection(
                     false,
                     false,
-                    false,
                     0,
-                    0,
-                    0,
-                    "forge-config-not-loaded",
                     e.getClass().getSimpleName() + ":" + String.valueOf(e.getMessage()));
         }
         EmbeddiumBuilderThreads builderThreads = useBuilderThreads
                 ? queryEmbeddiumBuilderThreads()
-                : new EmbeddiumBuilderThreads(false, 0, "disabled-by-config", "none");
+                : new EmbeddiumBuilderThreads(false, 0, "none");
         int dedicated = target;
         if (useBuilderThreads && builderThreads.available()) {
             dedicated = Math.max(1, target - builderThreads.threadCount());
@@ -39,11 +35,7 @@ final class ForgeOriginalVoxyServiceThreadPolicy {
         return new Selection(
                 true,
                 useBuilderThreads,
-                builderThreads.available(),
-                target,
                 dedicated,
-                builderThreads.threadCount(),
-                builderThreads.source(),
                 builderThreads.failureReason());
     }
 
@@ -53,32 +45,30 @@ final class ForgeOriginalVoxyServiceThreadPolicy {
             Method instanceNullable = rendererClass.getMethod("instanceNullable");
             Object renderer = instanceNullable.invoke(null);
             if (renderer == null) {
-                return new EmbeddiumBuilderThreads(false, 0, "embeddium-renderer-not-attached", "none");
+                return new EmbeddiumBuilderThreads(false, 0, "none");
             }
             Field managerField = rendererClass.getDeclaredField("renderSectionManager");
             managerField.setAccessible(true);
             Object manager = managerField.get(renderer);
             if (manager == null) {
-                return new EmbeddiumBuilderThreads(false, 0, "embeddium-render-section-manager-not-ready", "none");
+                return new EmbeddiumBuilderThreads(false, 0, "none");
             }
             Object builder = manager.getClass().getMethod("getBuilder").invoke(manager);
             if (builder == null) {
-                return new EmbeddiumBuilderThreads(false, 0, "embeddium-builder-not-ready", "none");
+                return new EmbeddiumBuilderThreads(false, 0, "none");
             }
             Object count = builder.getClass().getMethod("getTotalThreadCount").invoke(builder);
             if (!(count instanceof Integer threadCount)) {
-                return new EmbeddiumBuilderThreads(false, 0, "embeddium-builder-thread-count-invalid", "none");
+                return new EmbeddiumBuilderThreads(false, 0, "none");
             }
             return new EmbeddiumBuilderThreads(
                     true,
                     Math.max(0, threadCount),
-                    "config-minus-embeddium-builder",
                     "none");
         } catch (ReflectiveOperationException | RuntimeException e) {
             return new EmbeddiumBuilderThreads(
                     false,
                     0,
-                    "embeddium-builder-query-failed",
                     e.getClass().getSimpleName() + ":" + String.valueOf(e.getMessage()));
         }
     }
@@ -86,11 +76,7 @@ final class ForgeOriginalVoxyServiceThreadPolicy {
     record Selection(
             boolean configOwnerReady,
             boolean useEmbeddiumBuilderThreads,
-            boolean embeddiumBuilderThreadCountAvailable,
-            int targetThreadCount,
             int dedicatedThreadCount,
-            int embeddiumBuilderThreadCount,
-            String source,
             String failureReason
     ) {
     }
@@ -98,7 +84,6 @@ final class ForgeOriginalVoxyServiceThreadPolicy {
     private record EmbeddiumBuilderThreads(
             boolean available,
             int threadCount,
-            String source,
             String failureReason
     ) {
     }

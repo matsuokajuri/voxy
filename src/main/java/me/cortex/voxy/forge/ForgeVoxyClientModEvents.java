@@ -13,18 +13,24 @@ final class ForgeVoxyClientModEvents {
     static void register(IEventBus modBus) {
         ModLoadingContext.get().registerExtensionPoint(
                 ConfigScreenHandler.ConfigScreenFactory.class,
-                () -> new ConfigScreenHandler.ConfigScreenFactory(ForgeOriginalVoxyConfigScreen::new));
+                () -> new ConfigScreenHandler.ConfigScreenFactory(ForgeOriginalVoxyEmbeddiumOptions::createScreen));
         modBus.addListener(ForgeVoxyClientModEvents::onClientSetup);
         modBus.addListener(ForgeVoxyClientModEvents::onRegisterClientReloadListeners);
     }
 
     private static void onClientSetup(FMLClientSetupEvent event) {
-        ForgeVoxyInstance.INSTANCE.register();
-        VoxyForge.LOGGER.info("Voxy Forge client parity adapters registered. Game dir: {}", VoxyForge.PLATFORM.getGameDir());
+        event.enqueueWork(() -> {
+            if (!ForgeOriginalVoxyClientRuntime.initialize()) {
+                return;
+            }
+            ForgeOriginalVoxyEmbeddiumOptions.register();
+            ForgeVoxyInstance.INSTANCE.register();
+            VoxyForge.LOGGER.info("Voxy Forge client adapters registered");
+        });
     }
 
     private static void onRegisterClientReloadListeners(RegisterClientReloadListenersEvent event) {
-        ForgeVoxyInstance.INSTANCE.getModelBridgeResourceReloadTracker().registerClientReloadListeners(event);
-        VoxyForge.LOGGER.info("Registered Voxy model bridge client resource reload listener.");
+        event.registerReloadListener(new ForgeVoxyResourceReloadListener(ForgeVoxyInstance.INSTANCE));
+        VoxyForge.LOGGER.info("Registered Voxy client resource reload listener");
     }
 }

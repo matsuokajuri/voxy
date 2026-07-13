@@ -54,9 +54,9 @@ final class ForgeSoftwareModelTextureBakery {
     private static final int FLAG_DISCARD = 8;
     private static final Matrix4f[] VIEWS = createViews();
 
-    private final ForgeOriginalVoxyReuseVertexConsumer opaqueVC = new ForgeOriginalVoxyReuseVertexConsumer();
-    private final ForgeOriginalVoxyReuseVertexConsumer translucentVC = new ForgeOriginalVoxyReuseVertexConsumer(1);
-    private final ForgeOriginalVoxySoftwareRasterizer rasterizer = new ForgeOriginalVoxySoftwareRasterizer(FACE_SIZE);
+    private final ReuseVertexConsumer opaqueVC = new ReuseVertexConsumer();
+    private final ReuseVertexConsumer translucentVC = new ReuseVertexConsumer(1);
+    private final SoftwareRasterizer rasterizer = new SoftwareRasterizer(FACE_SIZE);
     private final LiquidBlockRenderer fluidRenderer = new LiquidBlockRenderer();
     private int[] atlasPixels;
     private int atlasWidth;
@@ -72,7 +72,7 @@ final class ForgeSoftwareModelTextureBakery {
         MemoryBuffer output = new MemoryBuffer(OUTPUT_BUFFER_BYTES);
         try {
             int flags = this.renderToOutput(minecraft, state, output.address);
-            ForgeOriginalVoxyColourDepthTextureData[] faces = texturesFromOutput(output.address);
+            ColourDepthTextureData[] faces = texturesFromOutput(output.address);
             return new BakeResult(faces, chooseLayer(state, flags, faces), flags, this.lastFailureReason);
         } finally {
             output.free();
@@ -186,7 +186,7 @@ final class ForgeSoftwareModelTextureBakery {
         try {
             for (RenderType renderType : renderTypes) {
                 anyRenderType = true;
-                ForgeOriginalVoxyReuseVertexConsumer target =
+                ReuseVertexConsumer target =
                         ForgeOriginalVoxyQuadMaterialBridge.isTranslucentLayer(renderType) ? this.translucentVC : this.opaqueVC;
                 for (Direction direction : directionsWithNull()) {
                     List<BakedQuad> quads = getQuads(model, state, direction, renderType);
@@ -221,12 +221,12 @@ final class ForgeSoftwareModelTextureBakery {
         return flags;
     }
 
-    private static ForgeOriginalVoxyModelLayer chooseLayer(BlockState state, int flags, ForgeOriginalVoxyColourDepthTextureData[] faces) {
+    private static ForgeOriginalVoxyModelLayer chooseLayer(BlockState state, int flags, ColourDepthTextureData[] faces) {
         ForgeOriginalVoxyModelLayer layer = ForgeOriginalVoxyModelLayer.OTHER;
         if ((flags & FLAG_TRANSLUCENT) != 0) {
             boolean anyTranslucent = false;
-            for (ForgeOriginalVoxyColourDepthTextureData face : faces) {
-                anyTranslucent |= face != null && ForgeOriginalVoxyTextureUtils.hasTranslucentPixel(face);
+            for (ColourDepthTextureData face : faces) {
+                anyTranslucent |= face != null && TextureUtils.hasTranslucentPixel(face);
                 if (anyTranslucent) {
                     break;
                 }
@@ -235,8 +235,8 @@ final class ForgeSoftwareModelTextureBakery {
                 layer = ForgeOriginalVoxyModelLayer.TRANSLUCENT;
             } else {
                 boolean solid = true;
-                for (ForgeOriginalVoxyColourDepthTextureData face : faces) {
-                    solid &= face == null || ForgeOriginalVoxyTextureUtils.isSolidWhereDrawn(face);
+                for (ColourDepthTextureData face : faces) {
+                    solid &= face == null || TextureUtils.isSolidWhereDrawn(face);
                     if (!solid) {
                         break;
                     }
@@ -346,7 +346,7 @@ final class ForgeSoftwareModelTextureBakery {
         this.opaqueVC.setDefaultMeta(0);
     }
 
-    private ForgeOriginalVoxyReuseVertexConsumer selectFluidConsumer(FluidState fluidState) {
+    private ReuseVertexConsumer selectFluidConsumer(FluidState fluidState) {
         RenderType renderType = ItemBlockRenderTypes.getRenderLayer(fluidState);
         if (ForgeOriginalVoxyQuadMaterialBridge.isTranslucentLayer(renderType)) {
             return this.translucentVC;
@@ -423,10 +423,10 @@ final class ForgeSoftwareModelTextureBakery {
         );
     }
 
-    record BakeResult(ForgeOriginalVoxyColourDepthTextureData[] textures, ForgeOriginalVoxyModelLayer layer, int flags, String failureReason) {
+    record BakeResult(ColourDepthTextureData[] textures, ForgeOriginalVoxyModelLayer layer, int flags, String failureReason) {
         boolean anyFaceWritten() {
-            for (ForgeOriginalVoxyColourDepthTextureData face : this.textures) {
-                if (face != null && ForgeOriginalVoxyTextureUtils.getWrittenPixelCount(face, ForgeOriginalVoxyTextureUtils.WRITE_CHECK_STENCIL) > 0) {
+            for (ColourDepthTextureData face : this.textures) {
+                if (face != null && TextureUtils.getWrittenPixelCount(face, TextureUtils.WRITE_CHECK_STENCIL) > 0) {
                     return true;
                 }
             }
@@ -434,7 +434,7 @@ final class ForgeSoftwareModelTextureBakery {
         }
     }
 
-    static byte[] rgbaBytes(ForgeOriginalVoxyColourDepthTextureData face) {
+    static byte[] rgbaBytes(ColourDepthTextureData face) {
         byte[] pixels = new byte[ForgeModelAtlasPixelFormat.BYTES_PER_FACE];
         for (int i = 0; i < Math.min(face.colour().length, FACE_PIXELS); i++) {
             int pixel = face.colour()[i];
@@ -447,8 +447,8 @@ final class ForgeSoftwareModelTextureBakery {
         return pixels;
     }
 
-    static ForgeOriginalVoxyColourDepthTextureData[] texturesFromOutput(long outputBuffer) {
-        ForgeOriginalVoxyColourDepthTextureData[] textures = new ForgeOriginalVoxyColourDepthTextureData[ForgeModelAtlasLayout.FACE_COUNT];
+    static ColourDepthTextureData[] texturesFromOutput(long outputBuffer) {
+        ColourDepthTextureData[] textures = new ColourDepthTextureData[ForgeModelAtlasLayout.FACE_COUNT];
         for (int face = 0; face < textures.length; face++) {
             long facePtr = outputBuffer + SINGLE_FACE_OUTPUT_SIZE * face;
             int[] colour = new int[FACE_PIXELS];
@@ -458,7 +458,7 @@ final class ForgeSoftwareModelTextureBakery {
                 colour[i] = (int) value;
                 depth[i] = (int) (value >>> 32);
             }
-            textures[face] = new ForgeOriginalVoxyColourDepthTextureData(colour, depth, FACE_SIZE, FACE_SIZE);
+            textures[face] = new ColourDepthTextureData(colour, depth, FACE_SIZE, FACE_SIZE);
         }
         return textures;
     }

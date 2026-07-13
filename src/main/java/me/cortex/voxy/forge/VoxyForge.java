@@ -1,8 +1,6 @@
 package me.cortex.voxy.forge;
 
 import me.cortex.voxy.config.ForgeVoxyConfig;
-import me.cortex.voxy.platform.ForgePlatformServices;
-import me.cortex.voxy.platform.PlatformServices;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.fml.DistExecutor;
@@ -17,7 +15,6 @@ import org.slf4j.LoggerFactory;
 public final class VoxyForge {
     public static final String MOD_ID = "voxy";
     public static final Logger LOGGER = LoggerFactory.getLogger("Voxy");
-    public static final PlatformServices PLATFORM = new ForgePlatformServices(MOD_ID);
 
     public VoxyForge() {
         IEventBus modBus = FMLJavaModLoadingContext.get().getModEventBus();
@@ -25,6 +22,6 @@ public final class VoxyForge {
 
         DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> ForgeVoxyClientModEvents.register(modBus));
 
-        LOGGER.info("Voxy Forge 1.20.1 original-parity route loaded. Whole-mod parity is user-approved.");
+        LOGGER.info("Voxy Forge 1.20.1 loaded");
     }
 }

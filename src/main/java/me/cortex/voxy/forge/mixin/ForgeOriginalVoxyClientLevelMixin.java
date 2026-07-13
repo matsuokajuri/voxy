@@ -1,10 +1,9 @@
 package me.cortex.voxy.forge.mixin;
 
-import me.cortex.voxy.common.world.service.VoxelIngestService;
 import me.cortex.voxy.config.ForgeVoxyConfig;
 import me.cortex.voxy.forge.ForgeVoxyInstance;
-import me.cortex.voxy.forge.ForgeOriginalVoxyWorldIdentifier;
-import me.cortex.voxy.forge.ForgeOriginalVoxyWorldIdentifierAccess;
+import me.cortex.voxy.forge.WorldIdentifier;
+import me.cortex.voxy.forge.IWorldGetIdentifier;
 import net.minecraft.client.multiplayer.ClientChunkCache;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.multiplayer.ClientPacketListener;
@@ -30,9 +29,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import java.util.function.Supplier;
 
 @Mixin(ClientLevel.class)
-public abstract class ForgeOriginalVoxyClientLevelMixin implements ForgeOriginalVoxyWorldIdentifierAccess {
+public abstract class ForgeOriginalVoxyClientLevelMixin implements IWorldGetIdentifier {
     @Unique
-    private ForgeOriginalVoxyWorldIdentifier voxy$worldIdentifier;
+    private WorldIdentifier voxy$worldIdentifier;
 
     @Shadow
     @Final
@@ -54,14 +53,14 @@ public abstract class ForgeOriginalVoxyClientLevelMixin implements ForgeOriginal
             boolean debug,
             long biomeZoomSeed,
             CallbackInfo ci) {
-        this.voxy$worldIdentifier = new ForgeOriginalVoxyWorldIdentifier(
+        this.voxy$worldIdentifier = new WorldIdentifier(
                 dimension,
                 biomeZoomSeed,
                 dimensionType == null ? null : dimensionType.unwrapKey().orElse(null));
     }
 
     @Override
-    public ForgeOriginalVoxyWorldIdentifier voxy$getOriginalVoxyWorldIdentifier() {
+    public WorldIdentifier voxy$getIdentifier() {
         return this.voxy$worldIdentifier;
     }
 
@@ -73,11 +72,6 @@ public abstract class ForgeOriginalVoxyClientLevelMixin implements ForgeOriginal
         if (!ForgeVoxyConfig.ENABLED.get() || !ForgeVoxyConfig.INGEST_ENABLED.get()) {
             return;
         }
-        var engine = ForgeVoxyInstance.INSTANCE.getEngineForLevel((ClientLevel) (Object) this);
-        if (engine.isEmpty()) {
-            return;
-        }
-
         int localX = pos.getX() & 15;
         int localY = pos.getY() & 15;
         int localZ = pos.getZ() & 15;
@@ -92,7 +86,9 @@ public abstract class ForgeOriginalVoxyClientLevelMixin implements ForgeOriginal
         if (!(level.getChunk(pos.getX() >> 4, pos.getZ() >> 4, ChunkStatus.FULL, false) instanceof LevelChunk chunk)) {
             return;
         }
-        boolean updated = VoxelIngestService.ingestChunkSection(engine.get(), chunk, sectionPos.y());
-        ForgeVoxyInstance.INSTANCE.getChunkIngestManager().recordMixinSectionIngest(updated);
+        ForgeVoxyInstance.INSTANCE.ingestSectionWithLightRetry(
+                (ClientLevel) (Object) this,
+                chunk,
+                sectionPos.y());
     }
 }

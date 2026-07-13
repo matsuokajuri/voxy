@@ -1,5 +1,6 @@
 package me.cortex.voxy.forge;
 
+import me.cortex.voxy.common.util.TrackedObject;
 import java.util.Arrays;
 
 import static org.lwjgl.opengl.GL11C.GL_DEPTH_COMPONENT;
@@ -28,10 +29,10 @@ import static org.lwjgl.opengl.GL45C.glNamedFramebufferTexture;
 import static org.lwjgl.opengl.GL45C.glTextureParameteri;
 import static org.lwjgl.opengl.GL45C.glTextureStorage2D;
 
-final class ForgeOriginalVoxyNormalPipelineTargets {
+final class ForgeOriginalVoxyNormalPipelineTargets extends TrackedObject {
     private final int ssaoFramebufferId = glCreateFramebuffers();
-    private final ForgeOriginalVoxyDepthFramebuffer translucentDepthFramebuffer =
-            new ForgeOriginalVoxyDepthFramebuffer(GL_DEPTH24_STENCIL8);
+    private final DepthFramebuffer translucentDepthFramebuffer =
+            new DepthFramebuffer(GL_DEPTH24_STENCIL8);
     private int colourTextureId;
     private int colourSsaoTextureId;
     private int width;
@@ -42,9 +43,6 @@ final class ForgeOriginalVoxyNormalPipelineTargets {
     private int translucentAttachmentCount;
     private int[] opaqueExternalTextureIds = new int[0];
     private int[] translucentExternalTextureIds = new int[0];
-    private long resizeCount;
-    private String lastLifecycleEvent = "created";
-    private String lastFailureReason = "none";
 
     boolean resize(ForgeOriginalVoxyPipelineDepthStage depthStage, int width, int height) {
         return this.resize(depthStage, width, height, null);
@@ -73,7 +71,7 @@ final class ForgeOriginalVoxyNormalPipelineTargets {
         this.opaqueExternalTextureIds = new int[0];
         this.translucentExternalTextureIds = new int[0];
         glNamedFramebufferTexture(depthStage.framebufferId(), GL_COLOR_ATTACHMENT0, this.colourTextureId, 0);
-        glNamedFramebufferTexture(this.ssaoFramebufferId, depthStage.depthAttachmentType(), depthStage.depthTextureId(), 0);
+        glNamedFramebufferTexture(this.ssaoFramebufferId, depthStage.getDepthAttachmentType(), depthStage.getDepthTex(), 0);
         glNamedFramebufferTexture(this.ssaoFramebufferId, GL_COLOR_ATTACHMENT0, this.colourSsaoTextureId, 0);
         this.setDrawBuffers(depthStage.framebufferId(), new int[]{GL_COLOR_ATTACHMENT0});
         this.setDrawBuffers(this.ssaoFramebufferId, new int[]{GL_COLOR_ATTACHMENT0});
@@ -81,25 +79,20 @@ final class ForgeOriginalVoxyNormalPipelineTargets {
         this.detachUnusedColourAttachments(this.ssaoFramebufferId, 1, this.translucentAttachmentCount);
         this.opaqueAttachmentCount = 1;
         this.translucentAttachmentCount = 1;
-        glTextureParameteri(depthStage.depthTextureId(), GL_DEPTH_STENCIL_TEXTURE_MODE, GL_DEPTH_COMPONENT);
+        glTextureParameteri(depthStage.getDepthTex(), GL_DEPTH_STENCIL_TEXTURE_MODE, GL_DEPTH_COMPONENT);
         this.verifyFramebuffer(depthStage.framebufferId(), "normal-pipeline-opaque-framebuffer");
         this.verifyFramebuffer(this.ssaoFramebufferId, "normal-pipeline-ssao-framebuffer");
         this.width = width;
         this.height = height;
-        this.resizeCount++;
-        this.lastLifecycleEvent = "resize";
-        this.lastFailureReason = "none";
         return true;
     }
 
     void bindOpaqueFramebuffer(ForgeOriginalVoxyPipelineDepthStage depthStage) {
         glBindFramebuffer(GL_FRAMEBUFFER, depthStage.framebufferId());
-        this.lastLifecycleEvent = "bind-opaque";
     }
 
     void bindTranslucentFramebuffer() {
         glBindFramebuffer(GL_FRAMEBUFFER, this.ssaoFramebufferId);
-        this.lastLifecycleEvent = "bind-translucent";
     }
 
     int translucentFramebufferId() {
@@ -116,10 +109,6 @@ final class ForgeOriginalVoxyNormalPipelineTargets {
                 && (!this.externalDrawTargets || this.translucentDepthFramebuffer.depthTextureReady());
     }
 
-    boolean usingExternalDrawTargets() {
-        return this.externalDrawTargets;
-    }
-
     int colourTextureId() {
         return this.colourTextureId;
     }
@@ -129,26 +118,15 @@ final class ForgeOriginalVoxyNormalPipelineTargets {
     }
 
     int translucentDepthTextureId() {
-        return this.translucentDepthFramebuffer.depthTextureId();
+        return this.translucentDepthFramebuffer.getDepthTex();
     }
 
-    long resizeCount() {
-        return this.resizeCount;
-    }
-
-    String lastLifecycleEvent() {
-        return this.lastLifecycleEvent;
-    }
-
-    String lastFailureReason() {
-        return this.lastFailureReason;
-    }
-
-    void freeOnRenderThread() {
+    @Override
+    public void free() {
+        this.free0();
         this.deleteOwnedTextures();
         this.translucentDepthFramebuffer.free();
         glDeleteFramebuffers(this.ssaoFramebufferId);
-        this.lastLifecycleEvent = "free";
     }
 
     private boolean resizeExternal(
@@ -164,11 +142,11 @@ final class ForgeOriginalVoxyNormalPipelineTargets {
             this.translucentDepthFramebuffer.resize(width, height);
             glNamedFramebufferTexture(
                     this.ssaoFramebufferId,
-                    depthStage.depthAttachmentType(),
-                    this.translucentDepthFramebuffer.depthTextureId(),
+                    depthStage.getDepthAttachmentType(),
+                    this.translucentDepthFramebuffer.getDepthTex(),
                     0);
             glTextureParameteri(
-                    this.translucentDepthFramebuffer.depthTextureId(),
+                    this.translucentDepthFramebuffer.getDepthTex(),
                     GL_DEPTH_STENCIL_TEXTURE_MODE,
                     GL_DEPTH_COMPONENT);
             return false;
@@ -192,21 +170,18 @@ final class ForgeOriginalVoxyNormalPipelineTargets {
         this.translucentDepthFramebuffer.resize(width, height);
         glNamedFramebufferTexture(
                 this.ssaoFramebufferId,
-                depthStage.depthAttachmentType(),
-                this.translucentDepthFramebuffer.depthTextureId(),
+                depthStage.getDepthAttachmentType(),
+                this.translucentDepthFramebuffer.getDepthTex(),
                 0);
-        glTextureParameteri(depthStage.depthTextureId(), GL_DEPTH_STENCIL_TEXTURE_MODE, GL_DEPTH_COMPONENT);
+        glTextureParameteri(depthStage.getDepthTex(), GL_DEPTH_STENCIL_TEXTURE_MODE, GL_DEPTH_COMPONENT);
         glTextureParameteri(
-                this.translucentDepthFramebuffer.depthTextureId(),
+                this.translucentDepthFramebuffer.getDepthTex(),
                 GL_DEPTH_STENCIL_TEXTURE_MODE,
                 GL_DEPTH_COMPONENT);
         this.verifyFramebuffer(depthStage.framebufferId(), "oculus-opaque-framebuffer");
         this.verifyFramebuffer(this.ssaoFramebufferId, "oculus-translucent-framebuffer");
         this.width = width;
         this.height = height;
-        this.resizeCount++;
-        this.lastLifecycleEvent = "resize-external-draw-targets";
-        this.lastFailureReason = "none";
         return true;
     }
 
@@ -214,9 +189,7 @@ final class ForgeOriginalVoxyNormalPipelineTargets {
         int[] drawBuffers = new int[textureIds.length];
         for (int i = 0; i < textureIds.length; i++) {
             if (textureIds[i] == 0) {
-                this.lastLifecycleEvent = "failure";
-                this.lastFailureReason = name + "-missing-texture-" + i;
-                throw new IllegalStateException(this.lastFailureReason);
+                throw new IllegalStateException(name + "-missing-texture-" + i);
             }
             int attachment = GL_COLOR_ATTACHMENT0 + i;
             drawBuffers[i] = attachment;
@@ -244,17 +217,17 @@ final class ForgeOriginalVoxyNormalPipelineTargets {
     private void verifyFramebuffer(int framebufferId, String name) {
         int status = glCheckNamedFramebufferStatus(framebufferId, GL_FRAMEBUFFER);
         if (status != GL_FRAMEBUFFER_COMPLETE) {
-            this.lastLifecycleEvent = "failure";
-            this.lastFailureReason = name + "-incomplete-" + status + "-gl-" + glGetError();
-            throw new IllegalStateException(this.lastFailureReason);
+            throw new IllegalStateException(name + "-incomplete-" + status + "-gl-" + glGetError());
         }
     }
 
     private void deleteOwnedTextures() {
         if (this.ownsColourTextures && this.colourTextureId != 0) {
+            ForgeOriginalVoxyGlResourceStatistics.textureFreed(this.colourTextureId);
             glDeleteTextures(this.colourTextureId);
         }
         if (this.ownsColourTextures && this.colourSsaoTextureId != 0) {
+            ForgeOriginalVoxyGlResourceStatistics.textureFreed(this.colourSsaoTextureId);
             glDeleteTextures(this.colourSsaoTextureId);
         }
         this.colourTextureId = 0;
@@ -266,6 +239,9 @@ final class ForgeOriginalVoxyNormalPipelineTargets {
 
     private static int createColourTexture(int width, int height) {
         int textureId = glCreateTextures(GL_TEXTURE_2D);
+        ForgeOriginalVoxyGlResourceStatistics.textureAllocated(
+                textureId,
+                (long) width * height * Integer.BYTES);
         glTextureStorage2D(textureId, 1, GL_RGBA8, width, height);
         glTextureParameteri(textureId, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
         glTextureParameteri(textureId, GL_TEXTURE_MAG_FILTER, GL_NEAREST);

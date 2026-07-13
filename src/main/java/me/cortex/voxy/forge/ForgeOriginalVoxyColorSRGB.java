@@ -85,22 +85,6 @@ final class ForgeOriginalVoxyColorSRGB {
         return (bias + (scale * t)) >>> 16;
     }
 
-    static boolean byteForByteAuditReady() {
-        return TO_SRGB8_TABLE.length == 104
-                && FROM_SRGB8_TABLE.length == 256
-                && Float.floatToRawIntBits(FROM_SRGB8_TABLE[0]) == 0x00000000
-                && Float.floatToRawIntBits(FROM_SRGB8_TABLE[1]) == 0x399f22b4
-                && Float.floatToRawIntBits(FROM_SRGB8_TABLE[11]) == 0x3b5b518d
-                && Float.floatToRawIntBits(FROM_SRGB8_TABLE[128]) == 0x3e5d0a8b
-                && Float.floatToRawIntBits(FROM_SRGB8_TABLE[255]) == 0x3f800000
-                && TO_SRGB8_TABLE[0] == 0x0073000d
-                && TO_SRGB8_TABLE[37] == 0x057b00c5
-                && TO_SRGB8_TABLE[103] == 0x7c330723
-                && linearToSrgb(0.0f, 0.0f, 0.0f, 255) == 0xff000000
-                && linearToSrgb(1.0f, 1.0f, 1.0f, 255) == 0xffffffff
-                && linearToSrgb8(srgbToLinear(128)) == 128;
-    }
-
     private static float clampLinearInput(float input) {
         if (!(input > MIN_BOUND)) {
             input = MIN_BOUND;

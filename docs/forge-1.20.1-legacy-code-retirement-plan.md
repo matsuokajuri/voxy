@@ -31,7 +31,8 @@ are all registered in one file.
 Retirement sequence:
 
 ```text
-1. keep /voxy parity_route_status as the visible boundary - done
+1. historical: keep /voxy parity_route_status as the visible boundary - done in
+   the proof phase; XXV later deleted the status-only command and DTO chain
 2. add no new commands to ForgeVoxyCommands - active rule
 3. split legacy debug/GPU/MDIC command registration into ForgeVoxyLegacyDebugCommands - done
 4. split formal renderer status commands into ForgeVoxyFormalRendererCommands - done

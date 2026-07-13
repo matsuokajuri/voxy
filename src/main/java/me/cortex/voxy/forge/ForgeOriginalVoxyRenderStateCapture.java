@@ -9,9 +9,6 @@ import java.lang.reflect.Method;
 
 public final class ForgeOriginalVoxyRenderStateCapture {
     private static Matrix4f projection;
-    private static long projectionGeneration;
-    private static CapturedViewportParameters oculusViewportParameters;
-    private static long oculusViewportGeneration;
     private static int lightTextureId;
 
     private ForgeOriginalVoxyRenderStateCapture() {
@@ -19,40 +16,14 @@ public final class ForgeOriginalVoxyRenderStateCapture {
 
     public static synchronized void captureProjection(Matrix4fc value) {
         projection = value == null ? null : new Matrix4f(value);
-        projectionGeneration++;
     }
 
     public static synchronized void captureLightTexture(Object lightTexture) {
         lightTextureId = readLightTextureId(lightTexture);
     }
 
-    public static synchronized void captureOculusViewport(
-            Matrix4fc vanillaProjection,
-            Matrix4fc modelView,
-            double cameraX,
-            double cameraY,
-            double cameraZ) {
-        if (vanillaProjection == null || modelView == null) {
-            oculusViewportParameters = null;
-        } else {
-            oculusViewportParameters = new CapturedViewportParameters(
-                    new Matrix4f(vanillaProjection),
-                    new Matrix4f(modelView),
-                    cameraX,
-                    cameraY,
-                    cameraZ,
-                    ++oculusViewportGeneration);
-            return;
-        }
-        oculusViewportGeneration++;
-    }
-
     static synchronized Matrix4f projectionCopy() {
         return projection == null ? null : new Matrix4f(projection);
-    }
-
-    static synchronized CapturedViewportParameters oculusViewportParametersCopy() {
-        return oculusViewportParameters == null ? null : oculusViewportParameters.copy();
     }
 
     static synchronized int lightTextureId() {
@@ -67,20 +38,9 @@ public final class ForgeOriginalVoxyRenderStateCapture {
         return lightTextureId;
     }
 
-    static synchronized long projectionGeneration() {
-        return projectionGeneration;
-    }
-
-    static synchronized long oculusViewportGeneration() {
-        return oculusViewportGeneration;
-    }
-
     static synchronized void clear() {
         projection = null;
-        oculusViewportParameters = null;
         lightTextureId = 0;
-        projectionGeneration++;
-        oculusViewportGeneration++;
     }
 
     private static int readLightTextureId(Object lightTexture) {
@@ -102,21 +62,4 @@ public final class ForgeOriginalVoxyRenderStateCapture {
         }
     }
 
-    record CapturedViewportParameters(
-            Matrix4f vanillaProjection,
-            Matrix4f modelView,
-            double cameraX,
-            double cameraY,
-            double cameraZ,
-            long generation) {
-        CapturedViewportParameters copy() {
-            return new CapturedViewportParameters(
-                    new Matrix4f(this.vanillaProjection),
-                    new Matrix4f(this.modelView),
-                    this.cameraX,
-                    this.cameraY,
-                    this.cameraZ,
-                    this.generation);
-        }
-    }
 }

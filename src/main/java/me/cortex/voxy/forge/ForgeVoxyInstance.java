@@ -1,16 +1,15 @@
 package me.cortex.voxy.forge;
 
-import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
-import me.cortex.voxy.common.config.section.SectionStorage;
 import me.cortex.voxy.common.util.MemoryBuffer;
 import me.cortex.voxy.common.world.WorldEngine;
-import me.cortex.voxy.common.world.WorldSection;
 import me.cortex.voxy.common.world.service.SectionSavingService;
 import me.cortex.voxy.common.world.service.VoxelIngestService;
 import me.cortex.voxy.commonImpl.ImportManager;
 import me.cortex.voxy.config.ForgeVoxyConfig;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
 import net.minecraftforge.client.event.CustomizeGuiOverlayEvent;
 import net.minecraftforge.client.event.RegisterClientCommandsEvent;
@@ -18,15 +17,12 @@ import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.GameShuttingDownEvent;
 import net.minecraftforge.event.TickEvent;
 
-import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Optional;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.LongConsumer;
 
 public final class ForgeVoxyInstance {
     public static final ForgeVoxyInstance INSTANCE = new ForgeVoxyInstance();
@@ -41,23 +37,21 @@ public final class ForgeVoxyInstance {
             new SectionSavingService(this.originalVoxyModelPipeline.getServiceManager());
     private final VoxelIngestService originalVoxyIngestService =
             new VoxelIngestService(this.originalVoxyModelPipeline.getServiceManager());
-    private final ImportManager originalVoxyImportManager = new ForgeOriginalVoxyClientImportManager();
-    private final ForgeChunkIngestManager chunkIngestManager = new ForgeChunkIngestManager(this);
-    private final ForgeModelBridgeResourceReloadTracker modelBridgeResourceReloadTracker = new ForgeModelBridgeResourceReloadTracker(this);
-    private long persistentStorageOpenCount;
-    private long persistentStorageReuseCount;
+    private final ImportManager originalVoxyImportManager = new ClientImportManager();
+    private final ForgeIngestRetryQueue ingestRetryQueue = new ForgeIngestRetryQueue(this);
     private String activeClientDimension;
+    private boolean gpuDebugEnabled;
     private volatile boolean shuttingDown;
 
     private ForgeVoxyInstance() {
     }
 
+    boolean isRunning() {
+        return !this.shuttingDown;
+    }
+
     public void register() {
-        VoxelIngestService.setAutoIngestTarget(chunk -> ForgeVoxyConfig.ENABLED.get()
-                && ForgeVoxyConfig.INGEST_ENABLED.get()
-                && chunk.getLevel() instanceof ClientLevel level
-                ? this.getEngineForLevel(level).orElse(null)
-                : null);
+        VoxelIngestService.setAutoIngestTarget(this::resolveAutoIngestTarget);
         VoxelIngestService.setActiveService(this.originalVoxyIngestService);
         MinecraftForge.EVENT_BUS.addListener(this::onClientLogin);
         MinecraftForge.EVENT_BUS.addListener(this::onClientLogout);
@@ -66,7 +60,44 @@ public final class ForgeVoxyInstance {
         MinecraftForge.EVENT_BUS.addListener(this::onGameShuttingDown);
         MinecraftForge.EVENT_BUS.addListener(this::onRenderFog);
         MinecraftForge.EVENT_BUS.addListener(this::onDebugText);
-        this.chunkIngestManager.register();
+        this.ingestRetryQueue.register();
+    }
+
+    private WorldEngine resolveAutoIngestTarget(LevelChunk chunk) {
+        if (!ForgeVoxyConfig.ENABLED.get() || !ForgeVoxyConfig.INGEST_ENABLED.get()) {
+            return null;
+        }
+        if (chunk.getLevel() instanceof ClientLevel level) {
+            return this.getEngineForLevel(level).orElse(null);
+        }
+        if (!(chunk.getLevel() instanceof ServerLevel serverLevel)) {
+            return null;
+        }
+
+        //Chunky generates ServerLevel chunks. Only bridge the current level of this physical
+        //client's own integrated server; a multiplayer client has no integrated server and can
+        //therefore never route dedicated-server chunks into its client WorldEngine.
+        Minecraft minecraft = Minecraft.getInstance();
+        var integratedServer = minecraft.getSingleplayerServer();
+        ClientLevel clientLevel = minecraft.level;
+        if (integratedServer == null
+                || clientLevel == null
+                || serverLevel.getServer() != integratedServer
+                || integratedServer.getLevel(clientLevel.dimension()) != serverLevel) {
+            return null;
+        }
+
+        WorldIdentifier clientIdentifier =
+                ((IWorldGetIdentifier) clientLevel).voxy$getIdentifier();
+        if (clientIdentifier == null
+                || !clientIdentifier.equals(WorldIdentifier.fromServerLevel(serverLevel))) {
+            return null;
+        }
+        //The client may finish a dimension switch while the integrated server callback runs.
+        if (minecraft.level != clientLevel) {
+            return null;
+        }
+        return this.getEngineForLevel(clientLevel).orElse(null);
     }
 
     //Original Voxy disables vanilla's render-distance fog whenever LOD rendering is active
@@ -80,15 +111,18 @@ public final class ForgeVoxyInstance {
         if (event.getMode() != net.minecraft.client.renderer.FogRenderer.FogMode.FOG_TERRAIN) {
             return;
         }
-        if (event.getType() != net.minecraft.world.level.material.FogType.NONE) {
-            return;
-        }
         if (!ForgeVoxyConfig.isEnabledEarlySafe()
                 || !this.originalVoxyModelPipeline.isChunkBoundTrackerActive()
                 || ForgeOriginalVoxyOculusPipelineBridge.shaderpackActive()) {
             return;
         }
-        if (!ForgeOriginalVoxyFogParameters.isRenderDistanceFog(event.getFarPlaneDistance())) {
+        if (ForgeVoxyConfig.ORIGINAL_VOXY_USE_ENVIRONMENTAL_FOG.get()) {
+            if (event.getType() != net.minecraft.world.level.material.FogType.NONE
+                    || !ForgeOriginalVoxyFogParameters.isRenderDistanceFog(event.getFarPlaneDistance())) {
+                return;
+            }
+        } else if (event.getFarPlaneDistance() < 10.0F) {
+            //Original keeps only the very-close blindness/darkness-style safety fog.
             return;
         }
         event.setNearPlaneDistance(9_999_999.0F);
@@ -132,37 +166,6 @@ public final class ForgeVoxyInstance {
         }
     }
 
-    public int getStorageWriteCount() {
-        OwnedWorld owned = this.getActiveOwnedWorld();
-        return owned == null ? 0 : owned.counters().storageWriteCount().get();
-    }
-
-    public PersistentStorageStatus createPersistentStorageStatusSnapshot() {
-        ForgeOriginalVoxyPersistentStorage.Identity identity = this.activeStorageIdentity;
-        ForgeOriginalVoxyStorageConfig.Loaded config = identity == null
-                ? null
-                : ForgeOriginalVoxyPersistentStorage.configuration(identity);
-        OwnedWorld owned = this.getActiveOwnedWorld();
-        StorageCounters counters = owned == null ? null : owned.counters();
-        return new PersistentStorageStatus(
-                identity != null && owned != null && owned.world().isLive(),
-                config != null && config.ready(),
-                config == null ? "none" : config.path().toString(),
-                config == null ? "none" : config.source(),
-                config != null && config.config().disabled,
-                config == null ? "none" : config.backendChain(),
-                identity == null ? "none" : identity.worldIdentifier().toString(),
-                identity == null ? "none" : identity.storagePath().toString(),
-                counters == null ? 0 : counters.storageLoadHitCount().get(),
-                counters == null ? 0 : counters.storageLoadMissCount().get(),
-                counters == null ? 0 : counters.storageWriteCount().get(),
-                counters == null ? 0 : counters.storageMappingLoadCount().get(),
-                counters == null ? 0 : counters.storageMappingWriteCount().get(),
-                this.persistentStorageOpenCount,
-                this.persistentStorageReuseCount,
-                this.getInactiveWorldCount());
-    }
-
     public ForgeOriginalVoxyModelPipeline getOriginalVoxyModelPipeline() {
         return this.originalVoxyModelPipeline;
     }
@@ -183,8 +186,12 @@ public final class ForgeVoxyInstance {
         this.originalVoxyModelPipeline.markOculusWorldRenderingSettingsReload();
     }
 
-    public ForgeChunkIngestManager getChunkIngestManager() {
-        return this.chunkIngestManager;
+    public boolean ingestChunkWithLightRetry(LevelChunk chunk) {
+        return this.ingestRetryQueue.ingestChunk(chunk);
+    }
+
+    public boolean ingestSectionWithLightRetry(ClientLevel level, LevelChunk chunk, int sectionY) {
+        return this.ingestRetryQueue.ingestSection(level, chunk, sectionY);
     }
 
     public VoxelIngestService getIngestService() {
@@ -199,10 +206,6 @@ public final class ForgeVoxyInstance {
         return this.originalVoxySectionSavingService.getTaskCount() < 1200;
     }
 
-    public ForgeModelBridgeResourceReloadTracker getModelBridgeResourceReloadTracker() {
-        return this.modelBridgeResourceReloadTracker;
-    }
-
     public boolean reloadOriginalVoxyRuntime() {
         Minecraft minecraft = Minecraft.getInstance();
         if (this.shuttingDown || minecraft.level == null || minecraft.player == null) {
@@ -210,8 +213,7 @@ public final class ForgeVoxyInstance {
         }
 
         this.cancelAllImports();
-        this.chunkIngestManager.clear();
-        this.modelBridgeResourceReloadTracker.clear();
+        this.ingestRetryQueue.clear();
         this.originalVoxyModelPipeline.markWorldUnload();
         this.activeClientDimension = minecraft.level.dimension().location().toString();
         this.closeActiveWorld();
@@ -222,19 +224,56 @@ public final class ForgeVoxyInstance {
         return selected;
     }
 
+    void reloadOriginalVoxyRenderer(boolean rebuildVanillaRenderer) {
+        if (this.shuttingDown) {
+            return;
+        }
+        this.originalVoxyModelPipeline.markConfigurationReload();
+        Minecraft minecraft = Minecraft.getInstance();
+        if (rebuildVanillaRenderer && minecraft.levelRenderer != null) {
+            minecraft.levelRenderer.allChanged();
+        }
+    }
+
     private void onDebugText(CustomizeGuiOverlayEvent.DebugText event) {
+        // Forge posts DebugText even when the vanilla debug overlay is hidden. Original Voxy's
+        // entries are owned by the debug screen, so they must not become an independent HUD.
+        if (!Minecraft.getInstance().options.renderDebug) {
+            return;
+        }
         List<String> left = event.getLeft();
-        ForgeOriginalVoxyModelPipeline.DebugStatus renderer = this.originalVoxyModelPipeline.createDebugStatus();
-        left.add((renderer.rendererActive()
-                ? net.minecraft.ChatFormatting.GREEN
-                : net.minecraft.ChatFormatting.YELLOW) + "voxy-forge");
         this.addDebug(left);
-        left.add("Voxy renderer: active=" + renderer.rendererActive()
-                + " drawObserved=" + renderer.visibleDrawObserved()
-                + " lifecycle=" + renderer.lifecycleState());
+        this.originalVoxyModelPipeline.addDebugInfo(left);
+        TimingStatistics.update();
+        left.add("Voxy frame runtime (millis): "
+                + TimingStatistics.dynamic.pVal() + ", "
+                + TimingStatistics.main.pVal() + ", "
+                + TimingStatistics.postDynamic.pVal() + ", "
+                + TimingStatistics.all.pVal());
+        left.add("Extra time: "
+                + TimingStatistics.A.pVal() + ", "
+                + TimingStatistics.B.pVal() + ", "
+                + TimingStatistics.C.pVal() + ", "
+                + TimingStatistics.D.pVal());
+        left.add("Extra 2 time: "
+                + TimingStatistics.E.pVal() + ", "
+                + TimingStatistics.F.pVal() + ", "
+                + TimingStatistics.G.pVal() + ", "
+                + TimingStatistics.H.pVal() + ", "
+                + TimingStatistics.I.pVal());
+        String gpuTiming = GPUTiming.INSTANCE.getDebug();
+        if (!gpuTiming.isEmpty()) {
+            left.add(gpuTiming);
+        }
+        PrintfDebugUtil.addToOut(left);
     }
 
     private synchronized void addDebug(List<String> debug) {
+        debug.add("Buf/Tex [#/Mb]: ["
+                + GlBuffer.getCount() + "/"
+                + GlBuffer.getTotalSize() / 1_000_000L + "],["
+                + ForgeOriginalVoxyGlResourceStatistics.textureCount() + "/"
+                + ForgeOriginalVoxyGlResourceStatistics.textureBytes() / 1_000_000L + "]");
         debug.add("MemoryBuffer, Count/Size (mb): " + MemoryBuffer.getCount()
                 + "/" + MemoryBuffer.getTotalSize() / 1_000_000);
         StringBuilder activeSections = new StringBuilder();
@@ -262,6 +301,16 @@ public final class ForgeVoxyInstance {
         }
 
         var minecraft = Minecraft.getInstance();
+        boolean renderDebug = minecraft.options.renderDebug;
+        if (renderDebug != this.gpuDebugEnabled) {
+            this.gpuDebugEnabled = renderDebug;
+            RenderStatistics.enabled = renderDebug;
+            GPUTiming.INSTANCE.setEnabled(renderDebug);
+            if (minecraft.levelRenderer != null) {
+                //Original DebugEntries rebuilds the renderer because HAS_STATISTICS is a shader define.
+                minecraft.levelRenderer.allChanged();
+            }
+        }
         if (minecraft.level == null || minecraft.player == null) {
             this.cleanIdleWorlds();
             return;
@@ -275,8 +324,7 @@ public final class ForgeVoxyInstance {
             //Detect and detach the old renderer owner before ensure/select. Previously ensure returned
             //the old global pointer first, allowing new-dimension chunks to enter the old WorldEngine.
             this.activeClientDimension = dimension;
-            this.chunkIngestManager.clear();
-            this.modelBridgeResourceReloadTracker.clear();
+            this.ingestRetryQueue.clear();
             this.originalVoxyModelPipeline.markDimensionSwitch();
             this.closeActiveWorld();
             VoxyForge.LOGGER.info("Cleared Voxy parity pipeline state after client dimension switch to {}.", dimension);
@@ -326,7 +374,6 @@ public final class ForgeVoxyInstance {
             this.activeStorageIdentity = identity;
             existing.world().markActive();
             if (newlySelected) {
-                this.persistentStorageReuseCount++;
                 VoxyForge.LOGGER.info(
                         "Reused original Voxy persistent WorldEngine {} at {}.",
                         identity.worldIdentifier(),
@@ -341,20 +388,12 @@ public final class ForgeVoxyInstance {
     }
 
     private OwnedWorld createOwnedWorld(ForgeOriginalVoxyPersistentStorage.Identity identity) {
-        StorageCounters counters = new StorageCounters();
-        var storage = new CountingSectionStorage(
-                ForgeOriginalVoxyPersistentStorage.open(identity),
-                counters.storageWriteCount(),
-                counters.storageLoadHitCount(),
-                counters.storageLoadMissCount(),
-                counters.storageMappingLoadCount(),
-                counters.storageMappingWriteCount());
+        var storage = ForgeOriginalVoxyPersistentStorage.open(identity);
         this.originalVoxyModelPipeline.ensureOriginalServiceThreads();
         WorldEngine world = new WorldEngine(storage, this);
         world.setSaveCallback(this.originalVoxySectionSavingService::enqueueSave);
-        OwnedWorld owned = new OwnedWorld(world, counters);
+        OwnedWorld owned = new OwnedWorld(world);
         this.activeWorlds.put(identity, owned);
-        this.persistentStorageOpenCount++;
         VoxyForge.LOGGER.info(
                 "Created Voxy WorldEngine using original persistent storage chain {} at {}.",
                 identity.worldIdentifier(),
@@ -363,8 +402,7 @@ public final class ForgeVoxyInstance {
     }
 
     private void onClientLogout(ClientPlayerNetworkEvent.LoggingOut event) {
-        this.chunkIngestManager.clear();
-        this.modelBridgeResourceReloadTracker.clear();
+        this.ingestRetryQueue.clear();
         this.originalVoxyModelPipeline.markWorldUnload();
         this.activeClientDimension = null;
         this.closeActiveWorld();
@@ -385,8 +423,7 @@ public final class ForgeVoxyInstance {
         VoxyForge.LOGGER.info("Shutting down Voxy Forge original-parity instance.");
         VoxelIngestService.setAutoIngestTarget(null);
         VoxelIngestService.setActiveService(null);
-        this.chunkIngestManager.clear();
-        this.modelBridgeResourceReloadTracker.clear();
+        this.ingestRetryQueue.clear();
 
         //Original VoxyInstance.shutdown() cancels every active import before the ingest/saving
         //services and the shared service pool are stopped. Import tasks own WorldEngine refs.
@@ -402,7 +439,7 @@ public final class ForgeVoxyInstance {
         }
         //Original VoxyClientInstance.shutdown(): free the render resource cache since the entire
         // instance is freed (this is the only point the reused geometry buffer is truly deleted).
-        ForgeOriginalVoxyRenderResourceReuse.clearResources();
+        RenderResourceReuse.clearResources();
 
         try {
             this.originalVoxyIngestService.shutdown();
@@ -420,6 +457,8 @@ public final class ForgeVoxyInstance {
         } catch (Exception e) {
             VoxyForge.LOGGER.error("Failed to shut down Voxy original service thread pool.", e);
         }
+        ForgeOriginalVoxyClientRuntime.shutdown();
+        GPUTiming.INSTANCE.free();
         VoxyForge.LOGGER.info("Voxy Forge original-parity instance shutdown complete.");
     }
 
@@ -490,113 +529,7 @@ public final class ForgeVoxyInstance {
         return this.activeStorageIdentity == null ? null : this.activeWorlds.get(this.activeStorageIdentity);
     }
 
-    private synchronized int getInactiveWorldCount() {
-        return this.activeWorlds.size() - (this.getActiveWorld() == null ? 0 : 1);
+    private record OwnedWorld(WorldEngine world) {
     }
 
-    public boolean isRunning() {
-        return !this.shuttingDown;
-    }
-
-    private record OwnedWorld(WorldEngine world, StorageCounters counters) {
-    }
-
-    private record StorageCounters(
-            AtomicInteger storageWriteCount,
-            AtomicInteger storageLoadHitCount,
-            AtomicInteger storageLoadMissCount,
-            AtomicInteger storageMappingLoadCount,
-            AtomicInteger storageMappingWriteCount) {
-        private StorageCounters() {
-            this(new AtomicInteger(), new AtomicInteger(), new AtomicInteger(), new AtomicInteger(), new AtomicInteger());
-        }
-    }
-
-    private static final class CountingSectionStorage extends SectionStorage {
-        private final SectionStorage delegate;
-        private final AtomicInteger storageWriteCount;
-        private final AtomicInteger storageLoadHitCount;
-        private final AtomicInteger storageLoadMissCount;
-        private final AtomicInteger storageMappingLoadCount;
-        private final AtomicInteger storageMappingWriteCount;
-
-        private CountingSectionStorage(
-                SectionStorage delegate,
-                AtomicInteger storageWriteCount,
-                AtomicInteger storageLoadHitCount,
-                AtomicInteger storageLoadMissCount,
-                AtomicInteger storageMappingLoadCount,
-                AtomicInteger storageMappingWriteCount) {
-            this.delegate = delegate;
-            this.storageWriteCount = storageWriteCount;
-            this.storageLoadHitCount = storageLoadHitCount;
-            this.storageLoadMissCount = storageLoadMissCount;
-            this.storageMappingLoadCount = storageMappingLoadCount;
-            this.storageMappingWriteCount = storageMappingWriteCount;
-        }
-
-        @Override
-        public int loadSection(WorldSection into) {
-            int result = this.delegate.loadSection(into);
-            if (result == 0) {
-                this.storageLoadHitCount.incrementAndGet();
-            } else if (result == 1) {
-                this.storageLoadMissCount.incrementAndGet();
-            }
-            return result;
-        }
-
-        @Override
-        public void saveSection(WorldSection section) {
-            this.delegate.saveSection(section);
-            this.storageWriteCount.incrementAndGet();
-        }
-
-        @Override
-        public void putIdMapping(int id, ByteBuffer data) {
-            this.delegate.putIdMapping(id, data);
-            this.storageMappingWriteCount.incrementAndGet();
-        }
-
-        @Override
-        public Int2ObjectOpenHashMap<byte[]> getIdMappingsData() {
-            Int2ObjectOpenHashMap<byte[]> mappings = this.delegate.getIdMappingsData();
-            this.storageMappingLoadCount.addAndGet(mappings.size());
-            return mappings;
-        }
-
-        @Override
-        public void flush() {
-            this.delegate.flush();
-        }
-
-        @Override
-        public void close() {
-            this.delegate.close();
-        }
-
-        @Override
-        public void iteratePositions(int level, LongConsumer callback) {
-            this.delegate.iteratePositions(level, callback);
-        }
-    }
-
-    public record PersistentStorageStatus(
-            boolean persistentStorageReady,
-            boolean storageConfigReady,
-            String storageConfigPath,
-            String storageConfigSource,
-            boolean storageDisabled,
-            String backendChain,
-            String worldIdentifier,
-            String storagePath,
-            int sectionLoadHits,
-            int sectionLoadMisses,
-            int sectionWrites,
-            int mappingEntriesLoaded,
-            int mappingWrites,
-            long openCount,
-            long reuseCount,
-            int closingWorldCount) {
-    }
 }

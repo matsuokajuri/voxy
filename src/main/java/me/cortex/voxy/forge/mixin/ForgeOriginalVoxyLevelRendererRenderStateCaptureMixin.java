@@ -8,7 +8,6 @@ import net.minecraft.client.Camera;
 import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.LightTexture;
-import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -32,13 +31,6 @@ public class ForgeOriginalVoxyLevelRendererRenderStateCaptureMixin {
             CallbackInfo ci) {
         ForgeOriginalVoxyRenderStateCapture.captureProjection(projection);
         ForgeOriginalVoxyRenderStateCapture.captureLightTexture(lightTexture);
-        Vec3 cameraPosition = camera.getPosition();
-        ForgeOriginalVoxyRenderStateCapture.captureOculusViewport(
-                projection,
-                poseStack.last().pose(),
-                cameraPosition.x,
-                cameraPosition.y,
-                cameraPosition.z);
         if (ForgeOriginalVoxyOculusPipelineBridge.shaderpackActive()
                 && !ForgeOriginalVoxyOculusPipelineBridge.shadowActive()) {
             glViewport(0, 0, Minecraft.getInstance().getMainRenderTarget().width, Minecraft.getInstance().getMainRenderTarget().height);
