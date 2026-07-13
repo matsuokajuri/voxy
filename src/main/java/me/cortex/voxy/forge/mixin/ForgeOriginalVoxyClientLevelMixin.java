@@ -70,7 +70,7 @@ public abstract class ForgeOriginalVoxyClientLevelMixin implements ForgeOriginal
         if (oldState == newState || !newState.isAir()) {
             return;
         }
-        if (!ForgeVoxyConfig.ENABLED.get()) {
+        if (!ForgeVoxyConfig.ENABLED.get() || !ForgeVoxyConfig.INGEST_ENABLED.get()) {
             return;
         }
         var engine = ForgeVoxyInstance.INSTANCE.getEngineForLevel((ClientLevel) (Object) this);

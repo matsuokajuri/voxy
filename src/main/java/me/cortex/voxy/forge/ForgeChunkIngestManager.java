@@ -1,6 +1,7 @@
 package me.cortex.voxy.forge;
 
 import me.cortex.voxy.common.world.service.VoxelIngestService;
+import me.cortex.voxy.config.ForgeVoxyConfig;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.world.level.ChunkPos;
@@ -71,7 +72,7 @@ public final class ForgeChunkIngestManager {
     public StatusSnapshot createStatusSnapshot() {
         return new StatusSnapshot(
                 this.instance.getCurrentEngineOptional().isPresent(),
-                ForgeVoxyRuntimeOverrides.enableAutoChunkIngest(),
+                ForgeVoxyConfig.ENABLED.get() && ForgeVoxyConfig.INGEST_ENABLED.get(),
                 this.activeDimension,
                 this.pendingChunks.size(),
                 this.ingestedChunks.size(),
@@ -106,7 +107,7 @@ public final class ForgeChunkIngestManager {
         }
         this.tickCounter++;
 
-        if (!ForgeVoxyRuntimeOverrides.enableAutoChunkIngest()) {
+        if (!ForgeVoxyConfig.ENABLED.get() || !ForgeVoxyConfig.INGEST_ENABLED.get()) {
             if (!this.pendingChunks.isEmpty() || !this.queuedChunks.isEmpty()) {
                 this.pendingChunks.clear();
                 this.queuedChunks.clear();

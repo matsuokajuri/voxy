@@ -4,6 +4,8 @@ import org.joml.Matrix4f;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
 
+import java.util.Locale;
+
 import static org.lwjgl.opengl.GL11C.GL_FALSE;
 import static org.lwjgl.opengl.GL11C.GL_LINEAR;
 import static org.lwjgl.opengl.GL11C.GL_NEAREST;
@@ -52,6 +54,17 @@ final class ForgeOriginalVoxySSAO {
         BASIC,
         BETTER,
         BEST
+    }
+
+    static SSAOMode modeFromConfig(String value) {
+        if (value == null) {
+            return SSAOMode.AUTO;
+        }
+        try {
+            return SSAOMode.valueOf(value.toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException ignored) {
+            return SSAOMode.AUTO;
+        }
     }
 
     private final int programId;

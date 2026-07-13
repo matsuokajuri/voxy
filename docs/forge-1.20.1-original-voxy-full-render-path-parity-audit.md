@@ -586,17 +586,20 @@ This is not a license to substitute behavior. The Forge implementation must
 still match original ownership, data layout, lifecycle, and performance
 semantics.
 
-## Remaining parity work after the renderer regression
+## Remaining parity work after XXII
 
-1. Triage the remaining unported-content inventory and optional compatibility
-   integrations after the renderer readiness round.
-2. Validate multiplayer storage isolation, corrupted-section deletion, and any
-   remaining `VoxyInstance.activeWorlds` behavior beyond the active/closing Forge
-   adapter. XXI.1-XXI.5 complete the original storage backend/config TYPE surface.
-3. Perform non-functional cleanup of unused MDIC config keys and the active
-   `ForgeCpuMeshLayer` name without deleting that model-bakery enum.
-4. Investigate IterationT only after original Voxy migration is complete; it is
-   absent from upstream and is not a renderer-parity blocker.
+1. XXIII ports original user-facing importers, reload/debug/F3/config entry
+   points, and classifies optional integrations through real Forge equivalents
+   or explicit platform-N/A findings.
+2. XXIV performs the final source-area/JAR/documentation audit and one complete
+   user regression before any whole-mod parity decision.
+3. IterationT remains a post-parity compatibility TODO: it is absent from
+   original Voxy and is not a migration blocker.
+
+The previously listed storage isolation/corrupt-entry checks, original config
+semantics, prototype config/runtime cleanup, and active model-layer rename are
+implemented by XXII. Runtime validation for the XXII code batch remains a user
+gate until recorded below.
 
 ## Current documented Forge deviations
 
@@ -2205,3 +2208,194 @@ water/model/shader special case. Final `compileJava` passed and
 when requested.
 
 Whole-mod parity and every renderer readiness flag remain unchanged.
+
+## XXII-XXIV whole-mod completion plan
+
+After XXI.6, visible renderer parity and its storage/world lifecycle are no
+longer the open work. The remaining work is grouped into three large rounds,
+each followed by one consolidated user regression and one commit:
+
+```text
+XXII  core non-renderer parity closure
+      - reconcile the stale unported inventory
+      - original/Embeddium chunk-remove snapshot and ingest/light ownership
+      - original config semantics and clean-install defaults
+      - retire prototype config/runtime surfaces and rename ForgeCpuMeshLayer
+      - multiplayer identity and corrupt-storage recovery validation
+
+XXIII original user features
+      - ImportManager plus world/raw/ZIP/current/cancel flows and progress UI
+      - reload/applicable debug/F3/config UI entry points
+      - real Forge-equivalent optional integrations or explicit platform-N/A
+
+XXIV  final whole-mod audit and release regression
+      - source-area classification, documentation/status cleanup, JAR audit
+      - one complete visual/lifecycle/storage/importer/multiplayer regression
+      - user-approved wholeOriginalModParity flip and final build/status check
+```
+
+XXII deliberately batches all remaining core-lifecycle/config/storage cleanup
+before asking for another manual run. Internal compile/build checkpoints remain
+mandatory, but historical preview paths and probes cannot count as completion.
+
+## XXII core non-renderer parity closure
+
+Status: implementation, automated validation, and the consolidated user runtime
+regression are complete without an observed issue. XXII is ready for review and
+commit when explicitly requested; `wholeOriginalModParity` remains false because
+XXIII/XXIV work is still outstanding.
+
+### Original source comparison and inventory reconciliation
+
+XXII re-read the original `VoxyConfig`, `VoxyClientInstance`,
+`MixinClientChunkCache`, `MixinRenderSectionManager`, `ICheekyClientChunkCache`,
+`SectionSerializationStorage`, `SaveLoadSystem3`, and the consumers of each
+Forge adapter before changing code. The twelve-section unported-content
+inventory now has an authoritative current table: renderer sections 2-9 are
+complete, core instance/storage section 1 is complete, ingest section 10 and
+core config portion of section 12 close in this round, while user features and
+optional integrations remain explicitly assigned to XXIII/XXIV.
+
+### Last-loaded chunk snapshot and ingest ownership
+
+Original Voxy does not use the normal range-checked chunk lookup during
+`RenderSectionManager.onChunkRemoved`. It reads the current
+`ClientChunkCache.Storage` slot directly, then verifies the returned chunk's X/Z
+coordinates before ingesting the final snapshot. Forge previously called
+ordinary `getChunk(..., false)`, which can return null at exactly this removal
+boundary.
+
+The Forge 1.20.1 port now exposes the package-private inner `Storage` class and
+its original `getIndex`/`getChunk` methods with an Access Transformer. The
+transformer entries use the 1.20.1 SRG member names (`m_104481_` and
+`m_104479_`), while the Mojmap development source calls the corresponding
+methods directly. `onChunkRemoved` uses that exact slot lookup and coordinate
+verification. Chunk add, chunk remove, Embeddium section-info
+updates, the ClientLevel dirty-section repair, the tick rediscovery adapter, and
+the global auto-ingest target all honor the same `enabled && ingestEnabled`
+contract. The XXI.6 `LIGHT_AND_DATA` deferred-light retry and level-routed
+active-world ownership remain unchanged.
+
+### Original config semantics and clean-install defaults
+
+The Forge config now carries the original behavioral fields and defaults:
+
+```text
+enabled=true
+enableRendering=true
+ingestEnabled=true
+service/render-distance/subdivision/environmental-fog settings retained
+ssaoMode=AUTO with BASIC/BETTER/BEST and invalid/null -> AUTO parsing
+```
+
+`enableRendering=false` tears down only the live render owner and blocks Oculus
+patch exposure/draw/start while leaving the WorldEngine available for ingest,
+matching the original separation between rendering and ingest. The two
+historical defaults `enableWorldEngineSkeleton=false` and
+`enableAutoChunkIngest=false` no longer gate the formal route, so a clean config
+starts the production owner and ingest path without hand edits. The three
+radius/budget/cooldown values remain as documented Forge/Embeddium rediscovery
+adapter controls because 1.20.1 lifecycle ordering can expose chunks before the
+original-shaped callbacks observe them.
+
+### Prototype surface cleanup and status truthfulness
+
+The unused CPU mesh, BuiltSection, geometry-GPU, and MDIC prototype config keys
+and the now-empty `ForgeVoxyRuntimeOverrides` facade are removed. The active
+model-bakery enum was not deleted; it is renamed from `ForgeCpuMeshLayer` to
+`ForgeOriginalVoxyModelLayer`, with mechanical call-site changes only.
+
+`/voxy parity_route_status` continues to report
+`wholeOriginalModParity=false`, advances `newWorkTarget` to
+`original-user-features-and-importers`, and no longer claims that every legacy
+route is physically absent. It instead states that the retained legacy adapter
+does not drive the visible renderer. Live renderer readiness predicates are
+unchanged.
+
+### Isolated storage regression coverage
+
+JUnit coverage was added outside the shipped runtime route:
+
+1. identical worlds under different server base paths, and different
+   dimension/seed identities under one server base, resolve to distinct storage
+   paths;
+2. a valid serialized section stored under a mismatched key causes
+   `SectionSerializationStorage` to return `-1`, delete the bad entry, and fill
+   the target section with `Mapper.AIR`, exactly matching original recovery;
+3. clean config defaults enable the formal route/render/ingest fields and SSAO
+   parsing matches the original fallback contract.
+
+This does not mutate any real `run/saves` or `.voxy` database.
+
+### First runtime attempt: Mixin-package class-load failure and correction
+
+The first anchored XXII `runClient` reached integrated-server player login, then
+failed with `IllegalClassLoadError`: the ordinary
+`ForgeOriginalVoxyClientChunkCacheAccess` bridge had been placed under the
+configured `me.cortex.voxy.forge.mixin.*` package. Mixin owns that package and
+rejects direct loading of non-Mixin helper types from transformed production
+classes. The failure therefore occurred before the new removal lookup could be
+exercised; it was not a storage, shaderpack, world-data, or rendering failure.
+
+The correction keeps the bridge in `me.cortex.voxy.forge`, outside the Mixin
+package, and removes the intermediate Storage invoker Mixin entirely. The Access
+Transformer now opens the same two members that original Voxy exposes through
+its access widener, so the merged `ClientChunkCache` method has no runtime
+reference to a second Mixin type. The failed attempt and correction remain part
+of uncommitted XXII; a fresh anchored runtime gate is still required.
+
+### Automated validation
+
+```text
+gradlew test: BUILD SUCCESSFUL, 4 tests
+gradlew build: BUILD SUCCESSFUL, 11 actionable tasks
+git diff --check: clean
+final JAR contains META-INF/accesstransformer.cfg,
+  ForgeOriginalVoxyClientChunkCache{Access,Mixin}, and
+  ForgeOriginalVoxyModelLayer; removed runtime/model-layer class names absent
+```
+
+### Consolidated user regression gate
+
+The completed gate covered existing-config schema upgrade, fresh/default route
+evidence, movement across the vanilla/LOD boundary, block removal/rediscovery,
+Overworld/Nether return, F3+T, logout/login, no-shader plus
+BSL/Complementary/Photon (including water), storage reuse, and a multiplayer
+server identity. The observed runs shut down normally without a reported Mixin,
+Access Transformer, dead-world, storage, GL, Voxy, or visual failure.
+
+User regression result: all listed client/integrated-server checks passed
+without an observed issue. For the multiplayer check, a local-only official
+Minecraft 1.20.1 server was created under
+ignored `run/local-server-1.20.1`, bound to `127.0.0.1:25565`, and configured for
+the development client's offline `Dev` identity. The first infrastructure
+attempt through Gradle `runServer` was rejected before world startup because the
+shared development runtime includes the client-only Oculus jar, which loads a
+client `Screen` on `DEDICATED_SERVER`; this is not a Voxy client multiplayer or
+storage failure. The isolated vanilla server reached `Done`, its port probe
+passed, the client joined twice and completed the same regression flow without
+an observed issue, and both client and server then shut down normally.
+
+The client log independently confirms the remote identity contract: it selected
+`run/.voxy/saves/127.0.0.1_25565`, created distinct Overworld and Nether
+identity-hash directories for server seed `-4672863472195697072`, reused the
+same Overworld engine/path after reconnect, closed idle dimension engines, and
+completed final instance shutdown. The server log records both join/leave pairs,
+then `stop` saved all three dimensions; a post-stop port probe returned false.
+
+### Final XXII review
+
+The post-regression review re-compared the changed config, lifecycle, SSAO,
+chunk-removal, and model-layer paths against original source and inspected every
+runtime diff plus the new tests and Access Transformer entries. No actionable
+runtime defect was found. The review confirmed that the model-layer rename is
+mechanical, removed prototype keys have no live source references, the removal
+snapshot uses the original slot lookup plus coordinate check, and all enabled /
+rendering / ingest gates preserve the original separation of ownership.
+
+One documentation issue was corrected: the June 22/23 debug-cleanup and full
+defect-audit files still described themselves as active/live even though their
+in-memory-storage and staged-switch findings are historical. They now point to
+this audit as canonical current status, and the XI investigation header now
+acknowledges the later regression closure. No code change was required by the
+review.

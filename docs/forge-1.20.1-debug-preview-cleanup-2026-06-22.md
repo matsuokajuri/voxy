@@ -1,7 +1,13 @@
 # Forge 1.20.1 debug / preview cleanup log, 2026-06-22
 
-This document is the active cleanup log for retiring historical debug,
-preview, proof, and fallback routes from the Forge port.
+> **HISTORICAL CLEANUP LOG.** This file records the 2026-06-22 cleanup sequence;
+> it is no longer the active route/status document. Use
+> `forge-1.20.1-original-voxy-full-render-path-parity-audit.md` and
+> `forge-1.20.1-deprecated-prototype-routes.md` for current ownership and
+> remaining retirement work.
+
+This document records the controlled retirement of historical debug, preview,
+proof, and fallback routes from the Forge port.
 
 The goal is not to hide evidence. The goal is to leave the active codebase
 centered on the original Voxy parity route, while removing old routes in

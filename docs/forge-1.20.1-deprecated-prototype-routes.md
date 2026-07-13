@@ -138,6 +138,14 @@ ForgeMdicCommandPlanner.createFaceMaskPlanForAudit
 
 The simple-GPU / GL-heap visualization / readback-mesh / MDIC debug draw route
 families no longer have active Forge source files or config/runtime switches.
+
+XXII completes the deferred schema cleanup: the remaining thin
+`ForgeVoxyRuntimeOverrides` facade and all unused CPU/BuiltSection/GPU/MDIC
+prototype config keys are removed. The live model-bakery classification enum is
+retained under the accurate name `ForgeOriginalVoxyModelLayer`; this is a rename,
+not removal of model-layer behavior. The separate legacy `ForgeVoxy*` ingest
+adapter remains present but does not drive visible MDIC rendering, so status no
+longer makes the over-broad claim that every legacy route is absent.
 The retained low-level CPU geometry helpers are current original-Voxy
 model/geometry staging code, not the deleted simple-GPU preview renderer.
 

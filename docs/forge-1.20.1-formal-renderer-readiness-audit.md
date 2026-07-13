@@ -101,11 +101,11 @@ Voxy sidecars.
 Not a renderer-readiness blocker:
 
 ```text
-storage backend/config TYPE inventory is complete in XXI.1-XXI.5; remaining
-storage regressions and full active-world-map parity are whole-mod work
+storage backend/config TYPE inventory is complete in XXI.1-XXI.5; XXI.6/XXII
+complete active-world ownership plus isolated identity/corrupt-entry validation
 IterationT pack-specific compatibility (post-parity, absent upstream)
 optional compatibility/content items from the unported-content inventory
-unused MDIC config-key cleanup and ForgeCpuMeshLayer naming cleanup
+XXIII importer/config-UI/compatibility work and XXIV final whole-mod audit
 ```
 
 Terminal render-resource parity found and closed by this audit:

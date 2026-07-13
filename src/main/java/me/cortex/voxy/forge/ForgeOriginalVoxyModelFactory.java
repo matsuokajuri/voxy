@@ -606,7 +606,7 @@ final class ForgeOriginalVoxyModelFactory {
         int softwareFlags = this.softwareBakery.renderToOutput(minecraft, bake.state(), this.bakeScratchBuffer.address);
         ForgeOriginalVoxyColourDepthTextureData[] textures =
                 ForgeSoftwareModelTextureBakery.texturesFromOutput(this.bakeScratchBuffer.address);
-        ForgeCpuMeshLayer layer = chooseLayer(bake.state(), softwareFlags, textures);
+        ForgeOriginalVoxyModelLayer layer = chooseLayer(bake.state(), softwareFlags, textures);
         ForgeSoftwareModelTextureBakery.BakeResult softwareBake =
                 new ForgeSoftwareModelTextureBakery.BakeResult(
                         textures,
@@ -734,8 +734,8 @@ final class ForgeOriginalVoxyModelFactory {
             int fluidModelId,
             int modelId
     ) {
-        ForgeCpuMeshLayer layer = softwareBake.layer();
-        int checkMode = layer == ForgeCpuMeshLayer.SOLID
+        ForgeOriginalVoxyModelLayer layer = softwareBake.layer();
+        int checkMode = layer == ForgeOriginalVoxyModelLayer.SOLID
                 ? ForgeOriginalVoxyTextureUtils.WRITE_CHECK_STENCIL
                 : ForgeOriginalVoxyTextureUtils.WRITE_CHECK_ALPHA;
         int[] words = new int[ForgeOriginalVoxyModelStoreLayoutSpec.MODEL_RECORD_WORDS];
@@ -771,7 +771,7 @@ final class ForgeOriginalVoxyModelFactory {
         int flags = 0;
         flags |= tint.hasTint() ? 1 : 0;
         flags |= tint.biomeDependent() ? 2 : 0;
-        flags |= layer == ForgeCpuMeshLayer.TRANSLUCENT ? 4 : 0;
+        flags |= layer == ForgeOriginalVoxyModelLayer.TRANSLUCENT ? 4 : 0;
         flags |= (softwareBake.flags() & 1) != 0 ? 8 : 0;
         words[ForgeOriginalVoxyModelStoreLayoutSpec.WORD_FLAGS_A] = flags;
         words[ForgeOriginalVoxyModelStoreLayoutSpec.WORD_COLOUR_TINT] = tint.recordColourTint();
@@ -952,7 +952,7 @@ final class ForgeOriginalVoxyModelFactory {
         if (bakedQuadTintIndex >= 0) {
             return bakedQuadTintIndex;
         }
-        int checkMode = softwareBake.layer() == ForgeCpuMeshLayer.SOLID
+        int checkMode = softwareBake.layer() == ForgeOriginalVoxyModelLayer.SOLID
                 ? ForgeOriginalVoxyTextureUtils.WRITE_CHECK_STENCIL
                 : ForgeOriginalVoxyTextureUtils.WRITE_CHECK_ALPHA;
         for (ForgeOriginalVoxyColourDepthTextureData face : softwareBake.textures()) {
@@ -997,12 +997,12 @@ final class ForgeOriginalVoxyModelFactory {
         return new Direction[]{Direction.DOWN, Direction.UP, Direction.NORTH, Direction.SOUTH, Direction.WEST, Direction.EAST, null};
     }
 
-    private static ForgeCpuMeshLayer chooseLayer(
+    private static ForgeOriginalVoxyModelLayer chooseLayer(
             BlockState state,
             int flags,
             ForgeOriginalVoxyColourDepthTextureData[] textures
     ) {
-        ForgeCpuMeshLayer layer = ForgeCpuMeshLayer.OTHER;
+        ForgeOriginalVoxyModelLayer layer = ForgeOriginalVoxyModelLayer.OTHER;
         if ((flags & 4) != 0) {
             boolean anyTranslucent = false;
             for (ForgeOriginalVoxyColourDepthTextureData face : textures) {
@@ -1012,7 +1012,7 @@ final class ForgeOriginalVoxyModelFactory {
                 }
             }
             if (anyTranslucent) {
-                layer = ForgeCpuMeshLayer.TRANSLUCENT;
+                layer = ForgeOriginalVoxyModelLayer.TRANSLUCENT;
             } else {
                 boolean solid = true;
                 for (ForgeOriginalVoxyColourDepthTextureData face : textures) {
@@ -1021,16 +1021,16 @@ final class ForgeOriginalVoxyModelFactory {
                         break;
                     }
                 }
-                layer = solid ? ForgeCpuMeshLayer.SOLID : ForgeCpuMeshLayer.CUTOUT;
+                layer = solid ? ForgeOriginalVoxyModelLayer.SOLID : ForgeOriginalVoxyModelLayer.CUTOUT;
             }
         }
-        if (layer == ForgeCpuMeshLayer.OTHER && (flags & 8) != 0) {
-            layer = ForgeCpuMeshLayer.CUTOUT;
+        if (layer == ForgeOriginalVoxyModelLayer.OTHER && (flags & 8) != 0) {
+            layer = ForgeOriginalVoxyModelLayer.CUTOUT;
         }
         if (state.is(net.minecraft.tags.BlockTags.LEAVES)) {
-            layer = ForgeCpuMeshLayer.SOLID;
+            layer = ForgeOriginalVoxyModelLayer.SOLID;
         }
-        return layer == ForgeCpuMeshLayer.OTHER ? ForgeCpuMeshLayer.SOLID : layer;
+        return layer == ForgeOriginalVoxyModelLayer.OTHER ? ForgeOriginalVoxyModelLayer.SOLID : layer;
     }
 
     private static boolean isBiomeDependentColour(Minecraft minecraft, BlockState state, int tintIndex) {
@@ -1154,13 +1154,13 @@ final class ForgeOriginalVoxyModelFactory {
 
     private static int encodeSoftwareFaceData(
             ForgeOriginalVoxyColourDepthTextureData texture,
-            ForgeCpuMeshLayer layer,
+            ForgeOriginalVoxyModelLayer layer,
             float depth,
             int[] bounds,
             int written,
             boolean hasTint
     ) {
-        int checkMode = layer == ForgeCpuMeshLayer.SOLID
+        int checkMode = layer == ForgeOriginalVoxyModelLayer.SOLID
                 ? ForgeOriginalVoxyTextureUtils.WRITE_CHECK_STENCIL
                 : ForgeOriginalVoxyTextureUtils.WRITE_CHECK_ALPHA;
         if (bounds[1] < bounds[0] || bounds[3] < bounds[2]) {
@@ -1182,10 +1182,10 @@ final class ForgeOriginalVoxyModelFactory {
         int area = Math.max(1, (maxU - minU + 1) * (maxV - minV + 1));
         boolean faceCoversFullBlock = minU == 0 && maxU == 15 && minV == 0 && maxV == 15;
         boolean needsAlphaDiscard = ((float) written / (float) area) < 0.9F;
-        needsAlphaDiscard |= layer != ForgeCpuMeshLayer.SOLID;
-        needsAlphaDiscard &= layer != ForgeCpuMeshLayer.TRANSLUCENT;
+        needsAlphaDiscard |= layer != ForgeOriginalVoxyModelLayer.SOLID;
+        needsAlphaDiscard &= layer != ForgeOriginalVoxyModelLayer.TRANSLUCENT;
         faceData |= needsAlphaDiscard ? 1 << 22 : 0;
-        faceData |= (!faceCoversFullBlock && layer != ForgeCpuMeshLayer.TRANSLUCENT) ? 1 << 23 : 0;
+        faceData |= (!faceCoversFullBlock && layer != ForgeOriginalVoxyModelLayer.TRANSLUCENT) ? 1 << 23 : 0;
         if (hasTint) {
             int tintState = ForgeOriginalVoxyTextureUtils.computeFaceTint(texture, checkMode);
             if (tintState == 2) {
@@ -1197,13 +1197,13 @@ final class ForgeOriginalVoxyModelFactory {
         return faceData;
     }
 
-    private static float computeSoftwareDepth(ForgeOriginalVoxyColourDepthTextureData texture, ForgeCpuMeshLayer layer) {
-        int checkMode = layer == ForgeCpuMeshLayer.SOLID
+    private static float computeSoftwareDepth(ForgeOriginalVoxyColourDepthTextureData texture, ForgeOriginalVoxyModelLayer layer) {
+        int checkMode = layer == ForgeOriginalVoxyModelLayer.SOLID
                 ? ForgeOriginalVoxyTextureUtils.WRITE_CHECK_STENCIL
                 : ForgeOriginalVoxyTextureUtils.WRITE_CHECK_ALPHA;
         return ForgeOriginalVoxyTextureUtils.computeDepth(
                 texture,
-                layer != ForgeCpuMeshLayer.SOLID ? ForgeOriginalVoxyTextureUtils.DEPTH_MODE_MIN : ForgeOriginalVoxyTextureUtils.DEPTH_MODE_AVG,
+                layer != ForgeOriginalVoxyModelLayer.SOLID ? ForgeOriginalVoxyTextureUtils.DEPTH_MODE_MIN : ForgeOriginalVoxyTextureUtils.DEPTH_MODE_AVG,
                 checkMode
         );
     }
@@ -1216,7 +1216,7 @@ final class ForgeOriginalVoxyModelFactory {
 
     private static long buildVoxyMetadata(
             BlockState state,
-            ForgeCpuMeshLayer layer,
+            ForgeOriginalVoxyModelLayer layer,
             FaceUpload[] faces,
             boolean hasTint,
             boolean biomeColourDependent,
@@ -1224,7 +1224,7 @@ final class ForgeOriginalVoxyModelFactory {
     ) {
         boolean isFluid = state.getBlock() instanceof LiquidBlock;
         boolean containsFluid = !isFluid && !state.getFluidState().isEmpty() && fluidModelId != -1;
-        boolean translucent = layer == ForgeCpuMeshLayer.TRANSLUCENT;
+        boolean translucent = layer == ForgeOriginalVoxyModelLayer.TRANSLUCENT;
         boolean doubleSided = needsDoubleSidedQuads(faces);
         boolean cullsSame = cullsSame(state);
         boolean fullyOpaque = true;
@@ -1239,7 +1239,7 @@ final class ForgeOriginalVoxyModelFactory {
             }
             float depth = upload.depth();
             boolean faceCoversFullBlock = upload.faceCoversFullBlock();
-            boolean occludesFace = layer != ForgeCpuMeshLayer.TRANSLUCENT
+            boolean occludesFace = layer != ForgeOriginalVoxyModelLayer.TRANSLUCENT
                     && depth < 0.1F
                     && ((float) upload.writtenPixels() / (float) (ForgeModelAtlasLayout.MODEL_TEXTURE_SIZE * ForgeModelAtlasLayout.MODEL_TEXTURE_SIZE)) > 0.9F;
             boolean canBeOccluded = depth < 0.3F;

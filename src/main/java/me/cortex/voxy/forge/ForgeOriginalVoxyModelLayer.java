@@ -4,7 +4,8 @@ import net.minecraft.client.renderer.ItemBlockRenderTypes;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.world.level.block.state.BlockState;
 
-public enum ForgeCpuMeshLayer {
+/** Forge render-type classification used while porting original Voxy model-bakery metadata. */
+public enum ForgeOriginalVoxyModelLayer {
     SOLID(0, "solid"),
     CUTOUT(1, "cutout"),
     TRANSLUCENT(2, "translucent"),
@@ -13,12 +14,12 @@ public enum ForgeCpuMeshLayer {
     public final int id;
     public final String displayName;
 
-    ForgeCpuMeshLayer(int id, String displayName) {
+    ForgeOriginalVoxyModelLayer(int id, String displayName) {
         this.id = id;
         this.displayName = displayName;
     }
 
-    public static ForgeCpuMeshLayer fromBlockState(BlockState state) {
+    public static ForgeOriginalVoxyModelLayer fromBlockState(BlockState state) {
         RenderType type = ItemBlockRenderTypes.getChunkRenderType(state);
         if (type == RenderType.translucent()) {
             return TRANSLUCENT;

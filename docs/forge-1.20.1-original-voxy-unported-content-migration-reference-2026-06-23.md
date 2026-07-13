@@ -10,6 +10,83 @@ It does not replace the active defect repair plan:
 docs/forge-1.20.1-xi-confirmed-defect-repair-plan-2026-06-23.md
 ```
 
+## Post-XXI authoritative completion rounds, 2026-07-13
+
+The per-subsystem `partial` labels below are a 2026-06-23 snapshot. They must
+not be read as current after XII-XXI.6: the formal renderer, model bakery,
+generation/geometry chain, HOC/MDIC frame route, terrain/shaderpack pipeline,
+water/translucency, resource reuse, persistent storage TYPE surface, and
+identifier-routed active-world map have since been ported and runtime-validated.
+XXII starts by reconciling every old label against current source.
+
+Work is intentionally grouped into three large Roman rounds so each round can
+receive one consolidated manual regression before its single commit.
+
+### Authoritative twelve-section reconciliation at XXII
+
+| Historical section | Current classification | Evidence / remaining owner |
+| --- | --- | --- |
+| 1. Instance, storage, service root | core parity complete | XXI.1-XXI.6 ported the storage TYPE surface, identity-keyed active-world map, original idle/shutdown order, and level-routed ingest; XXII adds isolated identity/corrupt-entry tests |
+| 2. VoxyRenderSystem outer owner | renderer parity complete | XII-XX.7 formal owner and live readiness evidence; XXI.6 lifecycle routing |
+| 3. ModelBakerySubsystem | renderer parity complete | original model factory/store/software bakery path, including the XX.4 transparent-model repair |
+| 4. Render generation and geometry | renderer parity complete | original service, BuiltSection, async geometry manager/data, upload, and resource reuse chain |
+| 5. RenderResourceReuse | renderer parity complete | XX.5 rebuild reuse and XX.7 terminal clear semantics |
+| 6. Viewport/HOC/MDIC | renderer parity complete | original traversal, cmdgen, MDIC draws, frame ordering, and current-lifecycle readiness evidence |
+| 7. Shaderpack/render pipeline | Oculus adaptation complete | original Iris contract mapped to Oculus and broadly shaderpack-regressed; IterationT is absent upstream and remains a post-parity TODO |
+| 8. Terrain shader contract | renderer parity complete | original packed attributes, patched/normal program defines, light/tint/depth, and state restore |
+| 9. Water/translucency | renderer parity complete | original bake/metadata/translucent command route; Photon water regression passed |
+| 10. Ingest/removal/light | core parity complete in XXII | original `LIGHT_AND_DATA` readiness, dirty-section route, and last-loaded removal snapshot |
+| 11. Compatibility integrations | XXIII / platform classification pending | importers, UI and real Forge equivalents remain; Fabric-only integrations must be marked platform-N/A rather than copied |
+| 12. Config/readiness/cleanup | core config complete in XXII; whole-mod status pending | original enabled/rendering/ingest/SSAO semantics and defaults are ported; user features and XXIV final parity decision remain |
+
+The detailed bodies below are retained as the 2026-06-23 source inventory and
+migration rationale. Their old `partial` wording is superseded by this table and
+the updated per-section status blocks.
+
+### XXII core non-renderer parity closure
+
+```text
+[x] reconcile all twelve historical inventory sections against XII-XXI.6
+[x] port original chunk-remove last-loaded snapshot semantics to Embeddium 1.20.1
+[x] unify chunk add/remove, dirty-section, deferred-light retry, and detach ownership
+[x] port original enabled/rendering/ingest/SSAO/config semantics and defaults
+[x] make a clean Forge config run the formal route without historical switches
+[x] remove unused CPU/BuiltSection/GPU/MDIC prototype config and runtime surfaces
+[x] rename active ForgeCpuMeshLayer without deleting the live model-bakery enum
+[x] correct stale status targets and whole-mod parity evidence
+[x] validate server identity isolation and corrupt-section deletion/recovery
+[x] compile/build and prepare one fresh/existing-config, movement, dimension,
+    reload, logout, shaderpack, storage, and multiplayer regression
+```
+
+### XXIII original user features and importers
+
+```text
+[ ] port ImportManager and client import task/reference lifecycle
+[ ] port current-world, named-world, raw-region, ZIP, cancel, and progress UI
+[ ] port /voxy reload and applicable original diagnostics/F3 statistics
+[ ] expose Forge/Embeddium configuration UI without copying ModMenu literally
+[ ] map Distant Horizons only through a real Forge 1.20.1 API
+[ ] classify Bobby, Flashback, FREX, Nvidium, ModMenu, and other Fabric-only hooks
+[ ] perform one consolidated importer/config/lifecycle/render smoke regression
+```
+
+### XXIV final whole-mod audit and release regression
+
+```text
+[ ] classify every original source area as ported, Forge-adapted, platform-N/A,
+    upstream-incomplete, or genuinely missing
+[ ] remove final preview/skeleton/status wording and update all active docs
+[ ] verify mixins, dependency bounds, native libraries, clean config, and final JAR
+[ ] run the complete no-shader/multi-shader/dimension/reload/relog/multiplayer/
+    storage/importer/shutdown regression once
+[ ] after user approval, flip wholeOriginalModParity and verify status/build
+```
+
+Accepted upstream behavior and platform-N/A integrations are not completion
+blockers. IterationT remains a post-parity compatibility TODO because original
+Voxy has no adaptation for it.
+
 Use this document after the confirmed visual/runtime bugs are fixed, especially
 after black LoD terrain, missing water/translucency, reload churn, and new-world
 startup crashes are no longer active blockers.
@@ -87,11 +164,12 @@ The most important unported or incomplete areas are:
 
 ## 1. Instance, world storage, and service root
 
-Status after XXI.5:
+Status after XXII implementation and completed runtime regression:
 
 ```text
-partial instance parity: original storage backend/config TYPE inventory is
-complete; full active-world map parity and remaining storage regressions remain
+core parity complete: original storage/config TYPE inventory, identity-keyed
+active-world ownership, idle/shutdown lifecycle, identity isolation, and
+corrupt-section deletion/recovery are ported and automatically validated
 ```
 
 Original Voxy source areas:
@@ -201,10 +279,10 @@ temporary Redis shut down normally; original config restored byte-for-byte
 
 ## 2. Full VoxyRenderSystem outer lifecycle owner
 
-Status:
+Status after XX.7 / XXI.6 reconciliation:
 
 ```text
-partial
+renderer parity complete
 ```
 
 Original Voxy source area:
@@ -291,10 +369,10 @@ confirm no stale queued start/free task mutates the wrong owner
 
 ## 3. ModelBakerySubsystem owner
 
-Status:
+Status after XX.4 reconciliation:
 
 ```text
-partial
+renderer parity complete
 ```
 
 Original Voxy source areas:
@@ -372,10 +450,10 @@ confirm no placeholder model ids are used in formal draw calls
 
 ## 4. Render generation, built sections, and geometry upload chain
 
-Status:
+Status after XX.7 reconciliation:
 
 ```text
-partial
+renderer parity complete
 ```
 
 Original Voxy source areas:
@@ -452,10 +530,10 @@ and post-frame work
 
 ## 5. RenderResourceReuse and GL resource lifetime
 
-Status:
+Status after XX.5 / XX.7 reconciliation:
 
 ```text
-partial
+renderer parity complete
 ```
 
 Original Voxy source area:
@@ -509,10 +587,10 @@ no double-free, no stale buffer reuse, no leaked GlBuffer/GlTexture count growth
 
 ## 6. Viewport, HOC, MDIC, and frame rhythm
 
-Status:
+Status after XX.7 reconciliation:
 
 ```text
-partial
+renderer parity complete
 ```
 
 Original Voxy source areas:
@@ -589,10 +667,10 @@ runClient movement test:
 
 ## 7. Shaderpack and render pipeline bridge
 
-Status:
+Status after XX.7 reconciliation:
 
 ```text
-partial / parity-unproven
+Oculus adaptation complete and runtime-proven for the original Iris contract
 ```
 
 Original Voxy source areas:
@@ -680,10 +758,10 @@ transitions
 
 ## 8. Terrain shader visual contract
 
-Status:
+Status after XX.4 / XX.7 reconciliation:
 
 ```text
-partial / parity-unproven
+renderer parity complete
 ```
 
 Original Voxy source areas:
@@ -748,10 +826,10 @@ foliage, stone, sand, snow, cave shadow, emissive block, and biome-colored grass
 
 ## 9. Water and translucent route
 
-Status:
+Status after Photon regression reconciliation:
 
 ```text
-partial / parity-unproven
+renderer parity complete
 ```
 
 Original Voxy source areas:
@@ -819,10 +897,10 @@ no shaderpack first, then shaderpack
 
 ## 10. Chunk ingest, chunk removal, and light updates
 
-Status:
+Status after XXI.6 / XXII implementation and completed runtime regression:
 
 ```text
-partial
+core parity complete
 ```
 
 Original Voxy source areas:
@@ -885,10 +963,10 @@ re-enter world and verify no stale light/ingest work crashes or corrupts LoD
 
 ## 11. Compatibility integrations and platform blockers
 
-Status:
+Status for XXIII:
 
 ```text
-partial / platform-blocked depending on integration
+pending real Forge-equivalent migration or explicit platform-N/A classification
 ```
 
 Original Voxy has Fabric-side integrations that must not be copied literally
@@ -936,10 +1014,10 @@ Migration steps:
 
 ## 12. Config, readiness status, and deprecated route cleanup
 
-Status:
+Status after XXII implementation and completed runtime regression:
 
 ```text
-partial
+core config/cleanup complete; user features and whole-mod parity remain pending
 ```
 
 Original Voxy source areas:

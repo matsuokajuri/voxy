@@ -1,9 +1,14 @@
 # Forge 1.20.1 full code defect audit, 2026-06-23
 
-This document is the live issue ledger for the post-cleanup audit requested on
-2026-06-23. It exists so findings survive context compaction. Do not treat this
-file as an implementation plan until each finding is confirmed against original
-Voxy and the Forge/Oculus/Embeddium 1.20.1 platform contracts.
+> **HISTORICAL SNAPSHOT.** This is the issue ledger captured on 2026-06-23, not
+> the current implementation status or an active plan. Many findings below were
+> resolved in later Roman-numeral rounds. Use
+> `forge-1.20.1-original-voxy-full-render-path-parity-audit.md` as the canonical
+> current status and re-confirm any surviving item against current source before
+> acting on it.
+
+This document is retained so the post-cleanup findings and their evidence remain
+reviewable.
 
 ## Audit scope
 

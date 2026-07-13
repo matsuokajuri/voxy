@@ -117,12 +117,12 @@ ForgeVoxyGeometryBuffer, ForgeVoxyGeometryCache, ForgeVoxyGreedyMesher,
 ForgeVoxyQuadEncoder
 ```
 
-Kept: ForgeCpuMeshLayer (used by the ACTIVE model pipeline:
-ForgeSoftwareModelTextureBakery.chooseLayer and ForgeOriginalVoxyModelFactory).
-ForgeVoxyRuntimeOverrides.mdicCommandSelectionMode() was removed with its only
-consumer; other mdicCommand*/legacy config entries in ForgeVoxyConfig are now
-unused but left declared to avoid config schema churn — they can go in a later
-sweep together with their config spec definitions.
+XXII follow-up: the active `ForgeCpuMeshLayer` was renamed to
+`ForgeOriginalVoxyModelLayer` without changing its model-bakery behavior.
+`ForgeVoxyRuntimeOverrides` and the unused mdicCommand*/CPU/BuiltSection/GPU
+prototype config entries were removed in the same controlled schema sweep. The
+remaining config now maps original Voxy behavior plus the bounded Forge chunk
+rediscovery adapter.
 
 compileJava passed immediately after the deletion, confirming the island
 mapping.

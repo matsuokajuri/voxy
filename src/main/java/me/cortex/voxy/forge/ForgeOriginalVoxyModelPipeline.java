@@ -234,6 +234,19 @@ public final class ForgeOriginalVoxyModelPipeline {
     }
 
     void clientTick() {
+        if (!ForgeVoxyConfig.ENABLED.get() || !ForgeVoxyConfig.RENDERING_ENABLED.get()) {
+            boolean hasOwnerOrPendingStart;
+            synchronized (this) {
+                hasOwnerOrPendingStart = this.ownerReady
+                        || this.startRequested
+                        || this.startQueuedOnRenderThread
+                        || this.renderSystem != null;
+            }
+            if (hasOwnerOrPendingStart) {
+                this.markStaleAndClear("rendering-disabled");
+            }
+            return;
+        }
         this.consumeOculusWorldRenderingSettingsReload();
         if (this.shouldRequestClientWorldStart()) {
             this.requestStart("client-world-ready");
@@ -903,7 +916,10 @@ public final class ForgeOriginalVoxyModelPipeline {
 
     private boolean shouldRequestClientWorldStart() {
         Minecraft minecraft = Minecraft.getInstance();
-        if (minecraft.level == null || minecraft.player == null || !ForgeVoxyConfig.ENABLED.get()) {
+        if (minecraft.level == null
+                || minecraft.player == null
+                || !ForgeVoxyConfig.ENABLED.get()
+                || !ForgeVoxyConfig.RENDERING_ENABLED.get()) {
             return false;
         }
         synchronized (this) {
@@ -981,6 +997,10 @@ public final class ForgeOriginalVoxyModelPipeline {
             return;
         }
         Minecraft minecraft = Minecraft.getInstance();
+        if (!ForgeVoxyConfig.ENABLED.get() || !ForgeVoxyConfig.RENDERING_ENABLED.get()) {
+            this.markStaleAndClear("rendering-disabled-before-start");
+            return;
+        }
         if (minecraft.level == null || minecraft.player == null) {
             this.recordFailure("no-active-client-world");
             return;
@@ -1084,6 +1104,9 @@ public final class ForgeOriginalVoxyModelPipeline {
     }
 
     public void renderEmbeddiumCutout(ChunkRenderMatrices matrices, CameraTransform camera) {
+        if (!ForgeVoxyConfig.isEnabledEarlySafe()) {
+            return;
+        }
         if (!RenderSystem.isOnRenderThread()) {
             this.recordNonFatalFailure("original-hoc-embeddium-cutout-not-render-thread");
             return;

@@ -6,8 +6,9 @@ Date: 2026-06-23
 > `PATCHED_SHADER` define applied only to the terrain fragment shader and not the
 > vertex shader — see "ROOT CAUSE FOUND AND FIXED" at the end of this file. The
 > trail below is kept for the diagnostic method (opaque-quad audit + fragment
-> attribute visualization probe). Secondary symptoms (holes, white weather streaks)
-> were not separately re-verified after the fix.
+> attribute visualization probe). Later rounds separately resolved and regressed
+> the remaining hole, water, and lifecycle symptoms; use the full render-path
+> parity audit for current status.
 
 Purpose: preserve the current source-reading trail for the remaining runtime
 visual bugs so context compaction does not lose the evidence.

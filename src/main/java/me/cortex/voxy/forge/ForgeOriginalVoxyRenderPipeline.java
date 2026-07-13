@@ -103,7 +103,9 @@ final class ForgeOriginalVoxyRenderPipeline {
                     "voxy:post/fullscreen.vert",
                     "voxy:post/blit_texture_depth_cutout.frag",
                     finalBlitDefines);
-            createdSsao = ForgeOriginalVoxySSAO.create(properties, ForgeOriginalVoxySSAO.SSAOMode.AUTO);
+            createdSsao = ForgeOriginalVoxySSAO.create(
+                    properties,
+                    ForgeOriginalVoxySSAO.modeFromConfig(ForgeVoxyConfig.ORIGINAL_VOXY_SSAO_MODE.get()));
             if (capturedPipelineData != null) {
                 if (capturedPipelineData.getUniforms() != null) {
                     createdOculusShaderUniforms = new ForgeOriginalVoxyGlBuffer(capturedPipelineData.getUniforms().size()).zero();

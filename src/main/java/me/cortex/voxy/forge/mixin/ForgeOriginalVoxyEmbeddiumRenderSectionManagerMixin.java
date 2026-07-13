@@ -4,6 +4,8 @@ import it.unimi.dsi.fastutil.longs.Long2ReferenceMap;
 import me.jellysquid.mods.sodium.client.gl.device.CommandList;
 import me.cortex.voxy.common.world.WorldEngine;
 import me.cortex.voxy.common.world.service.VoxelIngestService;
+import me.cortex.voxy.config.ForgeVoxyConfig;
+import me.cortex.voxy.forge.ForgeOriginalVoxyClientChunkCacheAccess;
 import me.cortex.voxy.forge.ForgeVoxyInstance;
 import me.cortex.voxy.forge.VoxyForge;
 import me.jellysquid.mods.sodium.client.render.viewport.Viewport;
@@ -154,6 +156,9 @@ public class ForgeOriginalVoxyEmbeddiumRenderSectionManagerMixin {
 
     @Inject(method = "onChunkAdded", at = @At("HEAD"))
     private void voxy$ingestOnChunkAdd(int x, int z, CallbackInfo ci) {
+        if (!ForgeVoxyConfig.ENABLED.get() || !ForgeVoxyConfig.INGEST_ENABLED.get()) {
+            return;
+        }
         LevelChunk chunk = this.world.getChunkSource().getChunk(x, z, net.minecraft.world.level.chunk.ChunkStatus.FULL, false);
         if (chunk != null) {
             boolean updated = VoxelIngestService.tryAutoIngestChunk(chunk);
@@ -163,7 +168,11 @@ public class ForgeOriginalVoxyEmbeddiumRenderSectionManagerMixin {
 
     @Inject(method = "onChunkRemoved", at = @At("HEAD"))
     private void voxy$ingestOnChunkRemove(int x, int z, CallbackInfo ci) {
-        LevelChunk chunk = this.world.getChunkSource().getChunk(x, z, net.minecraft.world.level.chunk.ChunkStatus.FULL, false);
+        if (!ForgeVoxyConfig.ENABLED.get() || !ForgeVoxyConfig.INGEST_ENABLED.get()) {
+            return;
+        }
+        LevelChunk chunk = ((ForgeOriginalVoxyClientChunkCacheAccess) this.world.getChunkSource())
+                .voxy$getLastLoadedChunk(x, z);
         if (chunk != null) {
             boolean updated = VoxelIngestService.tryAutoIngestChunk(chunk);
             ForgeVoxyInstance.INSTANCE.getChunkIngestManager().recordMixinChunkIngest(updated);
@@ -189,6 +198,9 @@ public class ForgeOriginalVoxyEmbeddiumRenderSectionManagerMixin {
         int z = section.getChunkZ();
         ForgeVoxyInstance.INSTANCE.trackOriginalVoxyChunkBoundSection(wasBuilt, x, y, z);
         if (flags == 0 || !wasBuilt) {
+            return;
+        }
+        if (!ForgeVoxyConfig.ENABLED.get() || !ForgeVoxyConfig.INGEST_ENABLED.get()) {
             return;
         }
 

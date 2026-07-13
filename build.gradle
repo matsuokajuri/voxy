@@ -64,6 +64,7 @@ sourceSets {
         }
         resources {
             include 'META-INF/MANIFEST.MF'
+            include 'META-INF/accesstransformer.cfg'
             include 'META-INF/mods.toml'
             include 'voxy.forge.mixins.json'
             include 'pack.mcmeta'
@@ -81,6 +82,7 @@ configurations {
 
 minecraft {
     mappings channel: 'official', version: project.minecraft_version
+    accessTransformer = file('src/main/resources/META-INF/accesstransformer.cfg')
     copyIdeResources = true
 
     runs {
@@ -169,6 +171,8 @@ def oculusDevJars = optionalFrontendJars('voxyOculusDevJar', 'oculus*.jar')
 dependencies {
     minecraft "net.minecraftforge:forge:${project.minecraft_version}-${project.forge_version}"
     implementation "it.unimi.dsi:fastutil:${project.fastutil_version}"
+    testImplementation platform('org.junit:junit-bom:5.10.2')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
     minecraftLibrary("org.lwjgl:lwjgl-zstd:3.3.1") {
         transitive = false
     }
@@ -239,6 +243,10 @@ dependencies {
         compileOnly fg.deobf(oculusDevJar)
         runtimeOnly fg.deobf(oculusDevJar)
     }
+}
+
+test {
+    useJUnitPlatform()
 }
 
 // Forge Jar-in-Jar identifies classifier siblings by the same group/name, so native entries

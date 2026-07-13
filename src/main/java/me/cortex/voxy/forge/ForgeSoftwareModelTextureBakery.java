@@ -221,8 +221,8 @@ final class ForgeSoftwareModelTextureBakery {
         return flags;
     }
 
-    private static ForgeCpuMeshLayer chooseLayer(BlockState state, int flags, ForgeOriginalVoxyColourDepthTextureData[] faces) {
-        ForgeCpuMeshLayer layer = ForgeCpuMeshLayer.OTHER;
+    private static ForgeOriginalVoxyModelLayer chooseLayer(BlockState state, int flags, ForgeOriginalVoxyColourDepthTextureData[] faces) {
+        ForgeOriginalVoxyModelLayer layer = ForgeOriginalVoxyModelLayer.OTHER;
         if ((flags & FLAG_TRANSLUCENT) != 0) {
             boolean anyTranslucent = false;
             for (ForgeOriginalVoxyColourDepthTextureData face : faces) {
@@ -232,7 +232,7 @@ final class ForgeSoftwareModelTextureBakery {
                 }
             }
             if (anyTranslucent) {
-                layer = ForgeCpuMeshLayer.TRANSLUCENT;
+                layer = ForgeOriginalVoxyModelLayer.TRANSLUCENT;
             } else {
                 boolean solid = true;
                 for (ForgeOriginalVoxyColourDepthTextureData face : faces) {
@@ -241,16 +241,16 @@ final class ForgeSoftwareModelTextureBakery {
                         break;
                     }
                 }
-                layer = solid ? ForgeCpuMeshLayer.SOLID : ForgeCpuMeshLayer.CUTOUT;
+                layer = solid ? ForgeOriginalVoxyModelLayer.SOLID : ForgeOriginalVoxyModelLayer.CUTOUT;
             }
         }
-        if (layer == ForgeCpuMeshLayer.OTHER && (flags & FLAG_DISCARD) != 0) {
-            layer = ForgeCpuMeshLayer.CUTOUT;
+        if (layer == ForgeOriginalVoxyModelLayer.OTHER && (flags & FLAG_DISCARD) != 0) {
+            layer = ForgeOriginalVoxyModelLayer.CUTOUT;
         }
         if (state.is(BlockTags.LEAVES)) {
-            layer = ForgeCpuMeshLayer.SOLID;
+            layer = ForgeOriginalVoxyModelLayer.SOLID;
         }
-        return layer == ForgeCpuMeshLayer.OTHER ? ForgeCpuMeshLayer.SOLID : layer;
+        return layer == ForgeOriginalVoxyModelLayer.OTHER ? ForgeOriginalVoxyModelLayer.SOLID : layer;
     }
 
     private int renderFluid(BlockState state, long outputBuffer) {
@@ -423,7 +423,7 @@ final class ForgeSoftwareModelTextureBakery {
         );
     }
 
-    record BakeResult(ForgeOriginalVoxyColourDepthTextureData[] textures, ForgeCpuMeshLayer layer, int flags, String failureReason) {
+    record BakeResult(ForgeOriginalVoxyColourDepthTextureData[] textures, ForgeOriginalVoxyModelLayer layer, int flags, String failureReason) {
         boolean anyFaceWritten() {
             for (ForgeOriginalVoxyColourDepthTextureData face : this.textures) {
                 if (face != null && ForgeOriginalVoxyTextureUtils.getWrittenPixelCount(face, ForgeOriginalVoxyTextureUtils.WRITE_CHECK_STENCIL) > 0) {

@@ -47,7 +47,9 @@ public final class ForgeVoxyInstance {
     }
 
     public void register() {
-        VoxelIngestService.setAutoIngestTarget(chunk -> chunk.getLevel() instanceof ClientLevel level
+        VoxelIngestService.setAutoIngestTarget(chunk -> ForgeVoxyConfig.ENABLED.get()
+                && ForgeVoxyConfig.INGEST_ENABLED.get()
+                && chunk.getLevel() instanceof ClientLevel level
                 ? this.getEngineForLevel(level).orElse(null)
                 : null);
         VoxelIngestService.setActiveService(this.originalVoxyIngestService);
@@ -226,21 +228,6 @@ public final class ForgeVoxyInstance {
 
     private void onClientLogin(ClientPlayerNetworkEvent.LoggingIn event) {
         this.ensureOriginalVoxyActiveWorldForCurrentWorld();
-    }
-
-    public boolean ensureActiveWorldSkeletonForCurrentWorldIfAllowed() {
-        if (this.shuttingDown) {
-            return false;
-        }
-        if (!ForgeVoxyRuntimeOverrides.enabledWorldEngineSkeleton()) {
-            return false;
-        }
-        var minecraft = Minecraft.getInstance();
-        if (minecraft.level == null || minecraft.player == null) {
-            return false;
-        }
-
-        return this.selectOrCreateWorld(ForgeOriginalVoxyPersistentStorage.identityForCurrentWorld(minecraft));
     }
 
     public boolean ensureOriginalVoxyActiveWorldForCurrentWorld() {
