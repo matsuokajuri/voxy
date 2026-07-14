@@ -7,6 +7,7 @@ issueTrackerURL="https://github.com/matsuokajuri/voxy/issues"
 modId="${mod_id}"
 version="${mod_version}"
 displayName="${mod_name}"
+logoFile="assets/voxy/icon.png"
 authors="${mod_authors}"
 description='''${mod_description}'''
 

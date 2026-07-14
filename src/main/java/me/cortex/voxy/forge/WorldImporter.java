@@ -17,6 +17,7 @@ import net.minecraft.core.Holder;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.NbtIo;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.Tag;
@@ -411,17 +412,17 @@ public final class WorldImporter implements IDataImporter {
         }
 
         try {
-            int chunkX = chunk.getInt("xPos");
-            int chunkZ = chunk.getInt("zPos");
+            int chunkX = getIntOrSentinel(chunk, "xPos");
+            int chunkZ = getIntOrSentinel(chunk, "zPos");
             if (chunkX >> 5 != regionX || chunkZ >> 5 != regionZ) {
                 Logger.error("Chunk position is not located in correct region, expected: (" + regionX + ", " + regionZ
                         + "), got: (" + (chunkX >> 5) + ", " + (chunkZ >> 5) + "), importing anyway");
             }
 
-            var sections = chunk.getList("sections", Tag.TAG_COMPOUND);
+            ListTag sections = requireList(chunk, "sections");
             for (int index = 0; index < sections.size(); index++) {
-                CompoundTag section = sections.getCompound(index);
-                this.importSectionNbt(chunkX, section.getInt("Y"), chunkZ, section);
+                CompoundTag section = (CompoundTag) sections.get(index);
+                this.importSectionNbt(chunkX, getIntOrSentinel(section, "Y"), chunkZ, section);
             }
         } catch (Exception e) {
             Logger.error("Exception importing world chunk:", e);
@@ -453,7 +454,7 @@ public final class WorldImporter implements IDataImporter {
         if (section.contains("biomes", Tag.TAG_COMPOUND)) {
             biomes = this.biomeCodec
                     .parse(NbtOps.INSTANCE, section.getCompound("biomes"))
-                    .resultOrPartial(message -> Logger.error("Failed to decode imported biomes: " + message))
+                    .result()
                     .orElse(this.defaultBiomeProvider);
         }
 
@@ -469,6 +470,18 @@ public final class WorldImporter implements IDataImporter {
                 });
         WorldVoxilizedSectionMipper.mipSection(converted, this.world.getMapper());
         WorldUpdater.insertUpdate(this.world, converted);
+    }
+
+    static int getIntOrSentinel(CompoundTag tag, String key) {
+        return tag.contains(key, Tag.TAG_ANY_NUMERIC) ? tag.getInt(key) : Integer.MIN_VALUE;
+    }
+
+    static ListTag requireList(CompoundTag tag, String key) {
+        Tag value = tag.get(key);
+        if (value instanceof ListTag list) {
+            return list;
+        }
+        throw new IllegalStateException("Missing required list tag: " + key);
     }
 
     @FunctionalInterface

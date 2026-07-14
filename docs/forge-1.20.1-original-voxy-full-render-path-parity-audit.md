@@ -66,6 +66,30 @@ XXV_F3_VISIBILITY_RUNTIME_ACCEPTANCE=passed
 XXV_EMBEDDIUM_PAGE_RUNTIME_ACCEPTANCE=passed
 XXV_CONFIG_APPLY_RUNTIME_ACCEPTANCE=passed
 XXV_TARGETED_FRONTEND_RUNTIME_ACCEPTANCE=passed
+XXVI_POST_XXV_GLOBAL_REVIEW=passed-static
+XXVI_IMPLEMENTATION=implemented
+XXVI_STATIC_SOURCE_AUDIT=passed
+XXVI_FULL_BUILD_AND_ARTIFACT_AUDIT=passed
+XXVI_CLAUDE_SUPPLEMENTAL_REVIEW=partial-no-findings
+XXVI_RUNTIME_REGRESSION=passed-via-xxvii-consolidated-user-regression
+XXVII_EXHAUSTIVE_LINE_AUDIT_PASS_1=252-of-252-reviewed
+XXVII_PASS_1_FINDINGS=15-repaired-static-gates-passed
+XXVII_EXHAUSTIVE_LINE_AUDIT_PASS_2=261-of-261-reviewed-22-repaired
+XXVII_EXHAUSTIVE_LINE_AUDIT_PASS_3=270-of-270-reviewed-3-repaired
+XXVII_EXHAUSTIVE_LINE_AUDIT_PASS_4_TO_7=complete-findings-repaired
+XXVII_EXHAUSTIVE_LINE_AUDIT_PASS_8=275-of-275-reviewed-1-repaired
+XXVII_EXHAUSTIVE_LINE_AUDIT_PASS_9=275-of-275-reviewed-1-repaired
+XXVII_EXHAUSTIVE_LINE_AUDIT_PASS_10=275-of-275-reviewed-3-repaired
+XXVII_EXHAUSTIVE_LINE_AUDIT_PASS_11=275-of-275-reviewed-3-comments-repaired
+XXVII_EXHAUSTIVE_LINE_AUDIT_PASS_12=275-of-275-reviewed-7-repaired
+XXVII_EXHAUSTIVE_LINE_AUDIT_PASS_13=275-of-275-reviewed-1-repaired
+XXVII_EXHAUSTIVE_LINE_AUDIT_PASS_14=275-of-275-reviewed-0-findings
+XXVII_ZERO_NEW_FINDING_PASS=passed-pass-14
+XXVII_STATIC_COMPLETION=passed
+XXVII_FORCED_CLEAN_GATE=35-suites-110-tests-jarJar-passed
+XXVII_RUNTIME_REGRESSION=passed-user-2026-07-14
+XXVII_RELEASE_READINESS=approved-by-user-finalization-request-2026-07-14
+XXVII_FINAL_PACKAGE=12,589,718-bytes-sha256-50a27befcfb8d9390aac4db77ab76cf25afe9b4a1fa0aa30c554b7654a5b5502
 WHOLE_ORIGINAL_MOD_PARITY=passed-with-documented-platform-adaptations
 ```
 
@@ -87,7 +111,10 @@ reporting an anomaly, and the log proves the Voxy pages were registered and the
 Embeddium options GUI was constructed. A follow-up then exercised Rendering off
 and on through Apply: the user confirmed LOD disappeared and returned, the
 expected renderer/Oculus lifecycle completed, configuration persisted, and the
-client exited normally. The current XXV acceptance gate is therefore closed.
+client exited normally. That historical XXV acceptance gate closed, but the
+post-commit global review reopened whole-mod parity for XXVI after finding
+unported session ownership, ingest-performance, storage-type, optional-library,
+and diagnostic behavior that the visual/frontend gate could not exercise.
 
 ## Authoritative original chain
 
@@ -371,12 +398,13 @@ MDICViewport / Viewport
  -> AsyncNodeManager.submitRequestBatch()
 ```
 
-The current Forge parity route now owns the original `ViewportSelector` shape:
-default viewport, optional Vivecraft render-pass viewport, optional
-Oculus/Iris shadow viewport, and all `MDICViewport` resources owned by the
-selected viewport. The Forge adapters use reflection for the optional
-Vivecraft/Oculus sources so the Forge source set does not gain hard compile
-dependencies that the original Fabric source did not need in this environment.
+The current Forge parity route now owns the original outer selection order:
+an active Oculus/Iris shadow pass returns no Voxy viewport before optional
+Vivecraft render-pass selection, otherwise the selector chooses the Vivecraft
+or default viewport. All `MDICViewport` resources remain owned by the selected
+viewport. The optional Vivecraft adapter uses reflection so that integration
+does not become a hard dependency; Oculus is already a required Forge frontend
+dependency in this project.
 
 The current Forge parity route now owns the original MDIC viewport-side buffers
 (`drawCountCallBuffer`, `drawCallBuffer`, `positionScratchBuffer`,
@@ -640,7 +668,7 @@ Forge config entry point are implemented and runtime-regressed by XXII-XXIII.
 | `AsyncNodeManager` render-side traversal producers | original Voxy receives top-level node adds/removes from `RenderDistanceTracker`, and request batches from `HierarchicalOcclusionTraverser` | Forge now ports the geometry-result queue, `SyncResults`, `ComputeMemoryCopy`, `UploadStream`, `DownloadStream`, `memcpy.comp`, `scatter.comp`, `SectionUpdateRouter`, `SingleNodeRequest`, `NodeChildRequest`, leaf-to-inner transitions, inner-node compaction, top-level node id deltas, cleaner reset/clear deltas, request batch entry points, remove batch entry points, render-side `NodeCleaner`, `GeometryCache`, `RenderDistanceTracker`, and the HOC owner/request-buffer path. `originalNodeManagerParityReady=true` is limited to this ownership layer. `originalHierarchicalOcclusionTraverserOwnerReady=true` does not imply HiZ traversal execution until `originalHizTraversalExecutableReady=true`. |
 | `AsyncNodeManager` GeometryCache | original Voxy has a CPU-side `GeometryCache` inside `AsyncNodeManager`; initial render generation first tries `geometryCache.remove(pos)`, and dirty world events clear cached geometry for the changed section | Fixed for the Forge parity route: `ForgeOriginalVoxyGeometryCache` mirrors original cache semantics, initial render callbacks consume cached geometry before queueing render generation, and world dirty callbacks clear stale cached geometry before forwarding router/remesh events. |
 | `RenderDistanceTracker` | original Voxy uses `RingTracker` to feed top-level LoD node add/remove events into `AsyncNodeManager` | Fixed for the Forge parity route: `ForgeOriginalVoxyRingTracker` and `ForgeOriginalVoxyRenderDistanceTracker` mirror the original algorithm and feed `AsyncNodeManager.addTopLevel/removeTopLevel`; render distance is now sourced from `originalVoxySectionRenderDistance`, the Forge config equivalent of original `VoxyConfig.CONFIG.sectionRenderDistance`. |
-| `HierarchicalOcclusionTraverser` / `ViewportSelector` / `MDICViewport` / HiZ | original Voxy selects a per-pass viewport, copies vanilla depth into a Voxy-owned `DepthFramebuffer(GL_DEPTH24_STENCIL8)` through `setup_stencil_depth.frag`, builds a HiZ depth pyramid, then runs GPU HOC traversal to produce render-list entries and node request batches | Fixed: the Forge owners port the original buffers, traversal, selector, depth/HiZ, request download, and shadow-pass selection. The active outer `ForgeOriginalVoxyRenderSystem` now runs `MDICSectionRenderer.renderOpaque(...)` immediately in the original frame order; the Embeddium adapter restores external GL state only because it enters from another renderer's pass. Historical CPU planners remain excluded. |
+| `HierarchicalOcclusionTraverser` / `ViewportSelector` / `MDICViewport` / HiZ | original Voxy rejects Iris shadow rendering before selecting a default or optional Vivecraft viewport, copies vanilla depth into a Voxy-owned `DepthFramebuffer(GL_DEPTH24_STENCIL8)` through `setup_stencil_depth.frag`, builds a HiZ depth pyramid, then runs GPU HOC traversal to produce render-list entries and node request batches | Fixed: the Forge owners port the original buffers, traversal, selector, depth/HiZ, request download, and shadow-pass rejection before optional-pass selection. The active outer `ForgeOriginalVoxyRenderSystem` now runs `MDICSectionRenderer.renderOpaque(...)` immediately in the original frame order; the Embeddium adapter restores external GL state only because it enters from another renderer's pass. Historical CPU planners remain excluded. |
 | `MDICViewport` -> `MDICSectionRenderer.buildDrawCalls(...)` | original `MDICSectionRenderer.buildDrawCalls(...)` uploads the MDIC scene uniform, runs `prep.comp`, rasterizes section AABBs into the viewport visibility buffer with color/depth writes disabled, dispatches production `cmdgen.comp`, runs prefix sum for translucent distance buckets, and dispatches `buildtranslucents.comp` | Fixed: `ForgeOriginalVoxyMdicSectionRenderer` owns the production programs, original buffers/layouts, command generation, and visible opaque/temporal/translucent indirect submissions. Targeted readbacks and the post-XX.6 visual regression confirm the real path rather than debug command buffers. |
 | `AbstractRenderPipeline` -> terrain shader owner | original `MDICSectionRenderer` receives a render pipeline, asks it for TAA and shader patches, compiles patched-or-normal opaque and translucent terrain programs, and then relies on the pipeline to bind opaque/translucent draw targets | Fixed for renderer parity: the Forge normal and Oculus paths own the original shader hooks, targets, SSAO, TAA, patch bindings, blend, depth transfers, and final blit. Roman XVIII/XX completed adapter state coverage and outer lifecycle ownership; the 2026-07-02 audit retired the patched-program fallback blocker. |
 | Embeddium render hook entry | original Voxy drives this chain from one `VoxyRenderSystem` owner; Forge must hook Embeddium until that owner is fully ported | The active mixin config uses one `DefaultChunkRenderer` cutout-pass hook. A stale, unregistered `SodiumWorldRenderer.drawChunkLayer` hook source was removed so it cannot be accidentally enabled as a second route. `ForgeOriginalVoxyModelPipeline.renderEmbeddiumCutout(...)` now also guards reentrant entry and only runs post-command-generation dynamic work after command generation actually completes. |
@@ -1288,10 +1316,11 @@ clustered by block type, unfixable by remesh.
 
 Fix: drain latched GL errors before the model-store build, before the
 upload-audit loop, and at the top of the render-system construction
-boundary (all logged); upload failures now retry next tick (front of the
-queue, capped at 16 attempts) and only then drop with a loud error log.
-This is a Forge audit-layer repair — original Voxy performs these uploads
-without glGetError audits at all, so no original behavior is displaced.
+boundary (all logged). XXVII's exhaustive failure-path audit then removed the
+remaining capped-drop behavior: a reported upload failure keeps the native
+payload queue-owned and propagates a fatal owner error, so CPU mappings can
+never remain valid after the corresponding GPU payload is discarded. This is
+the nearest explicit-error equivalent of original Voxy's direct upload path.
 
 2026-07-12 correction: the GL-error-triggered loss above was real, but the
 `nextModelId`/`uploadedModelRecordCount` drift used to quantify it was
@@ -2893,12 +2922,12 @@ worker gate, and counter must be ported together.
 ### Shader and resource parity evidence
 
 The resource audit compares all original shader resources with the compiled
-Forge set. Forty-five of forty-seven shader files are byte-identical. The two
-intentional adaptations are:
-
-1. `outline.vsh`, whose frontend symbols map to Embeddium 1.20.1.
-2. `lod/hierarchical/screenspace.glsl`, whose reverse-AABB depth handling is the
-   documented Forge/Oculus depth-contract adaptation.
+Forge set. Forty-six of forty-seven shader files are byte-identical. The sole
+intentional adaptation is `outline.vsh`, whose frontend symbols map to
+Embeddium 1.20.1. The earlier extra reverse-AABB guard in
+`lod/hierarchical/screenspace.glsl` was not tied to any Forge/Oculus contract;
+the full line audit classified it as an unproven local algorithm change and
+restored that shader byte-for-byte to original.
 
 The earlier one-stage `PATCHED_SHADER` defect remains fixed: the define is
 applied to both vertex and fragment stages. The final JAR audit must prove all
@@ -3197,3 +3226,621 @@ frontend gate, and current whole-mod acceptance therefore pass. The enabled-
 config strict lifecycle adaptation remains a separate documented TODO and is
 not claimed complete by this result; IterationT likewise remains the documented
 post-migration compatibility TODO.
+
+## XXVI post-XXV whole-mod parity closure
+
+XXVI re-opened the result after the user requested a whole-repository review and
+asked why the Forge artifact had grown to more than 90 MB while original Voxy's
+artifact is only about 12 MB. This round did not extend a preview route. It
+re-read the current `dev` implementations and the Forge 1.20.1/Embeddium/Oculus
+owners, then corrected process/session lifetime, ingest hot-path, storage,
+optional-library, diagnostics, custom-material, and packaging drift in one
+coherent regression unit.
+
+### XXVI.1 session ownership and disabled-state isolation
+
+Original `ClientSessionEvents` constructs one `VoxyClientInstance` while the
+join packet is being handled, before the client level is installed, and destroys
+that instance only after Minecraft has detached the level. Original
+`VoxyInstance` owns the unified service pool, saving and ingest services, import
+manager, active-world map, and active-world cleaner for exactly that session.
+The pre-XXVI Forge event shell instead retained some of these owners for the
+whole process. Applying `enabled=false` could therefore leave Voxy workers and
+Embeddium semaphore participation alive even though rendering was disabled.
+
+XXVI keeps only the Forge event registration shell process-wide. Its
+`SessionRuntime` now owns the original resource set per network connection:
+
+```text
+ClientPacketListener.handleLogin
+ -> after PacketUtils.ensureRunningOnSameThread
+ -> beginOriginalVoxyClientSession(the target ClientPacketListener)
+ -> read this connection's storage config
+ -> create unified pool / saving / ingest / imports / world cleaner
+ -> Embeddium later creates its chunk job queue against that pool
+
+Minecraft.clearLevel(Screen) TAIL
+ -> level and Embeddium queue are already detached
+ -> stop world cleaner
+ -> cancel imports
+ -> render-thread VoxyRenderSystem shutdown and GL release
+ -> stop ingest / saving / unified pool
+ -> wait for references and free every WorldEngine/storage
+```
+
+The explicit `ClientPacketListener` is required ground truth at the early join
+boundary: in Minecraft 1.20.1 `Minecraft#getConnection()` still returns null
+until the player owns its connection. The later Forge login event remains only
+the post-level world-selection fallback. Reconnect creates a new owner and old
+levels are rejected by connection and identity. A disabled Voxy creates no
+session runtime, worker, ingest callback, semaphore block, F3 diagnostics, or
+LOD owner. Re-enabling through Apply performs original-equivalent full instance
+replacement; the XXV text above describing a process-singleton service pool and
+an accepted strict-lifecycle TODO is therefore historical and superseded.
+
+Render resources are still released only on the render thread. When shutdown is
+requested elsewhere, the continuation runs after the recorded render call and
+only then tears down the CPU services/worlds. `RenderResourceReuse` is cleared
+at full session end, as in `VoxyClientInstance.shutdown`. The world cleaner is
+stopped once, before imports and services, matching `VoxyInstance.shutdown`.
+
+### XXVI.2 storage configuration parity
+
+The storage owner now captures base path, player UUID, and parsed configuration
+per session rather than caching configuration by path for the process. A logout
+and reconnect therefore rereads `config.json`, including changes made while the
+client was disconnected. The original registered `Memory` backend type is now
+accepted in addition to the already ported storage graph.
+
+One proposed safety behavior was explicitly rejected during review. Preserving
+an invalid/unknown storage JSON and silently disabling that session appeared
+safer, but it was not a port: original `StorageConfigUtil` resets any null,
+invalid-version, missing-storage, unknown-type, or parse-failed configuration to
+the default, then unconditionally writes the canonical JSON before continuing.
+XXVI restores that exact reset-and-rewrite behavior. Directory creation and the
+final write remain fail-fast exceptions, also matching original. Valid configs
+are canonical-rewritten on every session construction rather than returned
+without a write.
+
+The only version adaptation in the path is Realms classification: current
+original uses `ServerData.isRealm()`, which does not exist in 1.20.1, so Forge
+uses the equivalent 1.20.1 owner `Minecraft.isConnectedToRealms()`. Singleplayer
+continues to use `<world>/voxy`; multiplayer uses `.voxy/saves/<server>`.
+
+### XXVI.3 ingest hot-path parity
+
+Forge had drifted from original's direct palette decode to the public
+`PalettedContainer#get` route and allocated new voxel backing storage during
+ingest. XXVI exposes only the required 1.20.1 `PalettedContainer.data`,
+`Data.palette`, and `Data.storage` fields through the Forge access transformer,
+then ports original's packed `SimpleBitStorage`/`ZeroBitStorage` loop, local and
+global palette handling, per-thread biome/palette scratch storage, and weak
+per-`Mapper` block-state ID cache. Java 17's small bit-selection helper is the
+only substitute for original's newer-Java `Integer.compress` call; its output is
+covered exhaustively for the 4x4x4 biome index domain.
+
+`VoxelIngestService` again reuses one 4,681-long `VoxelizedSection` backing array
+per ingest thread. This is safe for the same reason as original: conversion,
+mipping, and `WorldUpdater.insertUpdate` consume the section synchronously
+before the worker accepts its next job. The existing Forge lighting corrections
+(LIGHT_AND_DATA readiness, implicit uniform sky light, dead-world drop, and
+retry queue) are preserved; they remain 1.20.1 ingestion adaptations and are not
+replaced by the performance port.
+
+Original's optional `LithiumHashPalette` branch is intentionally not copied:
+Lithium is Fabric-only here, Embeddium does not replace the vanilla palette
+classes, and Forge 1.20.1 constructs `LinearPalette`, `HashMapPalette`,
+`SingleValuePalette`, or `GlobalPalette`. An unknown coremod palette fails with
+its class name instead of silently producing incorrect mapping IDs; this is the
+same explicit-adapter boundary as original's Lithium special case.
+
+### XXVI.4 Forge custom material-layer adaptation
+
+Current original receives a per-quad `ChunkSectionLayer`; Forge 1.20.1 exposes
+`RenderType` and permits mods to return custom instances. The former Forge path
+threw on any non-vanilla type, causing an entire otherwise valid LOD model bake
+to become empty. XXVI preserves exact solid/cutout/translucent handling for the
+five vanilla chunk layers and classifies only custom layers from Embeddium's own
+per-sprite transparency analysis. This is a platform representation adapter,
+not a fallback renderer: the same original opaque/translucent consumers,
+metadata, software rasterizer, model store, and visible renderer remain in use.
+
+Fluid custom layers use Forge's actual fluid sprites and fluid-type tint alpha;
+sprite transparency is considered before a final descriptive-name hint.
+`forceSolid` follows original `ReuseVertexConsumer`: it clears discard metadata
+for leaves but never reroutes a translucent quad into the opaque consumer.
+Unknown custom-layer classifications warn once so future mod-specific evidence
+can add a direct mapping without silently changing the model.
+
+### XXVI.5 diagnostics and optional-library behavior
+
+The original tracked-object verification property is restored with its original
+default-on, case-sensitive semantics:
+
+```text
+voxy.ensureTrackedObjectsAreFreed=true by default
+voxy.trackObjectAllocationStacks=false by default
+```
+
+The legacy Forge-only `voxy.disableTrackedObjectAllocations` alias has been
+removed; tracked-object allocation now depends only on the original property,
+including its exact lowercase `"true"` parsing. The 1.20.1
+`GlDebug#printDebugLog` adapter now adds an origin
+stack to Voxy-caused GL diagnostics and suppresses the expected capability
+shader-compile probes. The `BlockableEventLoop#doRunTask` adapter rethrows a
+failure whose stack identifies `ClientPacketListener#handleLogin`. This is not
+broader than original: newer original first wraps every failed
+`ClientboundLoginPacket` in `LoadException`, then unwraps it at the same task
+boundary. In 1.20.1 the handler frame is the available equivalent packet-type
+evidence.
+
+The Distant Horizons decoder now uses the already packaged LWJGL Zstd binding
+instead of adding a second zstd-jni native stack. Streaming decompression,
+truncation/error checks, XZ array-cache reset, format/compression gates, and the
+SQL single-reconnect path are covered by focused tests. The DH command is
+registered only when optional SQLite JDBC and required XZ classes are present;
+normal Voxy use does not require or package SQLite. This matches original's
+runtime-library treatment rather than turning DH into a hard Voxy dependency.
+
+### XXVI.6 artifact-size root cause and correction
+
+The 90+ MB artifact was dependency payload, not 80 MB of Forge renderer code.
+The three largest mistakenly nested inputs alone were:
+
+```text
+rocksdbjni-10.2.1.jar   72,769,957 bytes (all upstream architectures)
+sqlite-jdbc-3.49.1.0    14,317,659 bytes
+zstd-jni-1.5.7-6         7,404,108 bytes
+```
+
+That is 94,491,724 bytes before Voxy classes, shaders, LWJGL modules, XZ, LZ4,
+Jedis, and pool2. Original `dev/build.gradle` instead repacks RocksDB, keeps only
+Win64 and Linux x64 by default, uses LWJGL Zstd, packages XZ, and treats SQLite
+as a development/runtime library. XXVI ports that mechanism to Forge JarJar:
+
+- `makeExcludedRocksDB` contains exactly `librocksdbjni-win64.dll` and
+  `librocksdbjni-linux64.so`; its entries are stored so the outer mod JAR can
+  compress the selected native payload once;
+- zstd-jni and sqlite-jdbc are absent from JarJar metadata and the artifact;
+- XZ 1.10 remains packaged because original packages it and DH compression
+  modes require it;
+- LWJGL Zstd/LMDB use the Minecraft 1.20.1-compatible 3.3.1 API/native set;
+- `-PincludeOtherArchs=true` remains the explicit wider-architecture build
+  switch, matching original policy.
+
+The final XXVI artifact is:
+
+```text
+build/libs/voxy-forge-0.2.17-beta-forge-all.jar
+size=12,560,316 bytes
+JarJar dependencies=7
+rocksdb natives=Win64 + Linux x64 only
+sqlite-jdbc=absent
+zstd-jni=absent
+xz-1.10=present
+```
+
+This is the same size class as original Voxy's 12 MB artifact while retaining
+the Forge/Oculus/Embeddium adaptation and the original storage backends.
+
+### XXVI.7 review, exclusions, and validation state
+
+The main review and an independent read-only review rechecked all nullable model
+pipeline callers, session/reload ordering, explicit early connection ownership,
+Embeddium queue/semaphore lifetime, storage reset semantics, custom block/fluid
+materials, TrackedObject flags, diagnostic mixin selectors, XZ, DH gating, and
+JarJar contents. The invalid-config preservation route and the unavailable
+1.20.1 `ServerData.isRealm()` call were found during this review and removed.
+No remaining P0-P3 source finding was identified before the runtime gate.
+
+A separate bounded Claude Code read-only pass likewise reported no verifiable
+P0-P3 finding in the files it covered. Its scan was stopped to conserve the
+user's limited Claude Pro allowance before it reached the lifecycle core and
+all new mixins, so it is recorded only as supplemental partial evidence and is
+not counted as the independent review above or as a full-review pass.
+
+The forced clean validation was:
+
+```text
+.\gradlew clean test jarJar --rerun-tasks --console=plain
+BUILD SUCCESSFUL
+14 test suites / 37 tests / 0 skipped / 0 failures / 0 errors
+git diff --check=passed
+Mixin refmap selectors=resolved for handleLogin, PacketUtils,
+  clearLevel, GlDebug.printDebugLog, and BlockableEventLoop.doRunTask
+```
+
+The first anchored client launch then exposed a Mixin 0.8.5 application rule
+that javac and the unit suite cannot exercise: `@Unique` static methods copied
+into a target must be private. The package-visible classification helpers in
+the new BlockableEventLoop and GlDebug mixins were made private, while their
+unit coverage now invokes them reflectively. A second forced clean
+`test jarJar` run passed all 37 tests, and the next anchored client launch
+entered the quick-play world with all four new mixins applied and an original
+Voxy network-session runtime created. This closes the launch blocker without
+changing the diagnostic behavior; the consolidated user-observed runtime
+regression remains pending.
+
+The following are not reopened implementation findings:
+
+- IterationT still has no original Voxy sidecar or special case and remains the
+  already documented post-migration compatibility TODO.
+- `ConditionalConfig` still throws upstream's own not-implemented exception;
+  inventing a backend would violate the baseline.
+- Fabric Lithium and Nvidium class-level hooks remain N/A where their applicable
+  Forge equivalents are already Embeddium/Acedium owners.
+- `capsettings.cap` is user-owned, remains untracked, and is excluded from every
+  artifact/commit gate.
+
+Static source, unit, packaging, and artifact gates pass. Whole-original-mod
+parity remains reopened only because the four new required 1.20.1 mixins and the
+session/disabled/custom-material paths require one anchored user-observed client
+regression. No XXVI commit is permitted until that gate passes.
+
+## XXVII exhaustive line-by-line port audit
+
+The user's final confidence question is not treated as a request for another
+sample review. XXVII freezes every physical text line that can affect the Forge
+artifact or its validation route and records each file in the dedicated ledger:
+
+```text
+docs/forge-1.20.1-line-by-line-port-audit.md
+Pass 1 frozen scope: 252 files / 36,741 lines / 1,533,469 bytes
+Pass 1 frozen-snapshot drift check: 0 mismatches
+Pass 1 coverage: 252 / 252 files read to EOF
+Pass 1 findings: 15
+```
+
+The scope includes every main/test Java file admitted by `sourceSets`, every
+packaged shader/resource, build/settings/properties/wrapper logic, and the audit
+inventory generator itself. The uncompiled original client tree is comparison
+ground truth rather than a Forge artifact input. Generated output, dependency
+sources, logs, saves, documentation, `.codegraph`, `.agents`, and the user's
+untracked `capsettings.cap` are explicitly excluded from line-coverage totals.
+
+Pass 1 found measurable deviations in verification-flag parsing, CPU topology,
+sparse-buffer reuse, verifier session ownership, control-flow exception cost,
+normal/Oculus resource ownership, liquid renderer initialization, multi-source
+tint evaluation, fullscreen shader defines/resource sharing, viewport mutation,
+fatal async error propagation, one extra HIZ algorithm guard, and stair-field
+access after reobfuscation. None was repaired until the full frozen pass and
+hash check were complete.
+
+The complete repair batch now restores the original mechanisms or their narrow
+Forge 1.20.1 representation adapters. Integrated validation completed without
+launching the client, as explicitly required for this audit goal:
+
+```text
+rtk git diff --check
+passed
+
+rtk test .\\gradlew compileJava --stacktrace --console=plain
+BUILD SUCCESSFUL
+
+rtk test .\\gradlew test --stacktrace --console=plain
+BUILD SUCCESSFUL
+```
+
+This is not yet a completion claim. The repaired worktree must be frozen again,
+all ledger rows must restart from pending at A001, and another complete read to
+EOF must produce zero new findings. Any new finding forces another deferred
+repair batch and another full pass from A001. No historical review credit,
+compile success, unit test, or visual acceptance substitutes for that terminal
+zero-new-finding pass.
+
+### XXVII.2 Pass 2 complete review and repair batch
+
+Pass 2 independently re-froze **261 files / 37,401 physical text lines /
+1,557,822 bytes**. Every B001-B261 row was read to EOF, and the post-review
+inventory comparison proved 261 inventory paths, 261 ledger paths, and zero
+hash/line/byte/missing/extra mismatches before any repair began.
+
+The complete pass and its independent repair cross-review identified 22 new
+findings (P2-F001 through P2-F022). They covered async-stop ordering, no-sky
+light readiness and retry bookkeeping, exact diagnostic flags, fatal model and
+MDIC failure propagation, reobfuscation-safe sprite/lightmap/atlas access,
+model-request and upload ownership, biome/tint invariants, global empty-VAO
+ownership, packaged shader loading, viewport selection, malformed NBT import,
+and pending UploadStream target lifetime. All 22 were repaired only after the
+full frozen pass had completed.
+
+The forced post-repair gate passed without launching the client:
+
+```text
+rtk git diff --check
+passed
+
+rtk test .\\gradlew clean test jarJar --rerun-tasks --stacktrace --console=plain
+BUILD SUCCESSFUL
+
+voxy-forge-0.2.17-beta-forge-all.jar
+size=12,573,346 bytes (11.99 MiB)
+SHA-256=0fc19ef1d2207bf183ac8581830b589291f15b9230f63d30805127b4d54c9669
+entries=451
+bundled Minecraft/LWJGL/Oculus/Embeddium classes=0
+```
+
+Production bytecode directly references the reobfuscated targets
+`SpriteContents.m_246162_`, `LightTexture.f_109870_`,
+`DynamicTexture.m_117963_`, and `TextureAtlas.f_276072_`; the prior literal
+development-name reflection hazards are absent from those paths. Pass 2 is
+therefore repaired, but XXVII remains open until a new full-tree pass over the
+post-repair hashes yields zero new findings.
+
+### XXVII.3 Pass 3 complete review and repair batch
+
+Pass 3 independently froze **270 files / 38,118 physical text lines /
+1,591,782 bytes** after the complete Pass 2 repair and artifact gate. Every
+C001-C270 row was read to EOF with no inherited coverage. The three independent
+partitions and the root partition each recomputed their assigned hashes, line
+counts, and byte lengths; the final whole-inventory comparison proved 270
+ledger paths, 270 current paths, and zero hash/line/byte/missing/extra
+mismatches before repairs began.
+
+Three new findings were confirmed and repaired as one deferred batch:
+
+- the common logger could resolve the client-only `Minecraft` class on a
+  dedicated server; client HUD bytecode is now isolated behind the Forge
+  distribution guard;
+- the 1.20.1 NBT adapter accepted wrong-type mapper tags through vanilla's
+  defaulting getters; tag-type-aware numeric/string fallbacks and the required
+  compound invariant now match original behavior;
+- the pipeline depth helper captured only the draw framebuffer while its
+  `GL_FRAMEBUFFER` bind changed both draw and read owners; both bindings are
+  now captured and restored independently.
+
+`rtk git diff --check` and `rtk test .\\gradlew compileJava test --stacktrace
+--console=plain` passed, including focused bytecode, malformed-NBT, and
+framebuffer-state tests. No client was launched. Pass 3 is repaired but is not
+the terminal proof: Pass 4 must re-freeze and physically reread the complete
+post-repair tree, and any new finding will force another deferred repair batch
+and full pass.
+
+### XXVII.4 Pass 4 complete review and repair batch
+
+Pass 4 independently froze **271 files / 38,237 physical text lines /
+1,596,803 bytes** after the Pass 3 repair. D001-D271 were physically reread to
+EOF across three independent partitions plus the root resource/shader/test
+partition. Every partition recomputed its assigned path, kind, line count,
+byte count, and SHA-256. The final whole-tree comparison proved 271 frozen
+rows, 271 current rows, and zero hash/line/byte/kind/missing/extra mismatches
+before any production repair began.
+
+Five new findings were frozen and repaired as one deferred batch:
+
+- original `ModelFactory` merges a contained fluid model's biome-colour
+  dependency after dedupe and feeds one state into CPU metadata, GPU flags,
+  colour/base-index selection, and biome-colour registration. Forge now merges
+  that dependency into its shared tint plan at the same lifecycle point;
+- six common-layer adaptations bypass original `Logger` through direct SLF4J
+  loggers; all six now route through the distribution-safe original common
+  logger with exact message/level/throwable behavior;
+- the Forge-only Embeddium injection state owner now round-trips indexed buffer
+  names/ranges and generic bindings, array/draw/dispatch-indirect targets,
+  image unit 0, unpack state, separate stencil-face state, and legal polygon
+  state. Target-specific zero texture binding prevents a 2D clear from
+  destroying Oculus 1D/3D/rectangle bindings, with non-2D queries limited to
+  actual shaderpack sampler slots rather than every target on every unit;
+- repair cross-review of the actual Oculus 1.8 bytecode found that
+  `TEXTURE_RECTANGLE.getGlType()` incorrectly reports `GL_TEXTURE_3D`. The
+  Forge adapter now maps all four enum identities to their correct GL targets;
+- the initial GL-boundary test constrained isolated state helpers but not the
+  complete active call chain. It now locks capture, restore arming, first
+  mutation ordering, the outer `finally`, every non-2D delegate hop, and the
+  four actual Oculus enum identities.
+
+The detailed per-line evidence and row-to-finding mapping are in
+`docs/forge-1.20.1-line-by-line-port-audit.md` as P4-F001 through P4-F005.
+Independent repair review found and corrected the initially incomplete
+P4-F001 CPU-only fix and the Oculus rectangle-target defect before the batch
+gate. `rtk git diff --check` and `rtk test .\\gradlew clean test jarJar
+--rerun-tasks --stacktrace --console=plain` passed. The resulting all-JAR is
+12,584,005 bytes, SHA-256
+`30c58e9dc85da6c56e5de10e0d343d1a9f365c93495ea0e66e1edcf4a9482570`,
+contains 457 entries, and contains zero bundled Minecraft/Forge/LWJGL/Oculus/
+Embeddium/Sodium dependency classes. No client was launched. Pass 4 cannot be
+the terminal pass because it found defects; Pass 5 must freeze and reread the
+entire repaired tree from zero inherited coverage.
+
+### XXVII.5 Pass 5 complete review and repair batch
+
+Pass 5 independently froze **272 files / 38,859 physical text lines /
+1,627,437 bytes** after the complete Pass 4 repair and gate. E001-E272 were
+physically reread to EOF across four disjoint partitions. Each partition
+recomputed its assigned path, kind, line count, byte count, and SHA-256; a
+separate whole-inventory comparison then proved 272 frozen rows, 272 current
+rows, and zero missing, extra, reordered, kind, line, byte, or hash mismatches
+before production repair began.
+
+Pass 5 found one new P3 parity deviation. Forge retained the historical
+`voxy.disableTrackedObjectAllocations` alias when the original
+`voxy.ensureTrackedObjectsAreFreed` property was absent. Besides being absent
+from original Voxy, the alias used `Boolean.getBoolean` and therefore accepted
+case variants that original verification flags reject. The alias is now
+removed. The active helper consumes only the original property, defaults it to
+enabled, and recognizes only exact lowercase `"true"`; the focused behavioral
+test covers the absent, `true`, `false`, and `TRUE` cases and passes.
+
+The detailed evidence is P5-F001 in
+`docs/forge-1.20.1-line-by-line-port-audit.md`. Pass 5 cannot be the terminal
+pass because it found a defect. The repaired executable inventory must be
+frozen again and reread from zero inherited coverage as Pass 6. No client was
+launched.
+
+### XXVII.6 Pass 6 terminal zero-finding line audit
+
+Pass 6 froze the complete post-P5-F001 executable inventory at **272 files /
+38,854 physical text lines / 1,627,177 bytes** and inherited zero review
+coverage. Four disjoint partitions physically reread all 272 files to EOF,
+using CodeGraph first for production Java and comparing each production path
+against original Voxy plus the necessary Forge 1.20.1, Embeddium, and Oculus
+contracts. The partition totals were F001-F074: 74 files / 9,700 lines /
+384,104 bytes; F075-F112: 38 / 9,745 / 410,534; F113-F164: 52 / 9,714 /
+408,613; and F165-F272: 108 / 9,695 / 423,926. Every partition reported zero
+new findings.
+
+Each partition independently re-matched path, kind, line count, byte count,
+and SHA-256. A separate whole-inventory comparison then proved 272 frozen rows,
+272 regenerated rows, and zero missing, extra, reordered, path, kind, line,
+byte, or hash mismatches. The detailed F001-F272 evidence and completion state
+are recorded in `docs/forge-1.20.1-line-by-line-port-audit.md`.
+
+`rtk git diff --check` passed. The forced final `rtk test .\gradlew clean test
+jarJar --rerun-tasks --stacktrace --console=plain` gate passed with 32 test
+suites / 94 tests / 0 failures / 0 errors / 0 skipped tests. The resulting
+`voxy-forge-0.2.17-beta-forge-all.jar` is 12,583,915 bytes, has SHA-256
+`94cd04bd5ff74f6e29198d9ac505560b2cf8c45c76e7dec177ec88827ec2c4c5`,
+contains 457 ZIP entries, and contains zero bundled Minecraft, Forge, LWJGL,
+Oculus/Iris, Embeddium, or Sodium dependency classes. No client was launched.
+Pass 6 therefore satisfied the static completion rule at the time, but the
+first subsequent client launch exposed P7-F001 and invalidated it as terminal
+readiness evidence.
+
+### XXVII.7 Post-audit Mixin runtime invalidation
+
+The first client launch after Pass 6 failed before window initialization with
+Mixin 0.8.5 rejecting
+`ForgeOriginalVoxyLevelRendererRenderStateCaptureMixin.shouldResetViewport(ZZZ)Z`
+as a non-private static method. Original Voxy's `MixinLevelRenderer` keeps the
+equivalent viewport action inside its private injection. Forge had extracted
+the predicate only so its unit test could call it directly, but package-level
+visibility made it an illegal member for Mixin's MAIN applicator phase. This
+is P7-F001 / P1 in the detailed line-audit ledger.
+
+The repair preserves the predicate behavior while restoring a valid Mixin
+contract: it is now `@Unique private static voxy$shouldResetViewport`, and the
+test uses reflection to assert `private` and `static` before checking all four
+behavior cases. The focused compile/test gate passed, and an independent
+review confirmed both the repair and that no other Forge mixin static method
+has the same visibility defect.
+
+A second client launch, explicitly anchored at `D:\Projects\voxy`, passed the
+real Mixin application phase, entered the default world, opened the original
+persistent WorldEngine, reached the Embeddium command-generation hook, and
+created `ForgeOriginalVoxyRenderPipeline` with `MDICSectionRenderer`. The
+client was left running for user validation. Pass 6's static evidence remains
+historically valid, but XXVII is reopened: a newly frozen complete zero-finding
+pass is required before the line-audit status can return to `complete`.
+
+### XXVII.8 Pass 7 complete review and repair batch
+
+Pass 7 froze the post-P7-F001 tree at 272 files / 38,876 physical text lines /
+1,627,815 bytes. Four disjoint clean-room partitions re-read every row to EOF,
+and both the partition checks and a final whole-inventory comparison reported
+zero path, kind, line, byte, SHA-256, missing-path, or extra-path drift. Pass 7
+confirmed four additional parity defects only after preserving that frozen
+coverage:
+
+- P7-F002 / P3: the original icon PNG was packaged, but Forge metadata omitted
+  `logoFile`, so Forge's mod-list owner could not expose it;
+- P7-F003 / P2: the Oculus patch validator skipped a null per-buffer blend
+  state and deferred the original load-time rejection into a translucent-render
+  NPE;
+- P7-F004 / P2: top-level node set mutation and its `workCounter` delta were
+  separated by unlocking, allowing the worker to drain uncounted work and enter
+  the negative-counter one-second sleep;
+- P7-F005 / P3: a short JSON blend array became a valid per-buffer off state in
+  Forge instead of following the original deserializer catch/partial-map path.
+
+The repair batch maps `assets/voxy/icon.png` through Forge's exact `logoFile`
+key, restores original blending-first/null and short-array behavior, and moves
+the top-level set mutation, counter delta, and unpark back into the producer
+critical section shared with the worker snapshot. Focused tests cover processed
+metadata/icon bytes, the real Oculus load-error boundary, short-array partial
+mapping, and both producer and worker sides of the top-level lock protocol.
+`git diff --check`, focused gates, and the forced complete suite passed: 35
+suites / 98 tests / zero failures, errors, or skips. Two independent repair
+reviews found the production changes clean; one strengthened the async protocol
+test before the final focused rerun. No client was launched.
+
+Pass 8 is frozen at 275 files / 39,143 physical text lines / 1,639,316 bytes.
+Every H001-H275 row starts pending and inherits no Pass 7 review credit. A full
+zero-finding Pass 8 remains mandatory before this audit may close.
+
+### XXVII.9 Passes 8 through 14 and terminal static closure
+
+Passes 8 through 13 each re-froze and physically reread all 275 executable
+inventory files with zero inherited review credit. Every pass independently
+reconciled `path / kind / lines / bytes / SHA-256` before its repair batch:
+
+- Pass 8 found and repaired one strong-retention error in the Forge-only
+  historical `ClientLevel` identity guard; weak identity membership now keeps
+  late same-session recognition without retaining old dimensions.
+- Pass 9 restored original `LevelRenderer#setLevel` `HEAD` identity teardown
+  instead of the delayed END-tick fallback.
+- Pass 10 repaired three original-contract omissions in shader-printf batch
+  replacement, the complete `ModelQueries` accessor surface, and duplicate
+  completed-model fail-fast behavior.
+- Pass 11 corrected three stale comments that contradicted the completed XX.4
+  investigation and the active dimension-switch owner. No runtime code changed.
+- Pass 12 repaired seven issues: the opt-in NodeManager integrity verifier,
+  bounded active GL-state capture, renderer-generation chunk-bound reseeding,
+  GPU-timing duplicate-free visibility, all remaining original Logger routes,
+  the inner-to-leaf request postcondition, and ModelFactory biome fail-fast/
+  default ownership.
+- Pass 13 removed the final redundant local lifecycle mask in
+  `SharedIndexBuffer`; the two actual terminal owners remain unchanged and
+  source-tested.
+
+Because Pass 13 changed production and test code, Pass 14 started again from
+zero at the repaired hashes. Four disjoint clean-room partitions reread all
+**275 files / 40,139 physical text lines / 1,689,515 bytes** to EOF:
+N001-N075 = 75 files / 9,835 lines / 390,076 bytes; N076-N113 = 38 / 9,811 /
+412,336; N114-N165 = 52 / 10,286 / 431,853; and N166-N275 = 110 / 10,207 /
+455,250. Every Java file used CodeGraph before its physical read and was
+compared against original Voxy plus the required Forge 1.20.1, Embeddium, and
+Oculus contracts. Each partition reported zero findings. The final whole-tree
+comparison matched 275 frozen and 275 current rows with zero path, kind, line,
+byte, SHA-256, missing, extra, or order drift.
+
+The forced post-audit gate passed without launching the client:
+
+```text
+rtk test .\gradlew clean test jarJar --rerun-tasks --stacktrace --console=plain
+exit=0
+35 test suites / 110 tests / 0 failures / 0 errors / 0 skipped
+git diff --check=passed
+
+voxy-forge-0.2.17-beta-forge-all.jar
+size=12,589,719 bytes (12.01 MiB)
+SHA-256=6685922c2a42a705635aa1cabb4fa0bc47e20034c774b045cd02456ffaf0a0c6
+entries=458
+duplicate entries=0
+bundled Minecraft/Forge/LWJGL/Oculus/Embeddium/Sodium classes=0
+```
+
+The only packaged `me/cortex/voxy/client/**` class is the explicitly selected
+original `SemaphoreBlockImpersonator` used by the Forge Embeddium chunk-job
+queue adaptation; no other uncompiled original client implementation is in the
+artifact. Seven expected JarJar runtime libraries remain nested, with the
+compressed RocksDB JNI payload accounting for most of the all-JAR size.
+
+Pass 14 therefore satisfies XXVII's exhaustive static completion rule. The
+consolidated post-repair runtime regression then passed on 2026-07-14. The
+anchored `runClient` entered `新的世界` with Embeddium and Oculus, opened the
+original persistent storage chain, and repeatedly created the formal
+`ForgeOriginalVoxyRenderPipeline` / `MDICSectionRenderer` route. The log proves
+shader disable/re-enable and repeated Oculus/Voxy pipeline rebuilds, transitions
+through overworld, Nether, and End storage owners, disconnect/re-entry, and the
+complete renderer, WorldEngine, network-session, and Forge-instance shutdown
+chain. The user reported no visual or lifecycle anomaly, and Gradle exited 0
+with `BUILD SUCCESSFUL` after the client closed normally.
+
+The final clean packaging rerun also exited 0: **35 suites / 110 tests / 0
+failures / 0 errors / 0 skipped**. The resulting
+`voxy-forge-0.2.17-beta-forge-all.jar` is **12,589,718 bytes (12.01 MiB)**,
+SHA-256
+`50a27befcfb8d9390aac4db77ab76cf25afe9b4a1fa0aa30c554b7654a5b5502`,
+with **458** ZIP entries, zero duplicates, seven expected nested JarJar
+libraries, and zero bundled Minecraft/Forge/LWJGL/Oculus/Embeddium/Sodium
+classes. Required Forge metadata, access transformer, refmap, Mixin config,
+icon, entrypoint, formal render owners, and all 47 shader resources are present;
+the Fabric descriptor and retired config screen are absent.
+
+The static and runtime evidence gates are therefore complete. This remains an
+evidence boundary, not a mathematical promise that no future runtime defect can
+exist. The user's 2026-07-14 finalization request approves the release/readiness
+decision and authorizes the audited worktree to be packaged, committed, and
+pushed. The removed status-only readiness fields have no replacement value to
+flip; acceptance is based on the real owners and the evidence above.
+`capsettings.cap` remains user-owned, untracked, and excluded.

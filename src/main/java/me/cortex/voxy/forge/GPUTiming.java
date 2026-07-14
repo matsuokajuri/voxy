@@ -25,7 +25,6 @@ final class GPUTiming {
     private float[] timings = new float[0];
     private String[] labels = new String[0];
     private boolean enabled;
-    private boolean freed;
 
     private GPUTiming() {
     }
@@ -35,19 +34,19 @@ final class GPUTiming {
     }
 
     void marker(String label) {
-        if (this.enabled && !this.freed) {
+        if (this.enabled) {
             this.timingSet.capture(label);
         }
     }
 
     void setEnabled(boolean enabled) {
-        if (!this.freed) {
+        if (this.enabled != enabled) {
             this.enabled = enabled;
         }
     }
 
     String getDebug() {
-        if (!this.enabled || this.freed) {
+        if (!this.enabled) {
             return "";
         }
         StringBuilder output = new StringBuilder("GpuTime: [");
@@ -64,9 +63,6 @@ final class GPUTiming {
     }
 
     void tick() {
-        if (this.freed) {
-            return;
-        }
         this.timingSet.download((metadata, data) -> {
             long current = data[0];
             if (data.length - 1 != this.timings.length) {
@@ -86,10 +82,7 @@ final class GPUTiming {
     }
 
     void free() {
-        if (!this.freed) {
-            this.freed = true;
-            this.timingSet.free();
-        }
+        this.timingSet.free();
     }
 
     @FunctionalInterface

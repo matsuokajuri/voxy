@@ -1,19 +1,18 @@
 package me.cortex.voxy.common.config.section;
 
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
+import me.cortex.voxy.common.Logger;
 import me.cortex.voxy.common.config.storage.StorageBackend;
 import me.cortex.voxy.common.util.ThreadLocalMemoryBuffer;
 import me.cortex.voxy.common.world.SaveLoadSystem3;
 import me.cortex.voxy.common.world.WorldSection;
 import me.cortex.voxy.common.world.other.Mapper;
-import org.slf4j.LoggerFactory;
 
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.function.LongConsumer;
 
 public class SectionSerializationStorage extends SectionStorage {
-    private static final org.slf4j.Logger LOGGER = LoggerFactory.getLogger("Voxy");
     public static final int BIGGEST_SERIALIZED_SECTION_SIZE = 32 * 32 * 32 * 8 * 2 + 8;
 
     private final StorageBackend backend;
@@ -30,7 +29,7 @@ public class SectionSerializationStorage extends SectionStorage {
                 this.backend.deleteSectionData(into.key);
                 //TODO: regenerate the section from children
                 Arrays.fill(into._unsafeGetRawDataArray(), Mapper.AIR);
-                LOGGER.error("Section {}, {}, {}, {} was unable to load, removing", into.lvl, into.x, into.y, into.z);
+                Logger.error("Section " + into.lvl + ", " + into.x + ", " + into.y + ", " + into.z + " was unable to load, removing");
                 return -1;
             } else {
                 return 0;

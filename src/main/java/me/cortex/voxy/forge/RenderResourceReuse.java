@@ -2,9 +2,6 @@ package me.cortex.voxy.forge;
 
 import java.util.ArrayDeque;
 
-import static org.lwjgl.opengl.ARBSparseBuffer.glBufferPageCommitmentARB;
-import static org.lwjgl.opengl.GL15C.GL_ARRAY_BUFFER;
-import static org.lwjgl.opengl.GL15C.glBindBuffer;
 import static org.lwjgl.opengl.GL15C.glDeleteBuffers;
 
 /**
@@ -12,12 +9,8 @@ import static org.lwjgl.opengl.GL15C.glDeleteBuffers;
  * route: the geometry buffer is cached and REUSED across owner rebuilds instead of being freed
  * and reallocated per lifecycle, and is only truly released at full instance shutdown.
  *
- * This is not just an allocation-cost optimisation: the original never opens a
- * free-then-reallocate window for this driver-heavy allocation during a rebuild, which the
- * XX.4 investigation implicated in NVIDIA VRAM aliasing between the dying and the new
- * lifecycle's buffers (shaderpack-switch LOD holes / missing water). Reuse also keeps GL
- * command ordering on one buffer object, so late reads from the old lifecycle order correctly
- * against the new lifecycle's writes.
+ * Reuse preserves the original ownership/lifetime contract, avoids allocation churn across
+ * owner rebuilds, and keeps GL command ordering on one buffer object.
  *
  * The model-atlas texture reuse half of the original class is adapted through
  * {@code ModelStore}'s static texture cache; {@link #clearResources()} owns its
@@ -28,8 +21,7 @@ final class RenderResourceReuse {
             int bufferId,
             long capacityBytes,
             boolean sparse,
-            boolean nvidiaWindowsSparseWorkaroundUsed,
-            long committedSparseBytes) {
+            boolean nvidiaWindowsSparseWorkaroundUsed) {
     }
 
     private static final ArrayDeque<ReusedGeometryBuffer> GEOMETRY_BUFFER_CACHE = new ArrayDeque<>();
@@ -41,11 +33,10 @@ final class RenderResourceReuse {
         ReusedGeometryBuffer cached = GEOMETRY_BUFFER_CACHE.poll();
         if (cached != null) {
             VoxyForge.LOGGER.info(
-                    "Reusing original Voxy geometry buffer {} ({} bytes, sparse={}, committed={} bytes).",
+                    "Reusing original Voxy geometry buffer {} ({} bytes, sparse={}).",
                     cached.bufferId(),
                     cached.capacityBytes(),
-                    cached.sparse(),
-                    cached.committedSparseBytes());
+                    cached.sparse());
             return cached;
         }
         long capacityBytes = BasicSectionGeometryData.selectGeometryCapacityBytes();
@@ -60,8 +51,7 @@ final class RenderResourceReuse {
                 allocation.bufferId(),
                 capacityBytes,
                 allocation.sparse(),
-                allocation.nvidiaWindowsSparseWorkaroundUsed(),
-                0L);
+                allocation.nvidiaWindowsSparseWorkaroundUsed());
     }
 
     static void giveBackGeometryBuffer(ReusedGeometryBuffer buffer) {
@@ -73,11 +63,6 @@ final class RenderResourceReuse {
         ModelStore.clearCachedModelStoreTextureAtlases();
         ReusedGeometryBuffer buffer = GEOMETRY_BUFFER_CACHE.poll();
         while (buffer != null) {
-            if (buffer.sparse() && buffer.committedSparseBytes() > 0L) {
-                glBindBuffer(GL_ARRAY_BUFFER, buffer.bufferId());
-                glBufferPageCommitmentARB(GL_ARRAY_BUFFER, 0L, buffer.committedSparseBytes(), false);
-                glBindBuffer(GL_ARRAY_BUFFER, 0);
-            }
             glDeleteBuffers(buffer.bufferId());
             buffer = GEOMETRY_BUFFER_CACHE.poll();
         }

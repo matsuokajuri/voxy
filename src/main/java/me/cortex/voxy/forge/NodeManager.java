@@ -2,8 +2,11 @@ package me.cortex.voxy.forge;
 
 import it.unimi.dsi.fastutil.ints.IntConsumer;
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
+import it.unimi.dsi.fastutil.ints.IntSet;
 import it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
+import it.unimi.dsi.fastutil.longs.LongSet;
+import me.cortex.voxy.common.Logger;
 import me.cortex.voxy.common.world.WorldEngine;
 
 import static me.cortex.voxy.common.world.WorldEngine.MAX_LOD_LAYER;
@@ -36,6 +39,7 @@ final class NodeManager {
     private final NodeStore nodeData;
     private final IntOpenHashSet topLevelNodeIds = new IntOpenHashSet();
     private final LongOpenHashSet topLevelNodes = new LongOpenHashSet();
+    private int activeNodeRequestCount;
     private IntConsumer topLevelNodeIdAddedCallback;
     private IntConsumer topLevelNodeIdRemovedCallback;
     private Cleaner cleanerInterface;
@@ -76,7 +80,7 @@ final class NodeManager {
     boolean insertTopLevelNode(long pos) {
         assertPosValid(pos);
         if (this.activeSectionMap.containsKey(pos)) {
-            VoxyForge.LOGGER.error("Tried inserting top level pos {} but it was in active map, discarding!", WorldEngine.pprintPos(pos));
+            Logger.error("Tried inserting top level pos " + WorldEngine.pprintPos(pos) + " but it was in active map, discarding!");
             return false;
         }
         ForgeOriginalVoxySingleNodeRequest request = new ForgeOriginalVoxySingleNodeRequest(pos);
@@ -148,7 +152,7 @@ final class NodeManager {
             if (this.nodeData.isNodeGeometryInFlight(nodeId)) {
                 throw new IllegalStateException();
             }
-            VoxyForge.LOGGER.warn("Received geometry update but not watching it, discarding");
+            Logger.warn("Recieved geometry update but not watching it, discarding");
             sectionResult.free();
             return;
         }
@@ -161,7 +165,7 @@ final class NodeManager {
     void processChildChange(long pos, byte childExistence) {
         int nodeId = this.activeSectionMap.get(pos);
         if (nodeId == -1) {
-            VoxyForge.LOGGER.warn("Got child change for pos {} but it was not in active map, ignoring!", WorldEngine.pprintPos(pos));
+            Logger.warn("Got child change for pos " + WorldEngine.pprintPos(pos) + " but it was not in active map, ignoring!");
             return;
         }
         if ((nodeId & NODE_TYPE_MSK) == NODE_TYPE_REQUEST) {
@@ -196,26 +200,26 @@ final class NodeManager {
         int nodeType = nodeId & NODE_TYPE_MSK;
         nodeId &= NODE_ID_MSK;
         if (nodeType == NODE_TYPE_REQUEST) {
-            VoxyForge.LOGGER.error("Tried processing request for pos {} but its type was a request, ignoring!", WorldEngine.pprintPos(pos));
+            Logger.error("Tried processing request for pos: " + WorldEngine.pprintPos(pos) + " but its type was a request, ignoring!");
             return;
         }
         if (nodeType != NODE_TYPE_LEAF && nodeType != NODE_TYPE_INNER) {
             throw new IllegalStateException("Unknown node type: " + nodeType);
         }
         if (WorldEngine.getLevel(pos) == 0) {
-            VoxyForge.LOGGER.error("Requests cannot exist for bottom level nodes at {}, ignoring request", WorldEngine.pprintPos(pos));
+            Logger.error("Requests cannot exist for bottom level nodes. at: " + WorldEngine.pprintPos(pos) + ". Ignoring request");
             return;
         }
         if (nodeType == NODE_TYPE_LEAF) {
             if (this.nodeData.getNodeGeometry(nodeId) == NULL_GEOMETRY_ID) {
-                VoxyForge.LOGGER.warn("Got request for leaf without geometry at {}", WorldEngine.pprintPos(pos));
+                Logger.warn("Got request for leaf that doesnt have geometry, this should not be possible at pos " + WorldEngine.pprintPos(pos));
                 if (!this.watcher.watch(pos, WorldEngine.UPDATE_TYPE_BLOCK_BIT)) {
-                    VoxyForge.LOGGER.warn("Node {} at {} got update request, but geometry was already being watched", nodeId, WorldEngine.pprintPos(pos));
+                    Logger.warn("Node: " + nodeId + " at pos: " + WorldEngine.pprintPos(pos) + " got update request, but geometry was already being watched");
                 }
                 return;
             }
             if (this.nodeData.isNodeRequestInFlight(nodeId)) {
-                VoxyForge.LOGGER.warn("Tried processing a node that already has a request in flight: {} pos: {}", nodeId, WorldEngine.pprintPos(pos));
+                Logger.warn("Tried processing a node that already has a request in flight: " + nodeId + " pos: " + WorldEngine.pprintPos(pos) + " ignoring");
                 return;
             }
             this.nodeData.markRequestInFlight(nodeId);
@@ -241,7 +245,7 @@ final class NodeManager {
             if (this.topLevelNodes.contains(pos)) {
                 int geo = this.nodeData.getNodeGeometry(nodeId);
                 if (geo != NULL_GEOMETRY_ID && geo != EMPTY_GEOMETRY_ID) {
-                    VoxyForge.LOGGER.warn("Tried removing geometry from top level node which is not allowed");
+                    Logger.warn("Tried removing geometry from top level node which is not allowed, disregarding request");
                 }
                 return;
             }
@@ -311,7 +315,7 @@ final class NodeManager {
 
     private void updateChildSectionsInner(long pos, int nodeId, byte childExistence) {
         if (childExistence == 0) {
-            VoxyForge.LOGGER.warn("Inner node child existence is changing to 0");
+            Logger.warn("Inner node child existence is changing to 0, this is mild bad");
         }
         byte existence = this.nodeData.getNodeChildExistence(nodeId);
         byte add = (byte) ((existence ^ childExistence) & childExistence);
@@ -321,6 +325,7 @@ final class NodeManager {
                 int requestId = this.childRequests.put(request);
                 this.nodeData.markRequestInFlight(nodeId);
                 this.nodeData.setNodeRequest(nodeId, requestId);
+                this.activeNodeRequestCount++;
             }
             int requestId = this.nodeData.getNodeRequest(nodeId);
             ForgeOriginalVoxyNodeChildRequest request = this.childRequests.get(requestId);
@@ -476,13 +481,18 @@ final class NodeManager {
             throw new IllegalStateException();
         }
         if (this.nodeData.getNodeGeometry(nodeId) == NULL_GEOMETRY_ID) {
-            VoxyForge.LOGGER.error("Transforming inner node to leaf node while it has null geometry");
+            Logger.error("Transforming inner node to leaf node while it has null geometry");
             if (!this.nodeData.isNodeGeometryInFlight(nodeId)) {
                 if ((this.watcher.get(pos) & UPDATE_TYPE_BLOCK_BIT) != 0) {
                     throw new IllegalStateException("Watcher was already watching for geometry update, but geometry was null");
                 }
                 this.processRequest(pos);
+                if ((this.watcher.get(pos) & UPDATE_TYPE_BLOCK_BIT) == 0
+                        || !this.nodeData.isNodeGeometryInFlight(nodeId)) {
+                    throw new IllegalStateException("Watcher must be watching for geometry update");
+                }
             }
+            Logger.error("Setting geometry to EMPTY while request is inflight");
             this.nodeData.setNodeGeometry(nodeId, EMPTY_GEOMETRY_ID);
         }
         if (this.nodeData.getChildPtr(nodeId) != SENTINEL_EMPTY_CHILD_PTR) {
@@ -604,6 +614,7 @@ final class NodeManager {
             }
         }
         this.childRequests.release(requestId);
+        this.activeNodeRequestCount--;
     }
 
     private void finishRequest(ForgeOriginalVoxySingleNodeRequest request) {
@@ -633,6 +644,7 @@ final class NodeManager {
             this.childRequests.release(requestId);
             this.nodeData.setNodeRequest(parentNodeId, NULL_REQUEST_ID);
             this.nodeData.unmarkRequestInFlight(parentNodeId);
+            this.activeNodeRequestCount--;
             this.invalidateNode(parentNodeId);
             return;
         }
@@ -659,7 +671,7 @@ final class NodeManager {
             this.nodeData.setNodePosition(childNodeId, childPos);
             byte childExistence = request.getChildChildExistence(childIdx);
             if (childExistence == 0) {
-                VoxyForge.LOGGER.warn("Request result with child existence of 0 for {}", WorldEngine.pprintPos(childPos));
+                Logger.warn("Request result with child existence of 0, for child pos " + WorldEngine.pprintPos(childPos));
             }
             this.nodeData.setNodeChildExistence(childNodeId, childExistence);
             this.nodeData.setNodeGeometry(childNodeId, request.getChildMesh(childIdx));
@@ -674,6 +686,7 @@ final class NodeManager {
         this.nodeData.setChildPtr(parentNodeId, base);
         this.nodeData.setChildPtrCount(parentNodeId, Integer.bitCount(mask));
         this.nodeData.setNodeRequest(parentNodeId, NULL_REQUEST_ID);
+        this.activeNodeRequestCount--;
         this.nodeData.unmarkRequestInFlight(parentNodeId);
         if ((this.activeSectionMap.put(request.getPosition(), NODE_TYPE_INNER | parentNodeId) & NODE_TYPE_MSK) != NODE_TYPE_LEAF) {
             throw new IllegalStateException();
@@ -760,6 +773,7 @@ final class NodeManager {
         this.nodeData.setChildPtr(parentNodeId, newChildPtr);
         this.nodeData.setChildPtrCount(parentNodeId, Integer.bitCount(newMask));
         this.nodeData.setNodeRequest(parentNodeId, NULL_REQUEST_ID);
+        this.activeNodeRequestCount--;
         this.nodeData.unmarkRequestInFlight(parentNodeId);
         this.invalidateNode(parentNodeId);
     }
@@ -768,7 +782,7 @@ final class NodeManager {
         long pos = this.nodeData.nodePosition(nodeId);
         byte childExistence = this.nodeData.getNodeChildExistence(nodeId);
         if (childExistence == 0 && !this.topLevelNodes.contains(pos)) {
-            VoxyForge.LOGGER.warn("Not creating a leaf request with existence mask of 0 at {}", WorldEngine.pprintPos(pos));
+            Logger.warn("Not creating a leaf request with existence mask of 0 at pos", WorldEngine.pprintPos(pos));
             this.nodeData.unmarkRequestInFlight(nodeId);
             this.invalidateNode(nodeId);
             return;
@@ -790,6 +804,7 @@ final class NodeManager {
             }
         }
         this.nodeData.setNodeRequest(nodeId, requestId);
+        this.activeNodeRequestCount++;
     }
 
     private void processInnerRequest(long pos, int nodeId) {
@@ -944,6 +959,217 @@ final class NodeManager {
 
     private void invalidateNode(int nodeId) {
         this.nodeUpdates.add(nodeId);
+    }
+
+    private int verifyRequest(
+            long pos,
+            int node,
+            int activeChildMask,
+            LongOpenHashSet seenPositions,
+            IntOpenHashSet seenNodes) {
+        if (!this.nodeData.isNodeRequestInFlight(node)) {
+            return 0;
+        }
+        int requestId = this.nodeData.getNodeRequest(node);
+        ForgeOriginalVoxyNodeChildRequest request = this.childRequests.get(requestId);
+        if (request.getPosition() != pos) {
+            throw new IllegalStateException();
+        }
+        int requestMask = Byte.toUnsignedInt(request.getMsk());
+        if ((activeChildMask & requestMask) != 0) {
+            throw new IllegalStateException();
+        }
+        for (int i = 0; i < 8; i++) {
+            if ((requestMask & (1 << i)) == 0) {
+                continue;
+            }
+            long childPos = makeChildPos(pos, i);
+            int childNode = this.activeSectionMap.get(childPos);
+            if (childNode == -1
+                    || (childNode & NODE_TYPE_MSK) != NODE_TYPE_REQUEST
+                    || (childNode & REQUEST_TYPE_MSK) != REQUEST_TYPE_CHILD
+                    || (childNode & NODE_ID_MSK) != requestId) {
+                throw new IllegalStateException();
+            }
+            this.verifyNode(childPos, seenPositions, seenNodes);
+        }
+        return requestMask;
+    }
+
+    private void verifyNode(long pos, LongOpenHashSet seenPositions, IntOpenHashSet seenNodes) {
+        int encodedNode = this.activeSectionMap.get(pos);
+        if (encodedNode == -1 || this.watcher.get(pos) == 0 || !seenPositions.add(pos)) {
+            throw new IllegalStateException();
+        }
+
+        int type = encodedNode & NODE_TYPE_MSK;
+        if (type == NODE_TYPE_REQUEST) {
+            int requestId = encodedNode & NODE_ID_MSK;
+            if ((encodedNode & REQUEST_TYPE_MSK) == REQUEST_TYPE_SINGLE) {
+                if (!this.topLevelNodes.contains(pos)) {
+                    throw new IllegalStateException();
+                }
+                ForgeOriginalVoxySingleNodeRequest request = this.singleRequests.get(requestId);
+                if (request.getPosition() != pos) {
+                    throw new IllegalStateException();
+                }
+            } else {
+                ForgeOriginalVoxyNodeChildRequest request = this.childRequests.get(requestId);
+                if (request.getPosition() != makeParentPos(pos)) {
+                    throw new IllegalStateException();
+                }
+            }
+            return;
+        }
+
+        int node = encodedNode & NODE_ID_MSK;
+        if (!this.nodeData.nodeExists(node)
+                || this.nodeData.nodePosition(node) != pos
+                || (this.nodeData.getNodeRequest(node) != NULL_REQUEST_ID)
+                != this.nodeData.isNodeRequestInFlight(node)) {
+            throw new IllegalStateException();
+        }
+        if (this.nodeData.isNodeRequestInFlight(node)) {
+            ForgeOriginalVoxyNodeChildRequest request =
+                    this.childRequests.get(this.nodeData.getNodeRequest(node));
+            if (request == null || request.getPosition() != pos) {
+                throw new IllegalStateException();
+            }
+            if (request.isSatisfied()
+                    && !(type == NODE_TYPE_LEAF && this.topLevelNodes.contains(pos))) {
+                throw new IllegalStateException();
+            }
+        }
+
+        boolean hasGeometry = this.nodeData.getNodeGeometry(node) != NULL_GEOMETRY_ID;
+        boolean watchingGeometry = (this.watcher.get(pos) & UPDATE_TYPE_BLOCK_BIT) != 0;
+        boolean awaitingGeometry = this.nodeData.isNodeGeometryInFlight(node);
+        if ((hasGeometry || awaitingGeometry) != watchingGeometry) {
+            throw new IllegalStateException();
+        }
+        if (hasGeometry
+                && awaitingGeometry
+                && this.nodeData.getNodeGeometry(node) != EMPTY_GEOMETRY_ID) {
+            throw new IllegalStateException();
+        }
+        if (!seenNodes.add(node)) {
+            throw new IllegalStateException();
+        }
+
+        if (type == NODE_TYPE_INNER) {
+            int childPtr = this.nodeData.getChildPtr(node);
+            int childCount = this.nodeData.getChildPtrCount(node);
+            int activeChildMask = 0;
+            if (childPtr == -1) {
+                throw new IllegalStateException();
+            }
+            if (childPtr != SENTINEL_EMPTY_CHILD_PTR) {
+                boolean allChildrenLeaf = true;
+                for (int i = 0; i < childCount; i++) {
+                    int childNodeId = childPtr + i;
+                    if (!this.nodeData.nodeExists(childNodeId)) {
+                        throw new IllegalStateException();
+                    }
+                    long childPos = this.nodeData.nodePosition(childNodeId);
+                    if (makeParentPos(childPos) != pos) {
+                        throw new IllegalStateException();
+                    }
+                    activeChildMask |= 1 << getChildIdx(childPos);
+                    int childNode = this.activeSectionMap.get(childPos);
+                    if (childNode == -1) {
+                        throw new IllegalStateException();
+                    }
+                    if ((childNode & NODE_TYPE_MSK) != NODE_TYPE_LEAF) {
+                        allChildrenLeaf = false;
+                    }
+                    this.verifyNode(childPos, seenPositions, seenNodes);
+                }
+                if (this.nodeData.getAllChildrenAreLeaf(node) != allChildrenLeaf) {
+                    throw new IllegalStateException();
+                }
+            } else {
+                if (this.nodeData.getAllChildrenAreLeaf(node)) {
+                    throw new IllegalStateException();
+                }
+                childCount = 0;
+            }
+            int childExistence = activeChildMask
+                    | this.verifyRequest(pos, node, activeChildMask, seenPositions, seenNodes);
+            if (childExistence != Byte.toUnsignedInt(this.nodeData.getNodeChildExistence(node))
+                    || childExistence == 0) {
+                throw new IllegalStateException();
+            }
+        } else if (type == NODE_TYPE_LEAF) {
+            if (this.nodeData.getAllChildrenAreLeaf(node)
+                    || this.nodeData.getChildPtr(node) != -1
+                    || this.nodeData.getNodeGeometry(node) == NULL_GEOMETRY_ID) {
+                throw new IllegalStateException();
+            }
+            if (WorldEngine.getLevel(pos) == 0) {
+                if (this.nodeData.isNodeRequestInFlight(node)) {
+                    throw new IllegalStateException();
+                }
+            } else if (this.nodeData.isNodeRequestInFlight(node)) {
+                int childExistence = this.verifyRequest(pos, node, 0, seenPositions, seenNodes);
+                if (childExistence != Byte.toUnsignedInt(this.nodeData.getNodeChildExistence(node))) {
+                    throw new IllegalStateException();
+                }
+            }
+        } else {
+            throw new IllegalStateException();
+        }
+    }
+
+    void verifyIntegrity() {
+        this.verifyIntegrity(null, null);
+    }
+
+    void verifyIntegrity(LongSet watchingPositions, IntSet nodes) {
+        LongOpenHashSet seenPositions = new LongOpenHashSet();
+        IntOpenHashSet seenNodes = new IntOpenHashSet();
+        for (long pos : this.topLevelNodes) {
+            this.verifyNode(pos, seenPositions, seenNodes);
+        }
+
+        LongSet activePositions = this.activeSectionMap.keySet();
+        if (!seenPositions.containsAll(activePositions)
+                || !activePositions.containsAll(seenPositions)
+                || seenNodes.size() != this.nodeData.getNodeCount()) {
+            throw new IllegalStateException();
+        }
+        for (int node : seenNodes) {
+            if (!this.nodeData.nodeExists(node)) {
+                throw new IllegalStateException();
+            }
+        }
+        if (this.activeNodeRequestCount != this.childRequests.count()) {
+            throw new IllegalStateException();
+        }
+        if (watchingPositions != null
+                && (!watchingPositions.containsAll(activePositions)
+                || !activePositions.containsAll(watchingPositions))) {
+            throw new IllegalStateException();
+        }
+        if (nodes != null
+                && (!nodes.containsAll(seenNodes) || !seenNodes.containsAll(nodes))) {
+            throw new IllegalStateException();
+        }
+
+        IntSet topLevelIds = new IntOpenHashSet(this.topLevelNodeIds.size());
+        for (long pos : this.topLevelNodes) {
+            int node = this.activeSectionMap.get(pos);
+            if (node == -1) {
+                throw new IllegalStateException();
+            }
+            if ((node & NODE_TYPE_MSK) != NODE_TYPE_REQUEST
+                    && !topLevelIds.add(node & NODE_ID_MSK)) {
+                throw new IllegalStateException();
+            }
+        }
+        if (!this.topLevelNodeIds.containsAll(topLevelIds)
+                || !topLevelIds.containsAll(this.topLevelNodeIds)) {
+            throw new IllegalStateException();
+        }
     }
 
     private static void assertPosValid(long pos) {

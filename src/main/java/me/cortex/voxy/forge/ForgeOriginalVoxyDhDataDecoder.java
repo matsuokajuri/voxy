@@ -1,17 +1,31 @@
 package me.cortex.voxy.forge;
 
-import com.github.luben.zstd.ZstdInputStream;
+import me.cortex.voxy.common.util.GlobalCleaner;
 import net.jpountz.lz4.LZ4FrameInputStream;
+import org.lwjgl.system.MemoryUtil;
+import org.lwjgl.util.zstd.ZSTDInBuffer;
+import org.lwjgl.util.zstd.ZSTDOutBuffer;
 import org.tukaani.xz.BasicArrayCache;
 import org.tukaani.xz.ResettableArrayCache;
 import org.tukaani.xz.XZInputStream;
 
 import java.io.BufferedInputStream;
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.ByteBuffer;
 import java.util.Arrays;
+
+import static org.lwjgl.util.zstd.Zstd.ZSTD_DCtx_reset;
+import static org.lwjgl.util.zstd.Zstd.ZSTD_DStreamOutSize;
+import static org.lwjgl.util.zstd.Zstd.ZSTD_createDStream;
+import static org.lwjgl.util.zstd.Zstd.ZSTD_decompressStream;
+import static org.lwjgl.util.zstd.Zstd.ZSTD_freeDStream;
+import static org.lwjgl.util.zstd.Zstd.ZSTD_getErrorName;
+import static org.lwjgl.util.zstd.Zstd.ZSTD_isError;
+import static org.lwjgl.util.zstd.Zstd.ZSTD_reset_session_only;
 
 /**
  * Decoder for the on-disk Distant Horizons FullData payload.
@@ -39,6 +53,8 @@ final class ForgeOriginalVoxyDhDataDecoder {
     private static final long BOTTOM_Y_MASK = (1L << 12) - 1L;
     private static final ThreadLocal<ResettableArrayCache> XZ_ARRAY_CACHE =
             ThreadLocal.withInitial(() -> new ResettableArrayCache(new BasicArrayCache()));
+    private static final ThreadLocal<ZstdContext> ZSTD_CONTEXT =
+            ThreadLocal.withInitial(ForgeOriginalVoxyDhDataDecoder::createZstdContext);
 
     private static final Range CENTER = new Range(1, WIDTH - 1, 1, WIDTH - 1);
     private static final Range NORTH = new Range(0, WIDTH, 0, 1);
@@ -53,6 +69,9 @@ final class ForgeOriginalVoxyDhDataDecoder {
     }
 
     private record Range(int minX, int maxX, int minZ, int maxZ) {
+    }
+
+    private record ZstdContext(long pointer) {
     }
 
     static boolean supportsFormat(int format) {
@@ -112,7 +131,7 @@ final class ForgeOriginalVoxyDhDataDecoder {
             case COMPRESSION_UNCOMPRESSED -> source;
             case COMPRESSION_LZ4 -> new LZ4FrameInputStream(new BufferedInputStream(source));
             case COMPRESSION_ZSTD_STREAM, COMPRESSION_ZSTD_BLOCK ->
-                    new ZstdInputStream(new BufferedInputStream(source));
+                    new ByteArrayInputStream(decompressZstd(compressed));
             case COMPRESSION_LZMA2 -> {
                 ResettableArrayCache cache = XZ_ARRAY_CACHE.get();
                 cache.reset();
@@ -120,6 +139,84 @@ final class ForgeOriginalVoxyDhDataDecoder {
             }
             default -> throw new IOException("Unsupported Distant Horizons compression mode " + compression);
         };
+    }
+
+    private static ZstdContext createZstdContext() {
+        long pointer = ZSTD_createDStream();
+        if (pointer == MemoryUtil.NULL) {
+            throw new OutOfMemoryError("Could not allocate Zstd decompression context");
+        }
+        ZstdContext context = new ZstdContext(pointer);
+        GlobalCleaner.CLEANER.register(context, () -> ZSTD_freeDStream(pointer));
+        return context;
+    }
+
+    private static byte[] decompressZstd(byte[] compressed) throws IOException {
+        if (compressed.length == 0) {
+            throw new IOException("Distant Horizons Zstd blob is empty");
+        }
+
+        long context = ZSTD_CONTEXT.get().pointer();
+        checkZstdResult(ZSTD_DCtx_reset(context, ZSTD_reset_session_only), "reset decoder");
+
+        int outputChunkSize;
+        try {
+            outputChunkSize = Math.toIntExact(ZSTD_DStreamOutSize());
+        } catch (ArithmeticException exception) {
+            throw new IOException("Invalid Zstd output buffer size", exception);
+        }
+        if (outputChunkSize <= 0) {
+            throw new IOException("Invalid Zstd output buffer size " + outputChunkSize);
+        }
+
+        ByteBuffer inputBuffer = MemoryUtil.memAlloc(compressed.length);
+        ByteBuffer outputBuffer = MemoryUtil.memAlloc(outputChunkSize);
+        try (ZSTDInBuffer input = ZSTDInBuffer.calloc();
+             ZSTDOutBuffer output = ZSTDOutBuffer.calloc();
+             ByteArrayOutputStream result = new ByteArrayOutputStream()) {
+            inputBuffer.put(compressed).flip();
+            input.set(inputBuffer, 0L);
+
+            while (true) {
+                outputBuffer.clear();
+                output.set(outputBuffer, 0L);
+                long previousInputPosition = input.pos();
+                long remaining = ZSTD_decompressStream(context, output, input);
+                checkZstdResult(remaining, "decompress data");
+
+                int produced;
+                try {
+                    produced = Math.toIntExact(output.pos());
+                } catch (ArithmeticException exception) {
+                    throw new IOException("Invalid Zstd decompressed chunk size", exception);
+                }
+                if (produced > 0) {
+                    byte[] chunk = new byte[produced];
+                    outputBuffer.position(0).limit(produced);
+                    outputBuffer.get(chunk);
+                    result.write(chunk, 0, chunk.length);
+                }
+
+                if (remaining == 0L && input.pos() == input.size()) {
+                    return result.toByteArray();
+                }
+                if (input.pos() == previousInputPosition && produced == 0) {
+                    if (input.pos() == input.size()) {
+                        throw new IOException("Truncated Distant Horizons Zstd blob");
+                    }
+                    throw new IOException("Zstd decoder made no progress");
+                }
+            }
+        } finally {
+            MemoryUtil.memFree(outputBuffer);
+            MemoryUtil.memFree(inputBuffer);
+        }
+    }
+
+    private static void checkZstdResult(long result, String operation) throws IOException {
+        if (ZSTD_isError(result)) {
+            throw new IOException("Could not " + operation + ": " + ZSTD_getErrorName(result));
+        }
     }
 
     private static DataInputStream openDataInput(int compression, byte[] compressed) throws IOException {

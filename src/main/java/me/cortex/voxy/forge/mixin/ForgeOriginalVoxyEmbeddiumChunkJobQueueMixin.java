@@ -20,7 +20,7 @@ public class ForgeOriginalVoxyEmbeddiumChunkJobQueueMixin {
     @Redirect(method = "<init>", at = @At(value = "NEW", target = "(I)Ljava/util/concurrent/Semaphore;"))
     private Semaphore voxy$injectUnifiedPool(int permits) {
         MultiThreadPrioritySemaphore.Block block =
-                ForgeVoxyInstance.INSTANCE.getOriginalVoxyModelPipeline().createEmbeddiumBuilderSemaphoreBlock();
+                ForgeVoxyInstance.INSTANCE.createEmbeddiumBuilderSemaphoreBlock();
         if (block != null) {
             this.voxy$semaphoreBlock = block;
             return new SemaphoreBlockImpersonator(block);

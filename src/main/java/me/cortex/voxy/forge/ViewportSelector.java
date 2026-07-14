@@ -19,15 +19,15 @@ final class ViewportSelector {
     }
 
     MDICViewport getViewport() {
-        Object vivecraftPass = ForgeVivecraftRenderPassBridge.currentNonVanillaRenderPass();
-        if (vivecraftPass != null) {
-            return this.select(vivecraftPass, "vivecraft-" + String.valueOf(vivecraftPass));
-        }
         //The stuck-ACTIVE protection (shaderpack must actually be active) lives inside
         // ForgeOculusShadowStateBridge.shadowActive() so all callers share it.
         if (ForgeOculusShadowStateBridge.shadowActive()) {
             this.lastSelectedKey = OCULUS_SHADOW_SKIPPED_KEY;
             return null;
+        }
+        Object vivecraftPass = ForgeVivecraftRenderPassBridge.currentNonVanillaRenderPass();
+        if (vivecraftPass != null) {
+            return this.select(vivecraftPass, "vivecraft-" + String.valueOf(vivecraftPass));
         }
         return this.select(DEFAULT_VIEWPORT_KEY, "default");
     }

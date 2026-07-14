@@ -173,11 +173,11 @@ final class SSAO extends TrackedObject {
 
         glDispatchCompute((viewport.width + 7) / 8, (viewport.height + 7) / 8, 1);
 
-        glBindTextureUnit(1, 0);
+        ForgeOriginalVoxyTextureBindings.bind2D(1, 0);
         glBindSampler(1, 0);
-        glBindTextureUnit(2, 0);
+        ForgeOriginalVoxyTextureBindings.bind2D(2, 0);
         glBindSampler(2, 0);
-        glBindTextureUnit(3, 0);
+        ForgeOriginalVoxyTextureBindings.bind2D(3, 0);
         glBindSampler(3, 0);
     }
 

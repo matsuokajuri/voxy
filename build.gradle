@@ -31,6 +31,7 @@ sourceSets {
             include 'me/cortex/voxy/common/util/UnsafeUtil.java'
             include 'me/cortex/voxy/common/util/MemoryBuffer.java'
             include 'me/cortex/voxy/common/util/ThreadUtils.java'
+            include 'me/cortex/voxy/common/util/cpu/CpuLayout.java'
             include 'me/cortex/voxy/common/util/ThreadLocalMemoryBuffer.java'
             include 'me/cortex/voxy/common/util/ResizingThreadLocalMemoryBuffer.java'
             include 'me/cortex/voxy/common/Logger.java'
@@ -199,9 +200,6 @@ dependencies {
     minecraftLibrary("org.tukaani:xz:1.10") {
         transitive = false
     }
-    minecraftLibrary("com.github.luben:zstd-jni:1.5.7-6") {
-        transitive = false
-    }
     minecraftLibrary("redis.clients:jedis:5.1.0") {
         transitive = false
     }
@@ -250,17 +248,9 @@ dependencies {
         transitive = false
         jarJar.pin(it, '1.8.0')
     }
-    jarJar(group: 'org.xerial', name: 'sqlite-jdbc', version: '[3.49.1.0,3.50)') {
-        transitive = false
-        jarJar.pin(it, '3.49.1.0')
-    }
     jarJar(group: 'org.tukaani', name: 'xz', version: '[1.10,2.0)') {
         transitive = false
         jarJar.pin(it, '1.10')
-    }
-    jarJar(group: 'com.github.luben', name: 'zstd-jni', version: '[1.5.7-6,1.5.8)') {
-        transitive = false
-        jarJar.pin(it, '1.5.7-6')
     }
     jarJar(group: 'redis.clients', name: 'jedis', version: '[5.1.0,5.2)') {
         transitive = false
@@ -282,6 +272,44 @@ dependencies {
     }
 }
 
+// JarJar's metadata uses compatibility ranges, while the original Voxy build packages the
+// explicitly selected library versions. Keep the payload filenames aligned with the pinned
+// metadata paths and replace only RocksDB with the architecture-trimmed copy below.
+def jarJarPayload = configurations.detachedConfiguration(
+        dependencies.create('org.lwjgl:lwjgl-zstd:3.3.1'),
+        dependencies.create('org.lwjgl:lwjgl-lmdb:3.3.1'),
+        dependencies.create('org.rocksdb:rocksdbjni:10.2.1'),
+        dependencies.create('org.lz4:lz4-java:1.8.0'),
+        dependencies.create('org.tukaani:xz:1.10'),
+        dependencies.create('redis.clients:jedis:5.1.0'),
+        dependencies.create('org.apache.commons:commons-pool2:2.12.0'))
+jarJarPayload.transitive = false
+
+def rocksDbJarJarFiles = jarJarPayload.incoming.artifacts.artifactFiles.filter {
+    it.name.startsWith('rocksdbjni-')
+}
+
+def makeExcludedRocksDB = tasks.register('makeExcludedRocksDB', Zip) {
+    archiveExtension.set('jar')
+    entryCompression = ZipEntryCompression.STORED
+    destinationDirectory.set(layout.buildDirectory.dir('trimmed-dependencies'))
+
+    dependsOn rocksDbJarJarFiles
+    from { zipTree(rocksDbJarJarFiles.singleFile) }
+    archiveFileName.set(providers.provider { rocksDbJarJarFiles.singleFile.name })
+
+    exclude {
+        def file = it.name
+        if (file.endsWith('.jnilib')) {
+            return true
+        }
+        if (!file.endsWith('.so')) {
+            return false
+        }
+        return ['osx', 'linux32', 'musl', 's390x', 'riscv64', 'ppc64le', 'aarch64'].any(file::contains)
+    }
+}
+
 test {
     useJUnitPlatform()
 }
@@ -290,6 +318,12 @@ test {
 // would collide with their class jars. Preserve official native resource paths in the outer jar.
 tasks.named('jarJar') {
     finalizedBy('reobfJarJar')
+    if (!INCLUDE_OTHER_ARCHS) {
+        dependsOn(makeExcludedRocksDB)
+        getIncludedDependencies().setFrom(
+                jarJarPayload.filter { !it.name.startsWith('rocksdbjni-') },
+                makeExcludedRocksDB.flatMap { it.archiveFile })
+    }
     from({ project.configurations.zstdJarJarNative.collect { zipTree(it) } }) {
         include 'windows/**'
         include 'linux/**'

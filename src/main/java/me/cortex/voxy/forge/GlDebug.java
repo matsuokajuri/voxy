@@ -8,7 +8,7 @@ import static org.lwjgl.opengl.GL43C.glObjectLabel;
 
 /** Forge-side port of original Voxy's opt-in OpenGL object labels. */
 final class GlDebug {
-    static final boolean ENABLED = Boolean.parseBoolean(System.getProperty("voxy.glDebug", "false"));
+    static final boolean ENABLED = System.getProperty("voxy.glDebug", "false").equals("true");
 
     private GlDebug() {
     }

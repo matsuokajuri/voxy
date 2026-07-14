@@ -225,7 +225,7 @@ final class HierarchicalOcclusionTraverser extends TrackedObject {
                     });
         }
         glBindSampler(0, 0);
-        glBindTextureUnit(0, 0);
+        ForgeOriginalVoxyTextureBindings.bind2D(0, 0);
         glUseProgram(0);
     }
 

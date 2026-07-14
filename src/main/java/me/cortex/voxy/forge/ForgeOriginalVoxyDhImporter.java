@@ -56,6 +56,15 @@ import java.util.function.BooleanSupplier;
  * compression modes 0 through 4.</p>
  */
 public final class ForgeOriginalVoxyDhImporter implements IDataImporter {
+    public static final boolean HasRequiredLibraries;
+
+    static {
+        HasRequiredLibraries = detectRequiredLibraries(name -> Class.forName(name));
+        if (!HasRequiredLibraries) {
+            Logger.warn("Distant Horizons import disabled because SQLite JDBC or XZ is unavailable");
+        }
+    }
+
     private static final String DATABASE_FILE_NAME = "DistantHorizons.sqlite";
     private static final int CHUNKS_PER_DH_ROW = 4 * 4;
     private static final int MAX_QUEUED_ROWS = 100;
@@ -126,6 +135,21 @@ public final class ForgeOriginalVoxyDhImporter implements IDataImporter {
     @FunctionalInterface
     interface SqlOperation {
         void run() throws SQLException, IOException;
+    }
+
+    @FunctionalInterface
+    interface RequiredLibraryLoader {
+        void load(String className) throws ClassNotFoundException;
+    }
+
+    static boolean detectRequiredLibraries(RequiredLibraryLoader loader) {
+        try {
+            loader.load("org.sqlite.JDBC");
+            loader.load("org.tukaani.xz.XZInputStream");
+            return true;
+        } catch (ClassNotFoundException | NoClassDefFoundError exception) {
+            return false;
+        }
     }
 
     private record ScanResult(

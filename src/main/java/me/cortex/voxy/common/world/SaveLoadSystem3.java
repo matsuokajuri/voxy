@@ -1,14 +1,13 @@
 package me.cortex.voxy.common.world;
 
 import it.unimi.dsi.fastutil.longs.Long2ShortOpenHashMap;
+import me.cortex.voxy.common.Logger;
 import me.cortex.voxy.common.util.MemoryBuffer;
 import me.cortex.voxy.common.util.ThreadLocalMemoryBuffer;
 import me.cortex.voxy.common.world.other.Mapper;
 import org.lwjgl.system.MemoryUtil;
-import org.slf4j.LoggerFactory;
 
 public class SaveLoadSystem3 {
-    private static final org.slf4j.Logger LOGGER = LoggerFactory.getLogger("Voxy");
     public static final int STORAGE_VERSION = 0;
 
     private record SerializationCache(Long2ShortOpenHashMap lutMapCache, MemoryBuffer memoryBuffer) {
@@ -100,7 +99,7 @@ public class SaveLoadSystem3 {
 
         if (section.key != key) {
             //throw new IllegalStateException("Decompressed section not the same as requested. got: " + key + " expected: " + section.key);
-            LOGGER.error("Decompressed section not the same as requested. got: {} expected: {}", key, section.key);
+            Logger.error("Decompressed section not the same as requested. got: " + key + " expected: " + section.key);
             return false;
         }
 

@@ -1,11 +1,9 @@
 package me.cortex.voxy.forge;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.LightTexture;
 import org.joml.Matrix4f;
 import org.joml.Matrix4fc;
-
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 
 public final class ForgeOriginalVoxyRenderStateCapture {
     private static Matrix4f projection;
@@ -18,7 +16,7 @@ public final class ForgeOriginalVoxyRenderStateCapture {
         projection = value == null ? null : new Matrix4f(value);
     }
 
-    public static synchronized void captureLightTexture(Object lightTexture) {
+    public static synchronized void captureLightTexture(LightTexture lightTexture) {
         lightTextureId = readLightTextureId(lightTexture);
     }
 
@@ -43,23 +41,11 @@ public final class ForgeOriginalVoxyRenderStateCapture {
         lightTextureId = 0;
     }
 
-    private static int readLightTextureId(Object lightTexture) {
-        if (lightTexture == null) {
+    private static int readLightTextureId(LightTexture lightTexture) {
+        if (lightTexture == null || lightTexture.lightTexture == null) {
             return 0;
         }
-        try {
-            Field field = lightTexture.getClass().getDeclaredField("lightTexture");
-            field.setAccessible(true);
-            Object texture = field.get(lightTexture);
-            if (texture == null) {
-                return 0;
-            }
-            Method method = texture.getClass().getMethod("getId");
-            Object id = method.invoke(texture);
-            return id instanceof Number number ? number.intValue() : 0;
-        } catch (ReflectiveOperationException ignored) {
-            return 0;
-        }
+        return lightTexture.lightTexture.getId();
     }
 
 }

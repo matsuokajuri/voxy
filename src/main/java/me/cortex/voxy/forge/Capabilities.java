@@ -221,7 +221,7 @@ final class Capabilities {
                     float result = MemoryUtil.memGetFloat(pointer);
                     glUnmapNamedBuffer(buffer);
                     glUseProgram(0);
-                    glBindTextureUnit(0, 0);
+                    ForgeOriginalVoxyTextureBindings.bind2D(0, 0);
                     glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
                     correct &= result == 0.0F;
                 }

@@ -13,12 +13,30 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ForgeOriginalVoxyDhImporterTest {
     @TempDir
     Path temporaryDirectory;
+
+    @Test
+    void detectsOptionalDistantHorizonsLibrariesWithoutHardFailure() {
+        assertTrue(ForgeOriginalVoxyDhImporter.HasRequiredLibraries);
+        assertTrue(ForgeOriginalVoxyDhImporter.detectRequiredLibraries(className -> {
+        }));
+        assertFalse(ForgeOriginalVoxyDhImporter.detectRequiredLibraries(className -> {
+            if (className.equals("org.sqlite.JDBC")) {
+                throw new ClassNotFoundException(className);
+            }
+        }));
+        assertFalse(ForgeOriginalVoxyDhImporter.detectRequiredLibraries(className -> {
+            if (className.equals("org.tukaani.xz.XZInputStream")) {
+                throw new NoClassDefFoundError(className);
+            }
+        }));
+    }
 
     @Test
     void resolvesDirectoryToOfficialDatabaseName() {

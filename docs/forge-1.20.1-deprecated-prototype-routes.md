@@ -214,8 +214,11 @@ can satisfy those conditions. Final runtime confirmation reported all three live
 renderer readiness fields true. Persistent storage, config, importers, and user
 features were subsequently completed, and the XXIV final regression received
 explicit user approval. XXV reopened closure for a deeper source/artifact audit
-and removed those status-only readiness fields; final runtime acceptance is
-pending.
+and removed those status-only readiness fields. XXVI/XXVII subsequently
+completed the remaining parity repairs, fourteen-pass exhaustive line audit,
+forced clean artifact gate, and consolidated user-observed runtime acceptance.
+The original-equivalent route is now release-accepted with the documented Forge
+adaptations; no prototype route contributes to that decision.
 
 The 2026-06-22 lifecycle/light repair retires two more non-original shortcuts
 from the active route:

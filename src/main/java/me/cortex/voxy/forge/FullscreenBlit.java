@@ -1,6 +1,5 @@
 package me.cortex.voxy.forge;
 
-import me.cortex.voxy.common.util.MemoryBuffer;
 import me.cortex.voxy.common.util.TrackedObject;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
@@ -30,12 +29,8 @@ import static org.lwjgl.opengl.GL20C.glLinkProgram;
 import static org.lwjgl.opengl.GL20C.glUseProgram;
 import static org.lwjgl.opengl.GL20C.nglShaderSource;
 import static org.lwjgl.opengl.GL30C.glBindVertexArray;
-import static org.lwjgl.opengl.GL30C.glDeleteVertexArrays;
-import static org.lwjgl.opengl.GL45C.glCreateVertexArrays;
 
 final class FullscreenBlit extends TrackedObject {
-    private final int vertexArrayId = glCreateVertexArrays();
-    private final GlBuffer indexBuffer;
     private final int programId;
 
     FullscreenBlit(RenderProperties properties, String vertexShaderId, String fragmentShaderId) {
@@ -46,23 +41,15 @@ final class FullscreenBlit extends TrackedObject {
             RenderProperties properties,
             String vertexShaderId,
             String fragmentShaderId,
-            String... fragmentDefines) {
-        this.indexBuffer = new GlBuffer(6L, false);
+            String... defines) {
         try {
-            MemoryBuffer quadIndices = generateQuadIndicesByte(1);
-            try {
-                long ptr = UploadStream.instance().upload(this.indexBuffer.id, 0L, this.indexBuffer.size());
-                quadIndices.cpyTo(ptr);
-            } finally {
-                quadIndices.free();
-            }
-            UploadStream.instance().commit();
-            this.programId = compileProgram(
-                    properties.injectDefines(ShaderLoader.parse(vertexShaderId)),
-                    injectDefines(properties.injectDefines(ShaderLoader.parse(fragmentShaderId)), fragmentDefines));
+            FullscreenBlitShaderSources sources = FullscreenBlitShaderSources.prepare(
+                    properties,
+                    ShaderLoader.parse(vertexShaderId),
+                    ShaderLoader.parse(fragmentShaderId),
+                    defines);
+            this.programId = compileProgram(sources.vertex(), sources.fragment());
         } catch (RuntimeException e) {
-            this.indexBuffer.free();
-            glDeleteVertexArrays(this.vertexArrayId);
             this.free0();
             throw e;
         }
@@ -73,9 +60,9 @@ final class FullscreenBlit extends TrackedObject {
     }
 
     void blit() {
-        glBindVertexArray(this.vertexArrayId);
+        glBindVertexArray(ForgeOriginalVoxyEmptyVertexArray.id());
         glUseProgram(this.programId);
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, this.indexBuffer.id);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, SharedIndexBuffer.INSTANCE_BYTE.id());
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_BYTE, 0L);
         glBindVertexArray(0);
     }
@@ -83,42 +70,7 @@ final class FullscreenBlit extends TrackedObject {
     @Override
     public void free() {
         this.free0();
-        this.indexBuffer.free();
-        glDeleteVertexArrays(this.vertexArrayId);
         glDeleteProgram(this.programId);
-    }
-
-    private static MemoryBuffer generateQuadIndicesByte(int quadCount) {
-        if ((quadCount * 4) >= 1 << 8) {
-            throw new IllegalArgumentException("Quad count too large");
-        }
-        MemoryBuffer buffer = new MemoryBuffer(quadCount * 6L);
-        long ptr = buffer.address;
-        for (int i = 0; i < quadCount * 4; i += 4) {
-            MemoryUtil.memPutByte(ptr, (byte) (i + 1));
-            MemoryUtil.memPutByte(ptr + 1L, (byte) (i + 2));
-            MemoryUtil.memPutByte(ptr + 2L, (byte) i);
-            MemoryUtil.memPutByte(ptr + 3L, (byte) (i + 1));
-            MemoryUtil.memPutByte(ptr + 4L, (byte) (i + 3));
-            MemoryUtil.memPutByte(ptr + 5L, (byte) (i + 2));
-            ptr += 6L;
-        }
-        return buffer;
-    }
-
-    private static String injectDefines(String source, String... defines) {
-        if (defines == null || defines.length == 0) {
-            return source;
-        }
-        StringBuilder builder = new StringBuilder();
-        for (String define : defines) {
-            builder.append("#define ").append(define).append('\n');
-        }
-        int split = source.indexOf('\n');
-        if (split < 0) {
-            return source + '\n' + builder;
-        }
-        return source.substring(0, split + 1) + builder + source.substring(split + 1);
     }
 
     private static int compileProgram(String vertexSource, String fragmentSource) {
@@ -154,5 +106,32 @@ final class FullscreenBlit extends TrackedObject {
             throw new IllegalStateException("Original fullscreen blit shader compile failed: " + log);
         }
         return shader;
+    }
+}
+
+record FullscreenBlitShaderSources(String vertex, String fragment) {
+    static FullscreenBlitShaderSources prepare(
+            RenderProperties properties,
+            String vertexSource,
+            String fragmentSource,
+            String... defines) {
+        return new FullscreenBlitShaderSources(
+                injectDefines(properties.injectDefines(vertexSource), defines),
+                injectDefines(properties.injectDefines(fragmentSource), defines));
+    }
+
+    private static String injectDefines(String source, String... defines) {
+        if (defines == null || defines.length == 0) {
+            return source;
+        }
+        StringBuilder builder = new StringBuilder();
+        for (String define : defines) {
+            builder.append("#define ").append(define).append('\n');
+        }
+        int split = source.indexOf('\n');
+        if (split < 0) {
+            return source + '\n' + builder;
+        }
+        return source.substring(0, split + 1) + builder + source.substring(split + 1);
     }
 }

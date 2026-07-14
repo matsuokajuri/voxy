@@ -17,8 +17,16 @@ abstract class ModelQueries {
         return ((metadata >> (8 * face)) & 0b1000) != 0;
     }
 
+    static boolean isDoubleSided(long metadata) {
+        return ((metadata >> (8 * 6)) & 4) != 0;
+    }
+
     static long _isDoubleSided(long metadata) {
         return (metadata >> (8 * 6 + 2)) & 1L;
+    }
+
+    static boolean isTranslucent(long metadata) {
+        return ((metadata >> (8 * 6)) & 2) != 0;
     }
 
     static long _isTranslucent(long metadata) {
@@ -33,8 +41,20 @@ abstract class ModelQueries {
         return (metadata >> (8 * 6 + 3)) & 1L;
     }
 
+    static boolean isFluid(long metadata) {
+        return ((metadata >> (8 * 6)) & 16) != 0;
+    }
+
     static long _isFluid(long metadata) {
         return (metadata >> (8 * 6 + 4)) & 1L;
+    }
+
+    static boolean isBiomeColoured(long metadata) {
+        return ((metadata >> (8 * 6)) & 1L) != 0;
+    }
+
+    static long _isBiomeColoured(long metadata) {
+        return (metadata >> (8 * 6)) & 1L;
     }
 
     static long _notIsBiomeColoured(long metadata) {

@@ -26,6 +26,8 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.lighting.LevelLightEngine;
 import net.minecraft.world.level.material.FluidState;
+import net.minecraftforge.client.ForgeHooksClient;
+import net.minecraftforge.client.extensions.common.IClientFluidTypeExtensions;
 import net.minecraftforge.client.model.data.ModelData;
 import org.joml.Matrix4f;
 import org.joml.Quaternionf;
@@ -57,7 +59,7 @@ final class ForgeSoftwareModelTextureBakery {
     private final ReuseVertexConsumer opaqueVC = new ReuseVertexConsumer();
     private final ReuseVertexConsumer translucentVC = new ReuseVertexConsumer(1);
     private final SoftwareRasterizer rasterizer = new SoftwareRasterizer(FACE_SIZE);
-    private final LiquidBlockRenderer fluidRenderer = new LiquidBlockRenderer();
+    private final PreparedLiquidBlockRenderer fluidRenderer = new PreparedLiquidBlockRenderer();
     private int[] atlasPixels;
     private int atlasWidth;
     private int atlasHeight;
@@ -65,6 +67,7 @@ final class ForgeSoftwareModelTextureBakery {
     private String lastFailureReason = "none";
 
     void prepareOnRenderThread(Minecraft minecraft) {
+        this.fluidRenderer.setupSpritesForBake();
         this.setupTexture(minecraft);
     }
 
@@ -186,11 +189,14 @@ final class ForgeSoftwareModelTextureBakery {
         try {
             for (RenderType renderType : renderTypes) {
                 anyRenderType = true;
-                ReuseVertexConsumer target =
-                        ForgeOriginalVoxyQuadMaterialBridge.isTranslucentLayer(renderType) ? this.translucentVC : this.opaqueVC;
                 for (Direction direction : directionsWithNull()) {
                     List<BakedQuad> quads = getQuads(model, state, direction, renderType);
                     for (BakedQuad quad : quads) {
+                        ReuseVertexConsumer target = ForgeOriginalVoxyQuadMaterialBridge.isTranslucentLayer(
+                                quad,
+                                renderType)
+                                ? this.translucentVC
+                                : this.opaqueVC;
                         target.quad(quad, renderType, forceSolid);
                     }
                 }
@@ -341,17 +347,27 @@ final class ForgeSoftwareModelTextureBakery {
                 return 0;
             }
         };
-        this.fluidRenderer.tesselate(getter, BlockPos.ZERO, this.selectFluidConsumer(state.getFluidState()), state, state.getFluidState());
+        this.fluidRenderer.tesselate(
+                getter,
+                BlockPos.ZERO,
+                this.selectFluidConsumer(state.getFluidState(), getter),
+                state,
+                state.getFluidState());
         this.translucentVC.setDefaultMeta(0);
         this.opaqueVC.setDefaultMeta(0);
     }
 
-    private ReuseVertexConsumer selectFluidConsumer(FluidState fluidState) {
+    private ReuseVertexConsumer selectFluidConsumer(FluidState fluidState, BlockAndTintGetter getter) {
         RenderType renderType = ItemBlockRenderTypes.getRenderLayer(fluidState);
-        if (ForgeOriginalVoxyQuadMaterialBridge.isTranslucentLayer(renderType)) {
+        TextureAtlasSprite[] sprites = ForgeHooksClient.getFluidSprites(getter, BlockPos.ZERO, fluidState);
+        int tintColor = IClientFluidTypeExtensions.of(fluidState)
+                .getTintColor(fluidState, getter, BlockPos.ZERO);
+        ForgeOriginalVoxyQuadMaterialBridge.MaterialLayer layer =
+                ForgeOriginalVoxyQuadMaterialBridge.materialLayerForFluid(renderType, sprites, tintColor);
+        if (layer == ForgeOriginalVoxyQuadMaterialBridge.MaterialLayer.TRANSLUCENT) {
             return this.translucentVC;
         }
-        if (ForgeOriginalVoxyQuadMaterialBridge.isDiscardLayer(renderType)) {
+        if (layer == ForgeOriginalVoxyQuadMaterialBridge.MaterialLayer.CUTOUT) {
             this.opaqueVC.setDefaultMeta(this.opaqueVC.getDefaultMeta() | 1);
         } else {
             this.opaqueVC.setDefaultMeta(this.opaqueVC.getDefaultMeta() & ~1);
@@ -421,6 +437,12 @@ final class ForgeSoftwareModelTextureBakery {
                 axis.z * invLength * sinAngle,
                 (float) Math.cos(halfAngle)
         );
+    }
+
+    private static final class PreparedLiquidBlockRenderer extends LiquidBlockRenderer {
+        private void setupSpritesForBake() {
+            super.setupSprites();
+        }
     }
 
     record BakeResult(ColourDepthTextureData[] textures, ForgeOriginalVoxyModelLayer layer, int flags, String failureReason) {

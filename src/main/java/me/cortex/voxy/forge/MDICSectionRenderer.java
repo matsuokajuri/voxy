@@ -1,5 +1,6 @@
 package me.cortex.voxy.forge;
 
+import me.cortex.voxy.common.Logger;
 import me.cortex.voxy.common.world.WorldEngine;
 import me.cortex.voxy.common.util.TrackedObject;
 import net.minecraft.client.Minecraft;
@@ -75,8 +76,6 @@ import static org.lwjgl.opengl.GL20C.glUseProgram;
 import static org.lwjgl.opengl.GL20C.glCompileShader;
 import static org.lwjgl.opengl.GL30C.glBindBufferBase;
 import static org.lwjgl.opengl.GL30C.glBindVertexArray;
-import static org.lwjgl.opengl.GL30C.glDeleteVertexArrays;
-import static org.lwjgl.opengl.GL30C.glGenVertexArrays;
 import static org.lwjgl.opengl.GL31C.GL_UNIFORM_BUFFER;
 import static org.lwjgl.opengl.GL32C.GL_FIRST_VERTEX_CONVENTION;
 import static org.lwjgl.opengl.GL32C.glProvokingVertex;
@@ -118,7 +117,6 @@ final class MDICSectionRenderer extends TrackedObject {
             new GlBuffer(TRANSLUCENT_WRITE_BASE * 4L + TRANSLUCENT_DRAW_COUNT * 4L).zero();
     private final GlBuffer statisticsBuffer = new GlBuffer(1024).zero();
     private final SharedIndexBuffer sharedIndexBuffer = SharedIndexBuffer.INSTANCE;
-    private final int vertexArrayId = glGenVertexArrays();
     private int terrainProgramId;
     private int translucentTerrainProgramId;
     private int prepProgramId;
@@ -215,8 +213,7 @@ final class MDICSectionRenderer extends TrackedObject {
                 && this.uniformBuffer.id != 0
                 && this.distanceCountBuffer.id != 0
                 && this.statisticsBuffer.id != 0
-                && this.sharedIndexBuffer.ready()
-                && this.vertexArrayId != 0;
+                && this.sharedIndexBuffer.ready();
     }
 
     void renderOpaque(
@@ -224,9 +221,13 @@ final class MDICSectionRenderer extends TrackedObject {
             BasicSectionGeometryData geometryData,
             ModelStore modelStore,
             ForgeOriginalVoxyRenderPipeline pipeline) {
-        if (geometryData == null || geometryData.getSectionCount() == 0) {
+        if (geometryData == null) {
+            throw this.failure("original-mdic-section-renderer-geometry-missing");
+        }
+        if (geometryData.getSectionCount() == 0) {
             return;
         }
+        this.requireRenderInputs(viewport, geometryData, modelStore, pipeline, false);
         this.uploadUniformBuffer(viewport);
         int maxDrawCount = Math.min((int) (geometryData.getSectionCount() * 4.4D + 128), OPAQUE_DRAW_COUNT);
         this.renderTerrain(
@@ -245,9 +246,13 @@ final class MDICSectionRenderer extends TrackedObject {
             BasicSectionGeometryData geometryData,
             ModelStore modelStore,
             ForgeOriginalVoxyRenderPipeline pipeline) {
-        if (geometryData == null || geometryData.getSectionCount() == 0) {
+        if (geometryData == null) {
+            throw this.failure("original-mdic-section-renderer-geometry-missing");
+        }
+        if (geometryData.getSectionCount() == 0) {
             return;
         }
+        this.requireRenderInputs(viewport, geometryData, modelStore, pipeline, false);
         this.renderTerrain(
                 viewport,
                 geometryData,
@@ -267,20 +272,20 @@ final class MDICSectionRenderer extends TrackedObject {
             BasicSectionGeometryData geometryData,
             ModelStore modelStore,
             ForgeOriginalVoxyRenderPipeline pipeline) {
-        if (geometryData == null || geometryData.getSectionCount() == 0) {
+        if (geometryData == null) {
+            throw this.failure("original-mdic-section-renderer-geometry-missing");
+        }
+        if (geometryData.getSectionCount() == 0) {
             return;
         }
-        if (!pipeline.translucentDrawTargetReady()) {
-            this.recordFailure("original-mdic-section-renderer-translucent-target-not-ready");
-            return;
-        }
+        this.requireRenderInputs(viewport, geometryData, modelStore, pipeline, true);
         glEnable(GL_BLEND);
         glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
         glDisable(GL_CULL_FACE);
         glEnable(GL_DEPTH_TEST);
         glDepthFunc(this.properties.closerEqualDepthCompare());
         glUseProgram(this.translucentTerrainProgramId);
-        glBindVertexArray(this.vertexArrayId);
+        glBindVertexArray(ForgeOriginalVoxyEmptyVertexArray.id());
         pipeline.setupAndBindTranslucent(viewport);
         this.bindRenderingBuffers(viewport, geometryData, modelStore);
         glMemoryBarrier(GL_COMMAND_BARRIER_BIT | GL_SHADER_STORAGE_BARRIER_BIT);
@@ -295,9 +300,9 @@ final class MDICSectionRenderer extends TrackedObject {
         glEnable(GL_CULL_FACE);
         glBindVertexArray(0);
         glBindSampler(0, 0);
-        glBindTextureUnit(0, 0);
+        ForgeOriginalVoxyTextureBindings.bind2D(0, 0);
         glBindSampler(1, 0);
-        glBindTextureUnit(1, 0);
+        ForgeOriginalVoxyTextureBindings.bind2D(1, 0);
         glDisable(GL_BLEND);
     }
 
@@ -305,30 +310,32 @@ final class MDICSectionRenderer extends TrackedObject {
             MDICViewport viewport,
             BasicSectionGeometryData geometryData,
             RenderProperties properties) {
-        if (!this.ready()) {
-            this.recordFailure("original-mdic-cmdgen-not-ready");
+        if (geometryData == null) {
+            throw this.failure("original-mdic-cmdgen-geometry-data-missing");
+        }
+        if (geometryData.getSectionCount() == 0) {
             return;
         }
-        if (geometryData == null || geometryData.getMetadataBuffer() == 0 || geometryData.getGeometryBuffer() == 0) {
-            this.recordFailure("original-mdic-cmdgen-geometry-data-not-ready");
-            return;
+        if (!this.ready()) {
+            throw this.failure("original-mdic-cmdgen-not-ready");
+        }
+        if (geometryData.getMetadataBuffer() == 0 || geometryData.getGeometryBuffer() == 0) {
+            throw this.failure("original-mdic-cmdgen-geometry-data-not-ready");
         }
         if (viewport == null || !viewport.ready()) {
-            this.recordFailure("original-mdic-cmdgen-viewport-not-ready");
-            return;
+            throw this.failure("original-mdic-cmdgen-viewport-not-ready");
         }
-        try {
-            this.uploadUniformBuffer(viewport);
-            this.dispatchPrep(viewport);
-            GPUTiming.INSTANCE.marker("OT");
-            this.rasterCullVisibility(viewport, geometryData, properties);
-            GPUTiming.INSTANCE.marker("CG");
-            this.dispatchCmdgen(viewport, geometryData);
-            GPUTiming.INSTANCE.marker("TS");
-            this.dispatchTranslucentCommandGeneration(viewport, geometryData);
-        } catch (RuntimeException e) {
-            this.recordFailure("original-mdic-cmdgen-run-" + e.getClass().getSimpleName() + ":" + e.getMessage());
+        if (properties == null) {
+            throw this.failure("original-mdic-cmdgen-render-properties-missing");
         }
+        this.uploadUniformBuffer(viewport);
+        this.dispatchPrep(viewport);
+        GPUTiming.INSTANCE.marker("OT");
+        this.rasterCullVisibility(viewport, geometryData, properties);
+        GPUTiming.INSTANCE.marker("CG");
+        this.dispatchCmdgen(viewport, geometryData);
+        GPUTiming.INSTANCE.marker("TS");
+        this.dispatchTranslucentCommandGeneration(viewport, geometryData);
     }
 
     void addDebug(List<String> lines) {
@@ -342,9 +349,6 @@ final class MDICSectionRenderer extends TrackedObject {
         this.uniformBuffer.free();
         this.distanceCountBuffer.free();
         this.statisticsBuffer.free();
-        if (this.vertexArrayId != 0) {
-            glDeleteVertexArrays(this.vertexArrayId);
-        }
     }
 
     private void bindRenderingBuffers(
@@ -372,32 +376,12 @@ final class MDICSectionRenderer extends TrackedObject {
             long indirectOffset,
             long drawCountOffset,
             int maxDrawCount) {
-        if (!this.ready()) {
-            this.recordFailure("original-mdic-section-renderer-not-ready");
-            return;
-        }
-        if (viewport == null || !viewport.ready()) {
-            this.recordFailure("original-mdic-section-renderer-viewport-not-ready");
-            return;
-        }
-        if (geometryData == null || geometryData.getGeometryBuffer() == 0 || geometryData.getMetadataBuffer() == 0) {
-            this.recordFailure("original-mdic-section-renderer-geometry-not-ready");
-            return;
-        }
-        if (modelStore == null) {
-            this.recordFailure("original-mdic-section-renderer-model-store-not-ready");
-            return;
-        }
-        if (!pipeline.opaqueDrawTargetReady()) {
-            this.recordFailure("original-mdic-section-renderer-opaque-target-not-ready");
-            return;
-        }
         glDisable(GL_CULL_FACE);
         glDisable(GL_BLEND);
         glEnable(GL_DEPTH_TEST);
         glDepthFunc(this.properties.closerEqualDepthCompare());
         glUseProgram(programId);
-        glBindVertexArray(this.vertexArrayId);
+        glBindVertexArray(ForgeOriginalVoxyEmptyVertexArray.id());
         pipeline.setupAndBindOpaque(viewport);
         this.bindRenderingBuffers(viewport, geometryData, modelStore);
         glMemoryBarrier(GL_COMMAND_BARRIER_BIT | GL_SHADER_STORAGE_BARRIER_BIT);
@@ -414,9 +398,40 @@ final class MDICSectionRenderer extends TrackedObject {
         glEnable(GL_CULL_FACE);
         glBindVertexArray(0);
         glBindSampler(0, 0);
-        glBindTextureUnit(0, 0);
+        ForgeOriginalVoxyTextureBindings.bind2D(0, 0);
         glBindSampler(1, 0);
-        glBindTextureUnit(1, 0);
+        ForgeOriginalVoxyTextureBindings.bind2D(1, 0);
+    }
+
+    private void requireRenderInputs(
+            MDICViewport viewport,
+            BasicSectionGeometryData geometryData,
+            ModelStore modelStore,
+            ForgeOriginalVoxyRenderPipeline pipeline,
+            boolean translucent) {
+        if (!this.ready()) {
+            throw this.failure("original-mdic-section-renderer-not-ready");
+        }
+        if (viewport == null || !viewport.ready()) {
+            throw this.failure("original-mdic-section-renderer-viewport-not-ready");
+        }
+        if (geometryData.getGeometryBuffer() == 0 || geometryData.getMetadataBuffer() == 0) {
+            throw this.failure("original-mdic-section-renderer-geometry-not-ready");
+        }
+        if (modelStore == null || !modelStore.canUploadOriginalVoxyModel()) {
+            throw this.failure("original-mdic-section-renderer-model-store-not-ready");
+        }
+        if (pipeline == null) {
+            throw this.failure("original-mdic-section-renderer-pipeline-missing");
+        }
+        boolean targetReady = translucent
+                ? pipeline.translucentDrawTargetReady()
+                : pipeline.opaqueDrawTargetReady();
+        if (!targetReady) {
+            throw this.failure(translucent
+                    ? "original-mdic-section-renderer-translucent-target-not-ready"
+                    : "original-mdic-section-renderer-opaque-target-not-ready");
+        }
     }
 
     private void uploadUniformBuffer(MDICViewport viewport) {
@@ -430,7 +445,7 @@ final class MDICSectionRenderer extends TrackedObject {
         viewport.section.getToAddress(ptr);
         ptr += 4L * 3L;
         if (viewport.frameId < 0) {
-            VoxyForge.LOGGER.error("Original MDIC frame id is negative; wrapping as original renderer expects");
+            Logger.error("Frame ID negative, this will cause things to break, wrapping around");
             viewport.frameId &= 0x7fffffff;
         }
         MemoryUtil.memPutInt(ptr, viewport.frameId & 0x7fffffff);
@@ -475,7 +490,7 @@ final class MDICSectionRenderer extends TrackedObject {
                 if (this.pipeline != null && this.pipeline.hasTAA()) {
                     this.pipeline.bindUniforms();
                 }
-                glBindVertexArray(this.vertexArrayId);
+                glBindVertexArray(ForgeOriginalVoxyEmptyVertexArray.id());
                 glBindBufferBase(GL_UNIFORM_BUFFER, 0, this.uniformBuffer.id);
                 glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, geometryData.getMetadataBuffer());
                 glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, viewport.visibilityBuffer.id);
@@ -720,7 +735,7 @@ final class MDICSectionRenderer extends TrackedObject {
             return new ShaderProgramBuildResult(programId);
         } catch (RuntimeException e) {
             if (patched) {
-                VoxyForge.LOGGER.error("Failed to compile original Voxy terrain shader patch; using normal shader path", e);
+                Logger.error("Failed to compile shader patch, using normal pipeline to prevent errors", e);
                 int programId = compileProgram(vertexSource, normalFragmentSource, name);
                 return new ShaderProgramBuildResult(programId);
             }
@@ -778,5 +793,9 @@ final class MDICSectionRenderer extends TrackedObject {
         String normalized = reason == null || reason.isBlank() ? "unspecified" : reason.replace(' ', '-');
         VoxyForge.LOGGER.error("Original MDIC command generation failure: {}", normalized);
         return normalized;
+    }
+
+    private IllegalStateException failure(String reason) {
+        return new IllegalStateException(this.recordFailure(reason));
     }
 }

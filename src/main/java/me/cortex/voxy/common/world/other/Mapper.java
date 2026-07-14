@@ -2,6 +2,7 @@ package me.cortex.voxy.common.world.other;
 
 import com.mojang.serialization.Dynamic;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
+import me.cortex.voxy.common.Logger;
 import me.cortex.voxy.common.config.IMappingStorage;
 import me.cortex.voxy.common.util.Pair;
 import net.minecraft.SharedConstants;
@@ -10,6 +11,7 @@ import net.minecraft.core.Holder;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtIo;
 import net.minecraft.nbt.NbtOps;
+import net.minecraft.nbt.Tag;
 import net.minecraft.util.datafix.DataFixers;
 import net.minecraft.util.datafix.fixes.References;
 import net.minecraft.world.level.EmptyBlockGetter;
@@ -19,7 +21,6 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.LeavesBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import org.lwjgl.system.MemoryUtil;
-import org.slf4j.LoggerFactory;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -37,7 +38,6 @@ import java.util.function.Consumer;
 //There are independent mappings for biome and block states, these get combined in the shader and allow for more
 // variaty of things
 public class Mapper {
-    private static final org.slf4j.Logger LOGGER = LoggerFactory.getLogger("Voxy");
     private static final int BLOCK_STATE_TYPE = 1;
     private static final int BIOME_TYPE = 2;
 
@@ -121,7 +121,7 @@ public class Mapper {
             if (entryType == BLOCK_STATE_TYPE) {
                 var sentry = StateEntry.deserialize(id, entry.getValue(), forceResave);
                 if (sentry.state.isAir()) {
-                    LOGGER.error("Deserialization was air, removed block");
+                    Logger.error("Deserialization was air, removed block");
                     sentryErrors.add(new Pair<>(entry.getValue(), id));
                     continue;
                 }
@@ -129,7 +129,7 @@ public class Mapper {
                 var oldEntry = this.block2stateEntry.putIfAbsent(sentry.state, sentry);
                 if (oldEntry != null) {
                     //forceResave[0] |= true;
-                    LOGGER.warn("Multiple mappings for blockstate, using old state, expect things to possibly go really badly. {}:{}:{}", oldEntry.id, sentry.id, sentry.state);
+                    Logger.warn("Multiple mappings for blockstate, using old state, expect things to possibly go really badly. " + oldEntry.id + ":" + sentry.id + ":" + sentry.state );
                 }
             } else if (entryType == BIOME_TYPE) {
                 var bentry = BiomeEntry.deserialize(id, entry.getValue());
@@ -173,7 +173,7 @@ public class Mapper {
         });
 
         if (forceResave[0]) {
-            LOGGER.warn("Forced state resave triggered");
+            Logger.warn("Forced state resave triggered");
             this.forceResaveStates();
         }
     }
@@ -381,25 +381,25 @@ public class Mapper {
         public static StateEntry deserialize(int id, byte[] data, boolean[] forceResave) {
             try {
                 var compound = NbtIo.readCompressed(new ByteArrayInputStream(data));
-                if (!compound.contains("id") || compound.getInt("id") != id) {
+                if (getIntOr(compound, "id", -1) != id) {
                     throw new IllegalStateException("Encoded id != expected id");
                 }
-                var bsc = compound.getCompound("block_state");
+                var bsc = requireCompound(compound, "block_state");
                 var state = BlockState.CODEC.parse(NbtOps.INSTANCE, bsc);
                 if (state.result().isEmpty()) {
-                    LOGGER.info("Could not decode blockstate, attempting fixes, error: {}", state.error().map(error -> error.message()).orElse("unknown"));
+                    Logger.info("Could not decode blockstate, attempting fixes, error: "+ state.error().map(error -> error.message()).orElse("unknown"));
                     bsc = (CompoundTag) DataFixers.getDataFixer().update(References.BLOCK_STATE, new Dynamic<>(NbtOps.INSTANCE,bsc),0, SharedConstants.getCurrentVersion().getDataVersion().getVersion()).getValue();
                     state = BlockState.CODEC.parse(NbtOps.INSTANCE, bsc);
                     if (state.result().isEmpty()) {
-                        LOGGER.error("Could not decode blockstate setting to air. id: {} error: {}", id, state.error().map(error -> error.message()).orElse("unknown"));
+                        Logger.error("Could not decode blockstate setting to air. id:" + id + " error: " + state.error().map(error -> error.message()).orElse("unknown"));
                         return new StateEntry(id, Blocks.AIR.defaultBlockState());
                     } else {
-                        LOGGER.info("Fixed blockstate to: {}", state.getOrThrow(false, LOGGER::error));
+                        Logger.info("Fixed blockstate to: " + state.getOrThrow(false, Logger::error));
                         forceResave[0] |= true;
-                        return new StateEntry(id, state.getOrThrow(false, LOGGER::error));
+                        return new StateEntry(id, state.getOrThrow(false, Logger::error));
                     }
                 } else {
-                    return new StateEntry(id, state.getOrThrow(false, LOGGER::error));
+                    return new StateEntry(id, state.getOrThrow(false, Logger::error));
                 }
             } catch (IOException e) {
                 throw new RuntimeException(e);
@@ -432,14 +432,29 @@ public class Mapper {
         public static BiomeEntry deserialize(int id, byte[] data) {
             try {
                 var compound = NbtIo.readCompressed(new ByteArrayInputStream(data));
-                if (!compound.contains("id") || compound.getInt("id") != id) {
+                if (getIntOr(compound, "id", -1) != id) {
                     throw new IllegalStateException("Encoded id != expected id");
                 }
-                String biome = compound.contains("biome_id") ? compound.getString("biome_id") : null;
+                String biome = getStringOr(compound, "biome_id", null);
                 return new BiomeEntry(id, biome);
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
         }
+    }
+
+    private static int getIntOr(CompoundTag compound, String key, int fallback) {
+        return compound.contains(key, Tag.TAG_ANY_NUMERIC) ? compound.getInt(key) : fallback;
+    }
+
+    private static String getStringOr(CompoundTag compound, String key, String fallback) {
+        return compound.contains(key, Tag.TAG_STRING) ? compound.getString(key) : fallback;
+    }
+
+    private static CompoundTag requireCompound(CompoundTag compound, String key) {
+        if (!compound.contains(key, Tag.TAG_COMPOUND)) {
+            throw new IllegalStateException("Expected compound tag: " + key);
+        }
+        return compound.getCompound(key);
     }
 }

@@ -45,6 +45,8 @@ import static org.lwjgl.opengl.GL43C.GL_SHADER_STORAGE_BUFFER;
 import static org.lwjgl.opengl.GL43C.glDispatchCompute;
 
 final class AsyncNodeManager {
+    private static final boolean VERIFY_NODE_MANAGER =
+            System.getProperty("voxy.verifyNodeManager", "false").equals("true");
     private static final int GEOMETRY_UPLOAD_LIMIT_PER_RUN = 300;
     private static final long GEOMETRY_UPLOAD_BATCH_LIMIT_BYTES = 1_000L << 10;
     private static final long GEOMETRY_UPLOAD_HEADROOM_BYTES = 50_000_000L;
@@ -187,30 +189,34 @@ final class AsyncNodeManager {
         if (!this.running) {
             return;
         }
-        int state = 0;
         synchronized (this.topLevelNodeLock) {
+            int state = 0;
             if (!this.topLevelNodeRemoves.remove(sectionPosition)) {
                 state += this.topLevelNodeAdds.add(sectionPosition) ? 1 : 0;
             } else {
                 state -= 1;
             }
+            if (state != 0 && this.workCounter.getAndAdd(state) == 0) {
+                LockSupport.unpark(this.workerThread);
+            }
         }
-        this.addTopLevelWork(state);
     }
 
     void removeTopLevel(long sectionPosition) {
         if (!this.running) {
             return;
         }
-        int state = 0;
         synchronized (this.topLevelNodeLock) {
+            int state = 0;
             if (!this.topLevelNodeAdds.remove(sectionPosition)) {
                 state += this.topLevelNodeRemoves.add(sectionPosition) ? 1 : 0;
             } else {
                 state -= 1;
             }
+            if (state != 0 && this.workCounter.getAndAdd(state) == 0) {
+                LockSupport.unpark(this.workerThread);
+            }
         }
-        this.addTopLevelWork(state);
     }
 
     void worldEvent(WorldSection section, int flags, int neighborMask) {
@@ -241,9 +247,7 @@ final class AsyncNodeManager {
     void tick(GlBuffer nodeBuffer, NodeCleaner nodeCleaner) {
         requireRenderThread("tick original async node geometry sync");
         if (this.uncaughtException != null) {
-            Throwable throwable = this.uncaughtException;
-            this.recordFailure("async-node-geometry-sync-" + throwable.getClass().getSimpleName() + ":" + throwable.getMessage());
-            return;
+            throw new RuntimeException(this.uncaughtException);
         }
         this.ensurePrograms();
         SyncResults sync = this.results.getAndSet(null);
@@ -315,6 +319,9 @@ final class AsyncNodeManager {
 
     void stop() {
         requireRenderThread("stop original async node geometry sync");
+        if (!this.running) {
+            throw new IllegalStateException();
+        }
         this.running = false;
         LockSupport.unpark(this.workerThread);
         try {
@@ -323,8 +330,7 @@ final class AsyncNodeManager {
                 this.workerThread.join(1000L);
             }
         } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            this.recordFailure("async-node-geometry-sync-stop-interrupted");
+            throw new RuntimeException(e);
         }
         while (true) {
             BuiltSection section = this.geometryUpdateQueue.poll();
@@ -511,6 +517,9 @@ final class AsyncNodeManager {
             return;
         }
         this.publishSyncResults();
+        if (VERIFY_NODE_MANAGER) {
+            this.nodeManager.verifyIntegrity();
+        }
     }
 
     private boolean hasGeometryCapacityHeadroom() {
@@ -522,11 +531,7 @@ final class AsyncNodeManager {
     }
 
     private void processGeometryResult(BuiltSection section) {
-        try {
-            this.nodeManager.processGeometryResult(section);
-        } catch (RuntimeException e) {
-            this.recordFailure("async-node-geometry-sync-" + e.getClass().getSimpleName() + ":" + e.getMessage());
-        }
+        this.nodeManager.processGeometryResult(section);
     }
 
     private void publishSyncResults() {
@@ -699,8 +704,7 @@ final class AsyncNodeManager {
 
     private void returnResultObject(SyncResults sync) {
         if (!this.resultCache1.compareAndSet(null, sync) && !this.resultCache2.compareAndSet(null, sync)) {
-            sync.free();
-            this.recordFailure("async-node-geometry-sync-result-cache-full");
+            throw new IllegalStateException("Could not insert result into cache");
         }
     }
 
@@ -725,17 +729,6 @@ final class AsyncNodeManager {
         if (this.workCounter.getAndIncrement() == 0) {
             LockSupport.unpark(this.workerThread);
         }
-    }
-
-    private void addTopLevelWork(int delta) {
-        if (delta != 0 && this.workCounter.getAndAdd(delta) == 0) {
-            LockSupport.unpark(this.workerThread);
-        }
-    }
-
-    private void recordFailure(String reason) {
-        String normalized = reason == null || reason.isBlank() ? "unspecified" : reason;
-        VoxyForge.LOGGER.error("Original async node geometry sync failure: {}", normalized);
     }
 
     private void freeSyncResult(SyncResults sync) {

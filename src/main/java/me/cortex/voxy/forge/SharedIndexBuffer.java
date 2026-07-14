@@ -10,7 +10,6 @@ final class SharedIndexBuffer {
     static final SharedIndexBuffer INSTANCE_BB_BYTE = new SharedIndexBuffer(true, true);
 
     private final GlBuffer indexBuffer;
-    private boolean freed;
 
     SharedIndexBuffer() {
         this.indexBuffer = new GlBuffer(CUBE_INDEX_OFFSET + 6L * 2L * 3L, false);
@@ -52,10 +51,7 @@ final class SharedIndexBuffer {
     }
 
     void free() {
-        if (!this.freed) {
-            this.freed = true;
-            this.indexBuffer.free();
-        }
+        this.indexBuffer.free();
     }
 
     static void freeAll() {

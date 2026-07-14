@@ -74,11 +74,11 @@ record ForgeOriginalVoxyConfigSnapshot(
         ForgeVoxyConfig.CLIENT_SPEC.save();
 
         ForgeVoxyInstance instance = ForgeVoxyInstance.INSTANCE;
-        if (changes.threadPolicyChanged()) {
-            instance.getOriginalVoxyModelPipeline().refreshOriginalServiceThreadPolicy();
+        if (changes.threadPolicyChanged() && !changes.instanceReload()) {
+            instance.refreshOriginalVoxyServiceThreadPolicy();
         }
         if (changes.renderDistanceChanged() && !changes.instanceReload() && !changes.rendererReload()) {
-            instance.getOriginalVoxyModelPipeline().updateOriginalRenderDistance((float) this.renderDistance);
+            instance.updateOriginalVoxyRenderDistance((float) this.renderDistance);
         }
         if (changes.instanceReload()) {
             instance.reloadOriginalVoxyRuntime();

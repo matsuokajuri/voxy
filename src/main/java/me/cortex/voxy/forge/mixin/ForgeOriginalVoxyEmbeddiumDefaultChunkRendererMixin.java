@@ -38,8 +38,7 @@ public class ForgeOriginalVoxyEmbeddiumDefaultChunkRendererMixin {
                 voxy$loggedCutoutHook = true;
                 Logger.info("Original Voxy Embeddium cutout pass command-generation hook reached.");
             }
-            ForgeVoxyInstance.INSTANCE.getOriginalVoxyModelPipeline()
-                    .renderEmbeddiumCutout(matrices, camera);
+            ForgeVoxyInstance.INSTANCE.renderOriginalVoxyAfterTerrain(matrices, camera);
         }
     }
 }

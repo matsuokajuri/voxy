@@ -45,7 +45,7 @@ public final class ForgeVoxyCommands {
     }
 
     private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> importCommands() {
-        return Commands.literal("import")
+        var imports = Commands.literal("import")
                 .then(Commands.literal("world")
                         .then(Commands.argument("world_name", StringArgumentType.string())
                                 .suggests(ForgeVoxyCommands::importWorldSuggester)
@@ -54,9 +54,6 @@ public final class ForgeVoxyCommands {
                         .then(Commands.argument("world_name", StringArgumentType.string())
                                 .suggests(ForgeVoxyCommands::importBobbySuggester)
                                 .executes(ForgeVoxyCommands::importBobby)))
-                .then(Commands.literal("distant_horizons")
-                        .then(Commands.argument("sqlDbPath", StringArgumentType.string())
-                                .executes(ForgeVoxyCommands::importDistantHorizons)))
                 .then(Commands.literal("raw")
                         .then(Commands.argument("path", StringArgumentType.string())
                                 .executes(ForgeVoxyCommands::importRaw)))
@@ -69,6 +66,12 @@ public final class ForgeVoxyCommands {
                         .executes(ForgeVoxyCommands::importCurrentWorld))
                 .then(Commands.literal("cancel")
                         .executes(ForgeVoxyCommands::cancelImport));
+        if (ForgeOriginalVoxyDhImporter.HasRequiredLibraries) {
+            imports.then(Commands.literal("distant_horizons")
+                    .then(Commands.argument("sqlDbPath", StringArgumentType.string())
+                            .executes(ForgeVoxyCommands::importDistantHorizons)));
+        }
+        return imports;
     }
 
     private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> debugCommands() {
@@ -98,14 +101,16 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance instance = ForgeVoxyInstance.INSTANCE;
         Minecraft minecraft = Minecraft.getInstance();
         WorldEngine engine = instance.getCurrentEngineOptional().orElse(null);
-        if (engine == null || minecraft.level == null) {
+        var importManager = instance.getImportManager();
+        var serviceManager = instance.getOriginalVoxyServiceManager();
+        if (engine == null || minecraft.level == null || importManager == null || serviceManager == null) {
             return false;
         }
-        return instance.getImportManager().makeAndRunIfNone(engine, () -> {
+        return importManager.makeAndRunIfNone(engine, () -> {
             WorldImporter importer = new WorldImporter(
                     engine,
                     minecraft.level,
-                    instance.getOriginalVoxyModelPipeline().getServiceManager(),
+                    serviceManager,
                     instance::canRunOriginalVoxyImportWork);
             importer.importRegionDirectoryAsync(directory);
             return importer;
@@ -176,18 +181,20 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance instance = ForgeVoxyInstance.INSTANCE;
         Minecraft minecraft = Minecraft.getInstance();
         WorldEngine engine = instance.getCurrentEngineOptional().orElse(null);
-        if (engine == null || minecraft.level == null) {
+        var importManager = instance.getImportManager();
+        var serviceManager = instance.getOriginalVoxyServiceManager();
+        if (engine == null || minecraft.level == null || importManager == null || serviceManager == null) {
             context.getSource().sendFailure(Component.literal(
                     "Voxy must be enabled in an active client world to import Distant Horizons data"));
             return 1;
         }
 
-        boolean started = instance.getImportManager().makeAndRunIfNone(engine, () ->
+        boolean started = importManager.makeAndRunIfNone(engine, () ->
                 new ForgeOriginalVoxyDhImporter(
                         databaseFile,
                         engine,
                         minecraft.level,
-                        instance.getOriginalVoxyModelPipeline().getServiceManager(),
+                        serviceManager,
                         instance::canRunOriginalVoxyImportWork));
         if (!started) {
             context.getSource().sendFailure(Component.literal("A Voxy import is already active"));
@@ -207,15 +214,17 @@ public final class ForgeVoxyCommands {
         ForgeVoxyInstance instance = ForgeVoxyInstance.INSTANCE;
         Minecraft minecraft = Minecraft.getInstance();
         WorldEngine engine = instance.getCurrentEngineOptional().orElse(null);
-        if (engine == null || minecraft.level == null) {
+        var importManager = instance.getImportManager();
+        var serviceManager = instance.getOriginalVoxyServiceManager();
+        if (engine == null || minecraft.level == null || importManager == null || serviceManager == null) {
             return 1;
         }
         String finalInnerDirectory = innerDirectory;
-        return instance.getImportManager().makeAndRunIfNone(engine, () -> {
+        return importManager.makeAndRunIfNone(engine, () -> {
             WorldImporter importer = new WorldImporter(
                     engine,
                     minecraft.level,
-                    instance.getOriginalVoxyModelPipeline().getServiceManager(),
+                    serviceManager,
                     instance::canRunOriginalVoxyImportWork);
             importer.importZippedRegionDirectoryAsync(zip, finalInnerDirectory);
             return importer;
@@ -223,8 +232,10 @@ public final class ForgeVoxyCommands {
     }
 
     private static int cancelImport(CommandContext<CommandSourceStack> context) {
-        WorldEngine engine = ForgeVoxyInstance.INSTANCE.getCurrentEngineOptional().orElse(null);
-        return engine != null && ForgeVoxyInstance.INSTANCE.getImportManager().cancelImport(engine) ? 0 : 1;
+        ForgeVoxyInstance instance = ForgeVoxyInstance.INSTANCE;
+        WorldEngine engine = instance.getCurrentEngineOptional().orElse(null);
+        var importManager = instance.getImportManager();
+        return engine != null && importManager != null && importManager.cancelImport(engine) ? 0 : 1;
     }
 
     private static CompletableFuture<Suggestions> importWorldSuggester(

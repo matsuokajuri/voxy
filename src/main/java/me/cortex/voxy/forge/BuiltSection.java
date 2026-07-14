@@ -5,7 +5,8 @@ import me.cortex.voxy.common.util.MemoryBuffer;
 import java.util.Arrays;
 
 final class BuiltSection {
-    static final boolean VERIFY_BUILT_SECTION_OFFSETS = Boolean.getBoolean("voxy.verifyBuiltSectionOffsets");
+    static final boolean VERIFY_BUILT_SECTION_OFFSETS =
+            System.getProperty("voxy.verifyBuiltSectionOffsets", "false").equals("true");
     final long position;
     final byte childExistence;
     final int aabb;

@@ -1,5 +1,6 @@
 package me.cortex.voxy.forge;
 
+import me.cortex.voxy.common.Logger;
 import org.lwjgl.system.MemoryUtil;
 
 import java.util.ArrayList;
@@ -27,6 +28,10 @@ final class PrintfDebugUtil {
     private static GlBuffer outputBuffer;
 
     private PrintfDebugUtil() {
+    }
+
+    static int activeBindingIndex() {
+        return ENABLED ? BINDING_INDEX : -1;
     }
 
     static String processShader(String source) {
@@ -235,6 +240,7 @@ final class PrintfDebugUtil {
         if (total == 0) {
             return;
         }
+        CURRENT_QUEUE.clear();
         int count = 0;
         List<Character> types = new ArrayList<>();
         while (count < total) {
@@ -260,7 +266,7 @@ final class PrintfDebugUtil {
             }
             String line = String.format(format, arguments);
             if (line.startsWith("LOG")) {
-                VoxyForge.LOGGER.info(line);
+                Logger.info(line);
             }
             CURRENT_QUEUE.add(line);
         }

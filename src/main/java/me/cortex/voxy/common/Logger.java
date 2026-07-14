@@ -2,6 +2,8 @@ package me.cortex.voxy.common;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.fml.loading.FMLEnvironment;
 import org.slf4j.LoggerFactory;
 
 import java.util.Arrays;
@@ -51,18 +53,27 @@ public class Logger {
 
         String error = (INSERT_CLASS?("["+callClsName()+"]: "):"") + Stream.of(args).map(Logger::objToString).collect(Collectors.joining(" "));
         LOGGER.error(error, throwable);
-        if (Minecraft.getInstance() != null) {
-            showInHUD(error);//This is done so that on dedicated server, the Minecraft client class isnt loaded
+        if (FMLEnvironment.dist == Dist.CLIENT) {
+            showInHUD(error);
         }
     }
 
     public static void showInHUD(String msg) {
-        var instance = Minecraft.getInstance();
-        if (instance != null) {
-            instance.executeIfPossible(() -> {
-                var player = Minecraft.getInstance().player;
-                if (player != null) instance.getChatListener().handleSystemMessage(Component.literal(msg), true);
-            });
+        if (FMLEnvironment.dist == Dist.CLIENT) {
+            ClientOnly.showInHUD(msg);
+        }
+    }
+
+    /** Keeps client-only Minecraft references out of the common Logger class file. */
+    private static final class ClientOnly {
+        private static void showInHUD(String msg) {
+            var instance = Minecraft.getInstance();
+            if (instance != null) {
+                instance.executeIfPossible(() -> {
+                    var player = Minecraft.getInstance().player;
+                    if (player != null) instance.getChatListener().handleSystemMessage(Component.literal(msg), true);
+                });
+            }
         }
     }
 

@@ -22,12 +22,20 @@ import java.util.Optional;
 
 import static org.lwjgl.opengl.GL11C.GL_VIEWPORT;
 import static org.lwjgl.opengl.GL11C.GL_BLEND;
+import static org.lwjgl.opengl.GL11C.GL_BACK;
 import static org.lwjgl.opengl.GL11C.GL_COLOR_WRITEMASK;
 import static org.lwjgl.opengl.GL11C.GL_CULL_FACE;
 import static org.lwjgl.opengl.GL11C.GL_DEPTH_TEST;
 import static org.lwjgl.opengl.GL11C.GL_DEPTH_WRITEMASK;
+import static org.lwjgl.opengl.GL11C.GL_FRONT;
 import static org.lwjgl.opengl.GL11C.GL_STENCIL_TEST;
 import static org.lwjgl.opengl.GL11C.GL_TEXTURE_BINDING_2D;
+import static org.lwjgl.opengl.GL11C.GL_TEXTURE_2D;
+import static org.lwjgl.opengl.GL11C.GL_UNPACK_ALIGNMENT;
+import static org.lwjgl.opengl.GL11C.GL_UNPACK_ROW_LENGTH;
+import static org.lwjgl.opengl.GL11C.GL_UNPACK_SKIP_PIXELS;
+import static org.lwjgl.opengl.GL11C.GL_UNPACK_SKIP_ROWS;
+import static org.lwjgl.opengl.GL11C.glBindTexture;
 import static org.lwjgl.opengl.GL11C.glColorMask;
 import static org.lwjgl.opengl.GL11C.glDepthMask;
 import static org.lwjgl.opengl.GL11C.glDisable;
@@ -52,10 +60,10 @@ import static org.lwjgl.opengl.GL11C.GL_STENCIL_WRITEMASK;
 import static org.lwjgl.opengl.GL11C.glDepthFunc;
 import static org.lwjgl.opengl.GL11C.glFrontFace;
 import static org.lwjgl.opengl.GL11C.glPolygonMode;
-import static org.lwjgl.opengl.GL11C.glStencilFunc;
-import static org.lwjgl.opengl.GL11C.glStencilMask;
-import static org.lwjgl.opengl.GL11C.glStencilOp;
+import static org.lwjgl.opengl.GL11C.glPixelStorei;
 import static org.lwjgl.opengl.GL11C.GL_FRONT_AND_BACK;
+import static org.lwjgl.opengl.GL12C.GL_UNPACK_IMAGE_HEIGHT;
+import static org.lwjgl.opengl.GL12C.GL_UNPACK_SKIP_IMAGES;
 import static org.lwjgl.opengl.GL13C.GL_ACTIVE_TEXTURE;
 import static org.lwjgl.opengl.GL13C.GL_TEXTURE0;
 import static org.lwjgl.opengl.GL13C.glActiveTexture;
@@ -65,9 +73,13 @@ import static org.lwjgl.opengl.GL14C.GL_BLEND_SRC_ALPHA;
 import static org.lwjgl.opengl.GL14C.GL_BLEND_SRC_RGB;
 import static org.lwjgl.opengl.GL14C.glBlendFuncSeparate;
 import static org.lwjgl.opengl.GL15C.glBindBuffer;
-import static org.lwjgl.opengl.GL31C.GL_MAX_UNIFORM_BUFFER_BINDINGS;
+import static org.lwjgl.opengl.GL15C.GL_ARRAY_BUFFER;
+import static org.lwjgl.opengl.GL15C.GL_ARRAY_BUFFER_BINDING;
 import static org.lwjgl.opengl.GL31C.GL_UNIFORM_BUFFER;
 import static org.lwjgl.opengl.GL31C.GL_UNIFORM_BUFFER_BINDING;
+import static org.lwjgl.opengl.GL31C.GL_UNIFORM_BUFFER_SIZE;
+import static org.lwjgl.opengl.GL31C.GL_UNIFORM_BUFFER_START;
+import static org.lwjgl.opengl.GL32C.glGetInteger64i;
 import static org.lwjgl.opengl.GL32C.GL_PROVOKING_VERTEX;
 import static org.lwjgl.opengl.GL32C.glProvokingVertex;
 import static org.lwjgl.opengl.GL40C.GL_DRAW_INDIRECT_BUFFER;
@@ -75,7 +87,16 @@ import static org.lwjgl.opengl.GL40C.GL_DRAW_INDIRECT_BUFFER_BINDING;
 import static org.lwjgl.opengl.ARBIndirectParameters.GL_PARAMETER_BUFFER_ARB;
 import static org.lwjgl.opengl.ARBIndirectParameters.GL_PARAMETER_BUFFER_BINDING_ARB;
 import static org.lwjgl.opengl.GL20C.GL_CURRENT_PROGRAM;
-import static org.lwjgl.opengl.GL20C.GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS;
+import static org.lwjgl.opengl.GL20C.GL_STENCIL_BACK_FAIL;
+import static org.lwjgl.opengl.GL20C.GL_STENCIL_BACK_FUNC;
+import static org.lwjgl.opengl.GL20C.GL_STENCIL_BACK_PASS_DEPTH_FAIL;
+import static org.lwjgl.opengl.GL20C.GL_STENCIL_BACK_PASS_DEPTH_PASS;
+import static org.lwjgl.opengl.GL20C.GL_STENCIL_BACK_REF;
+import static org.lwjgl.opengl.GL20C.GL_STENCIL_BACK_VALUE_MASK;
+import static org.lwjgl.opengl.GL20C.GL_STENCIL_BACK_WRITEMASK;
+import static org.lwjgl.opengl.GL20C.glStencilFuncSeparate;
+import static org.lwjgl.opengl.GL20C.glStencilMaskSeparate;
+import static org.lwjgl.opengl.GL20C.glStencilOpSeparate;
 import static org.lwjgl.opengl.GL20C.glUseProgram;
 import static org.lwjgl.opengl.GL30C.GL_DRAW_FRAMEBUFFER_BINDING;
 import static org.lwjgl.opengl.GL30C.GL_READ_FRAMEBUFFER;
@@ -89,12 +110,22 @@ import static org.lwjgl.opengl.GL30C.glGetIntegeri;
 import static org.lwjgl.opengl.GL33C.GL_SAMPLER_BINDING;
 import static org.lwjgl.opengl.GL33C.glBindSampler;
 import static org.lwjgl.opengl.GL42C.GL_FRAMEBUFFER_BARRIER_BIT;
+import static org.lwjgl.opengl.GL42C.GL_IMAGE_BINDING_ACCESS;
+import static org.lwjgl.opengl.GL42C.GL_IMAGE_BINDING_FORMAT;
+import static org.lwjgl.opengl.GL42C.GL_IMAGE_BINDING_LAYER;
+import static org.lwjgl.opengl.GL42C.GL_IMAGE_BINDING_LAYERED;
+import static org.lwjgl.opengl.GL42C.GL_IMAGE_BINDING_LEVEL;
+import static org.lwjgl.opengl.GL42C.GL_IMAGE_BINDING_NAME;
 import static org.lwjgl.opengl.GL42C.GL_PIXEL_BUFFER_BARRIER_BIT;
+import static org.lwjgl.opengl.GL42C.glBindImageTexture;
 import static org.lwjgl.opengl.GL42C.glMemoryBarrier;
+import static org.lwjgl.opengl.GL43C.GL_DISPATCH_INDIRECT_BUFFER;
+import static org.lwjgl.opengl.GL43C.GL_DISPATCH_INDIRECT_BUFFER_BINDING;
 import static org.lwjgl.opengl.GL43C.GL_SHADER_STORAGE_BUFFER;
 import static org.lwjgl.opengl.GL43C.GL_SHADER_STORAGE_BUFFER_BINDING;
-import static org.lwjgl.opengl.GL43C.GL_MAX_SHADER_STORAGE_BUFFER_BINDINGS;
-import static org.lwjgl.opengl.GL45C.glBindTextureUnit;
+import static org.lwjgl.opengl.GL43C.GL_SHADER_STORAGE_BUFFER_SIZE;
+import static org.lwjgl.opengl.GL43C.GL_SHADER_STORAGE_BUFFER_START;
+import static org.lwjgl.opengl.GL30C.glBindBufferRange;
 
 public final class ForgeOriginalVoxyModelPipeline {
     private final ForgeVoxyInstance instance;
@@ -117,6 +148,7 @@ public final class ForgeOriginalVoxyModelPipeline {
     private String lastLifecycleEvent = "initialized";
     private boolean renderEmbeddiumCutoutActive;
     private boolean serviceThreadPoolShutdown;
+    private long chunkBoundOwnerGeneration;
     ForgeOriginalVoxyModelPipeline(ForgeVoxyInstance instance) {
         this.instance = instance;
     }
@@ -155,13 +187,10 @@ public final class ForgeOriginalVoxyModelPipeline {
         }
     }
 
-    boolean shutdownForClientStop() {
-        if (!RenderSystem.isOnRenderThread()) {
-            this.markStaleAndClear("client-shutdown-deferred");
-            return false;
-        }
-        this.markStaleAndClear("client-shutdown");
-        return true;
+    void shutdownForClientStop(Runnable continuation) {
+        this.markStaleAndClear(
+                RenderSystem.isOnRenderThread() ? "client-shutdown" : "client-shutdown-deferred",
+                continuation);
     }
 
     void shutdownOriginalServiceThreads() {
@@ -222,6 +251,16 @@ public final class ForgeOriginalVoxyModelPipeline {
     }
 
     synchronized boolean isChunkBoundTrackerActive() {
+        return this.ownerReady && !this.stale && this.renderSystem != null;
+    }
+
+    synchronized long chunkBoundOwnerGeneration() {
+        return this.ownerReady && !this.stale && this.renderSystem != null
+                ? this.chunkBoundOwnerGeneration
+                : -1L;
+    }
+
+    synchronized boolean hasActiveRenderOwner() {
         return this.ownerReady && !this.stale && this.renderSystem != null;
     }
 
@@ -466,6 +505,7 @@ public final class ForgeOriginalVoxyModelPipeline {
             this.ownerReady = true;
             this.startRequested = false;
             this.stale = false;
+            this.chunkBoundOwnerGeneration++;
             this.lastLifecycleEvent = "start-on-render-thread";
             this.replayPendingChunkBoundSections(renderSystem.chunkBoundRenderer());
         }
@@ -550,7 +590,7 @@ public final class ForgeOriginalVoxyModelPipeline {
             GPUTiming.INSTANCE.marker();
             TimingStatistics.main.start();
             timingStarted = true;
-            oldRenderState = captureOriginalVoxyRenderState();
+            oldRenderState = captureOriginalVoxyRenderState(renderPipeline);
             oldFramebuffer = oldRenderState.drawFramebuffer();
             if (oldFramebuffer == 0) {
                 this.recordNonFatalFailure("original-hoc-embeddium-cutout-default-framebuffer");
@@ -648,11 +688,7 @@ public final class ForgeOriginalVoxyModelPipeline {
                 }
                 try {
                     if (postDynamicWorkEligible) {
-                        try {
-                            this.runOriginalPostDynamicWorkAfterCommandGeneration(postDynamicCameraX, postDynamicCameraZ);
-                        } catch (RuntimeException e) {
-                            this.recordNonFatalFailure("original-post-dynamic-" + e.getClass().getSimpleName() + ":" + e.getMessage());
-                        }
+                        this.runOriginalPostDynamicWorkAfterCommandGeneration(postDynamicCameraX, postDynamicCameraZ);
                     }
                 } finally {
                     if (capturedRenderState) {
@@ -672,6 +708,9 @@ public final class ForgeOriginalVoxyModelPipeline {
     }
 
     public MultiThreadPrioritySemaphore.Block createEmbeddiumBuilderSemaphoreBlock() {
+        if (!ForgeVoxyConfig.ENABLED.get() || !this.instance.isSessionRuntimeActive()) {
+            return null;
+        }
         this.updateDedicatedThreads();
         if (!this.originalEmbeddiumBuilderThreadSharingEnabled) {
             return null;
@@ -680,6 +719,12 @@ public final class ForgeOriginalVoxyModelPipeline {
     }
 
     private synchronized void updateDedicatedThreads() {
+        if (!ForgeVoxyConfig.ENABLED.get() || !this.instance.isSessionRuntimeActive()) {
+            this.originalServiceThreadConfigOwnerReady = false;
+            this.originalEmbeddiumBuilderThreadSharingEnabled = false;
+            this.originalServiceThreadPolicyFailureReason = "no-active-voxy-session";
+            return;
+        }
         if (this.serviceThreadPoolShutdown) {
             this.originalServiceThreadConfigOwnerReady = false;
             this.originalServiceThreadPolicyFailureReason = "service-thread-pool-shutdown";
@@ -698,6 +743,10 @@ public final class ForgeOriginalVoxyModelPipeline {
     }
 
     private void markStaleAndClear(String event) {
+        this.markStaleAndClear(event, null);
+    }
+
+    private void markStaleAndClear(String event, Runnable continuation) {
         long cleanupGeneration;
         ForgeOriginalVoxyRenderSystem renderSystem;
         synchronized (this) {
@@ -716,21 +765,27 @@ public final class ForgeOriginalVoxyModelPipeline {
         }
         ForgeOriginalVoxyRenderStateCapture.clear();
         this.runOnRenderThread(() -> {
-            boolean cleanupCurrent;
-            synchronized (this) {
-                cleanupCurrent = cleanupGeneration == this.lifecycleGeneration || !this.ownerReady;
-                if (!cleanupCurrent) {
-                    this.lastLifecycleEvent = "cleanup-skipped-global-flush-stale-generation";
+            try {
+                boolean cleanupCurrent;
+                synchronized (this) {
+                    cleanupCurrent = cleanupGeneration == this.lifecycleGeneration || !this.ownerReady;
+                    if (!cleanupCurrent) {
+                        this.lastLifecycleEvent = "cleanup-skipped-global-flush-stale-generation";
+                    }
                 }
-            }
-            if (renderSystem != null) {
-                //Full original VoxyRenderSystem.shutdown() order: flush, callbacks, node manager,
-                // model bakery, render generation, traversal, cleaner, geometry, chunk-bound,
-                // viewport selector, pipeline last, flush, release world ref. The global download
-                // stream flush is skipped when a newer lifecycle generation already owns it.
-                renderSystem.shutdown(cleanupCurrent);
-            } else if (cleanupCurrent && DownloadStream.isReady()) {
-                DownloadStream.instance().flushWaitClear();
+                if (renderSystem != null) {
+                    //Full original VoxyRenderSystem.shutdown() order: flush, callbacks, node manager,
+                    // model bakery, render generation, traversal, cleaner, geometry, chunk-bound,
+                    // viewport selector, pipeline last, flush, release world ref. The global download
+                    // stream flush is skipped when a newer lifecycle generation already owns it.
+                    renderSystem.shutdown(cleanupCurrent);
+                } else if (cleanupCurrent && DownloadStream.isReady()) {
+                    DownloadStream.instance().flushWaitClear();
+                }
+            } finally {
+                if (continuation != null) {
+                    continuation.run();
+                }
             }
         });
     }
@@ -745,8 +800,7 @@ public final class ForgeOriginalVoxyModelPipeline {
 
     private void processFactoryUploads(ForgeOriginalVoxyRenderSystem renderSystem) {
         if (!RenderSystem.isOnRenderThread()) {
-            this.recordFailure("model-factory-upload-not-render-thread");
-            return;
+            throw new IllegalStateException("Original Voxy model factory uploads must run on the render thread");
         }
         synchronized (this) {
             if (!this.ownerReady || this.stale || renderSystem != this.renderSystem) {
@@ -759,7 +813,40 @@ public final class ForgeOriginalVoxyModelPipeline {
             return;
         }
         //Original ModelBakerySubsystem.tick(): worker death propagates to the render caller.
-        renderSystem.modelService().tick();
+        try {
+            renderSystem.modelService().tick();
+        } catch (RuntimeException e) {
+            //The factory retains the failed native payload. Resolve every process-global upload
+            // target while its buffers still exist, then let factory.free() release that payload
+            // exactly once during owner teardown. Cleanup failures never replace the root cause.
+            throw preserveFactoryTickFailure(
+                    e,
+                    () -> {
+                        if (UploadStream.isReady()) {
+                            UploadStream.instance().commitPendingCopiesBeforeOwnerTeardown();
+                        }
+                    },
+                    () -> this.markStaleAndClear("model-factory-tick-failure-" + e.getClass().getSimpleName()));
+        }
+    }
+
+    static RuntimeException preserveFactoryTickFailure(
+            RuntimeException failure,
+            Runnable pendingUploadCleanup,
+            Runnable ownerCleanup) {
+        runCleanupSuppressingFailure(failure, pendingUploadCleanup);
+        runCleanupSuppressingFailure(failure, ownerCleanup);
+        return failure;
+    }
+
+    private static void runCleanupSuppressingFailure(RuntimeException failure, Runnable cleanup) {
+        try {
+            cleanup.run();
+        } catch (Throwable cleanupFailure) {
+            if (cleanupFailure != failure) {
+                failure.addSuppressed(cleanupFailure);
+            }
+        }
     }
 
     private void runOriginalInnerPrimaryWorkBeforeTraversal(
@@ -837,18 +924,73 @@ public final class ForgeOriginalVoxyModelPipeline {
         }
     }
 
-    private static int[] captureShaderStorageBufferBindings() {
-        int bindingCount = Math.max(16, glGetInteger(GL_MAX_SHADER_STORAGE_BUFFER_BINDINGS));
-        int[] oldBufferBindings = new int[bindingCount];
-        for (int i = 0; i < oldBufferBindings.length; i++) {
-            oldBufferBindings[i] = glGetIntegeri(GL_SHADER_STORAGE_BUFFER_BINDING, i);
+    private static IndexedBufferBindings captureIndexedBufferBindings(
+            int[] bindingIndices,
+            int bindingPname,
+            int startPname,
+            int sizePname) {
+        int[] buffers = new int[bindingIndices.length];
+        long[] starts = new long[bindingIndices.length];
+        long[] sizes = new long[bindingIndices.length];
+        for (int i = 0; i < bindingIndices.length; i++) {
+            int bindingIndex = bindingIndices[i];
+            buffers[i] = glGetIntegeri(bindingPname, bindingIndex);
+            starts[i] = glGetInteger64i(startPname, bindingIndex);
+            sizes[i] = glGetInteger64i(sizePname, bindingIndex);
         }
-        return oldBufferBindings;
+        return new IndexedBufferBindings(bindingIndices, buffers, starts, sizes);
     }
 
-    private static OriginalVoxyRenderState captureOriginalVoxyRenderState() {
+    private static void restoreIndexedBufferBindings(int target, IndexedBufferBindings bindings) {
+        if (bindings == null) {
+            return;
+        }
+        for (int i = 0; i < bindings.buffers().length; i++) {
+            int bindingIndex = bindings.bindingIndices()[i];
+            int buffer = bindings.buffers()[i];
+            long start = bindings.starts()[i];
+            long size = bindings.sizes()[i];
+            if (buffer == 0 || size <= 0L) {
+                glBindBufferBase(target, bindingIndex, buffer);
+            } else {
+                //The GL exposes the effective indexed range, not whether Base or Range created it.
+                //Rebinding that queried range reproduces the indexed state exactly.
+                glBindBufferRange(target, bindingIndex, buffer, start, size);
+            }
+        }
+    }
+
+    private static StencilFaceState captureStencilFace(boolean back) {
+        return new StencilFaceState(
+                glGetInteger(back ? GL_STENCIL_BACK_FUNC : GL_STENCIL_FUNC),
+                glGetInteger(back ? GL_STENCIL_BACK_REF : GL_STENCIL_REF),
+                glGetInteger(back ? GL_STENCIL_BACK_VALUE_MASK : GL_STENCIL_VALUE_MASK),
+                glGetInteger(back ? GL_STENCIL_BACK_WRITEMASK : GL_STENCIL_WRITEMASK),
+                glGetInteger(back ? GL_STENCIL_BACK_FAIL : GL_STENCIL_FAIL),
+                glGetInteger(back ? GL_STENCIL_BACK_PASS_DEPTH_FAIL : GL_STENCIL_PASS_DEPTH_FAIL),
+                glGetInteger(back ? GL_STENCIL_BACK_PASS_DEPTH_PASS : GL_STENCIL_PASS_DEPTH_PASS));
+    }
+
+    private static void restoreStencilFace(int face, StencilFaceState state) {
+        glStencilFuncSeparate(face, state.func(), state.ref(), state.valueMask());
+        glStencilMaskSeparate(face, state.writeMask());
+        glStencilOpSeparate(face, state.fail(), state.passDepthFail(), state.passDepthPass());
+    }
+
+    private static ImageUnitState captureImageUnit(int unit) {
+        return new ImageUnitState(
+                glGetIntegeri(GL_IMAGE_BINDING_NAME, unit),
+                glGetIntegeri(GL_IMAGE_BINDING_LEVEL, unit),
+                glGetIntegeri(GL_IMAGE_BINDING_LAYERED, unit) != 0,
+                glGetIntegeri(GL_IMAGE_BINDING_LAYER, unit),
+                glGetIntegeri(GL_IMAGE_BINDING_ACCESS, unit),
+                glGetIntegeri(GL_IMAGE_BINDING_FORMAT, unit));
+    }
+
+    private static OriginalVoxyRenderState captureOriginalVoxyRenderState(
+            ForgeOriginalVoxyRenderPipeline renderPipeline) {
         int activeTexture = glGetInteger(GL_ACTIVE_TEXTURE);
-        int textureUnitCount = Math.max(12, glGetInteger(GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS));
+        int textureUnitCount = renderPipeline.embeddiumTextureBindingCount();
         int[] textureBindings = new int[textureUnitCount];
         int[] samplerBindings = new int[textureUnitCount];
         for (int i = 0; i < textureBindings.length; i++) {
@@ -857,6 +999,8 @@ public final class ForgeOriginalVoxyModelPipeline {
             samplerBindings[i] = glGetIntegeri(GL_SAMPLER_BINDING, i);
         }
         glActiveTexture(activeTexture);
+        ForgeOriginalVoxyTextureBindings.Binding[] oculusNon2DTextureBindings =
+                renderPipeline.captureOculusNon2DTextureBindings();
         int[] viewport = new int[4];
         glGetIntegerv(GL_VIEWPORT, viewport);
         boolean[] colorMask = new boolean[4];
@@ -868,21 +1012,36 @@ public final class ForgeOriginalVoxyModelPipeline {
             colorMask[2] = mask.get(2) != 0;
             colorMask[3] = mask.get(3) != 0;
         }
-        int uniformBindingCount = Math.min(16, Math.max(8, glGetInteger(GL_MAX_UNIFORM_BUFFER_BINDINGS)));
-        int[] uniformBufferBindings = new int[uniformBindingCount];
-        for (int i = 0; i < uniformBufferBindings.length; i++) {
-            uniformBufferBindings[i] = glGetIntegeri(GL_UNIFORM_BUFFER_BINDING, i);
-        }
+        IndexedBufferBindings uniformBufferBindings = captureIndexedBufferBindings(
+                renderPipeline.embeddiumUniformBufferBindingIndices(),
+                GL_UNIFORM_BUFFER_BINDING,
+                GL_UNIFORM_BUFFER_START,
+                GL_UNIFORM_BUFFER_SIZE);
+        IndexedBufferBindings shaderStorageBufferBindings = captureIndexedBufferBindings(
+                renderPipeline.embeddiumShaderStorageBufferBindingIndices(),
+                GL_SHADER_STORAGE_BUFFER_BINDING,
+                GL_SHADER_STORAGE_BUFFER_START,
+                GL_SHADER_STORAGE_BUFFER_SIZE);
         int[] polygonMode = new int[2];
         glGetIntegerv(GL_POLYGON_MODE, polygonMode);
+        StencilFaceState frontStencil = captureStencilFace(false);
+        StencilFaceState backStencil = captureStencilFace(true);
         boolean nvRepresentativeSupported = org.lwjgl.opengl.GL.getCapabilities().GL_NV_representative_fragment_test;
         return new OriginalVoxyRenderState(
                 glGetInteger(GL_DRAW_FRAMEBUFFER_BINDING),
                 glGetInteger(GL_READ_FRAMEBUFFER_BINDING),
                 viewport,
-                captureShaderStorageBufferBindings(),
+                shaderStorageBufferBindings,
+                uniformBufferBindings,
+                glGetInteger(GL_SHADER_STORAGE_BUFFER_BINDING),
+                glGetInteger(GL_UNIFORM_BUFFER_BINDING),
+                glGetInteger(GL_ARRAY_BUFFER_BINDING),
+                glGetInteger(GL_DRAW_INDIRECT_BUFFER_BINDING),
+                glGetInteger(GL_DISPATCH_INDIRECT_BUFFER_BINDING),
+                glGetInteger(GL_PARAMETER_BUFFER_BINDING_ARB),
                 textureBindings,
                 samplerBindings,
+                oculusNon2DTextureBindings,
                 glGetInteger(GL_CURRENT_PROGRAM),
                 glGetInteger(GL_VERTEX_ARRAY_BINDING),
                 glIsEnabled(GL_DEPTH_TEST),
@@ -900,19 +1059,18 @@ public final class ForgeOriginalVoxyModelPipeline {
                 glGetInteger(GL_BLEND_DST_RGB),
                 glGetInteger(GL_BLEND_SRC_ALPHA),
                 glGetInteger(GL_BLEND_DST_ALPHA),
-                glGetInteger(GL_STENCIL_FUNC),
-                glGetInteger(GL_STENCIL_REF),
-                glGetInteger(GL_STENCIL_VALUE_MASK),
-                glGetInteger(GL_STENCIL_WRITEMASK),
-                glGetInteger(GL_STENCIL_FAIL),
-                glGetInteger(GL_STENCIL_PASS_DEPTH_FAIL),
-                glGetInteger(GL_STENCIL_PASS_DEPTH_PASS),
+                frontStencil,
+                backStencil,
                 polygonMode[0],
                 glGetInteger(GL_PROVOKING_VERTEX),
                 glGetInteger(GL_FRONT_FACE),
-                uniformBufferBindings,
-                glGetInteger(GL_DRAW_INDIRECT_BUFFER_BINDING),
-                glGetInteger(GL_PARAMETER_BUFFER_BINDING_ARB),
+                glGetInteger(GL_UNPACK_ROW_LENGTH),
+                glGetInteger(GL_UNPACK_SKIP_PIXELS),
+                glGetInteger(GL_UNPACK_SKIP_ROWS),
+                glGetInteger(GL_UNPACK_IMAGE_HEIGHT),
+                glGetInteger(GL_UNPACK_SKIP_IMAGES),
+                glGetInteger(GL_UNPACK_ALIGNMENT),
+                captureImageUnit(0),
                 nvRepresentativeSupported,
                 nvRepresentativeSupported
                         && glIsEnabled(org.lwjgl.opengl.NVRepresentativeFragmentTest.GL_REPRESENTATIVE_FRAGMENT_TEST_NV));
@@ -941,32 +1099,44 @@ public final class ForgeOriginalVoxyModelPipeline {
         if (textureBindings != null && samplerBindings != null) {
             int count = Math.min(textureBindings.length, samplerBindings.length);
             for (int i = 0; i < count; i++) {
-                glBindTextureUnit(i, textureBindings[i]);
+                glActiveTexture(GL_TEXTURE0 + i);
+                glBindTexture(GL_TEXTURE_2D, textureBindings[i]);
                 glBindSampler(i, samplerBindings[i]);
             }
         }
-        int[] bufferBindings = state.shaderStorageBufferBindings();
-        if (bufferBindings != null) {
-            for (int i = 0; i < bufferBindings.length; i++) {
-                glBindBufferBase(GL_SHADER_STORAGE_BUFFER, i, bufferBindings[i]);
-            }
-        }
+        ForgeOriginalVoxyTextureBindings.restore(state.oculusNon2DTextureBindings());
+        restoreIndexedBufferBindings(GL_SHADER_STORAGE_BUFFER, state.shaderStorageBufferBindings());
+        restoreIndexedBufferBindings(GL_UNIFORM_BUFFER, state.uniformBufferBindings());
+        //Range/Base mutate the corresponding generic binding, so restore generic state last.
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, state.shaderStorageBufferBinding());
+        glBindBuffer(GL_UNIFORM_BUFFER, state.uniformBufferBinding());
+        glBindBuffer(GL_ARRAY_BUFFER, state.arrayBuffer());
+        glBindBuffer(GL_DRAW_INDIRECT_BUFFER, state.drawIndirectBuffer());
+        glBindBuffer(GL_DISPATCH_INDIRECT_BUFFER, state.dispatchIndirectBuffer());
+        glBindBuffer(GL_PARAMETER_BUFFER_ARB, state.parameterBuffer());
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, state.unpackRowLength());
+        glPixelStorei(GL_UNPACK_SKIP_PIXELS, state.unpackSkipPixels());
+        glPixelStorei(GL_UNPACK_SKIP_ROWS, state.unpackSkipRows());
+        glPixelStorei(GL_UNPACK_IMAGE_HEIGHT, state.unpackImageHeight());
+        glPixelStorei(GL_UNPACK_SKIP_IMAGES, state.unpackSkipImages());
+        glPixelStorei(GL_UNPACK_ALIGNMENT, state.unpackAlignment());
+        ImageUnitState imageUnit0 = state.imageUnit0();
+        glBindImageTexture(
+                0,
+                imageUnit0.texture(),
+                imageUnit0.level(),
+                imageUnit0.layered(),
+                imageUnit0.layer(),
+                imageUnit0.access(),
+                imageUnit0.format());
         glDepthFunc(state.depthFunc());
         glBlendFuncSeparate(state.blendSrcRgb(), state.blendDstRgb(), state.blendSrcAlpha(), state.blendDstAlpha());
-        glStencilFunc(state.stencilFunc(), state.stencilRef(), state.stencilValueMask());
-        glStencilMask(state.stencilWriteMask());
-        glStencilOp(state.stencilFail(), state.stencilPassDepthFail(), state.stencilPassDepthPass());
+        restoreStencilFace(GL_FRONT, state.frontStencil());
+        restoreStencilFace(GL_BACK, state.backStencil());
+        //Core profile only permits FRONT_AND_BACK here; its two queried modes are therefore equal.
         glPolygonMode(GL_FRONT_AND_BACK, state.polygonMode());
         glProvokingVertex(state.provokingVertex());
         glFrontFace(state.frontFace());
-        int[] uniformBindings = state.uniformBufferBindings();
-        if (uniformBindings != null) {
-            for (int i = 0; i < uniformBindings.length; i++) {
-                glBindBufferBase(GL_UNIFORM_BUFFER, i, uniformBindings[i]);
-            }
-        }
-        glBindBuffer(GL_DRAW_INDIRECT_BUFFER, state.drawIndirectBuffer());
-        glBindBuffer(GL_PARAMETER_BUFFER_ARB, state.parameterBuffer());
         if (state.nvRepresentativeFragmentTestSupported()) {
             setCapability(
                     org.lwjgl.opengl.NVRepresentativeFragmentTest.GL_REPRESENTATIVE_FRAGMENT_TEST_NV,
@@ -987,9 +1157,17 @@ public final class ForgeOriginalVoxyModelPipeline {
             int drawFramebuffer,
             int readFramebuffer,
             int[] viewport,
-            int[] shaderStorageBufferBindings,
+            IndexedBufferBindings shaderStorageBufferBindings,
+            IndexedBufferBindings uniformBufferBindings,
+            int shaderStorageBufferBinding,
+            int uniformBufferBinding,
+            int arrayBuffer,
+            int drawIndirectBuffer,
+            int dispatchIndirectBuffer,
+            int parameterBuffer,
             int[] textureBindings,
             int[] samplerBindings,
+            ForgeOriginalVoxyTextureBindings.Binding[] oculusNon2DTextureBindings,
             int currentProgram,
             int vertexArray,
             boolean depthTestEnabled,
@@ -1007,21 +1185,42 @@ public final class ForgeOriginalVoxyModelPipeline {
             int blendDstRgb,
             int blendSrcAlpha,
             int blendDstAlpha,
-            int stencilFunc,
-            int stencilRef,
-            int stencilValueMask,
-            int stencilWriteMask,
-            int stencilFail,
-            int stencilPassDepthFail,
-            int stencilPassDepthPass,
+            StencilFaceState frontStencil,
+            StencilFaceState backStencil,
             int polygonMode,
             int provokingVertex,
             int frontFace,
-            int[] uniformBufferBindings,
-            int drawIndirectBuffer,
-            int parameterBuffer,
+            int unpackRowLength,
+            int unpackSkipPixels,
+            int unpackSkipRows,
+            int unpackImageHeight,
+            int unpackSkipImages,
+            int unpackAlignment,
+            ImageUnitState imageUnit0,
             boolean nvRepresentativeFragmentTestSupported,
             boolean nvRepresentativeFragmentTestEnabled) {
+    }
+
+    private record IndexedBufferBindings(int[] bindingIndices, int[] buffers, long[] starts, long[] sizes) {
+    }
+
+    private record StencilFaceState(
+            int func,
+            int ref,
+            int valueMask,
+            int writeMask,
+            int fail,
+            int passDepthFail,
+            int passDepthPass) {
+    }
+
+    private record ImageUnitState(
+            int texture,
+            int level,
+            boolean layered,
+            int layer,
+            int access,
+            int format) {
     }
 
     private void processRenderDistanceTrackerOnRenderThread(double cameraX, double cameraZ) {

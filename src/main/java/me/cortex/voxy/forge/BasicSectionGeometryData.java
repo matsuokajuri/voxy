@@ -30,12 +30,10 @@ final class BasicSectionGeometryData {
     private static final long MIN_GEOMETRY_CAPACITY_BYTES = 512L * 1024L * 1024L;
     private static final long NVIDIA_LINUX_GEOMETRY_CAP_BYTES = 2000L * 1024L * 1024L;
     private static final long GPU_MEMORY_HEADROOM_BYTES = (long) (1.5D * 1024D * 1024D * 1024D);
-    private static final long GPU_MEMORY_RELEASE_WAIT_TIMEOUT_MS = 400L;
 
     private final int maxSectionCount;
     private int sectionMetadataBufferId;
     private int geometryBufferId;
-    private boolean externalGeometryBuffer;
     private boolean sparseGeometryBuffer;
     private boolean nvidiaWindowsSparseWorkaroundUsed;
     private int currentSectionCount;
@@ -63,9 +61,8 @@ final class BasicSectionGeometryData {
         try {
             metadataBuffer = createStorageBuffer(this.metadataCapacityBytes, 0, true);
             //Original RenderResourceReuse semantics: the geometry buffer is REUSED across owner
-            // rebuilds and only truly freed at instance shutdown. This avoids the per-rebuild
-            // free/reallocate window of this driver-heavy allocation (XX.4: NVIDIA VRAM aliasing
-            // between the dying and new lifecycle's buffers) and keeps GL ordering on one object.
+            // rebuilds and only truly freed at instance shutdown, avoiding allocation churn and
+            // preserving the original single-buffer ownership and GL-ordering contract.
             geometry = RenderResourceReuse.getOrCreateGeometryBuffer();
             this.geometryCapacityBytes = geometry.capacityBytes();
             if (this.geometryCapacityBytes % Long.BYTES != 0) {
@@ -75,11 +72,11 @@ final class BasicSectionGeometryData {
             this.geometryBufferId = geometry.bufferId();
             this.sparseGeometryBuffer = geometry.sparse();
             this.nvidiaWindowsSparseWorkaroundUsed = geometry.nvidiaWindowsSparseWorkaroundUsed();
-            this.externalGeometryBuffer = false;
             this.currentSectionCount = 0;
-            //Carry over the reused buffer's page commitment so ensureAccessable does not
-            // redundantly re-commit already-committed pages.
-            this.sparseCommitmentBytes = geometry.committedSparseBytes();
+            //Original BasicSectionGeometryData.free() decommits every sparse page before the
+            // external buffer is returned to RenderResourceReuse. A reused buffer therefore
+            // always starts with zero committed pages.
+            this.sparseCommitmentBytes = 0L;
             return "none";
         } catch (RuntimeException e) {
             if (geometry != null) {
@@ -146,23 +143,33 @@ final class BasicSectionGeometryData {
             this.sectionMetadataBufferId = 0;
         }
         if (this.geometryBufferId != 0) {
-            //Original RenderResourceReuse semantics: give the geometry buffer back to the cache
-            // for the next owner instead of deleting it (no decommit, no delete, no NVIDIA
-            // free-wait — the entire per-rebuild reallocation hazard window is gone). Committed
-            // sparse pages stay committed and travel with the cached buffer.
-            if (!this.externalGeometryBuffer) {
-                RenderResourceReuse.giveBackGeometryBuffer(
-                        new RenderResourceReuse.ReusedGeometryBuffer(
-                                this.geometryBufferId,
-                                this.geometryCapacityBytes,
-                                this.sparseGeometryBuffer,
-                                this.nvidiaWindowsSparseWorkaroundUsed,
-                                this.sparseCommitmentBytes));
-            }
+            int releasedBufferId = this.geometryBufferId;
+            RenderResourceReuse.ReusedGeometryBuffer releasedBuffer =
+                    new RenderResourceReuse.ReusedGeometryBuffer(
+                            releasedBufferId,
+                            this.geometryCapacityBytes,
+                            this.sparseGeometryBuffer,
+                            this.nvidiaWindowsSparseWorkaroundUsed);
+            GeometryBufferReuseLifecycle.release(
+                    this.sparseGeometryBuffer,
+                    this.sparseCommitmentBytes,
+                    () -> {
+                        glBindBuffer(GL_ARRAY_BUFFER, releasedBufferId);
+                        glBufferPageCommitmentARB(
+                                GL_ARRAY_BUFFER,
+                                0L,
+                                this.sparseCommitmentBytes,
+                                false);
+                        glBindBuffer(GL_ARRAY_BUFFER, 0);
+                    },
+                    () -> glFinish(),
+                    () -> RenderResourceReuse.giveBackGeometryBuffer(releasedBuffer));
             this.geometryBufferId = 0;
         }
         this.currentSectionCount = 0;
         this.sparseCommitmentBytes = 0L;
+        this.sparseGeometryBuffer = false;
+        this.nvidiaWindowsSparseWorkaroundUsed = false;
     }
 
     //Capacity selection for the reuse cache: honours the RenderDoc-compat diagnostic override.
@@ -232,10 +239,6 @@ final class BasicSectionGeometryData {
         return geometryCapacity & ~(Long.BYTES - 1L);
     }
 
-    private static long queryFreeDedicatedGpuMemoryBytes() {
-        return glGetInteger64(GL_GPU_MEMORY_INFO_CURRENT_AVAILABLE_VIDMEM_NVX) * 1024L;
-    }
-
     private static long roundUpPowerOfTwo(long value) {
         if (value <= 1L) {
             return 1L;
@@ -265,5 +268,23 @@ final class BasicSectionGeometryData {
     }
 
     record GeometryAllocation(int bufferId, boolean sparse, boolean nvidiaWindowsSparseWorkaroundUsed) {
+    }
+}
+
+final class GeometryBufferReuseLifecycle {
+    private GeometryBufferReuseLifecycle() {
+    }
+
+    static void release(
+            boolean sparse,
+            long committedSparseBytes,
+            Runnable decommit,
+            Runnable finish,
+            Runnable cacheHandoff) {
+        if (sparse && committedSparseBytes > 0L) {
+            decommit.run();
+        }
+        finish.run();
+        cacheHandoff.run();
     }
 }

@@ -7,7 +7,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class MemoryBuffer extends TrackedObject {
-    private static final boolean TRACK_MEMORY_BUFFERS = Boolean.getBoolean("voxy.trackBuffers");
+    private static final boolean TRACK_MEMORY_BUFFERS =
+            System.getProperty("voxy.trackBuffers", "false").equals("true");
 
     public final long address;
     public final long size;

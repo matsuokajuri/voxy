@@ -4,7 +4,6 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import me.cortex.voxy.common.util.MemoryBuffer;
 import me.cortex.voxy.common.util.TrackedObject;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.texture.AbstractTexture;
 import net.minecraft.client.renderer.texture.TextureAtlas;
 import org.lwjgl.opengl.GL11C;
 import org.lwjgl.opengl.GL12C;
@@ -15,7 +14,6 @@ import org.lwjgl.opengl.GL43C;
 import org.lwjgl.opengl.GL45C;
 import org.lwjgl.system.MemoryUtil;
 
-import java.lang.reflect.Field;
 import java.util.ArrayList;
 
 import static org.lwjgl.opengl.ARBDirectStateAccess.nglTextureSubImage2D;
@@ -266,38 +264,9 @@ final class ModelStore {
     }
 
     private static int resolveBlockAtlasMipLevel(Minecraft minecraft) {
-        if (minecraft == null || minecraft.getTextureManager() == null) {
-            return MipGen.LAYERS - 1;
-        }
-        AbstractTexture texture = minecraft.getTextureManager().getTexture(TextureAtlas.LOCATION_BLOCKS);
-        Integer atlasMipLevel = readIntField(texture, "maxMipLevel", "maxMipmapLevels", "f_119402_");
-        if (atlasMipLevel != null) {
-            return clampMipLevel(atlasMipLevel);
-        }
-        return clampMipLevel(readIntField(minecraft.getModelManager(), "maxMipmapLevels", "f_119402_"));
-    }
-
-    private static int clampMipLevel(Integer mipLevel) {
-        if (mipLevel == null) {
-            return MipGen.LAYERS - 1;
-        }
-        return Math.max(0, Math.min(mipLevel, MipGen.LAYERS - 1));
-    }
-
-    private static Integer readIntField(Object owner, String... names) {
-        if (owner == null) {
-            return null;
-        }
-        Class<?> type = owner.getClass();
-        for (String name : names) {
-            try {
-                Field field = type.getDeclaredField(name);
-                field.setAccessible(true);
-                return field.getInt(owner);
-            } catch (ReflectiveOperationException ignored) {
-            }
-        }
-        return null;
+        TextureAtlas blockAtlas = (TextureAtlas) minecraft.getTextureManager()
+                .getTexture(TextureAtlas.LOCATION_BLOCKS);
+        return blockAtlas.mipLevel;
     }
 
     private static void zeroTexture(int texture) {

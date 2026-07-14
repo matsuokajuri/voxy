@@ -13,7 +13,7 @@ final class ForgeVoxyResourceReloadListener implements ResourceManagerReloadList
 
     @Override
     public void onResourceManagerReload(ResourceManager resourceManager) {
-        this.instance.getOriginalVoxyModelPipeline().markResourceReload();
+        this.instance.markOriginalVoxyResourceReload();
     }
 
     @Override

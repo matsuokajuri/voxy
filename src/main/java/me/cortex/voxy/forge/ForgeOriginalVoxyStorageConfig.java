@@ -14,6 +14,7 @@ import me.cortex.voxy.common.config.compressors.StorageCompressor;
 import me.cortex.voxy.common.config.section.SectionSerializationStorage;
 import me.cortex.voxy.common.config.section.SectionStorage;
 import me.cortex.voxy.common.config.storage.StorageBackend;
+import me.cortex.voxy.common.config.storage.inmemory.MemoryStorageBackend;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -39,6 +40,7 @@ final class ForgeOriginalVoxyStorageConfig {
         STORAGE_TYPES.register("RocksDB", RocksDbConfig.class);
         STORAGE_TYPES.register("LMDB", LmdbConfig.class);
         STORAGE_TYPES.register("Redis", RedisConfig.class);
+        STORAGE_TYPES.register("Memory", MemoryConfig.class);
         STORAGE_TYPES.register("CompressionAdaptor", CompressionAdaptorConfig.class);
         STORAGE_TYPES.register("BasicPathConfig", BasicPathConfig.class);
         STORAGE_TYPES.register("FragmentationAdaptor", FragmentationAdaptorConfig.class);
@@ -70,22 +72,27 @@ final class ForgeOriginalVoxyStorageConfig {
         ClientConfig config = null;
         String source = "default-created";
         if (Files.exists(configPath)) {
-            source = "loaded";
             try {
                 config = GSON.fromJson(Files.readString(configPath), ClientConfig.class);
                 if (config == null || config.version != 1 || config.sectionStorageConfig == null) {
-                    VoxyForge.LOGGER.error("Invalid original Voxy storage config, reverting to default: {}", configPath);
+                    VoxyForge.LOGGER.error(
+                            "Invalid original Voxy storage config; resetting it to the original default: {}",
+                            configPath);
                     config = null;
                     source = "invalid-reset";
+                } else {
+                    source = "loaded";
                 }
             } catch (Exception e) {
                 VoxyForge.LOGGER.error(
-                        "Failed to load original Voxy storage config; resetting to default may break a custom save: {}",
+                        "Failed to load original Voxy storage config; resetting it to the original default: {}",
                         configPath,
                         e);
+                config = null;
                 source = "load-failure-reset";
             }
         }
+
         if (config == null) {
             config = createDefault();
         }
@@ -172,6 +179,18 @@ final class ForgeOriginalVoxyStorageConfig {
         @Override
         String describe() {
             return "RocksDB";
+        }
+    }
+
+    static final class MemoryConfig extends StorageConfig {
+        @Override
+        StorageBackend build(ConfigBuildCtx context) {
+            return new MemoryStorageBackend();
+        }
+
+        @Override
+        String describe() {
+            return "Memory";
         }
     }
 

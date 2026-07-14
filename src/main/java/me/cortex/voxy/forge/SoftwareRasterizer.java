@@ -184,11 +184,6 @@ final class SoftwareRasterizer {
     }
 
     private int sampleTexture(float u, float v) {
-        // Intentional Forge 1.20.1 safety adaptation: model/reload churn can briefly leave the
-        // sampler unset, so return transparent instead of indexing an invalid texture array.
-        if (this.samplerTexture == null || this.samplerWidth <= 0 || this.samplerHeight <= 0) {
-            return 0;
-        }
         int pu = clamp(Math.round(u * this.samplerWidth - 0.5F), 0, this.samplerWidth - 1);
         int pv = clamp(Math.round(v * this.samplerHeight - 0.5F), 0, this.samplerHeight - 1);
         return this.samplerTexture[this.samplerWidth * pv + pu];

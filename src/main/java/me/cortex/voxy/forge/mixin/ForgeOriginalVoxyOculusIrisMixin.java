@@ -1,7 +1,7 @@
 package me.cortex.voxy.forge.mixin;
 
+import me.cortex.voxy.common.Logger;
 import me.cortex.voxy.forge.ForgeOriginalVoxyShaderLoadError;
-import me.cortex.voxy.forge.VoxyForge;
 import net.irisshaders.iris.Iris;
 import net.irisshaders.iris.shaderpack.ShaderPack;
 import net.irisshaders.iris.shaderpack.materialmap.NamespacedId;
@@ -22,7 +22,7 @@ public class ForgeOriginalVoxyOculusIrisMixin {
         try {
             return shaderPack.getProgramSet(dimension);
         } catch (ForgeOriginalVoxyShaderLoadError error) {
-            VoxyForge.LOGGER.error("Failed to load Voxy shaderpack patch; disabling this Oculus pipeline.", error);
+            Logger.error(error);
             return null;
         }
     }

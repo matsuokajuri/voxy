@@ -3,12 +3,16 @@ package me.cortex.voxy.forge;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.block.model.BakedQuad;
+import net.minecraft.client.renderer.texture.SpriteContents;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.resources.ResourceLocation;
 
 import javax.annotation.Nullable;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.Locale;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 final class ForgeOriginalVoxyQuadMaterialBridge {
     private static final String BAKED_QUAD_VIEW_CLASS = "me.jellysquid.mods.sodium.client.model.quad.BakedQuadView";
@@ -24,6 +28,7 @@ final class ForgeOriginalVoxyQuadMaterialBridge {
     private static final Method GET_SPRITE;
     private static final Method HAS_SHADE;
     private static final Method GET_TRANSPARENCY_LEVEL;
+    private static final Set<RenderType> WARNED_UNKNOWN_RENDER_LAYERS = ConcurrentHashMap.newKeySet();
 
     static {
         try {
@@ -50,15 +55,13 @@ final class ForgeOriginalVoxyQuadMaterialBridge {
         if (!BAKED_QUAD_VIEW.isInstance(quad)) {
             throw new IllegalStateException("embeddium-baked-quad-view-missing");
         }
-        if (!isKnownRenderLayer(renderType)) {
-            throw new IllegalArgumentException("unsupported-render-layer:" + renderType);
-        }
         Object view = BAKED_QUAD_VIEW.cast(quad);
-        int metadata = forceSolid || renderType == RenderType.solid() ? 0 : 1;
+        TextureAtlasSprite sprite = (TextureAtlasSprite) invoke(GET_SPRITE, view);
+        MaterialLayer layer = materialLayer(renderType, sprite);
+        int metadata = discardMetadata(layer, forceSolid);
         if (intValue(GET_COLOR_INDEX, view) != -1) {
             metadata |= 4;
         }
-        TextureAtlasSprite sprite = (TextureAtlasSprite) invoke(GET_SPRITE, view);
         float[] x = new float[4];
         float[] y = new float[4];
         float[] z = new float[4];
@@ -83,36 +86,137 @@ final class ForgeOriginalVoxyQuadMaterialBridge {
         );
     }
 
-    static boolean isTranslucentLayer(RenderType renderType) {
-        return renderType == RenderType.translucent();
+    static boolean isTranslucentLayer(BakedQuad quad, RenderType renderType) {
+        if (!BAKED_QUAD_VIEW.isInstance(quad)) {
+            throw new IllegalStateException("embeddium-baked-quad-view-missing");
+        }
+        TextureAtlasSprite sprite = (TextureAtlasSprite) invoke(GET_SPRITE, BAKED_QUAD_VIEW.cast(quad));
+        // Original Voxy chooses the translucent consumer from materialInfo().layer() before
+        // passing forceSolid to ReuseVertexConsumer; forceSolid only removes the discard bit.
+        return routesToTranslucent(materialLayer(renderType, sprite));
     }
 
-    static boolean isDiscardLayer(RenderType renderType) {
+    private static MaterialLayer materialLayer(
+            RenderType renderType,
+            @Nullable TextureAtlasSprite sprite) {
         if (renderType == RenderType.solid()) {
-            return false;
+            return MaterialLayer.SOLID;
+        }
+        if (renderType == RenderType.translucent()) {
+            return MaterialLayer.TRANSLUCENT;
         }
         if (renderType == RenderType.cutout()
                 || renderType == RenderType.cutoutMipped()
-                || renderType == RenderType.tripwire()
-                || renderType == RenderType.translucent()) {
-            return true;
+                || renderType == RenderType.tripwire()) {
+            return MaterialLayer.CUTOUT;
         }
-        throw new IllegalArgumentException("unsupported-render-layer:" + renderType);
+
+        // Forge 1.20.1 has no per-quad ChunkSectionLayer equivalent to the materialInfo()
+        // owner used by current original Voxy. Embeddium's own default material mapper only
+        // recognizes the five vanilla chunk layers, so a third-party BakedModel that exposes a
+        // custom RenderType previously made the entire Voxy model bake return empty. Preserve
+        // the original per-quad classification shape by deriving the least-lossy layer from
+        // Embeddium's existing per-sprite transparency analysis.
+        warnCustomRenderLayer(renderType, "per-quad sprite transparency");
+        return fallbackMaterialLayer(transparencyLevel(sprite));
     }
 
-    private static boolean isKnownRenderLayer(RenderType renderType) {
-        return renderType == RenderType.solid()
-                || renderType == RenderType.cutout()
+    static MaterialLayer fallbackMaterialLayer(String transparency) {
+        if ("TRANSLUCENT".equals(transparency)) {
+            return MaterialLayer.TRANSLUCENT;
+        }
+        if ("TRANSPARENT".equals(transparency)) {
+            return MaterialLayer.CUTOUT;
+        }
+        return MaterialLayer.SOLID;
+    }
+
+    static boolean routesToTranslucent(MaterialLayer layer) {
+        return layer == MaterialLayer.TRANSLUCENT;
+    }
+
+    static int discardMetadata(MaterialLayer layer, boolean forceSolid) {
+        return forceSolid || layer == MaterialLayer.SOLID ? 0 : 1;
+    }
+
+    static MaterialLayer materialLayerForFluid(
+            RenderType renderType,
+            TextureAtlasSprite[] sprites,
+            int tintColor) {
+        if (renderType == RenderType.solid()) {
+            return MaterialLayer.SOLID;
+        }
+        if (renderType == RenderType.translucent()) {
+            return MaterialLayer.TRANSLUCENT;
+        }
+        if (renderType == RenderType.cutout()
                 || renderType == RenderType.cutoutMipped()
-                || renderType == RenderType.tripwire()
-                || renderType == RenderType.translucent();
+                || renderType == RenderType.tripwire()) {
+            return MaterialLayer.CUTOUT;
+        }
+
+        String[] transparency = new String[sprites == null ? 0 : sprites.length];
+        for (int i = 0; i < transparency.length; i++) {
+            transparency[i] = transparencyLevel(sprites[i]);
+        }
+        warnCustomRenderLayer(renderType, "fluid sprite/tint transparency");
+        return fallbackFluidMaterialLayer(
+                transparency,
+                tintColor >>> 24,
+                String.valueOf(renderType));
+    }
+
+    static MaterialLayer fallbackFluidMaterialLayer(
+            String[] spriteTransparency,
+            int tintAlpha,
+            String renderTypeDescription) {
+        if (tintAlpha < 255) {
+            return MaterialLayer.TRANSLUCENT;
+        }
+        MaterialLayer spriteLayer = MaterialLayer.SOLID;
+        for (String transparency : spriteTransparency) {
+            MaterialLayer layer = fallbackMaterialLayer(transparency);
+            if (layer == MaterialLayer.TRANSLUCENT) {
+                return layer;
+            }
+            if (layer == MaterialLayer.CUTOUT) {
+                spriteLayer = layer;
+            }
+        }
+        String description = renderTypeDescription == null
+                ? ""
+                : renderTypeDescription.toUpperCase(Locale.ROOT);
+        if (description.contains("TRANSLUCENT") || description.contains("ADDITIVE")) {
+            return MaterialLayer.TRANSLUCENT;
+        }
+        if (description.contains("CUTOUT") || description.contains("TRIPWIRE")) {
+            return MaterialLayer.CUTOUT;
+        }
+        return spriteLayer;
+    }
+
+    private static void warnCustomRenderLayer(RenderType renderType, String evidence) {
+        if (WARNED_UNKNOWN_RENDER_LAYERS.add(renderType)) {
+            VoxyForge.LOGGER.warn(
+                    "Classifying custom Forge render layer {} from {} for Voxy LOD baking.",
+                    renderType,
+                    evidence);
+        }
+    }
+
+    private static String transparencyLevel(@Nullable TextureAtlasSprite sprite) {
+        if (sprite == null) {
+            return "OPAQUE";
+        }
+        Object level = invoke(GET_TRANSPARENCY_LEVEL, null, sprite.contents());
+        return level == null ? "OPAQUE" : String.valueOf(level);
     }
 
     private static boolean usesEmbeddiumDarkCutoutEquivalent(@Nullable TextureAtlasSprite sprite) {
         if (sprite == null || Minecraft.getInstance().options.mipmapLevels().get() <= 0) {
             return false;
         }
-        Object contents = sprite.contents();
+        SpriteContents contents = sprite.contents();
         Object transparencyLevel = invoke(GET_TRANSPARENCY_LEVEL, null, contents);
         if (transparencyLevel == null || "OPAQUE".equals(String.valueOf(transparencyLevel))) {
             return false;
@@ -121,14 +225,14 @@ final class ForgeOriginalVoxyQuadMaterialBridge {
         return name != null && name.getPath().contains("leaves");
     }
 
-    @Nullable
-    private static ResourceLocation spriteName(Object contents) {
-        try {
-            Method method = contents.getClass().getMethod("name");
-            return (ResourceLocation) method.invoke(contents);
-        } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException("sprite-contents-name-missing", e);
-        }
+    enum MaterialLayer {
+        SOLID,
+        CUTOUT,
+        TRANSLUCENT
+    }
+
+    private static ResourceLocation spriteName(SpriteContents contents) {
+        return contents.name();
     }
 
     private static float floatValue(Method method, Object target, int vertex) {

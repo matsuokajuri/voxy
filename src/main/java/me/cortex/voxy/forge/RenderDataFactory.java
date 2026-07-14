@@ -1,5 +1,6 @@
 package me.cortex.voxy.forge;
 
+import me.cortex.voxy.common.Logger;
 import me.cortex.voxy.common.util.MemoryBuffer;
 import me.cortex.voxy.common.util.UnsafeUtil;
 import me.cortex.voxy.common.world.WorldEngine;
@@ -1753,7 +1754,7 @@ final class RenderDataFactory {
         }
 
         if (this.quadCount >= 1<<16) {
-            VoxyForge.LOGGER.warn("Large quad count for section " + WorldEngine.pprintPos(section.key) + " is " + this.quadCount);
+            Logger.warn("Large quad count for section " + WorldEngine.pprintPos(section.key) + " is " + this.quadCount);
         }
 
         if (this.minX<0 || this.minY<0 || this.minZ<0 || 32<this.maxX || 32<this.maxY || 32<this.maxZ) {

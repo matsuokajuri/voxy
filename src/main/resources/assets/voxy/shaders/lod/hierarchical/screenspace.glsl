@@ -168,9 +168,6 @@ bool isCulledByHiz() {
     ssize = max(ivec2(1), ssize>>ml);
     ivec2 mxbb = min(ivec2(ceil(_maxBB.xy*ssize)),ssize-1);
     ivec2 mnbb = ivec2(floor(_minBB.xy*ssize));
-    if (any(greaterThan(mnbb, mxbb))) {
-        return false;
-    }
 
     float pointSample = (NEAR*3.0f)-1.0f;
     //float pointSample2 = 0.0f;

@@ -169,6 +169,23 @@ final class UploadStream extends TrackedObject {
         this.offset = 0L;
     }
 
+    /**
+     * Resolves every queued target-buffer reference before a renderer owner deletes its buffers.
+     * A failed GL commit is still fatal, but its unissued copies must be discarded so a later
+     * process-global stream tick cannot target deleted or subsequently reused buffer names.
+     */
+    void commitPendingCopiesBeforeOwnerTeardown() {
+        try {
+            this.commit();
+        } finally {
+            this.uploadList.clear();
+            // Keep the allocation arena ownership in thisFrameAllocations; a later tick fences and
+            // releases it. Only detach the active span so new uploads cannot expand into that span.
+            this.caddr = -1L;
+            this.offset = 0L;
+        }
+    }
+
     void tick() {
         this.tick(true);
     }

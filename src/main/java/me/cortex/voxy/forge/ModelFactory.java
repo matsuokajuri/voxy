@@ -3,6 +3,7 @@ package me.cortex.voxy.forge;
 import com.mojang.blaze3d.systems.RenderSystem;
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
 import it.unimi.dsi.fastutil.objects.Object2IntMap;
+import me.cortex.voxy.common.Logger;
 import me.cortex.voxy.common.util.MemoryBuffer;
 import me.cortex.voxy.common.world.other.Mapper;
 import net.minecraft.client.Minecraft;
@@ -27,16 +28,17 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.lighting.LevelLightEngine;
 import net.minecraft.world.level.material.FluidState;
+import net.minecraftforge.client.extensions.common.IClientFluidTypeExtensions;
 import net.minecraftforge.client.model.data.ModelData;
 import org.lwjgl.opengl.GL11C;
 import org.lwjgl.system.MemoryUtil;
 
 import javax.annotation.Nullable;
 import java.lang.invoke.VarHandle;
-import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentLinkedDeque;
@@ -47,8 +49,10 @@ final class ModelFactory {
     private static final int MAX_MODEL_IDS = 1 << 16;
     private static final int MODEL_SIZE = ForgeModelStoreLayoutSpec.MODEL_RECORD_BYTES;
     private static final Direction[] DIRECTIONS = Direction.values();
+    private final Biome DEFAULT_BIOME = Minecraft.getInstance().level.registryAccess()
+            .registryOrThrow(Registries.BIOME)
+            .get(Biomes.PLAINS);
     private static final byte[] EMPTY_FACE_PIXELS = new byte[ForgeModelAtlasPixelFormat.BYTES_PER_FACE];
-    private static final Field STAIR_BASE_STATE_FIELD = findStairBaseStateField();
 
     private final Mapper mapper;
     private final ModelStore store;
@@ -57,8 +61,6 @@ final class ModelFactory {
     private final ConcurrentLinkedDeque<BlockBake> bakeQueue = new ConcurrentLinkedDeque<>();
     private final ConcurrentLinkedDeque<Mapper.BiomeEntry> biomeQueue = new ConcurrentLinkedDeque<>();
     private final ConcurrentLinkedDeque<ResultUploader> uploadResults = new ConcurrentLinkedDeque<>();
-    private static final int MAX_UPLOAD_ATTEMPTS = 16;
-    private int consecutiveUploadFailureCount;
     private final ReentrantLock blockStatesInFlightLock = new ReentrantLock();
     private final IntOpenHashSet blockStatesInFlight = new IntOpenHashSet(6000);
     private final Map<ModelEntry, Integer> modelTexture2id = new HashMap<>();
@@ -95,18 +97,13 @@ final class ModelFactory {
 
     boolean addEntry(int blockId) {
         if (blockId < 0 || blockId >= this.idMappings.length) {
-            return false;
+            throw new IllegalArgumentException("Original Voxy block-state id is outside the model mapping capacity: " + blockId);
         }
         if (this.idMappings[blockId] != -1) {
             return false;
         }
 
-        BlockState blockState;
-        try {
-            blockState = this.mapper.getBlockStateFromBlockId(blockId);
-        } catch (RuntimeException e) {
-            return false;
-        }
+        BlockState blockState = this.mapper.getBlockStateFromBlockId(blockId);
         blockState = normalizeBlockState(blockState);
 
         boolean isFluid = blockState.getBlock() instanceof LiquidBlock;
@@ -160,14 +157,10 @@ final class ModelFactory {
 
     void processUploads() {
         if (!RenderSystem.isOnRenderThread()) {
-            return;
+            throw new IllegalStateException("Original Voxy model uploads must run on the render thread");
         }
-        if (!this.ensureStoreReady()) {
-            return;
-        }
-        ResultUploader upload = this.uploadResults.poll();
-        if (upload == null) {
-            return;
+        if (!this.store.canUploadOriginalVoxyModel()) {
+            throw new IllegalStateException("Original Voxy model store readiness invariant failed before model upload");
         }
         //Do not let latched errors from earlier non-Voxy GL calls (e.g. an Oculus pipeline
         // reload) fail Voxy's own upload checks below.
@@ -176,6 +169,10 @@ final class ModelFactory {
         GL11C.glPixelStorei(GL11C.GL_UNPACK_SKIP_PIXELS, 0);
         GL11C.glPixelStorei(GL11C.GL_UNPACK_SKIP_ROWS, 0);
         GL11C.glPixelStorei(GL11C.GL_UNPACK_ALIGNMENT, 4);
+        ResultUploader upload = this.uploadResults.poll();
+        if (upload == null) {
+            return;
+        }
         //Original ModelFactory.processUploads() drains every queued ResultUploader. A polled
         //uploader owns native model/atlas payloads and must be uploaded, requeued, or freed.
         while (upload != null) {
@@ -183,35 +180,19 @@ final class ModelFactory {
             try {
                 error = upload.upload(this.store, this);
             } catch (RuntimeException e) {
-                //Pipeline failure handling tears this owner down on the next client tick. Keep
-                //the native payload queue-owned until that teardown drains and frees it.
+                //Pipeline failure handling drains pending GPU copies before tearing this owner
+                //down. Keep the native payload queue-owned until factory.free() releases it.
                 this.uploadResults.addFirst(upload);
                 throw e;
             }
             if (!"none".equals(error)) {
-                //Dropping the upload would leave the model's GPU data zeroed forever (invisible
-                // or black faces for every blockstate that maps to it), so retry next tick and
-                // only give up after repeated failures.
-                this.consecutiveUploadFailureCount++;
-                if (this.consecutiveUploadFailureCount < MAX_UPLOAD_ATTEMPTS) {
-                    this.uploadResults.addFirst(upload);
-                    VoxyForge.LOGGER.warn(
-                            "Original Voxy model upload failed (attempt {}/{}), retrying next tick: {}",
-                            this.consecutiveUploadFailureCount,
-                            MAX_UPLOAD_ATTEMPTS,
-                            error);
-                } else {
-                    upload.free();
-                    VoxyForge.LOGGER.error(
-                            "Original Voxy model upload dropped after {} failed attempts (models referencing it will render empty until rebuild): {}",
-                            MAX_UPLOAD_ATTEMPTS,
-                            error);
-                    this.consecutiveUploadFailureCount = 0;
-                }
-                break;
+                //The CPU model mapping is already published. Keep the payload queue-owned so the
+                // formal owner teardown can free it, and fail the frame instead of continuing with
+                // a permanently partial GPU model.
+                this.uploadResults.addFirst(upload);
+                throw new IllegalStateException("Original Voxy model upload failed: " + error);
             }
             upload.free();
-            this.consecutiveUploadFailureCount = 0;
             upload = this.uploadResults.poll();
         }
         if (UploadStream.isReady()) {
@@ -293,25 +274,10 @@ final class ModelFactory {
         this.bakeScratchBuffer.free();
     }
 
-    private boolean ensureStoreReady() {
-        if (this.store.canUploadOriginalVoxyModel()) {
-            return true;
-        }
-        this.store.build(Minecraft.getInstance());
-        if (!this.store.canUploadOriginalVoxyModel()) {
-            return false;
-        }
-        return true;
-    }
-
     private boolean processModelResult(Minecraft minecraft) {
         BlockBake bake = this.bakeQueue.poll();
         if (bake == null) {
             return false;
-        }
-        if (this.idMappings[bake.blockId()] != -1) {
-            this.removeInFlight(bake.blockId());
-            return true;
         }
 
         int softwareFlags = this.softwareBakery.renderToOutput(minecraft, bake.state(), this.bakeScratchBuffer.address);
@@ -326,8 +292,15 @@ final class ModelFactory {
                         this.softwareBakery.lastFailureReason()
                 );
         if (!"none".equals(softwareBake.failureReason())) {
-            this.removeInFlight(bake.blockId());
-            return true;
+            throw new IllegalStateException(
+                    "Original Voxy software model bake failed for block-state "
+                            + bake.blockId()
+                            + ": "
+                            + softwareBake.failureReason());
+        }
+        if (this.idMappings[bake.blockId()] != -1) {
+            throw new IllegalStateException(
+                    "Block id already added: " + bake.blockId() + " for state: " + bake.state());
         }
 
         int fluidModelId = this.resolveClientFluidModelId(bake.state());
@@ -345,13 +318,20 @@ final class ModelFactory {
             return true;
         }
 
-        int modelId = this.nextModelId++;
+        int modelId = this.nextModelId;
         if (!ForgeModelAtlasLayout.isValidModelId(modelId) || modelId >= this.metadataCache.length) {
-            this.removeInFlight(bake.blockId());
-            return true;
+            throw new IllegalStateException("Original Voxy model capacity exhausted at model id " + modelId);
         }
+        this.nextModelId++;
 
-        tint = this.finalizeTintForNewModel(minecraft, modelId, bake.state(), tint);
+        boolean containsFluid = !(bake.state().getBlock() instanceof LiquidBlock)
+                && !bake.state().getFluidState().isEmpty()
+                && fluidModelId != -1;
+        tint = mergeContainedFluidBiomeColourDependency(
+                tint,
+                containsFluid,
+                containsFluid ? this.metadataCache[fluidModelId] : 0L);
+        tint = this.finalizeTintForNewModel(modelId, tint);
         RecordBuild build = this.buildRecord(bake.state(), softwareBake, tint, fluidModelId, modelId);
         this.modelTexture2id.put(entry, modelId);
         this.metadataCache[modelId] = build.voxyMetadata();
@@ -418,7 +398,13 @@ final class ModelFactory {
             }
         }
 
-        long metadata = buildVoxyMetadata(state, layer, faces, tint.hasTint(), tint.biomeDependent(), fluidModelId);
+        long metadata = buildVoxyMetadata(
+                state,
+                layer,
+                faces,
+                tint.hasTint(),
+                tint.biomeDependent(),
+                fluidModelId);
         int flags = 0;
         flags |= tint.hasTint() ? 1 : 0;
         flags |= tint.biomeDependent() ? 2 : 0;
@@ -443,13 +429,12 @@ final class ModelFactory {
     }
 
     private TintPlan createTintPlan(Minecraft minecraft, BlockState state, ForgeSoftwareModelTextureBakery.BakeResult softwareBake) {
-        int tintIndex = firstTintIndex(minecraft, state, softwareBake);
-        if (tintIndex < 0) {
-            return new TintPlan(false, false, -1, -1, -1, null, -1);
+        TintSourcePlan tintSources = collectTintSources(minecraft, state, softwareBake);
+        if (tintSources.isEmpty()) {
+            return new TintPlan(false, false, tintSources, -1, -1, null, -1);
         }
-        Biome defaultBiome = defaultBiome(minecraft);
-        boolean biomeDependent = isBiomeDependentColour(minecraft, state, tintIndex);
-        int capturedColour = biomeDependent ? -1 : captureColourConstant(minecraft, state, tintIndex, defaultBiome);
+        boolean biomeDependent = isBiomeDependentColour(tintSources, this.DEFAULT_BIOME);
+        int capturedColour = biomeDependent ? -1 : captureColourConstant(tintSources, this.DEFAULT_BIOME);
         // A baked quad tint index only selects a possible BlockColors entry. It
         // does not prove that one exists: vanilla cherry leaves inherit the
         // tinted leaves model but deliberately have no BlockColor registration.
@@ -457,43 +442,47 @@ final class ModelFactory {
         // case as untinted. Forge 1.20.1 exposes no equivalent source list, so
         // preserve the same contract through BlockColors' -1 no-tint result.
         if (!biomeDependent && capturedColour == -1) {
-            return new TintPlan(false, false, -1, -1, -1, null, -1);
+            return new TintPlan(false, false, tintSources, -1, -1, null, -1);
         }
         int constant = biomeDependent ? -1 : capturedColour | 0xFF000000;
         if (!biomeDependent) {
-            return new TintPlan(true, false, tintIndex, constant, constant, null, -1);
+            return new TintPlan(true, false, tintSources, constant, constant, null, -1);
         }
-        return new TintPlan(true, true, tintIndex, -1, -1, null, -1);
+        return new TintPlan(true, true, tintSources, -1, -1, null, -1);
     }
 
-    private TintPlan finalizeTintForNewModel(Minecraft minecraft, int modelId, BlockState state, TintPlan tint) {
-        if (!tint.biomeDependent() || !tint.hasTint()) {
+    private TintPlan finalizeTintForNewModel(int modelId, TintPlan tint) {
+        if (!requiresBiomeColourLut(tint)) {
             return tint;
         }
         int biomeIndex = this.modelsRequiringBiomeColours.size() * this.biomes.size();
-        this.modelsRequiringBiomeColours.add(new BiomeModel(modelId, state, tint.tintIndex()));
+        this.modelsRequiringBiomeColours.add(new BiomeModel(modelId, tint.tintSources()));
         int[] immediateColours = null;
         if (!this.biomes.isEmpty()) {
             immediateColours = new int[this.biomes.size()];
             for (int biomeId = 0; biomeId < this.biomes.size(); biomeId++) {
                 Biome biome = this.biomes.get(biomeId);
                 if (biome != null) {
-                    immediateColours[biomeId] = captureColourConstant(minecraft, state, tint.tintIndex(), biome) | 0xFF000000;
+                    immediateColours[biomeId] = captureColourConstant(tint.tintSources(), biome) | 0xFF000000;
                 }
             }
         }
-        return new TintPlan(true, true, tint.tintIndex(), -1, biomeIndex, immediateColours, biomeIndex);
+        return applyBiomeColourLut(tint, biomeIndex, immediateColours);
     }
 
     private ResultUploader addBiome0(int id, Biome biome) {
+        if (biome == null) {
+            throw new IllegalStateException("Null biome");
+        }
         for (int i = this.biomes.size(); i <= id; i++) {
             this.biomes.add(null);
         }
         Biome oldBiome = this.biomes.set(id, biome);
-        if (oldBiome == biome) {
-            return null;
+        if (oldBiome != null && oldBiome != biome) {
+            throw new IllegalStateException("Biome was put in an id that was not null");
         }
-        if (oldBiome != null) {
+        if (oldBiome == biome) {
+            Logger.error("Biome added was a duplicate: " + id);
             return null;
         }
         if (this.modelsRequiringBiomeColours.isEmpty()) {
@@ -503,7 +492,6 @@ final class ModelFactory {
         int[] colours = new int[this.biomes.size() * this.modelsRequiringBiomeColours.size()];
         int[] modelIds = new int[this.modelsRequiringBiomeColours.size()];
         int[] biomeIndexes = new int[this.modelsRequiringBiomeColours.size()];
-        Minecraft minecraft = Minecraft.getInstance();
         for (int modelIndex = 0; modelIndex < this.modelsRequiringBiomeColours.size(); modelIndex++) {
             BiomeModel model = this.modelsRequiringBiomeColours.get(modelIndex);
             int biomeIndex = modelIndex * this.biomes.size();
@@ -514,7 +502,7 @@ final class ModelFactory {
                 if (targetBiome == null) {
                     continue;
                 }
-                colours[biomeIndex + biomeId] = captureColourConstant(minecraft, model.state(), model.tintIndex(), targetBiome) | 0xFF000000;
+                colours[biomeIndex + biomeId] = captureColourConstant(model.tintSources(), targetBiome) | 0xFF000000;
             }
         }
         return new BiomeUpload(colours, modelIds, biomeIndexes);
@@ -536,11 +524,40 @@ final class ModelFactory {
         return this.customBlockStateIdMapping.getInt(state);
     }
 
-    private static int firstTintIndex(Minecraft minecraft, BlockState state, ForgeSoftwareModelTextureBakery.BakeResult softwareBake) {
-        int bakedQuadTintIndex = firstBakedQuadTintIndex(minecraft, state);
-        if (bakedQuadTintIndex >= 0) {
-            return bakedQuadTintIndex;
+    private static TintSourcePlan collectTintSources(
+            Minecraft minecraft,
+            BlockState state,
+            ForgeSoftwareModelTextureBakery.BakeResult softwareBake) {
+        if (state.getBlock() instanceof LiquidBlock) {
+            FluidState fluidState = state.getFluidState();
+            IClientFluidTypeExtensions extension = IClientFluidTypeExtensions.of(fluidState);
+            return new TintSourcePlan(List.of((biome, biomeDependencyMarker) -> extension.getTintColor(
+                    fluidState,
+                    tintGetter(state, biome, biomeDependencyMarker),
+                    BlockPos.ZERO)));
         }
+
+        LinkedHashSet<Integer> tintIndices = collectBakedQuadTintIndices(minecraft, state);
+        if (tintIndices.isEmpty() && softwareBakeHasTint(softwareBake)) {
+            tintIndices.add(0);
+        }
+        if (tintIndices.isEmpty()) {
+            return TintSourcePlan.EMPTY;
+        }
+
+        BlockColors blockColors = minecraft.getBlockColors();
+        List<TintSourceDescriptor> sources = new ArrayList<>(tintIndices.size());
+        for (int tintIndex : tintIndices) {
+            sources.add((biome, biomeDependencyMarker) -> blockColors.getColor(
+                    state,
+                    tintGetter(state, biome, biomeDependencyMarker),
+                    BlockPos.ZERO,
+                    tintIndex));
+        }
+        return new TintSourcePlan(sources);
+    }
+
+    private static boolean softwareBakeHasTint(ForgeSoftwareModelTextureBakery.BakeResult softwareBake) {
         int checkMode = softwareBake.layer() == ForgeOriginalVoxyModelLayer.SOLID
                 ? TextureUtils.WRITE_CHECK_STENCIL
                 : TextureUtils.WRITE_CHECK_ALPHA;
@@ -548,33 +565,30 @@ final class ModelFactory {
             if (face != null) {
                 int tintState = TextureUtils.computeFaceTint(face, checkMode);
                 if (tintState == 2 || tintState == 3) {
-                    return 0;
+                    return true;
                 }
             }
         }
-        return -1;
+        return false;
     }
 
-    private static int firstBakedQuadTintIndex(Minecraft minecraft, BlockState state) {
-        try {
-            BakedModel model = minecraft.getBlockRenderer().getBlockModel(state);
-            if (model == null || model.isCustomRenderer()) {
-                return -1;
-            }
-            Iterable<RenderType> renderTypes = model.getRenderTypes(state, RandomSource.create(42L), ModelData.EMPTY);
-            for (RenderType renderType : renderTypes) {
-                for (Direction direction : directionsWithNull()) {
-                    for (BakedQuad quad : getQuads(model, state, direction, renderType)) {
-                        if (quad.isTinted()) {
-                            return quad.getTintIndex();
-                        }
+    private static LinkedHashSet<Integer> collectBakedQuadTintIndices(Minecraft minecraft, BlockState state) {
+        LinkedHashSet<Integer> tintIndices = new LinkedHashSet<>();
+        BakedModel model = minecraft.getBlockRenderer().getBlockModel(state);
+        if (model == null || model.isCustomRenderer()) {
+            return tintIndices;
+        }
+        Iterable<RenderType> renderTypes = model.getRenderTypes(state, RandomSource.create(42L), ModelData.EMPTY);
+        for (RenderType renderType : renderTypes) {
+            for (Direction direction : directionsWithNull()) {
+                for (BakedQuad quad : getQuads(model, state, direction, renderType)) {
+                    if (quad.isTinted()) {
+                        tintIndices.add(quad.getTintIndex());
                     }
                 }
             }
-        } catch (RuntimeException ignored) {
-            return -1;
         }
-        return -1;
+        return tintIndices;
     }
 
     private static List<BakedQuad> getQuads(BakedModel model, BlockState state, Direction direction, RenderType renderType) {
@@ -622,28 +636,33 @@ final class ModelFactory {
         return layer == ForgeOriginalVoxyModelLayer.OTHER ? ForgeOriginalVoxyModelLayer.SOLID : layer;
     }
 
-    private static boolean isBiomeDependentColour(Minecraft minecraft, BlockState state, int tintIndex) {
+    static boolean isBiomeDependentColour(TintSourcePlan tintSources, Biome biome) {
         boolean[] biomeDependent = new boolean[1];
-        BlockAndTintGetter getter = tintGetter(state, defaultBiome(minecraft), biomeDependent);
-        try {
-            minecraft.getBlockColors().getColor(state, getter, BlockPos.ZERO, tintIndex);
-            return biomeDependent[0];
-        } catch (RuntimeException ignored) {
-            return false;
+        Runnable biomeDependencyMarker = () -> biomeDependent[0] = true;
+        for (TintSourceDescriptor source : tintSources.sources()) {
+            if (source != null) {
+                source.colour(biome, biomeDependencyMarker);
+            }
         }
+        return biomeDependent[0];
     }
 
-    private static int captureColourConstant(Minecraft minecraft, BlockState state, int tintIndex, Biome biome) {
-        try {
-            BlockColors colors = minecraft.getBlockColors();
-            int rgb = colors.getColor(state, tintGetter(state, biome, null), BlockPos.ZERO, tintIndex);
-            return rgb == -1 ? -1 : rgb;
-        } catch (RuntimeException ignored) {
-            return -1;
+    static int captureColourConstant(TintSourcePlan tintSources, Biome biome) {
+        for (TintSourceDescriptor source : tintSources.sources()) {
+            if (source != null) {
+                int colour = source.colour(biome, null);
+                if (colour != -1) {
+                    return colour;
+                }
+            }
         }
+        return -1;
     }
 
-    private static BlockAndTintGetter tintGetter(BlockState state, Biome biome, @Nullable boolean[] biomeDependent) {
+    private static BlockAndTintGetter tintGetter(
+            BlockState state,
+            Biome biome,
+            @Nullable Runnable biomeDependencyMarker) {
         return new BlockAndTintGetter() {
             @Override
             public float getShade(Direction direction, boolean shade) {
@@ -658,8 +677,9 @@ final class ModelFactory {
 
             @Override
             public int getBlockTint(BlockPos pos, ColorResolver resolver) {
-                if (biomeDependent != null) {
-                    biomeDependent[0] = true;
+                if (biomeDependencyMarker != null) {
+                    biomeDependencyMarker.run();
+                    return 0;
                 }
                 return resolver.getColor(biome, 0, 0);
             }
@@ -697,48 +717,21 @@ final class ModelFactory {
         };
     }
 
-    private static Biome resolveBiome(Minecraft minecraft, String biomeId) {
-        if (minecraft.level == null || biomeId == null) {
-            return defaultBiome(minecraft);
-        }
-        ResourceLocation location = ResourceLocation.tryParse(biomeId);
-        if (location == null) {
-            return defaultBiome(minecraft);
-        }
+    private Biome resolveBiome(Minecraft minecraft, String biomeId) {
+        ResourceLocation location = new ResourceLocation(biomeId);
         Biome biome = minecraft.level.registryAccess().registryOrThrow(Registries.BIOME).get(location);
-        return biome == null ? defaultBiome(minecraft) : biome;
-    }
-
-    private static Biome defaultBiome(Minecraft minecraft) {
-        if (minecraft.level == null) {
-            return null;
+        if (biome == null) {
+            Logger.warn("Could not find biome: " + biomeId + " using default");
+            return this.DEFAULT_BIOME;
         }
-        Biome biome = minecraft.level.registryAccess().registryOrThrow(Registries.BIOME).get(Biomes.PLAINS);
-        return biome == null ? minecraft.level.registryAccess().registryOrThrow(Registries.BIOME).iterator().next() : biome;
+        return biome;
     }
 
     private static BlockState normalizeBlockState(BlockState state) {
-        if (state != null && state.getBlock() instanceof StairBlock stair && STAIR_BASE_STATE_FIELD != null) {
-            try {
-                Object baseState = STAIR_BASE_STATE_FIELD.get(stair);
-                if (baseState instanceof BlockState blockState) {
-                    return blockState.getBlock().withPropertiesOf(state);
-                }
-            } catch (IllegalAccessException ignored) {
-                // Keep the original state if the Forge field cannot be read.
-            }
+        if (state != null && state.getBlock() instanceof StairBlock stair) {
+            return stair.baseState.getBlock().withPropertiesOf(state);
         }
         return state;
-    }
-
-    private static Field findStairBaseStateField() {
-        try {
-            Field field = StairBlock.class.getDeclaredField("baseState");
-            field.setAccessible(true);
-            return field;
-        } catch (ReflectiveOperationException | SecurityException ignored) {
-            return null;
-        }
     }
 
     private static int encodeSoftwareFaceData(
@@ -854,6 +847,43 @@ final class ModelFactory {
         return metadata;
     }
 
+    static TintPlan mergeContainedFluidBiomeColourDependency(
+            TintPlan tint,
+            boolean containsFluid,
+            long fluidModelMetadata) {
+        boolean biomeColourDependent = tint.biomeDependent()
+                || containsFluid && ModelQueries._notIsBiomeColoured(fluidModelMetadata) == 0L;
+        if (biomeColourDependent == tint.biomeDependent()) {
+            return tint;
+        }
+        return new TintPlan(
+                tint.hasTint(),
+                biomeColourDependent,
+                tint.tintSources(),
+                tint.dedupeColour(),
+                tint.recordColourTint(),
+                tint.immediateBiomeColours(),
+                tint.immediateBiomeColourBaseIndex());
+    }
+
+    static boolean requiresBiomeColourLut(TintPlan tint) {
+        return tint.biomeDependent() && tint.hasTint();
+    }
+
+    static TintPlan applyBiomeColourLut(TintPlan tint, int biomeIndex, int[] immediateColours) {
+        if (!requiresBiomeColourLut(tint)) {
+            return tint;
+        }
+        return new TintPlan(
+                true,
+                true,
+                tint.tintSources(),
+                tint.dedupeColour(),
+                biomeIndex,
+                immediateColours,
+                biomeIndex);
+    }
+
     private static int getBlockLightEmission(BlockState state) {
         boolean isEmissive = state.emissiveRendering(new BlockGetter() {
             @Override
@@ -917,10 +947,27 @@ final class ModelFactory {
     private record BlockBake(int blockId, BlockState state) {
     }
 
-    private record TintPlan(
+    @FunctionalInterface
+    interface TintSourceDescriptor {
+        int colour(Biome biome, @Nullable Runnable biomeDependencyMarker);
+    }
+
+    record TintSourcePlan(List<TintSourceDescriptor> sources) {
+        private static final TintSourcePlan EMPTY = new TintSourcePlan(List.of());
+
+        TintSourcePlan {
+            sources = List.copyOf(sources);
+        }
+
+        boolean isEmpty() {
+            return this.sources.isEmpty();
+        }
+    }
+
+    record TintPlan(
             boolean hasTint,
             boolean biomeDependent,
-            int tintIndex,
+            TintSourcePlan tintSources,
             int dedupeColour,
             int recordColourTint,
             int[] immediateBiomeColours,
@@ -928,7 +975,7 @@ final class ModelFactory {
     ) {
     }
 
-    private record BiomeModel(int modelId, BlockState state, int tintIndex) {
+    private record BiomeModel(int modelId, TintSourcePlan tintSources) {
     }
 
     private record FaceUpload(int faceIndex, String direction, byte[] pixels, String checksum, int faceDataWord, int writtenPixels, float depth, boolean faceCoversFullBlock) {

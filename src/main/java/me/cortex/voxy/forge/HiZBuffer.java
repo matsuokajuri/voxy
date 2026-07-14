@@ -46,7 +46,6 @@ import static org.lwjgl.opengl.GL30C.GL_FRAMEBUFFER_COMPLETE;
 import static org.lwjgl.opengl.GL30C.glBindFramebuffer;
 import static org.lwjgl.opengl.GL30C.glBindVertexArray;
 import static org.lwjgl.opengl.GL30C.glDrawArrays;
-import static org.lwjgl.opengl.GL30C.glGenVertexArrays;
 import static org.lwjgl.opengl.GL33C.GL_NEAREST_MIPMAP_NEAREST;
 import static org.lwjgl.opengl.GL33C.GL_TEXTURE_COMPARE_MODE;
 import static org.lwjgl.opengl.GL33C.glBindSampler;
@@ -72,7 +71,6 @@ final class HiZBuffer extends TrackedObject {
     private final int type;
     private final int framebufferId = glCreateFramebuffers();
     private final int samplerId = glGenSamplers();
-    private final int vertexArrayId = glGenVertexArrays();
     private final int programId;
     private int textureId;
     private int levels;
@@ -94,7 +92,6 @@ final class HiZBuffer extends TrackedObject {
         } catch (RuntimeException e) {
             glDeleteFramebuffers(this.framebufferId);
             glDeleteSamplers(this.samplerId);
-            org.lwjgl.opengl.GL30C.glDeleteVertexArrays(this.vertexArrayId);
             this.free0();
             throw e;
         }
@@ -114,7 +111,7 @@ final class HiZBuffer extends TrackedObject {
             this.alloc(targetWidth, targetHeight);
         }
 
-        glBindVertexArray(this.vertexArrayId);
+        glBindVertexArray(ForgeOriginalVoxyEmptyVertexArray.id());
         int boundFramebuffer = glGetInteger(GL_DRAW_FRAMEBUFFER_BINDING);
         glUseProgram(this.programId);
         glBindFramebuffer(GL_FRAMEBUFFER, this.framebufferId);
@@ -169,7 +166,6 @@ final class HiZBuffer extends TrackedObject {
         }
         glDeleteFramebuffers(this.framebufferId);
         glDeleteSamplers(this.samplerId);
-        org.lwjgl.opengl.GL30C.glDeleteVertexArrays(this.vertexArrayId);
         glDeleteProgram(this.programId);
     }
 

@@ -67,8 +67,12 @@ import java.util.function.LongConsumer;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
-import static org.lwjgl.opengl.GL33C.glBindSampler;
+import static org.lwjgl.opengl.GL11C.GL_TEXTURE_1D;
+import static org.lwjgl.opengl.GL11C.GL_TEXTURE_2D;
+import static org.lwjgl.opengl.GL12C.GL_TEXTURE_3D;
 import static org.lwjgl.opengl.GL30C.glBindBufferBase;
+import static org.lwjgl.opengl.GL31C.GL_TEXTURE_RECTANGLE;
+import static org.lwjgl.opengl.GL33C.glBindSampler;
 import static org.lwjgl.opengl.GL43C.GL_SHADER_STORAGE_BUFFER;
 import static org.lwjgl.opengl.GL45C.glBindTextureUnit;
 
@@ -76,6 +80,22 @@ public final class ForgeOriginalVoxyOculusRenderPipelineData {
     public static final int UNIFORM_BINDING_POINT = 7;
     public static final int BUFFER_BINDING_INDEX_BASE = 10;
     public static final int BASE_SAMPLER_BINDING_INDEX = 6;
+
+    static int textureTarget(TextureType type) {
+        if (type == TextureType.TEXTURE_1D) {
+            return GL_TEXTURE_1D;
+        }
+        if (type == TextureType.TEXTURE_2D) {
+            return GL_TEXTURE_2D;
+        }
+        if (type == TextureType.TEXTURE_3D) {
+            return GL_TEXTURE_3D;
+        }
+        if (type == TextureType.TEXTURE_RECTANGLE) {
+            return GL_TEXTURE_RECTANGLE;
+        }
+        throw new IllegalArgumentException("Unsupported Oculus texture type: " + type);
+    }
 
     private Object boundPipeline;
     public final int[] opaqueDrawTargets;
@@ -821,6 +841,7 @@ public final class ForgeOriginalVoxyOculusRenderPipelineData {
 
     private static final class TextureWithSampler {
         private final String name;
+        private final int textureTarget;
         private final IntSupplier texture;
         private final IntSupplier sampler;
         private final boolean requiredNonZeroTexture;
@@ -828,10 +849,12 @@ public final class ForgeOriginalVoxyOculusRenderPipelineData {
 
         private TextureWithSampler(
                 String name,
+                int textureTarget,
                 IntSupplier texture,
                 IntSupplier sampler,
                 boolean requiredNonZeroTexture) {
             this.name = name;
+            this.textureTarget = textureTarget;
             this.texture = texture;
             this.sampler = sampler;
             this.requiredNonZeroTexture = requiredNonZeroTexture;
@@ -856,6 +879,7 @@ public final class ForgeOriginalVoxyOculusRenderPipelineData {
     public static final class ImageSet {
         private final String layout;
         private final TextureWithSampler[] samplers;
+        private final int[] textureTargets;
         private final IntConsumer bindingFunction;
         private String lastFailureReason = "none";
         private boolean textureZeroLogged;
@@ -863,6 +887,10 @@ public final class ForgeOriginalVoxyOculusRenderPipelineData {
         private ImageSet(String layout, TextureWithSampler[] samplers) {
             this.layout = layout;
             this.samplers = samplers;
+            this.textureTargets = new int[samplers.length];
+            for (int i = 0; i < samplers.length; i++) {
+                this.textureTargets[i] = samplers[i].textureTarget;
+            }
             this.bindingFunction = this::bind;
         }
 
@@ -874,8 +902,16 @@ public final class ForgeOriginalVoxyOculusRenderPipelineData {
             return this.bindingFunction;
         }
 
+        public int bindingCount() {
+            return this.samplers.length;
+        }
+
         String lastFailureReason() {
             return this.lastFailureReason;
+        }
+
+        ForgeOriginalVoxyTextureBindings.Binding[] captureNon2DTextureBindings(int base) {
+            return ForgeOriginalVoxyTextureBindings.captureNon2D(base, this.textureTargets);
         }
 
         private void bind(int base) {
@@ -893,7 +929,14 @@ public final class ForgeOriginalVoxyOculusRenderPipelineData {
                                 sampler.name);
                     }
                 }
-                glBindTextureUnit(unit, textureId);
+                if (textureId == 0) {
+                    //glBindTextureUnit(unit, 0) clears every target on the unit. Oculus retains the
+                    //TextureType for dynamic samplers, so clear only that target and leave unrelated
+                    //Embeddium/mod bindings intact for the outer state guard to restore.
+                    ForgeOriginalVoxyTextureBindings.bind(unit, sampler.textureTarget, 0);
+                } else {
+                    glBindTextureUnit(unit, textureId);
+                }
                 int samplerId = sampler.sampler.getAsInt();
                 glBindSampler(unit, samplerId == -1 ? 0 : samplerId);
             }
@@ -962,6 +1005,7 @@ public final class ForgeOriginalVoxyOculusRenderPipelineData {
                 }
                 samplerSet.add(new TextureWithSampler(
                         this.name(names),
+                        textureTarget(type),
                         texture,
                         sampler != null ? sampler::getId : () -> -1,
                         false));
@@ -975,10 +1019,22 @@ public final class ForgeOriginalVoxyOculusRenderPipelineData {
                 }
                 String name = this.name(names);
                 IntSupplier externalTexture = externalTextures.get(name);
+                //Oculus 1.8's external-sampler API carries no TextureType; those bindings are the
+                //2D lightmap/gbuffer contract. Dynamic samplers above retain their explicit type.
                 if (externalTexture != null) {
-                    samplerSet.add(new TextureWithSampler(name, externalTexture, () -> 0, true));
+                    samplerSet.add(new TextureWithSampler(
+                            name,
+                            textureTarget(TextureType.TEXTURE_2D),
+                            externalTexture,
+                            () -> 0,
+                            true));
                 } else {
-                    samplerSet.add(new TextureWithSampler(name, () -> texture, () -> -1, false));
+                    samplerSet.add(new TextureWithSampler(
+                            name,
+                            textureTarget(TextureType.TEXTURE_2D),
+                            () -> texture,
+                            () -> -1,
+                            false));
                 }
             }
 
@@ -1038,7 +1094,7 @@ public final class ForgeOriginalVoxyOculusRenderPipelineData {
         return new ImageSet(builder.toString(), samplers);
     }
 
-    public record SSBOSet(String layout, IntConsumer bindingFunction) {
+    public record SSBOSet(String layout, IntConsumer bindingFunction, int bindingCount) {
     }
 
     private record SSBOBinding(int irisIndex, int bindingOffset) {
@@ -1073,6 +1129,6 @@ public final class ForgeOriginalVoxyOculusRenderPipelineData {
                 glBindBufferBase(GL_SHADER_STORAGE_BUFFER, base + binding.bindingOffset, ssboStore.getBufferIndex(binding.irisIndex));
             }
         };
-        return new SSBOSet(builder.toString(), bindingFunction);
+        return new SSBOSet(builder.toString(), bindingFunction, bindings.length);
     }
 }

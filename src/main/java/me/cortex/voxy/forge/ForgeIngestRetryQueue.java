@@ -12,7 +12,9 @@ import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.TickEvent;
 
 import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.HashSet;
+import java.util.Set;
 
 /**
  * Forge-only retry adapter for the original event-driven ingest route.
@@ -62,13 +64,28 @@ final class ForgeIngestRetryQueue {
 
     private void recordDeferred(LevelChunk chunk, VoxelIngestService.IngestStats stats) {
         long key = chunk.getPos().toLong();
-        if (stats.deferred()) {
-            if (this.queuedChunks.add(key)) {
-                this.pendingChunks.addLast(key);
-            }
-        } else {
-            this.queuedChunks.remove(key);
+        updateDeferredRetryState(this.pendingChunks, this.queuedChunks, key, stats.deferred());
+    }
+
+    static void updateDeferredRetryState(
+            Deque<Long> pendingChunks,
+            Set<Long> queuedChunks,
+            long key,
+            boolean deferred) {
+        if (!deferred) {
+            //A successful single-section ingest does not prove that another deferred section in
+            //the same chunk is ready. Keep the chunk retry until the tick loop consumes it.
+            return;
         }
+        if (queuedChunks.add(key)) {
+            pendingChunks.addLast(key);
+        }
+    }
+
+    static long pollDeferredRetryState(Deque<Long> pendingChunks, Set<Long> queuedChunks) {
+        long key = pendingChunks.removeFirst();
+        queuedChunks.remove(key);
+        return key;
     }
 
     private void onClientTick(TickEvent.ClientTickEvent event) {
@@ -88,8 +105,7 @@ final class ForgeIngestRetryQueue {
 
         int attempts = Math.min(MAX_RETRIES_PER_TICK, this.pendingChunks.size());
         for (int i = 0; i < attempts; i++) {
-            long key = this.pendingChunks.removeFirst();
-            this.queuedChunks.remove(key);
+            long key = pollDeferredRetryState(this.pendingChunks, this.queuedChunks);
             LevelChunk chunk = getLoadedChunk(level, ChunkPos.getX(key), ChunkPos.getZ(key));
             if (chunk != null) {
                 this.ingestChunk(chunk);

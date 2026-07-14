@@ -1,5 +1,6 @@
 package me.cortex.voxy.config;
 
+import me.cortex.voxy.common.util.cpu.CpuLayout;
 import net.minecraftforge.common.ForgeConfigSpec;
 
 public final class ForgeVoxyConfig {
@@ -61,11 +62,11 @@ public final class ForgeVoxyConfig {
     }
 
     private static int defaultServiceThreads() {
-        return Math.max((int) (ForgeOriginalVoxyCpuLayout.getCoreCount() / 1.5D), 1);
+        return Math.max((int) (CpuLayout.getCoreCount() / 1.5D), 1);
     }
 
     private static int maxServiceThreads() {
-        return Math.max(ForgeOriginalVoxyCpuLayout.getCoreCount(), 1);
+        return Math.max(CpuLayout.getCoreCount(), 1);
     }
 
     public static int serviceThreadMaximum() {

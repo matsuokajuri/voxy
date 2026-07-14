@@ -1,6 +1,7 @@
 package me.cortex.voxy.forge;
 
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
+import me.cortex.voxy.common.Logger;
 import me.cortex.voxy.common.config.storage.StorageBackend;
 import me.cortex.voxy.common.config.storage.lmdb.LMDBInterface;
 import me.cortex.voxy.common.util.MemoryBuffer;
@@ -41,7 +42,7 @@ final class LMDBStorageBackend extends StorageBackend {
 
     private void growEnv() {
         long size = this.dbi.getMapSize() + GROW_SIZE;
-        VoxyForge.LOGGER.info("Growing DBI env size to: {} bytes", size);
+        Logger.info("Growing DBI env size to: " + size + " bytes");
         this.dbi.setMapSize(size);
     }
 

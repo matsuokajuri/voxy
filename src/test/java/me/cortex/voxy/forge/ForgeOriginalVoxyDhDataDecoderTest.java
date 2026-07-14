@@ -1,9 +1,10 @@
 package me.cortex.voxy.forge;
 
-import com.github.luben.zstd.Zstd;
-import com.github.luben.zstd.ZstdOutputStream;
 import net.jpountz.lz4.LZ4FrameOutputStream;
 import org.junit.jupiter.api.Test;
+import org.lwjgl.system.MemoryUtil;
+import org.lwjgl.util.zstd.ZSTDInBuffer;
+import org.lwjgl.util.zstd.ZSTDOutBuffer;
 import org.tukaani.xz.LZMA2Options;
 import org.tukaani.xz.XZOutputStream;
 
@@ -11,11 +12,23 @@ import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.nio.ByteBuffer;
 import java.util.Arrays;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.lwjgl.util.zstd.Zstd.ZSTD_CCtx_reset;
+import static org.lwjgl.util.zstd.Zstd.ZSTD_CStreamOutSize;
+import static org.lwjgl.util.zstd.Zstd.ZSTD_compress;
+import static org.lwjgl.util.zstd.Zstd.ZSTD_compressBound;
+import static org.lwjgl.util.zstd.Zstd.ZSTD_compressStream2;
+import static org.lwjgl.util.zstd.Zstd.ZSTD_createCStream;
+import static org.lwjgl.util.zstd.Zstd.ZSTD_e_end;
+import static org.lwjgl.util.zstd.Zstd.ZSTD_freeCStream;
+import static org.lwjgl.util.zstd.Zstd.ZSTD_getErrorName;
+import static org.lwjgl.util.zstd.Zstd.ZSTD_isError;
+import static org.lwjgl.util.zstd.Zstd.ZSTD_reset_session_only;
 
 class ForgeOriginalVoxyDhDataDecoderTest {
     @Test
@@ -201,13 +214,15 @@ class ForgeOriginalVoxyDhDataDecoderTest {
             return input;
         }
         if (compression == ForgeOriginalVoxyDhDataDecoder.COMPRESSION_ZSTD_BLOCK) {
-            return Zstd.compress(input);
+            return compressZstdBlock(input);
+        }
+        if (compression == ForgeOriginalVoxyDhDataDecoder.COMPRESSION_ZSTD_STREAM) {
+            return compressZstdStream(input);
         }
 
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
         try (OutputStream output = switch (compression) {
             case ForgeOriginalVoxyDhDataDecoder.COMPRESSION_LZ4 -> new LZ4FrameOutputStream(bytes);
-            case ForgeOriginalVoxyDhDataDecoder.COMPRESSION_ZSTD_STREAM -> new ZstdOutputStream(bytes);
             case ForgeOriginalVoxyDhDataDecoder.COMPRESSION_LZMA2 ->
                     new XZOutputStream(bytes, new LZMA2Options());
             default -> throw new IllegalArgumentException("compression " + compression);
@@ -215,6 +230,87 @@ class ForgeOriginalVoxyDhDataDecoderTest {
             output.write(input);
         }
         return bytes.toByteArray();
+    }
+
+    private static byte[] compressZstdBlock(byte[] input) throws IOException {
+        int capacity;
+        try {
+            capacity = Math.toIntExact(ZSTD_compressBound(input.length));
+        } catch (ArithmeticException exception) {
+            throw new IOException("Invalid Zstd compression bound", exception);
+        }
+
+        ByteBuffer source = MemoryUtil.memAlloc(Math.max(1, input.length));
+        ByteBuffer destination = MemoryUtil.memAlloc(capacity);
+        try {
+            source.put(input).flip();
+            long size = ZSTD_compress(destination, source, 3);
+            checkZstdResult(size);
+            int compressedSize = Math.toIntExact(size);
+            byte[] result = new byte[compressedSize];
+            destination.position(0).limit(compressedSize);
+            destination.get(result);
+            return result;
+        } finally {
+            MemoryUtil.memFree(destination);
+            MemoryUtil.memFree(source);
+        }
+    }
+
+    private static byte[] compressZstdStream(byte[] inputBytes) throws IOException {
+        long context = ZSTD_createCStream();
+        if (context == MemoryUtil.NULL) {
+            throw new OutOfMemoryError("Could not allocate Zstd compression context");
+        }
+
+        int outputChunkSize;
+        try {
+            outputChunkSize = Math.toIntExact(ZSTD_CStreamOutSize());
+        } catch (ArithmeticException exception) {
+            ZSTD_freeCStream(context);
+            throw new IOException("Invalid Zstd output buffer size", exception);
+        }
+
+        ByteBuffer source = MemoryUtil.memAlloc(Math.max(1, inputBytes.length));
+        ByteBuffer destination = MemoryUtil.memAlloc(outputChunkSize);
+        try (ZSTDInBuffer input = ZSTDInBuffer.calloc();
+             ZSTDOutBuffer output = ZSTDOutBuffer.calloc();
+             ByteArrayOutputStream result = new ByteArrayOutputStream()) {
+            checkZstdResult(ZSTD_CCtx_reset(context, ZSTD_reset_session_only));
+            source.put(inputBytes).flip();
+            input.set(source, 0L);
+
+            long remaining;
+            do {
+                destination.clear();
+                output.set(destination, 0L);
+                remaining = ZSTD_compressStream2(context, output, input, ZSTD_e_end);
+                checkZstdResult(remaining);
+
+                int produced = Math.toIntExact(output.pos());
+                if (produced > 0) {
+                    byte[] chunk = new byte[produced];
+                    destination.position(0).limit(produced);
+                    destination.get(chunk);
+                    result.write(chunk, 0, chunk.length);
+                }
+            } while (remaining != 0L);
+
+            if (input.pos() != input.size()) {
+                throw new IOException("Zstd stream did not consume its input");
+            }
+            return result.toByteArray();
+        } finally {
+            MemoryUtil.memFree(destination);
+            MemoryUtil.memFree(source);
+            ZSTD_freeCStream(context);
+        }
+    }
+
+    private static void checkZstdResult(long result) throws IOException {
+        if (ZSTD_isError(result)) {
+            throw new IOException("Zstd test compression failed: " + ZSTD_getErrorName(result));
+        }
     }
 
     private static long dataPoint(int id, int height, int bottomY, int blockLight, int skyLight) {

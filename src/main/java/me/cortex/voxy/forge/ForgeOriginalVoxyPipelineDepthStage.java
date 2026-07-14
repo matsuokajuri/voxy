@@ -43,6 +43,7 @@ import static org.lwjgl.opengl.GL30C.GL_DEPTH24_STENCIL8;
 import static org.lwjgl.opengl.GL30C.GL_DEPTH_ATTACHMENT;
 import static org.lwjgl.opengl.GL30C.GL_DEPTH_STENCIL;
 import static org.lwjgl.opengl.GL30C.GL_DRAW_FRAMEBUFFER_BINDING;
+import static org.lwjgl.opengl.GL30C.GL_DRAW_FRAMEBUFFER;
 import static org.lwjgl.opengl.GL30C.GL_FRAMEBUFFER;
 import static org.lwjgl.opengl.GL30C.GL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME;
 import static org.lwjgl.opengl.GL30C.GL_READ_FRAMEBUFFER;
@@ -198,6 +199,7 @@ final class ForgeOriginalVoxyPipelineDepthStage extends TrackedObject {
 
     private record GlState(
             int drawFramebuffer,
+            int readFramebuffer,
             int currentProgram,
             int vertexArray,
             boolean depthEnabled,
@@ -229,6 +231,7 @@ final class ForgeOriginalVoxyPipelineDepthStage extends TrackedObject {
                 glActiveTexture(activeTexture);
                 return new GlState(
                         glGetInteger(GL_DRAW_FRAMEBUFFER_BINDING),
+                        glGetInteger(GL_READ_FRAMEBUFFER_BINDING),
                         glGetInteger(GL_CURRENT_PROGRAM),
                         glGetInteger(GL_VERTEX_ARRAY_BINDING),
                         glIsEnabled(GL_DEPTH_TEST),
@@ -253,7 +256,8 @@ final class ForgeOriginalVoxyPipelineDepthStage extends TrackedObject {
         }
 
         void restore() {
-            glBindFramebuffer(GL_FRAMEBUFFER, this.drawFramebuffer);
+            glBindFramebuffer(GL_DRAW_FRAMEBUFFER, this.drawFramebuffer);
+            glBindFramebuffer(GL_READ_FRAMEBUFFER, this.readFramebuffer);
             glUseProgram(this.currentProgram);
             glBindVertexArray(this.vertexArray);
             if (this.depthEnabled) {
@@ -272,7 +276,7 @@ final class ForgeOriginalVoxyPipelineDepthStage extends TrackedObject {
             glStencilMask(this.stencilWriteMask);
             glStencilOp(this.stencilFail, this.stencilPassDepthFail, this.stencilPassDepthPass);
             glColorMask(this.colorMaskR, this.colorMaskG, this.colorMaskB, this.colorMaskA);
-            glBindTextureUnit(0, this.textureUnit0);
+            ForgeOriginalVoxyTextureBindings.bind2D(0, this.textureUnit0);
             glBindSampler(0, this.samplerUnit0);
             glActiveTexture(this.activeTexture);
         }

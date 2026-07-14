@@ -12,7 +12,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 public final class WorldSection {
     public static final int SECTION_VOLUME = 32*32*32;
     public static final int POS_FORMAT_VERSION = 1;
-    public static final boolean VERIFY_WORLD_SECTION_EXECUTION = Boolean.getBoolean("voxy.verifyWorldSectionExecution");
+    public static final boolean VERIFY_WORLD_SECTION_EXECUTION =
+            System.getProperty("voxy.verifyWorldSectionExecution", "false").equals("true");
 
     @FunctionalInterface
     interface ReleaseTracker {

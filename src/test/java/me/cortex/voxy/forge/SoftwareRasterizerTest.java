@@ -8,6 +8,7 @@ import java.util.Arrays;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class SoftwareRasterizerTest {
     private static final int TARGET_SIZE = 4;
@@ -50,6 +51,25 @@ class SoftwareRasterizerTest {
         assertEquals(unchanged, SoftwareRasterizer.mix(unchanged, unchanged, 0));
         assertEquals(unchanged, SoftwareRasterizer.mix(unchanged, unchanged, 127));
         assertEquals(unchanged, SoftwareRasterizer.mix(unchanged, unchanged, 255));
+    }
+
+    @Test
+    void missingSamplerSurfacesTheInvalidRasterizerState() {
+        SoftwareRasterizer rasterizer = new SoftwareRasterizer(TARGET_SIZE);
+        rasterizer.setFaceCull(true);
+        rasterizer.clear();
+
+        long vertices = MemoryUtil.nmemAlloc(4L * ReuseVertexConsumer.VERTEX_FORMAT_SIZE);
+        try {
+            putVertex(vertices, 0, -0.75F, -0.75F);
+            putVertex(vertices, 1, -0.75F, 0.75F);
+            putVertex(vertices, 2, 0.75F, 0.75F);
+            putVertex(vertices, 3, 0.75F, -0.75F);
+
+            assertThrows(NullPointerException.class, () -> rasterizer.raster(new Matrix4f(), vertices, 1));
+        } finally {
+            MemoryUtil.nmemFree(vertices);
+        }
     }
 
     private static void putVertex(long base, int index, float x, float y) {

@@ -7,6 +7,7 @@ final class IdNotYetComputedException extends RuntimeException {
     long[] auxData;
 
     IdNotYetComputedException(int id, boolean isIdBlockId) {
+        super(null, null, false, false);
         this.id = id;
         this.isIdBlockId = isIdBlockId;
     }

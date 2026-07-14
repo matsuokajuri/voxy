@@ -2,18 +2,19 @@ package me.cortex.voxy.forge.mixin;
 
 import it.unimi.dsi.fastutil.longs.Long2ReferenceMap;
 import me.jellysquid.mods.sodium.client.gl.device.CommandList;
+import me.jellysquid.mods.sodium.client.render.chunk.ChunkRenderMatrices;
 import me.cortex.voxy.common.world.service.VoxelIngestService;
 import me.cortex.voxy.config.ForgeVoxyConfig;
 import me.cortex.voxy.forge.ICheekyClientChunkCache;
 import me.cortex.voxy.forge.ForgeVoxyInstance;
 import me.cortex.voxy.forge.VoxyForge;
-import me.jellysquid.mods.sodium.client.render.viewport.Viewport;
 import me.jellysquid.mods.sodium.client.render.chunk.RenderSection;
 import me.jellysquid.mods.sodium.client.render.chunk.RenderSectionManager;
 import me.jellysquid.mods.sodium.client.render.chunk.data.BuiltSectionInfo;
 import me.jellysquid.mods.sodium.client.render.chunk.map.ChunkStatus;
 import me.jellysquid.mods.sodium.client.render.chunk.map.ChunkTrackerHolder;
-import net.minecraft.client.Camera;
+import me.jellysquid.mods.sodium.client.render.chunk.terrain.DefaultTerrainRenderPasses;
+import me.jellysquid.mods.sodium.client.render.chunk.terrain.TerrainRenderPass;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraftforge.fml.ModList;
@@ -39,21 +40,27 @@ public class ForgeOriginalVoxyEmbeddiumRenderSectionManagerMixin {
 
     private long voxy$cachedChunkPos = Long.MIN_VALUE;
     private int voxy$cachedChunkStatus;
-    private boolean voxy$chunkBoundSeededForOwner;
+    private long voxy$chunkBoundSeededOwnerGeneration = -1L;
 
     @Inject(method = "<init>", at = @At("TAIL"))
     private void voxy$resetChunkBoundTracker(ClientLevel world, int renderDistance, CommandList commandList, CallbackInfo ci) {
         ForgeVoxyInstance.INSTANCE.resetOriginalVoxyChunkBoundTracker();
-        this.voxy$chunkBoundSeededForOwner = false;
+        this.voxy$chunkBoundSeededOwnerGeneration = -1L;
     }
 
-    @Inject(method = "update", at = @At("TAIL"))
-    private void voxy$seedChunkBoundTracker(Camera camera, Viewport viewport, int frame, boolean spectator, CallbackInfo ci) {
-        if (!ForgeVoxyInstance.INSTANCE.isOriginalVoxyChunkBoundTrackerActive()) {
-            this.voxy$chunkBoundSeededForOwner = false;
+    @Inject(method = "renderLayer", at = @At("HEAD"))
+    private void voxy$seedChunkBoundTracker(
+            ChunkRenderMatrices matrices,
+            TerrainRenderPass renderPass,
+            double cameraX,
+            double cameraY,
+            double cameraZ,
+            CallbackInfo ci) {
+        if (renderPass != DefaultTerrainRenderPasses.CUTOUT) {
             return;
         }
-        if (this.voxy$chunkBoundSeededForOwner) {
+        long ownerGeneration = ForgeVoxyInstance.INSTANCE.originalVoxyChunkBoundOwnerGeneration();
+        if (ownerGeneration < 0L || this.voxy$chunkBoundSeededOwnerGeneration == ownerGeneration) {
             return;
         }
         ForgeVoxyInstance.INSTANCE.resetOriginalVoxyChunkBoundTracker();
@@ -68,11 +75,10 @@ public class ForgeOriginalVoxyEmbeddiumRenderSectionManagerMixin {
                 seeded++;
             }
         }
-        if (seeded == 0) {
-            return;
+        if (seeded != 0) {
+            VoxyForge.LOGGER.info("Original Voxy chunk-bound tracker seeded {} Embeddium built sections.", seeded);
         }
-        VoxyForge.LOGGER.info("Original Voxy chunk-bound tracker seeded {} Embeddium built sections.", seeded);
-        this.voxy$chunkBoundSeededForOwner = true;
+        this.voxy$chunkBoundSeededOwnerGeneration = ownerGeneration;
     }
 
     @Inject(method = "onChunkAdded", at = @At("HEAD"))

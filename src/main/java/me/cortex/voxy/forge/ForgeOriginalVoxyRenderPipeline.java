@@ -20,6 +20,7 @@ import static org.lwjgl.opengl.GL11C.GL_ONE_MINUS_SRC_ALPHA;
 import static org.lwjgl.opengl.GL11C.GL_SRC_ALPHA;
 import static org.lwjgl.opengl.GL11C.GL_STENCIL_BUFFER_BIT;
 import static org.lwjgl.opengl.GL11C.GL_STENCIL_TEST;
+import static org.lwjgl.opengl.GL11C.glGetInteger;
 import static org.lwjgl.opengl.GL11C.glColorMask;
 import static org.lwjgl.opengl.GL11C.glDepthFunc;
 import static org.lwjgl.opengl.GL11C.glDisable;
@@ -30,15 +31,22 @@ import static org.lwjgl.opengl.GL11C.glStencilOp;
 import static org.lwjgl.opengl.GL14C.glBlendFuncSeparate;
 import static org.lwjgl.opengl.GL20C.glUniform4f;
 import static org.lwjgl.opengl.GL20C.nglUniformMatrix4fv;
+import static org.lwjgl.opengl.GL20C.GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS;
 import static org.lwjgl.opengl.GL30C.GL_FRAMEBUFFER;
 import static org.lwjgl.opengl.GL30C.glBindFramebuffer;
 import static org.lwjgl.opengl.GL30C.glBindBufferBase;
 import static org.lwjgl.opengl.GL31C.GL_UNIFORM_BUFFER;
+import static org.lwjgl.opengl.GL31C.GL_MAX_UNIFORM_BUFFER_BINDINGS;
+import static org.lwjgl.opengl.GL43C.GL_MAX_SHADER_STORAGE_BUFFER_BINDINGS;
 import static org.lwjgl.opengl.GL45C.glBindTextureUnit;
 import static org.lwjgl.opengl.GL45C.glBlitNamedFramebuffer;
 import static org.lwjgl.opengl.GL45C.glTextureBarrier;
 
 final class ForgeOriginalVoxyRenderPipeline extends TrackedObject {
+    private static final int ORIGINAL_TEXTURE_SAMPLER_BINDING_COUNT = 12;
+    private static final int[] BASE_UNIFORM_BUFFER_BINDINGS = new int[]{0, 1};
+    private static final int[] OCULUS_UNIFORM_BUFFER_BINDINGS = new int[]{0, 1, 7};
+
     private final RenderProperties properties;
     private final ForgeOriginalVoxyPipelineDepthStage depthStage;
     private final ForgeOriginalVoxyNormalPipelineTargets normalTargets;
@@ -52,6 +60,9 @@ final class ForgeOriginalVoxyRenderPipeline extends TrackedObject {
     private final GlBuffer oculusShaderUniforms;
     private final FullscreenBlit shaderpackDepthBlit;
     private final FullscreenBlit shaderDepthHackFixTransformBlit;
+    private final int embeddiumTextureBindingCount;
+    private final int[] embeddiumUniformBufferBindingIndices;
+    private final int[] embeddiumShaderStorageBufferBindingIndices;
     private String lastLoggedFailureReason = "";
 
     //Per-frame guard failures were previously recorded silently, which made "LOD invisible"
@@ -73,6 +84,22 @@ final class ForgeOriginalVoxyRenderPipeline extends TrackedObject {
             throw new IllegalStateException(capturedOculusData.failureReason());
         }
         ForgeOriginalVoxyOculusRenderPipelineData capturedPipelineData = capturedOculusData.data();
+        int capturedTextureBindingCount = requiredTextureBindingCount(capturedPipelineData);
+        int[] capturedUniformBufferBindings = requiredUniformBufferBindings(capturedPipelineData);
+        int[] capturedShaderStorageBufferBindings = requiredShaderStorageBufferBindings(capturedPipelineData);
+        validateBindingCapacity(
+                "texture/sampler",
+                capturedTextureBindingCount,
+                glGetInteger(GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS));
+        validateBindingCapacity(
+                "uniform buffer",
+                bindingSpan(capturedUniformBufferBindings),
+                glGetInteger(GL_MAX_UNIFORM_BUFFER_BINDINGS));
+        validateBindingCapacity(
+                "shader storage buffer",
+                bindingSpan(capturedShaderStorageBufferBindings),
+                glGetInteger(GL_MAX_SHADER_STORAGE_BUFFER_BINDINGS));
+        ResourceMode resourceMode = resourceMode(capturedPipelineData != null);
         ForgeOriginalVoxyPipelineDepthStage createdDepthStage = new ForgeOriginalVoxyPipelineDepthStage(properties);
         ForgeOriginalVoxyNormalPipelineTargets createdNormalTargets = new ForgeOriginalVoxyNormalPipelineTargets();
         FullscreenBlit createdFinalBlit = null;
@@ -82,18 +109,19 @@ final class ForgeOriginalVoxyRenderPipeline extends TrackedObject {
         FullscreenBlit createdShaderDepthHackFixTransformBlit = null;
         boolean boundOculusPipelineData = false;
         try {
-            String[] finalBlitDefines = this.useEnvFog
-                    ? new String[]{"USE_ENV_FOG", "EMIT_COLOUR"}
-                    : new String[]{"EMIT_COLOUR"};
-            createdFinalBlit = new FullscreenBlit(
-                    properties,
-                    "voxy:post/fullscreen.vert",
-                    "voxy:post/blit_texture_depth_cutout.frag",
-                    finalBlitDefines);
-            createdSsao = SSAO.createSSAO(
-                    properties,
-                    SSAO.modeFromConfig(ForgeVoxyConfig.ORIGINAL_VOXY_SSAO_MODE.get()));
-            if (capturedPipelineData != null) {
+            if (resourceMode.ownsNormalResources()) {
+                String[] finalBlitDefines = this.useEnvFog
+                        ? new String[]{"USE_ENV_FOG", "EMIT_COLOUR"}
+                        : new String[]{"EMIT_COLOUR"};
+                createdFinalBlit = new FullscreenBlit(
+                        properties,
+                        "voxy:post/fullscreen.vert",
+                        "voxy:post/blit_texture_depth_cutout.frag",
+                        finalBlitDefines);
+                createdSsao = SSAO.createSSAO(
+                        properties,
+                        SSAO.modeFromConfig(ForgeVoxyConfig.ORIGINAL_VOXY_SSAO_MODE.get()));
+            } else if (resourceMode.ownsOculusResources()) {
                 if (capturedPipelineData.getUniforms() != null) {
                     createdOculusShaderUniforms = new GlBuffer(capturedPipelineData.getUniforms().size()).zero();
                 }
@@ -109,6 +137,8 @@ final class ForgeOriginalVoxyRenderPipeline extends TrackedObject {
                 }
                 capturedPipelineData.bindPipeline(this);
                 boundOculusPipelineData = true;
+            } else {
+                throw new IllegalStateException("unknown-render-pipeline-resource-mode");
             }
         } catch (RuntimeException e) {
             if (boundOculusPipelineData) {
@@ -143,6 +173,70 @@ final class ForgeOriginalVoxyRenderPipeline extends TrackedObject {
         this.oculusShaderUniforms = createdOculusShaderUniforms;
         this.shaderpackDepthBlit = createdShaderpackDepthBlit;
         this.shaderDepthHackFixTransformBlit = createdShaderDepthHackFixTransformBlit;
+        this.embeddiumTextureBindingCount = capturedTextureBindingCount;
+        this.embeddiumUniformBufferBindingIndices = capturedUniformBufferBindings;
+        this.embeddiumShaderStorageBufferBindingIndices = capturedShaderStorageBufferBindings;
+    }
+
+    int embeddiumTextureBindingCount() {
+        return this.embeddiumTextureBindingCount;
+    }
+
+    int[] embeddiumUniformBufferBindingIndices() {
+        return this.embeddiumUniformBufferBindingIndices;
+    }
+
+    int[] embeddiumShaderStorageBufferBindingIndices() {
+        return this.embeddiumShaderStorageBufferBindingIndices;
+    }
+
+    private static int requiredTextureBindingCount(ForgeOriginalVoxyOculusRenderPipelineData data) {
+        int count = ORIGINAL_TEXTURE_SAMPLER_BINDING_COUNT;
+        if (data != null && data.getImageSet() != null) {
+            count = Math.max(
+                    count,
+                    ForgeOriginalVoxyOculusRenderPipelineData.BASE_SAMPLER_BINDING_INDEX
+                            + data.getImageSet().bindingCount());
+        }
+        return count;
+    }
+
+    private static int[] requiredUniformBufferBindings(ForgeOriginalVoxyOculusRenderPipelineData data) {
+        return data != null && data.getUniforms() != null
+                ? OCULUS_UNIFORM_BUFFER_BINDINGS
+                : BASE_UNIFORM_BUFFER_BINDINGS;
+    }
+
+    private static int[] requiredShaderStorageBufferBindings(ForgeOriginalVoxyOculusRenderPipelineData data) {
+        int prefixCount = ForgeOriginalVoxyOculusRenderPipelineData.BUFFER_BINDING_INDEX_BASE + 1;
+        if (data != null && data.getSsboSet() != null) {
+            prefixCount = Math.max(
+                    prefixCount,
+                    ForgeOriginalVoxyOculusRenderPipelineData.BUFFER_BINDING_INDEX_BASE
+                            + data.getSsboSet().bindingCount());
+        }
+        int printfBinding = PrintfDebugUtil.activeBindingIndex();
+        boolean appendPrintfBinding = printfBinding >= prefixCount;
+        int[] bindings = new int[prefixCount + (appendPrintfBinding ? 1 : 0)];
+        for (int i = 0; i < prefixCount; i++) {
+            bindings[i] = i;
+        }
+        if (appendPrintfBinding) {
+            bindings[prefixCount] = printfBinding;
+        }
+        return bindings;
+    }
+
+    private static int bindingSpan(int[] bindings) {
+        return bindings.length == 0 ? 0 : bindings[bindings.length - 1] + 1;
+    }
+
+    private static void validateBindingCapacity(String type, int required, int available) {
+        if (required > available) {
+            throw new IllegalStateException(
+                    "Original Voxy requires " + required + ' ' + type
+                            + " bindings but OpenGL exposes " + available);
+        }
     }
 
     boolean oculusPipelineGenerationStale() {
@@ -226,7 +320,7 @@ final class ForgeOriginalVoxyRenderPipeline extends TrackedObject {
             return;
         }
         GPUTiming.INSTANCE.marker("ao");
-        this.ssao.computeSSAO(
+        this.normalSsao().computeSSAO(
                 viewport,
                 this.normalTargets.colourSsaoTextureId(),
                 this.normalTargets.colourTextureId(),
@@ -247,7 +341,8 @@ final class ForgeOriginalVoxyRenderPipeline extends TrackedObject {
             this.finishOculus(viewport, sourceFramebuffer, srcWidth, srcHeight);
             return;
         }
-        this.finalBlit.bind();
+        FullscreenBlit normalFinalBlit = this.normalFinalBlit();
+        normalFinalBlit.bind();
         glBindTextureUnit(3, this.normalTargets.colourSsaoTextureId());
         boolean fogCoversAllRendering = viewport.fogParameters.environmentalEnd() < minecraftRenderDistance();
         if (this.useEnvFog) {
@@ -258,7 +353,7 @@ final class ForgeOriginalVoxyRenderPipeline extends TrackedObject {
             glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
             try {
                 transformBlitDepth(
-                        this.finalBlit,
+                        normalFinalBlit,
                         this.depthStage.getDepthTex(),
                         sourceFramebuffer,
                         viewport,
@@ -352,7 +447,11 @@ final class ForgeOriginalVoxyRenderPipeline extends TrackedObject {
     }
 
     void addDebug(List<String> debug) {
-        this.ssao.addDebugInfo(debug);
+        if (this.ssao != null) {
+            this.ssao.addDebugInfo(debug);
+        } else {
+            debug.add("Using: IrisVoxyRenderPipeline");
+        }
     }
 
     @Override
@@ -370,10 +469,53 @@ final class ForgeOriginalVoxyRenderPipeline extends TrackedObject {
         if (this.oculusShaderUniforms != null) {
             this.oculusShaderUniforms.free();
         }
-        this.ssao.free();
-        this.finalBlit.free();
+        if (this.ssao != null) {
+            this.ssao.free();
+        }
+        if (this.finalBlit != null) {
+            this.finalBlit.free();
+        }
         this.normalTargets.free();
         this.depthStage.free();
+    }
+
+    static ResourceMode resourceMode(boolean hasOculusPipelineData) {
+        return hasOculusPipelineData ? ResourceMode.OCULUS : ResourceMode.NORMAL;
+    }
+
+    enum ResourceMode {
+        NORMAL(true, false),
+        OCULUS(false, true);
+
+        private final boolean ownsNormalResources;
+        private final boolean ownsOculusResources;
+
+        ResourceMode(boolean ownsNormalResources, boolean ownsOculusResources) {
+            this.ownsNormalResources = ownsNormalResources;
+            this.ownsOculusResources = ownsOculusResources;
+        }
+
+        boolean ownsNormalResources() {
+            return this.ownsNormalResources;
+        }
+
+        boolean ownsOculusResources() {
+            return this.ownsOculusResources;
+        }
+    }
+
+    private FullscreenBlit normalFinalBlit() {
+        if (this.finalBlit == null || this.oculusPipelineData != null) {
+            throw new IllegalStateException("normal-final-blit-not-owned");
+        }
+        return this.finalBlit;
+    }
+
+    private SSAO normalSsao() {
+        if (this.ssao == null || this.oculusPipelineData != null) {
+            throw new IllegalStateException("normal-ssao-not-owned");
+        }
+        return this.ssao;
     }
 
     private void postOpaquePreTranslucentOculus(MDICViewport viewport) {
@@ -464,6 +606,14 @@ final class ForgeOriginalVoxyRenderPipeline extends TrackedObject {
                 this.recordSilentFailure(imageFailure);
             }
         }
+    }
+
+    ForgeOriginalVoxyTextureBindings.Binding[] captureOculusNon2DTextureBindings() {
+        if (this.oculusPipelineData == null || this.oculusPipelineData.getImageSet() == null) {
+            return ForgeOriginalVoxyTextureBindings.empty();
+        }
+        return this.oculusPipelineData.getImageSet().captureNon2DTextureBindings(
+                ForgeOriginalVoxyOculusRenderPipelineData.BASE_SAMPLER_BINDING_INDEX);
     }
 
     private String oculusImageSetFailureReason() {

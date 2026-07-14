@@ -22,7 +22,7 @@ final class DebugUtils {
                 LongArrayFIFOQueue positions = new LongArrayFIFOQueue();
                 engine.storage.iteratePositions(WorldEngine.MAX_LOD_LAYER, positions::enqueue);
                 Logger.info("Verifying " + positions.size() + " top level nodes");
-                while (!positions.isEmpty() && ForgeVoxyInstance.INSTANCE.isRunning()) {
+                while (!positions.isEmpty() && engine.isOwningSessionRunning()) {
                     long position = positions.dequeueLong();
                     verifyTopNodeChildren(
                             engine,
@@ -31,7 +31,7 @@ final class DebugUtils {
                             WorldEngine.getZ(position),
                             attemptRepair);
                 }
-                if (!ForgeVoxyInstance.INSTANCE.isRunning()) {
+                if (!engine.isOwningSessionRunning()) {
                     Logger.info("Verification aborted due to shutdown");
                 } else {
                     Logger.info("Verification complete");
@@ -56,7 +56,7 @@ final class DebugUtils {
             for (int y = (topY << 4) >> level; y < ((topY + 1) << 4) >> level; y++) {
                 for (int x = (topX << 4) >> level; x < ((topX + 1) << 4) >> level; x++) {
                     for (int z = (topZ << 4) >> level; z < ((topZ + 1) << 4) >> level; z++) {
-                        if (!ForgeVoxyInstance.INSTANCE.isRunning()) {
+                        if (!world.isOwningSessionRunning()) {
                             return;
                         }
                         if (level == 0) {

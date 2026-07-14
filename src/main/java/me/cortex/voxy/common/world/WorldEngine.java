@@ -1,17 +1,15 @@
 package me.cortex.voxy.common.world;
 
+import me.cortex.voxy.common.Logger;
 import me.cortex.voxy.common.config.section.SectionStorage;
 import me.cortex.voxy.common.util.TrackedObject;
 import me.cortex.voxy.common.world.other.Mapper;
-import org.slf4j.LoggerFactory;
 
 import java.lang.invoke.VarHandle;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class WorldEngine {
-    private static final org.slf4j.Logger LOGGER = LoggerFactory.getLogger("Voxy");
-
     public static final int MAX_LOD_LAYER = 4;
 
     public static final int UPDATE_TYPE_BLOCK_BIT = 1;
@@ -42,16 +40,31 @@ public class WorldEngine {
     public Mapper getMapper() {return this.mapper;}
     public boolean isLive() {return this.isLive;}
 
+    /** Narrow lifecycle contract used by work owned by one Voxy session. */
+    public interface LifecycleOwner {
+        boolean isRunning();
+    }
+
     public final Object instanceIn;
+    private final LifecycleOwner lifecycleOwner;
     private final AtomicInteger refCount = new AtomicInteger();
     volatile long lastActiveTime = System.currentTimeMillis();//Time in millis the world was last "active" i.e. had a total ref count or active section count of != 0
 
     public WorldEngine(SectionStorage storage) {
-        this(storage, null);
+        this(storage, (Object) null);
     }
 
     public WorldEngine(SectionStorage storage, Object instance) {
+        this(storage, instance, null);
+    }
+
+    public WorldEngine(SectionStorage storage, LifecycleOwner instance) {
+        this(storage, instance, instance);
+    }
+
+    private WorldEngine(SectionStorage storage, Object instance, LifecycleOwner lifecycleOwner) {
         this.instanceIn = instance;
+        this.lifecycleOwner = lifecycleOwner;
 
         int cacheSize = 1024;
         if (Runtime.getRuntime().maxMemory()>=(1L<<32)-(200L<<20)) {
@@ -62,6 +75,10 @@ public class WorldEngine {
         this.mapper = new Mapper(this.storage);
         //5 cache size bits means that the section tracker has 32 separate maps that it uses
         this.sectionTracker = new ActiveSectionTracker(6, storage::loadSection, cacheSize, this);
+    }
+
+    public boolean isOwningSessionRunning() {
+        return this.lifecycleOwner == null || this.lifecycleOwner.isRunning();
     }
 
     public WorldSection acquireIfExists(int lvl, int x, int y, int z) {
@@ -147,10 +164,10 @@ public class WorldEngine {
         }
 
         this.thisTracker.free();
-        try {this.mapper.close();} catch (Exception e) {LOGGER.error("Failed to close mapper", e);}
-        try {this.storage.flush();} catch (Exception e) {LOGGER.error("Failed to flush section storage", e);}
+        try {this.mapper.close();} catch (Exception e) {Logger.error(e);}
+        try {this.storage.flush();} catch (Exception e) {Logger.error(e);}
         //Shutdown in this order to preserve as much data as possible
-        try {this.storage.close();} catch (Exception e) {LOGGER.error("Failed to close section storage", e);}
+        try {this.storage.close();} catch (Exception e) {Logger.error(e);}
     }
 
     private static final long TIMEOUT_MILLIS = 10_000;//10 second timeout (is to long? or to short??)

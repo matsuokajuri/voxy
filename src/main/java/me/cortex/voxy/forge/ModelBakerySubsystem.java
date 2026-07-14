@@ -54,12 +54,7 @@ final class ModelBakerySubsystem {
                 }
             }
         }, "Model factory processor");
-        this.processingThread.setUncaughtExceptionHandler((thread, exception) -> {
-            this.isRunning = false;
-            this.processingThreadException = exception == null
-                    ? new RuntimeException("unhandled-model-factory-exception")
-                    : exception;
-        });
+        this.processingThread.setUncaughtExceptionHandler((thread, exception) -> this.recordFactoryFailure(exception));
         this.processingThread.start();
     }
 
@@ -93,16 +88,35 @@ final class ModelBakerySubsystem {
             Logger.error("Error, got bakeing request for out of range state id. StateId: " + blockId + " max id: " + this.mapper.getBlockStateCount(), new Exception());
             return;
         }
+        boolean enqueued;
         this.seenIdsLock.lock();
-        if (!this.seenIds.add(blockId)) {
+        try {
+            if (this.seenIds.contains(blockId)) {
+                return;
+            }
+            this.enqueueLock.lock();
+            try {
+                try {
+                    enqueued = this.factory.addEntry(blockId);
+                } catch (RuntimeException e) {
+                    //Requests run on section-meshing workers. Publish the failure for the formal
+                    // owner tick instead of letting the shared service executor log-and-swallow it.
+                    this.recordFactoryFailure(e);
+                    return;
+                }
+            } finally {
+                this.enqueueLock.unlock();
+            }
+            // A normal false result is still a completed dedupe decision: the mapping already
+            // exists or the same id is already in flight. ModelFactory reports real failures by
+            // throwing, so only the exceptional path above must leave the id unseen for retry.
+            this.seenIds.add(blockId);
+        } finally {
             this.seenIdsLock.unlock();
-            return;
         }
-        this.seenIdsLock.unlock();
-        this.enqueueLock.lock();
-        this.factory.addEntry(blockId);
-        this.enqueueLock.unlock();
-        LockSupport.unpark(this.processingThread);
+        if (enqueued) {
+            LockSupport.unpark(this.processingThread);
+        }
     }
 
     void addBiome(Mapper.BiomeEntry biomeEntry) {
@@ -122,10 +136,20 @@ final class ModelBakerySubsystem {
     }
 
     boolean hasPendingUploads() {
-        return this.factory.hasPendingUploads();
+        return this.processingThreadException != null || this.factory.hasPendingUploads();
     }
 
     void addDebugData(List<String> debug) {
         debug.add(String.format("IF/MC: %03d, %04d", this.factory.getInflightCount(), this.factory.getBakedCount()));
+    }
+
+    private synchronized void recordFactoryFailure(Throwable exception) {
+        this.isRunning = false;
+        if (this.processingThreadException == null) {
+            this.processingThreadException = exception == null
+                    ? new RuntimeException("unhandled-model-factory-exception")
+                    : exception;
+        }
+        LockSupport.unpark(this.processingThread);
     }
 }

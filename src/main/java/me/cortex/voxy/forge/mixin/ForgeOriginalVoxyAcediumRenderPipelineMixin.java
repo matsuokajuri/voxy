@@ -21,7 +21,6 @@ public class ForgeOriginalVoxyAcediumRenderPipelineMixin {
             double cameraY,
             double cameraZ,
             CallbackInfo ci) {
-        ForgeVoxyInstance.INSTANCE.getOriginalVoxyModelPipeline()
-                .renderEmbeddiumCutout(matrices, viewport.getTransform());
+        ForgeVoxyInstance.INSTANCE.renderOriginalVoxyAfterTerrain(matrices, viewport.getTransform());
     }
 }

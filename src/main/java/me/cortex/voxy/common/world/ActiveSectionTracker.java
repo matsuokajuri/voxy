@@ -2,8 +2,8 @@ package me.cortex.voxy.common.world;
 
 import it.unimi.dsi.fastutil.longs.Long2ObjectLinkedOpenHashMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
+import me.cortex.voxy.common.Logger;
 import me.cortex.voxy.common.world.other.Mapper;
-import org.slf4j.LoggerFactory;
 
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
@@ -12,8 +12,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.StampedLock;
 
 public class ActiveSectionTracker implements WorldSection.ReleaseTracker {
-    private static final org.slf4j.Logger LOGGER = LoggerFactory.getLogger("Voxy");
-
     //Deserialize into the supplied section, returns true on success, false on failure
     public interface SectionLoader {int load(WorldSection section);}
 
@@ -148,7 +146,7 @@ public class ActiveSectionTracker implements WorldSection.ReleaseTracker {
                 if (status < 0) {
                     //TODO: Instead if throwing an exception do something better, like attempting to regen
                     //throw new IllegalStateException("Unable to load section: ");
-                    LOGGER.error("Unable to load section {} setting to air", section.key);
+                    Logger.error("Unable to load section " + section.key + " setting to air");
                     status = 1;
                 }
 

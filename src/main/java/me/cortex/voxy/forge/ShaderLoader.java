@@ -1,12 +1,12 @@
 package me.cortex.voxy.forge;
 
+import net.minecraft.resources.ResourceLocation;
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Pattern;
@@ -18,10 +18,10 @@ final class ShaderLoader {
     }
 
     static String parse(String id) {
-        return "#version 460 core\n" + String.join("\n", parseRoot(id));
+        return "#version 460 core\n" + String.join("\n", parseRoot(new ResourceLocation(id)));
     }
 
-    private static List<String> parseRoot(String id) {
+    private static List<String> parseRoot(ResourceLocation id) {
         List<String> out = new ArrayList<>();
         for (String line : lines(load(id))) {
             if (line.startsWith("#version")) {
@@ -32,7 +32,7 @@ final class ShaderLoader {
                 if (!match.matches()) {
                     throw new IllegalArgumentException("Unknown shader import: " + line);
                 }
-                out.addAll(parseRoot(match.group("namespace") + ":" + match.group("path")));
+                out.addAll(parseRoot(new ResourceLocation(match.group("namespace"), match.group("path"))));
             } else {
                 out.add(line);
             }
@@ -40,29 +40,14 @@ final class ShaderLoader {
         return out;
     }
 
-    private static String load(String id) {
-        int split = id.indexOf(':');
-        if (split <= 0 || split == id.length() - 1) {
-            throw new IllegalArgumentException("Invalid shader id " + id);
-        }
-        String namespace = id.substring(0, split);
-        String path = id.substring(split + 1);
-        String resourcePath = "/assets/" + namespace + "/shaders/" + path;
+    private static String load(ResourceLocation id) {
+        String resourcePath = "/assets/" + id.getNamespace() + "/shaders/" + id.getPath();
         try (InputStream stream = ShaderLoader.class.getResourceAsStream(resourcePath)) {
             if (stream != null) {
                 return new String(stream.readAllBytes(), StandardCharsets.UTF_8);
             }
         } catch (IOException e) {
             throw new IllegalStateException("Failed to read shader resource " + resourcePath, e);
-        }
-
-        Path devPath = Path.of("src", "main", "resources", "assets", namespace, "shaders", path);
-        if (Files.exists(devPath)) {
-            try {
-                return Files.readString(devPath, StandardCharsets.UTF_8);
-            } catch (IOException e) {
-                throw new IllegalStateException("Failed to read shader file " + devPath, e);
-            }
         }
         throw new IllegalStateException("Shader not found: " + resourcePath);
     }

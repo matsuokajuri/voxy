@@ -423,9 +423,6 @@ public final class ForgeOriginalVoxyOculusShaderPatch {
                 return null;
             }
 
-            if (blendParts.size() < 4) {
-                return new BlendState(buffer, true, -1, -1, -1, -1);
-            }
             int[] values = blendParts.stream().mapToInt(BlendStateDeserializer::parseType).toArray();
             return new BlendState(buffer, false, values[0], values[1], values[2], values[3]);
         }
@@ -478,6 +475,21 @@ public final class ForgeOriginalVoxyOculusShaderPatch {
         public boolean skipShaderDepthHackFix;
 
         public String checkValid() {
+            if (this.blending != null) {
+                int i = 0;
+                for (BlendState state : this.blending.values()) {
+                    if (state.buffer != -1
+                            && (state.buffer < 0 || this.translucentDrawBuffers.length <= state.buffer)) {
+                        if (state.buffer < 0) {
+                            return "Blending buffer is <0 at index: " + i;
+                        }
+                        return "Blending buffer index out of bounds at " + i
+                                + " was " + state.buffer
+                                + " maximum is " + (this.translucentDrawBuffers.length - 1);
+                    }
+                    i++;
+                }
+            }
             if (this.opaquePatchData == null) {
                 return "Opaque patch data is null";
             }
@@ -489,21 +501,6 @@ public final class ForgeOriginalVoxyOculusShaderPatch {
             }
             if (this.translucentDrawBuffers == null) {
                 return "Translucent draw buffers are null";
-            }
-            if (this.blending != null) {
-                int i = 0;
-                for (BlendState state : this.blending.values()) {
-                    if (state != null && state.buffer != -1
-                            && (state.buffer < 0 || this.translucentDrawBuffers.length <= state.buffer)) {
-                        if (state.buffer < 0) {
-                            return "Blending buffer is <0 at index: " + i;
-                        }
-                        return "Blending buffer index out of bounds at " + i
-                                + " was " + state.buffer
-                                + " maximum is " + (this.translucentDrawBuffers.length - 1);
-                    }
-                    i++;
-                }
             }
             return null;
         }

@@ -4,41 +4,32 @@ This document measures readiness only against the original Voxy owner and draw
 chain. Preview pixels, synthetic validation, manual readback commands, status
 DTOs, and removed prototype routes never count.
 
-## Current verdict (XXV re-audit, 2026-07-13)
+## Current verdict (XXVII exhaustive re-audit, 2026-07-14)
 
 ```text
 ORIGINAL_RENDERER_CHAIN_IMPLEMENTED=true
 ONLY_VISIBLE_ROUTE_IS_ORIGINAL_EQUIVALENT=true
-XXV_STATIC_SOURCE_AUDIT=passed
-XXV_FRONTEND_PARITY_CORRECTIONS=implemented
-XXV_FINAL_JAR_AUDIT=passed-after-option-id-correction
-XXV_BROAD_VISUAL_ACCEPTANCE=passed
-XXV_F3_VISIBILITY_RUNTIME_ACCEPTANCE=passed
-XXV_EMBEDDIUM_PAGE_RUNTIME_ACCEPTANCE=passed
-XXV_CONFIG_APPLY_RUNTIME_ACCEPTANCE=passed
-XXV_TARGETED_FRONTEND_RUNTIME_ACCEPTANCE=passed
+XXVII_EXHAUSTIVE_LINE_AUDIT=14-passes-final-pass-zero-findings
+XXVII_STATIC_AND_ARTIFACT_GATE=35-suites-110-tests-jarJar-passed
+XXVII_RUNTIME_REGRESSION=passed-user-2026-07-14
+XXVII_RELEASE_READINESS=approved-by-user-finalization-request-2026-07-14
 WHOLE_ORIGINAL_MOD_PARITY=passed-with-documented-platform-adaptations
 ```
 
-XXIV's renderer and whole-mod regression passed and was explicitly approved by
-the user. XXV reopened the release decision for a deeper all-source,
-optional-integration, retired-code, naming, Mixin/refmap, dependency/native, and
-final-artifact audit. Therefore the historical XXIV approval remains evidence,
-while the completed XXV gates are the current completion claim.
-
-The broad XXV user visual/lifecycle run also passed without a renderer anomaly.
-It nevertheless exposed two narrower frontend omissions: Voxy diagnostics were
-visible while F3 was closed, and the nine Voxy settings lived in a standalone
-Forge screen rather than pages inside Embeddium. Those migrations are now
-corrected. The refreshed post-correction artifact passes qualification, and the
-user's focused F3/menu observation completed without a reported anomaly. The
-follow-up Rendering off/on Apply lifecycle also passed, closing the current
-qualification gate.
+XXIV and XXV remain valid historical acceptance evidence. XXVI then reopened
+the implementation for deeper session, ingest, storage, optional-integration,
+GL-state, lifecycle, and packaging parity work. XXVII audited the resulting
+tree line by line through fourteen independently frozen full passes. Pass 14
+reread all 275 executable files (40,139 physical text lines / 1,689,515 bytes)
+from zero inherited coverage and found no new issue. The forced clean gate
+passed 35 suites / 110 tests plus JarJar, and the consolidated user-observed
+runtime regression covered repeated shader rebuilds, overworld/Nether/End
+owners, reconnect, and normal shutdown without a reported anomaly.
 
 The former `formalRendererReady`, `actualRendererDrawEnabled`,
 `formalDrawPipelineReady`, and `wholeOriginalModParity` values were telemetry
 published by the removed parity/status command surface. They did not enable or
-disable rendering. XXV removes those fields rather than preserving a second,
+disable rendering. XXV removed those fields rather than preserving a second,
 status-only ownership model. Current acceptance is based on the real owners,
 build/JAR evidence, logs, and the final user-observed runtime gate.
 
@@ -136,7 +127,35 @@ XXV has additionally established:
 `parity_route_status`, `original_voxy_*_status`, and XX.4 audit commands are
 historical evidence only and are no longer registered.
 
-## Final qualification gate
+## Current XXVII qualification evidence
+
+The exhaustive audit and final forced-clean packaging rerun produced this
+accepted artifact:
+
+```text
+35 test suites / 110 tests / 0 failures / 0 errors / 0 skipped
+voxy-forge-0.2.17-beta-forge-all.jar
+size=12,589,718 bytes (12.01 MiB)
+SHA-256=50a27befcfb8d9390aac4db77ab76cf25afe9b4a1fa0aa30c554b7654a5b5502
+entries=458
+duplicate entries=0
+bundled Minecraft/Forge/LWJGL/Oculus/Embeddium/Sodium classes=0
+```
+
+The 2026-07-14 anchored client run exited 0 after the user completed the final
+visual regression without finding an issue. Runtime logs prove the original
+persistent WorldEngine chain, `ForgeOriginalVoxyRenderPipeline`,
+`MDICSectionRenderer`, repeated shader lifecycle, all three vanilla dimensions,
+disconnect/re-entry, and complete shutdown ownership. The user's finalization
+request approves packaging, commit, and push. This is the current readiness
+decision, subject to the documented Forge adaptations and the explicit
+post-migration IterationT compatibility TODO.
+
+## Historical XXV qualification gate
+
+The remainder of this section records the superseded XXV gate and its older
+97 MB pre-packaging-cleanup artifact. It is retained as investigation history;
+the XXVII evidence above is authoritative.
 
 Readiness may be re-approved only after all of the following are true:
 
