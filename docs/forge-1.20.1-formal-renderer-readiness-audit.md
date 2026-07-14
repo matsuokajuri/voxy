@@ -4,7 +4,7 @@ This document measures readiness only against the original Voxy owner and draw
 chain. Preview pixels, synthetic validation, manual readback commands, status
 DTOs, and removed prototype routes never count.
 
-## Current verdict (XXVII exhaustive re-audit, 2026-07-14)
+## Current verdict (XXVIII formal-client and Chunky ingest repair, 2026-07-14)
 
 ```text
 ORIGINAL_RENDERER_CHAIN_IMPLEMENTED=true
@@ -13,7 +13,13 @@ XXVII_EXHAUSTIVE_LINE_AUDIT=14-passes-final-pass-zero-findings
 XXVII_STATIC_AND_ARTIFACT_GATE=35-suites-110-tests-jarJar-passed
 XXVII_RUNTIME_REGRESSION=passed-user-2026-07-14
 XXVII_RELEASE_READINESS=approved-by-user-finalization-request-2026-07-14
-WHOLE_ORIGINAL_MOD_PARITY=passed-with-documented-platform-adaptations
+XXVIII_FORMAL_CLIENT_REGRESSION=confirmed-embeddium-0.3.31-linkage-crash
+XXVIII_IMPLEMENTATION=implemented-minimum-frontend-watertight-bake-and-custom-renderer-empty-map-repairs
+XXVIII_MINIMUM_FRONTEND_GATE=36-suites-114-tests-jarJar-passed-against-exact-0.3.31
+XXVIII_FORMAL_RUNTIME_REGRESSION=passed-user-2026-07-14
+XXVIII_CHUNKY_PREGGEN_REGRESSION=passed-user-2026-07-14
+XXVIII_RELEASE_READINESS=beta-complete-approved-by-user-2026-07-14
+WHOLE_ORIGINAL_MOD_PARITY=beta-complete-user-approved-2026-07-14
 ```
 
 XXIV and XXV remain valid historical acceptance evidence. XXVI then reopened
@@ -25,6 +31,15 @@ from zero inherited coverage and found no new issue. The forced clean gate
 passed 35 suites / 110 tests plus JarJar, and the consolidated user-observed
 runtime regression covered repeated shader rebuilds, overworld/Nether/End
 owners, reconnect, and normal shutdown without a reported anomaly.
+
+The first packaged formal-client run then invalidated that release decision.
+The formal Embeddium 0.3.31 instance is inside the declared supported range but
+lacks a 0.3.32-beta internal transparency-holder class used by the Forge
+material adapter. XXVIII removes that hard linkage and mirrors the exact
+three-level alpha classifier locally. The complete project now compiles, tests,
+and JarJars against the exact formal 0.3.31 JAR. The replacement artifact then
+passed the user's formal-client runtime, visual, custom-renderer, and Chunky
+pregeneration gates; the Forge port is accepted as beta-complete.
 
 The former `formalRendererReady`, `actualRendererDrawEnabled`,
 `formalDrawPipelineReady`, and `wholeOriginalModParity` values were telemetry
@@ -127,7 +142,42 @@ XXV has additionally established:
 `parity_route_status`, `original_voxy_*_status`, and XX.4 audit commands are
 historical evidence only and are no longer registered.
 
-## Current XXVII qualification evidence
+## Current XXVIII qualification evidence
+
+The final XXVIII source gate uses the exact Embeddium 0.3.31 JAR from the
+formal instance and passes **36 suites / 114 tests / 0 failures / 0 errors / 0
+skipped** plus reobfuscated JarJar. Artifact inspection confirms the rewritten
+material bridge no longer references
+`SpriteTransparencyLevelHolder` or its post-0.3.31 implementation package.
+The replacement all-JAR is **12,592,017 bytes (12.01 MiB)**, SHA-256
+`d8fa3c7cf01f463597e2e0613433d906592b6a1e2edcf85358750ad1d02e8add`, with
+459 entries, zero duplicates, and zero bundled frontend/platform classes.
+
+The 0.3.31 compatibility repair has now passed formal startup and world entry in
+the user's affected modpack. That run exposed a repeated no-shader diagonal mark
+in LOD-baked block faces. XXVIII.2 restores XVI's already accepted watertight
+four-edge quad rasterization: triangle splitting remains only for UV/depth
+interpolation, not coverage. The regression test now requires continuous 16/16
+quad coverage instead of preserving the reverted 9/16 result. The full gate
+above includes this repair.
+
+The next formal run proved that active rendering continued for roughly five
+minutes, then exposed a separate custom block-entity model classification crash
+for `butcher:pestleandmortarblock[facing=south,animation=0]`. Original Voxy does
+not yet render block entities into LOD, but it accepts an empty ordinary-quad
+bake. XXVIII.3 restores that boundary: custom renderers publish/dedupe a valid
+empty model mapping, while a genuinely missing baked model remains fatal. The
+new three-route regression test is included in the current gate.
+
+XXVIII.4 additionally ports original Voxy's exact-result Chunky ingest ownership
+to Forge 1.20.1, removing the post-ticket coordinate relookup race which omitted
+random fast-generated ocean chunks. The user completed the combined formal
+runtime gate with the final JAR: the no-shader diagonal remained absent, the
+custom-renderer state no longer crashed, Chunky-pregenerated ocean LOD contained
+no holes, and no other tested regression was reported. The user explicitly
+approved marking the project beta-complete on 2026-07-14.
+
+## Historical XXVII qualification evidence
 
 The exhaustive audit and final forced-clean packaging rerun produced this
 accepted artifact:
@@ -142,14 +192,15 @@ duplicate entries=0
 bundled Minecraft/Forge/LWJGL/Oculus/Embeddium/Sodium classes=0
 ```
 
-The 2026-07-14 anchored client run exited 0 after the user completed the final
+The 2026-07-14 anchored development client run exited 0 after the user completed the final
 visual regression without finding an issue. Runtime logs prove the original
 persistent WorldEngine chain, `ForgeOriginalVoxyRenderPipeline`,
 `MDICSectionRenderer`, repeated shader lifecycle, all three vanilla dimensions,
 disconnect/re-entry, and complete shutdown ownership. The user's finalization
-request approves packaging, commit, and push. This is the current readiness
-decision, subject to the documented Forge adaptations and the explicit
-post-migration IterationT compatibility TODO.
+request approved the XXVII packaging, commit, and push. The later formal 0.3.31
+crash supersedes that release decision; the evidence remains historical and
+does not close XXVIII. The explicit post-migration IterationT compatibility TODO
+is unchanged.
 
 ## Historical XXV qualification gate
 

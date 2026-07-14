@@ -14,7 +14,7 @@ class SoftwareRasterizerTest {
     private static final int TARGET_SIZE = 4;
 
     @Test
-    void quadCoverageMatchesOriginalTriangleEdgeOwnership() {
+    void quadCoverageIsWatertightAcrossTheInternalTriangleSplit() {
         SoftwareRasterizer rasterizer = new SoftwareRasterizer(TARGET_SIZE);
         rasterizer.setFaceCull(true);
         rasterizer.setSamplerTexture(new int[]{0xFFFFFFFF}, 1, 1);
@@ -37,9 +37,9 @@ class SoftwareRasterizerTest {
                 .toArray();
         assertArrayEquals(new int[]{
                 1, 1, 1, 1,
-                0, 1, 1, 0,
-                0, 1, 1, 0,
-                0, 0, 0, 1
+                1, 1, 1, 1,
+                1, 1, 1, 1,
+                1, 1, 1, 1
         }, covered, Arrays.toString(covered));
     }
 

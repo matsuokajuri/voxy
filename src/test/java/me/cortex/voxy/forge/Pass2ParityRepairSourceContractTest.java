@@ -91,6 +91,22 @@ class Pass2ParityRepairSourceContractTest {
         assertFalse(biomeBlock.contains("resultOrPartial"));
     }
 
+    @Test
+    void chunkyForgeHookConsumesTheExactFullFutureResult() throws IOException {
+        String source = source(
+                "src/main/java/me/cortex/voxy/forge/mixin/ForgeOriginalVoxyChunkyForgeWorldMixin.java");
+
+        assertTrue(source.contains("@Redirect("));
+        assertTrue(source.contains("ChunkHolder;getOrScheduleFuture"));
+        assertTrue(source.contains("ChunkHolder;m_140049_"));
+        assertTrue(source.contains("result.left().ifPresent(chunk ->"));
+        assertTrue(source.contains("chunk instanceof LevelChunk levelChunk"));
+        assertFalse(source.contains("getChunkNow"));
+        assertFalse(source.contains("thenRunAsync"));
+        assertFalse(source.contains("CallbackInfoReturnable"));
+        assertFalse(source.contains("mixinextras"));
+    }
+
     private static String source(String path) throws IOException {
         return Files.readString(Path.of(path));
     }

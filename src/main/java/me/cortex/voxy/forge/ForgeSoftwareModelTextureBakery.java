@@ -176,8 +176,15 @@ final class ForgeSoftwareModelTextureBakery {
 
     private int renderBlock(Minecraft minecraft, BlockState state, long outputBuffer) {
         BakedModel model = minecraft.getBlockRenderer().getBlockModel(state);
-        if (model == null || model.isCustomRenderer()) {
-            this.lastFailureReason = "baked-model-missing-or-custom";
+        ModelRoute route = classifyModel(model);
+        if (route == ModelRoute.MISSING) {
+            this.lastFailureReason = "baked-model-missing";
+            return 0;
+        }
+        if (route == ModelRoute.CUSTOM_RENDERER_EMPTY) {
+            // Original SoftwareModelTextureBakery does not yet bake block-entity renderers: a
+            // model with no ordinary quads becomes an empty model mapping instead of a fatal
+            // bakery failure. Forge exposes that case explicitly through isCustomRenderer().
             return 0;
         }
         this.opaqueVC.reset();
@@ -393,6 +400,19 @@ final class ForgeSoftwareModelTextureBakery {
     private static List<BakedQuad> getQuads(BakedModel model, BlockState state, Direction direction, RenderType renderType) {
         List<BakedQuad> quads = model.getQuads(state, direction, RandomSource.create(42L), ModelData.EMPTY, renderType);
         return quads == null ? List.of() : quads;
+    }
+
+    static ModelRoute classifyModel(@Nullable BakedModel model) {
+        if (model == null) {
+            return ModelRoute.MISSING;
+        }
+        return model.isCustomRenderer() ? ModelRoute.CUSTOM_RENDERER_EMPTY : ModelRoute.BAKED_QUADS;
+    }
+
+    enum ModelRoute {
+        MISSING,
+        CUSTOM_RENDERER_EMPTY,
+        BAKED_QUADS
     }
 
     private static Direction[] directionsWithNull() {

@@ -1,10 +1,10 @@
 # Forge 1.20.1 line-by-line port audit
 
 ```text
-AUDIT_STATUS=complete-pass-14-zero-finding-static-gates-passed
+AUDIT_STATUS=beta-complete-user-approved-2026-07-14
 AUDIT_BRANCH=forge-1.20.1-skeleton
-AUDIT_HEAD=a562e1f1d937dc5f36ec406c8ac586881a408f69
-AUDIT_WORKTREE=current-dirty-XXVII-line-audit-and-repair-tree
+AUDIT_HEAD=836208526d5457657a1c919c130be18a72006b3b
+AUDIT_WORKTREE=XXVIII-final-repairs-validated
 AUDIT_PASS_1=252-of-252-files-reviewed
 AUDIT_PASS_2=261-of-261-files-reviewed
 AUDIT_PASS_3=270-of-270-files-reviewed
@@ -20,7 +20,7 @@ AUDIT_PASS_12=275-of-275-files-reviewed
 AUDIT_PASS_13=275-of-275-files-reviewed
 AUDIT_PASS_14=275-of-275-files-reviewed
 AUDIT_ZERO_FINDING_FULL_PASS=proven-pass-14
-AUDIT_CLIENT_LAUNCH=forbidden-by-user
+AUDIT_CLIENT_LAUNCH=formal-embeddium-0.3.31-combined-runtime-passed-user
 ```
 
 ## Objective and completion rule
@@ -4935,3 +4935,127 @@ and N166-N275 (**110 / 10,207 / 455,250**).
   `50a27befcfb8d9390aac4db77ab76cf25afe9b4a1fa0aa30c554b7654a5b5502`,
   with 458 entries, zero duplicates, seven expected nested libraries, and zero
   bundled Minecraft/Forge/LWJGL/Oculus/Embeddium/Sodium classes.
+
+### Post-XXVII formal-client compatibility invalidation (XXVIII)
+
+- The committed XXVII tree and its 275-file Pass 14 ledger remain the complete
+  historical static audit baseline. They are no longer a release qualification
+  for the current worktree: the first formal-client run used the declared
+  minimum Embeddium 0.3.31 and crashed before world entry.
+- The supplied crash report identifies
+  `ForgeOriginalVoxyQuadMaterialBridge.<clinit>` and a missing
+  `SpriteTransparencyLevelHolder`. That class exists in the development
+  Embeddium 0.3.32 beta but not in the formal 0.3.31 JAR, even though
+  `gradle.properties` and `mods.toml` accept `[0.3.31,0.4)`.
+- The two-file XXVIII delta was reviewed against the exact 0.3.31 JAR, the
+  0.3.32 transparency-classification implementation, and Forge 1.20.1
+  `SpriteContents`/`NativeImage`. It removes the newer internal-class linkage,
+  preserves the same `OPAQUE`/`TRANSPARENT`/`TRANSLUCENT` alpha precedence, and
+  weakly caches results for the atlas-content lifetime.
+- Regression coverage now exercises every classification branch and rejects
+  reintroduction of the post-0.3.31 internal package dependency. A forced clean
+  `test jarJar` using the exact formal 0.3.31 JAR passed **35 suites / 112 tests /
+  0 failures / 0 errors / 0 skipped**.
+- The replacement all-JAR is **12,590,782 bytes**, SHA-256
+  `3b9c0dee957a1c9cbcc18171903b5e7bc0b171dbfa871f59110d2dabc06dbe06`, with
+  458 entries, zero duplicates, zero bundled frontend/platform classes, and no
+  post-0.3.31 transparency-holder constant-pool reference.
+- This targeted delta audit does not retroactively rewrite the Pass 14 hashes.
+  Current whole-mod acceptance remains reopened until the replacement artifact
+  starts and completes visual/lifecycle regression in the user's formal
+  0.3.31 instance. No XXVIII commit is authorized before that user confirmation.
+
+### XXVIII.2 audit correction: restored XVI watertight quad coverage
+
+- Formal 0.3.31 startup progressed into the affected modpack, proving the
+  XXVIII.1 linkage repair. User screenshots then showed regular, face-local
+  diagonal marks on LOD blocks with shaderpacks disabled. The separately seen
+  shaderpack fog wall was classified by the user as modpack configuration and
+  is excluded from this code change.
+- Historical commit `7d1bc34e` records the same symptom, root cause, exact
+  software-raster correction, and successful runtime verification. The current
+  `SoftwareRasterizer` had lost that correction during XXV reconstruction:
+  `rasterQuad` again delegated coverage to two independently tested triangles.
+- Pass 14's original-source equality is therefore not sufficient for this
+  method. The current original implementation is still the comparison baseline,
+  but the XVI four-outer-edge coverage test is a documented, runtime-proven
+  correction to a defective software-bakery edge-ownership result, not a
+  substitute render route.
+- `rasterConvexQuad` now decides inclusion from the quad's four outer edges.
+  The original `(0,1,2)` / `(2,3,0)` split remains solely for barycentric
+  depth/UV interpolation, so the internal diagonal cannot leave clear baked
+  texels. Degenerate triangle-as-quad input remains valid.
+- The old test name and 9-of-16 coverage expectation incorrectly enshrined the
+  regression. It now requires watertight 16-of-16 coverage for the controlled
+  quad. The focused test passes.
+- A forced clean `test jarJar` against the exact affected Embeddium 0.3.31 JAR
+  passes **35 suites / 112 tests / 0 failures / 0 errors / 0 skipped**. The
+  all-JAR is **12,590,782 bytes**, SHA-256
+  `3b9c0dee957a1c9cbcc18171903b5e7bc0b171dbfa871f59110d2dabc06dbe06`,
+  with 458 entries, zero duplicates, and zero bundled platform/frontend classes.
+- The Pass 14 hash ledger remains the committed historical XXVII snapshot; the
+  changed rasterizer and test are explicitly superseded by this delta audit.
+  User visual confirmation is required before commit or readiness closure.
+
+### XXVIII.3 audit correction: custom renderers are empty, not missing models
+
+- The 2026-07-14 19:59 error bundle proves the current JAR entered the affected
+  0.3.31 modpack, created the formal Voxy route, and rendered for about five
+  minutes. The fatal owner was then `ModelFactory.processModelResult`, reporting
+  block-state 5731 as `baked-model-missing-or-custom`; shutdown completed through
+  the normal render-system teardown path.
+- Direct read-only decoding of the persistent Mapper's typed RocksDB mapping
+  identifies 5731 as
+  `butcher:pestleandmortarblock[facing=south,animation=0]`. The Butcher JAR owns
+  an animated block-entity renderer for this state, so Forge correctly marks the
+  model as custom-rendered.
+- Original `SoftwareModelTextureBakery` has an explicit TODO for block-entity
+  models but does not fail an empty ordinary-quad bake. The Forge adapter's
+  merged null/custom failure classification, combined with XXVII's strict error
+  propagation, changed that unsupported original case into a client crash.
+- `ForgeSoftwareModelTextureBakery.classifyModel` now separates `MISSING`,
+  `CUSTOM_RENDERER_EMPTY`, and `BAKED_QUADS`. Only `MISSING` sets a failure.
+  Custom renderers return empty face data with `none`, allowing the unchanged
+  `ModelFactory` dedupe/mapping/in-flight completion path to run. This preserves
+  the original limitation without inventing replacement geometry.
+- A focused behavior test covers all three routes. The forced-clean exact-0.3.31
+  `test jarJar` gate passes **36 suites / 113 tests / 0 failures / 0 errors / 0
+  skipped**. The all-JAR is **12,591,959 bytes**, SHA-256
+  `d53b8c6c5c495020556e63b41fb77f42f9eda7df9fbbf326fece151b462f3a06`,
+  with 459 entries, zero duplicates, and zero bundled platform/frontend classes.
+- The user confirmed the final JAR no longer showed the diagonal seam and did
+  not crash around the custom-renderer state. This closes the combined runtime
+  confirmation for XXVIII.2 and XXVIII.3.
+
+### XXVIII.4 audit correction: Chunky FULL result must be ingested by identity
+
+- Installed Chunky 1.3.146 bytecode confirms its Forge adapter returns an
+  `allOf` Void future and independently removes the `CHUNKY` ticket on async
+  completion. The previous Voxy RETURN injector added another async completion
+  and then called `getChunkNow`; it could therefore observe null after ticket
+  release/unload and silently omit the generated chunk.
+- Original Fabric Voxy wraps the holder generation future and consumes the
+  successful chunk object directly. Forge 1.20.1 exposes it as
+  `Either<ChunkAccess, ChunkHolder.ChunkLoadingFailure>`; the Forge mixin now
+  redirects `ChunkHolder.getOrScheduleFuture`, consumes the left value, and
+  preserves the same `LevelChunk` contract. No fallback importer, synthetic
+  LOD, or renderer-side repair was added.
+- Ocean concentration is consistent with fast homogeneous generation widening
+  the scheduling window. Source review excludes a water-only empty-section
+  filter: water sections are non-air and every non-null section is eligible.
+- The external Chunky target prevents automatic remapping of the nested
+  Minecraft invocation. Both verified Forge 1.20.1 names are explicit:
+  development `getOrScheduleFuture` and production `m_140049_`; `require=0`
+  ensures only the environment-appropriate point applies.
+- The focused source contract rejects the former `getChunkNow`/`thenRunAsync`
+  route and requires the dependency-free standard-Mixin redirect, exact-result
+  capture, and both runtime targets. The forced-clean exact-0.3.31 gate passes
+  **36 suites / 114 tests / 0 failures / 0 errors / 0 skipped** plus reobfuscated
+  JarJar. The 12,592,017-byte artifact has SHA-256
+  `d8fa3c7cf01f463597e2e0613433d906592b6a1e2edcf85358750ad1d02e8add`,
+  459 entries, zero duplicates, and zero bundled platform/frontend classes.
+  The user completed Chunky pregeneration and inspection of never-client-loaded
+  ocean LOD without reproducing a hole, reconfirmed the other XXVIII repairs,
+  and approved the final commit/push. The project is beta-complete as of
+  2026-07-14; IterationT remains the already documented post-migration
+  compatibility TODO because original Voxy has no corresponding adaptation.

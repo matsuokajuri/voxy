@@ -1,22 +1,27 @@
 package me.cortex.voxy.forge;
 
+import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.block.model.BakedQuad;
 import net.minecraft.client.renderer.texture.SpriteContents;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.FastColor;
 
 import javax.annotation.Nullable;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.Collections;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
+import java.util.WeakHashMap;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.IntUnaryOperator;
 
 final class ForgeOriginalVoxyQuadMaterialBridge {
     private static final String BAKED_QUAD_VIEW_CLASS = "me.jellysquid.mods.sodium.client.model.quad.BakedQuadView";
-    private static final String SPRITE_TRANSPARENCY_HOLDER_CLASS = "org.embeddedt.embeddium.impl.render.chunk.sprite.SpriteTransparencyLevelHolder";
 
     private static final Class<?> BAKED_QUAD_VIEW;
     private static final Method GET_X;
@@ -27,8 +32,9 @@ final class ForgeOriginalVoxyQuadMaterialBridge {
     private static final Method GET_COLOR_INDEX;
     private static final Method GET_SPRITE;
     private static final Method HAS_SHADE;
-    private static final Method GET_TRANSPARENCY_LEVEL;
     private static final Set<RenderType> WARNED_UNKNOWN_RENDER_LAYERS = ConcurrentHashMap.newKeySet();
+    private static final Map<SpriteContents, String> TRANSPARENCY_LEVELS =
+            Collections.synchronizedMap(new WeakHashMap<>());
 
     static {
         try {
@@ -41,8 +47,6 @@ final class ForgeOriginalVoxyQuadMaterialBridge {
             GET_COLOR_INDEX = BAKED_QUAD_VIEW.getMethod("getColorIndex");
             GET_SPRITE = BAKED_QUAD_VIEW.getMethod("getSprite");
             HAS_SHADE = BAKED_QUAD_VIEW.getMethod("hasShade");
-            Class<?> holder = Class.forName(SPRITE_TRANSPARENCY_HOLDER_CLASS);
-            GET_TRANSPARENCY_LEVEL = holder.getMethod("getTransparencyLevel", Class.forName("net.minecraft.client.renderer.texture.SpriteContents"));
         } catch (ReflectiveOperationException e) {
             throw new ExceptionInInitializerError(e);
         }
@@ -208,8 +212,36 @@ final class ForgeOriginalVoxyQuadMaterialBridge {
         if (sprite == null) {
             return "OPAQUE";
         }
-        Object level = invoke(GET_TRANSPARENCY_LEVEL, null, sprite.contents());
-        return level == null ? "OPAQUE" : String.valueOf(level);
+        return TRANSPARENCY_LEVELS.computeIfAbsent(
+                sprite.contents(),
+                ForgeOriginalVoxyQuadMaterialBridge::computeTransparencyLevel);
+    }
+
+    private static String computeTransparencyLevel(SpriteContents contents) {
+        NativeImage image = contents.getOriginalImage();
+        int width = image.getWidth();
+        int pixelCount = width * image.getHeight();
+        return classifyTransparency(
+                pixelCount,
+                pixelIndex -> FastColor.ABGR32.alpha(
+                        image.getPixelRGBA(pixelIndex % width, pixelIndex / width)));
+    }
+
+    // Embeddium 0.3.32 caches this exact three-level classification on SpriteContents. The
+    // declared minimum 0.3.31 runtime predates that internal API, so the Forge adapter mirrors
+    // its alpha contract locally and caches the result weakly for the atlas lifetime.
+    static String classifyTransparency(int pixelCount, IntUnaryOperator alphaAt) {
+        boolean hasTransparentPixel = false;
+        for (int pixelIndex = 0; pixelIndex < pixelCount; pixelIndex++) {
+            int alpha = alphaAt.applyAsInt(pixelIndex);
+            if (alpha > 0 && alpha < 255) {
+                return "TRANSLUCENT";
+            }
+            if (alpha == 0) {
+                hasTransparentPixel = true;
+            }
+        }
+        return hasTransparentPixel ? "TRANSPARENT" : "OPAQUE";
     }
 
     private static boolean usesEmbeddiumDarkCutoutEquivalent(@Nullable TextureAtlasSprite sprite) {
@@ -217,8 +249,7 @@ final class ForgeOriginalVoxyQuadMaterialBridge {
             return false;
         }
         SpriteContents contents = sprite.contents();
-        Object transparencyLevel = invoke(GET_TRANSPARENCY_LEVEL, null, contents);
-        if (transparencyLevel == null || "OPAQUE".equals(String.valueOf(transparencyLevel))) {
+        if ("OPAQUE".equals(transparencyLevel(sprite))) {
             return false;
         }
         ResourceLocation name = spriteName(contents);

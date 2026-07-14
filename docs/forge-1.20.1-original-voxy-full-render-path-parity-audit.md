@@ -90,7 +90,13 @@ XXVII_FORCED_CLEAN_GATE=35-suites-110-tests-jarJar-passed
 XXVII_RUNTIME_REGRESSION=passed-user-2026-07-14
 XXVII_RELEASE_READINESS=approved-by-user-finalization-request-2026-07-14
 XXVII_FINAL_PACKAGE=12,589,718-bytes-sha256-50a27befcfb8d9390aac4db77ab76cf25afe9b4a1fa0aa30c554b7654a5b5502
-WHOLE_ORIGINAL_MOD_PARITY=passed-with-documented-platform-adaptations
+XXVIII_FORMAL_CLIENT_REGRESSION=confirmed-embeddium-0.3.31-internal-api-linkage-failure
+XXVIII_IMPLEMENTATION=implemented-minimum-frontend-watertight-bake-and-custom-renderer-empty-map-repairs
+XXVIII_MINIMUM_FRONTEND_GATE=36-suites-114-tests-jarJar-passed-against-formal-embeddium-0.3.31
+XXVIII_FORMAL_RUNTIME_REGRESSION=passed-user-2026-07-14
+XXVIII_CHUNKY_PREGGEN_REGRESSION=passed-user-2026-07-14
+XXVIII_RELEASE_READINESS=beta-complete-approved-by-user-2026-07-14
+WHOLE_ORIGINAL_MOD_PARITY=beta-complete-user-approved-2026-07-14
 ```
 
 The original-equivalent renderer chain remains the only visible route and its
@@ -3844,3 +3850,187 @@ decision and authorizes the audited worktree to be packaged, committed, and
 pushed. The removed status-only readiness fields have no replacement value to
 flip; acceptance is based on the real owners and the evidence above.
 `capsettings.cap` remains user-owned, untracked, and excluded.
+
+## XXVIII formal Embeddium 0.3.31 compatibility repair
+
+The packaged XXVII artifact passed the development client but failed during the
+first formal-client run. The user-supplied 2026-07-14 error bundle proves an
+`ExceptionInInitializerError` in
+`ForgeOriginalVoxyQuadMaterialBridge.<clinit>`, caused by
+`ClassNotFoundException` for
+`org.embeddedt.embeddium.impl.render.chunk.sprite.SpriteTransparencyLevelHolder`.
+The formal instance was Forge 47.4.20, Oculus 1.8.0, and Embeddium
+`0.3.31+mc1.20.1`, which is inside the declared `[0.3.31,0.4)` dependency range.
+Java 21 and the newer Forge patch level were not the failure source.
+
+The development classpath had silently selected Embeddium
+`0.3.32-beta.9999+mc1.20.1`. Its internal
+`SpriteTransparencyLevelHolder` API does not exist in the formal 0.3.31 JAR.
+This was therefore a real platform-adapter compatibility defect missed by the
+XXVII source and development-runtime gates; the previous whole-mod acceptance
+and XXVII final artifact are no longer the current release evidence.
+
+The repair keeps the declared minimum at 0.3.31 and removes the hard linkage to
+the post-0.3.31 internal class. The Forge material adapter now mirrors
+Embeddium 0.3.32's exact three-level pixel-alpha contract locally:
+
+- any alpha in `1..254` classifies the sprite as `TRANSLUCENT`;
+- otherwise any alpha `0` classifies it as `TRANSPARENT`;
+- otherwise the sprite is `OPAQUE`.
+
+The source image is the Forge 1.20.1 `SpriteContents#getOriginalImage()` owner,
+and results are cached in a synchronized weak-key map so the cache does not
+extend the atlas contents' lifetime. This is a bounded Embeddium-version adapter,
+not an alternate model or renderer route; all callers continue through the
+same original Voxy model-material and software-bake chain.
+
+The focused classifier/source-contract tests passed. A forced clean gate then
+compiled and packaged the complete project while explicitly substituting the
+exact Embeddium 0.3.31 JAR from the formal instance:
+
+```text
+rtk powershell ... .\gradlew clean test jarJar
+  -PvoxyEmbeddiumDevJar=<formal Embeddium 0.3.31 JAR>
+  --rerun-tasks --stacktrace --console=plain
+exit=0
+36 test suites / 113 tests / 0 failures / 0 errors / 0 skipped
+voxy-forge-0.2.17-beta-forge-all.jar
+size=12,591,959 bytes (12.01 MiB)
+SHA-256=d53b8c6c5c495020556e63b41fb77f42f9eda7df9fbbf326fece151b462f3a06
+entries=459 / duplicate entries=0
+bundled Minecraft/Forge/LWJGL/Oculus/Embeddium/Sodium classes=0
+post-0.3.31 transparency-holder reference=absent
+watertight software-raster quad coverage=present
+custom-renderer empty-model mapping=present
+```
+
+The minimum-frontend repair has now passed formal startup far enough to enter a
+large 0.3.31-based modpack and render the original LOD route. That run exposed a
+second current-worktree regression: with shaderpacks disabled, stable
+face-local diagonal marks appeared on baked LOD terrain. The shaderpack fog wall
+reported in the same run was independently identified by the user as modpack
+configuration and is explicitly outside this repair.
+
+### XXVIII.2 watertight software-bakery quad coverage
+
+The no-shader screenshots match the diagonal model-texture seam previously
+repaired and accepted in XVI (`7d1bc34e`). XVI established that independently
+testing the `(0,1,2)` and `(2,3,0)` triangles makes their shared diagonal a
+coverage boundary; transformed float values can leave a clear texel rejected
+by both triangles, which is then magnified over the LOD face. It repaired this
+by testing the four outer quad edges once and retaining the triangle split only
+as the barycentric interpolation basis.
+
+The XXV source reconstruction later restored the original Voxy
+`rasterTriangle(false/true)` implementation line-for-line. XXVII's exhaustive
+audit retained it, and `SoftwareRasterizerTest` incorrectly locked the resulting
+partial edge-ownership coverage as parity. This was a real audit regression:
+the original source remains the baseline, but an already runtime-proven,
+documented Forge software-bakery correction must not be removed merely to
+reproduce a known raster coverage defect.
+
+XXVIII.2 restores XVI's exact four-edge convex-quad coverage algorithm in the
+current `SoftwareRasterizer`. Degenerate triangle-as-quad encodings remain
+supported because a zero-length outer edge imposes no negative-edge constraint.
+The two triangles still select the same vertices and UV/depth interpolation;
+only their internal diagonal ceases to decide pixel ownership. The replacement
+test requires all 16 pixel centers of the controlled 4x4 quad to be covered,
+where the reverted implementation covered only 9 and left deterministic edge
+gaps.
+
+The focused rasterizer test and the forced clean 0.3.31 gate above pass. Visual
+confirmation in the affected modpack remains mandatory: verify the repeated
+diagonal marks are absent with shaderpacks disabled and check representative
+cutout/translucent blocks. XXVIII remains uncommitted and not releasable until
+the user reports that result.
+
+### XXVIII.3 custom block-entity model crash parity repair
+
+The user's `错误报告-2026-07-14_19.59.12.zip` records a successful 0.3.31 world
+entry and roughly five minutes of active original-route rendering before the
+model-factory worker failed. The first fatal exception was:
+
+```text
+Original Voxy software model bake failed for block-state 5731:
+baked-model-missing-or-custom
+```
+
+The persistent WorldEngine Mapper RocksDB entry for typed block-state key
+`(1 << 30) | 5731` decodes to
+`butcher:pestleandmortarblock[facing=south,animation=0]`. The supplying
+`butcher-2.7.5-forge-1.20.1.jar` contains a tile renderer, animated geometry,
+and no ordinary baked-quad representation for that state. Forge therefore
+reports its `BakedModel` as `isCustomRenderer()`.
+
+Original `SoftwareModelTextureBakery` explicitly leaves block-entity model
+support as a TODO. It does not turn the absence of ordinary quads into an
+exception: the bake completes with empty face data and `ModelFactory` publishes
+or deduplicates the empty model mapping. The Forge adapter instead combined
+`model == null` and `model.isCustomRenderer()` into one failure reason, while
+XXVII's strict failure propagation converted that adapter-only classification
+into a client-fatal exception. This is a confirmed port deviation, not a
+failure caused by XXVIII.2's quad coverage algorithm.
+
+XXVIII.3 now distinguishes three model routes. A genuinely missing `BakedModel`
+remains `baked-model-missing` and therefore fatal. A custom renderer produces
+the original-equivalent intentional empty bake with failure reason `none`, so
+the normal `ModelFactory` dedupe path publishes a valid block-state mapping and
+removes the in-flight request. Ordinary models continue through the existing
+quad/material/raster path unchanged. No synthetic geometry or substitute model
+is introduced; the animated block entity is simply absent from distant LOD,
+matching the original unsupported-feature boundary.
+
+The focused three-route classification test passes. The current forced-clean
+gate against the exact affected Embeddium 0.3.31 JAR passes **36 suites / 113
+tests / 0 failures / 0 errors / 0 skipped** plus reobfuscated JarJar. The current
+artifact statistics are recorded in the gate above. Runtime confirmation must
+cover both the no-shader diagonal scene and continued travel/loading around the
+Butcher pestle-and-mortar state without a model-factory crash. The user later
+confirmed the combined final JAR passed both checks without a reported issue.
+
+### XXVIII.4 Chunky generated-chunk ownership parity repair
+
+The user reported persistent, chunk-aligned LOD holes after a Chunky
+pregeneration run, concentrated in large oceans at roughly one or two missing
+chunks per ten. The affected chunks had never entered the vanilla client
+radius. Loading one as a vanilla chunk and moving away caused its LOD to appear
+permanently, proving that the first generated-chunk ingest had been omitted.
+
+The exact installed Chunky 1.3.146 bytecode shows that Forge
+`ForgeWorld.getChunkAtAsync` adds a `CHUNKY` ticket, requests the holder's FULL
+future, converts it to `CompletableFuture<Void>` with `allOf`, and registers an
+asynchronous completion callback which removes the ticket. The existing Forge
+Voxy mixin injected at the returned Void future, scheduled a second asynchronous
+server callback, and called `getChunkNow(x,z)`. Ticket removal and Voxy's lookup
+were sibling completion tasks. Once the generated chunk was no longer resident,
+`getChunkNow` returned null and the omission was silent. Fast homogeneous ocean
+generation makes this scheduling/unload window easier to hit; there is no
+water-only empty-section filter because water sections are non-air and the
+ingest loop accepts every non-null section.
+
+Original Voxy's Fabric `MixinFabricWorld` does not perform a coordinate lookup.
+It wraps the exact FULL result future and consumes the successful chunk directly,
+type-checks it as `LevelChunk`, and passes that object to `VoxelIngestService`.
+Forge 1.20.1 represents that result as
+`Either<ChunkAccess, ChunkHolder.ChunkLoadingFailure>`. XXVIII.4 ports the same
+ownership contract by redirecting `ChunkHolder.getOrScheduleFuture` through a
+`thenApply` that returns the unchanged `Either`. The post-completion `getChunkNow`,
+server reschedule, coordinate snapshot, and ticket-removal race are removed.
+
+Because the enclosing target is a third-party class declared `remap=false`, the
+Minecraft invocation target receives no annotation-processor refmap entry. The
+mixin therefore declares both the Forge 1.20.1 development Mojmap name
+`getOrScheduleFuture` and its verified production runtime name `m_140049_`;
+both are optional injection points and exactly one matches in each environment.
+A source-contract regression test requires the standard-Mixin redirect,
+exact-result capture, and both names,
+while rejecting `getChunkNow`, `thenRunAsync`, and the former RETURN injector.
+The forced-clean exact-Embeddium-0.3.31 gate passes **36 suites / 114 tests / 0
+failures / 0 errors / 0 skipped** plus reobfuscated JarJar. The all-JAR is
+**12,592,017 bytes**, SHA-256
+`d8fa3c7cf01f463597e2e0613433d906592b6a1e2edcf85358750ad1d02e8add`,
+with 459 entries, zero duplicates, and zero bundled platform/frontend classes.
+The user completed the final Chunky pregeneration and remote-ocean visual gate
+without reproducing a hole, and also reconfirmed the no-shader seam and custom
+renderer repairs. On 2026-07-14 the user approved the XXVIII commit/push and
+marked the project beta-complete.
