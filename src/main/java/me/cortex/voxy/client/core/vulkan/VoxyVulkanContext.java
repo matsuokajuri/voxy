@@ -24,16 +24,16 @@ import java.util.Objects;
 @Environment(EnvType.CLIENT)
 public final class VoxyVulkanContext {
     private static final long REQUIRED_MAX_DRAW_INDIRECT_COUNT = 400_000L;
-    // The Round V through normal Round VII front-half owners are wired in source, but the full
-    // renderer still lacks SSAO, translucent, composite, reload and real-frame validation.
-    // Keep the only runtime gate closed until the complete formal chain satisfies its TODO item.
-    private static final boolean FORMAL_RENDERER_CONNECTED = false;
+    // The complete normal-renderer source chain is connected through the Minecraft target
+    // composite. Runtime validation remains a correctness gate, not a route-selection fallback.
+    private static final boolean FORMAL_RENDERER_CONNECTED = true;
     private static VoxyVulkanContext INSTANCE;
 
     private final GpuDevice hostDevice;
     private final VulkanDevice vulkanDevice;
     private final HostCapabilities capabilities;
     private VulkanPipelineCache pipelineCache;
+    private VulkanDownloadStream downloadStream;
 
     private VoxyVulkanContext(GpuDevice hostDevice, VulkanDevice vulkanDevice, HostCapabilities capabilities) {
         this.hostDevice = hostDevice;
@@ -222,6 +222,10 @@ public final class VoxyVulkanContext {
     public static synchronized void shutdown() {
         if (INSTANCE != null) {
             Logger.info("Releasing Voxy Vulkan host context before Minecraft destroys its Vulkan device");
+            if (INSTANCE.downloadStream != null) {
+                INSTANCE.downloadStream.close();
+                INSTANCE.downloadStream = null;
+            }
             if (INSTANCE.pipelineCache != null) {
                 INSTANCE.pipelineCache.close();
                 INSTANCE.pipelineCache = null;
@@ -263,6 +267,14 @@ public final class VoxyVulkanContext {
             this.pipelineCache = new VulkanPipelineCache();
         }
         return this.pipelineCache;
+    }
+
+    /** Global 32 MiB readback ring matching the original DownloadStream.INSTANCE ownership. */
+    public synchronized VulkanDownloadStream downloadStream() {
+        if (this.downloadStream == null) {
+            this.downloadStream = new VulkanDownloadStream();
+        }
+        return this.downloadStream;
     }
 
     public record HostCapabilities(

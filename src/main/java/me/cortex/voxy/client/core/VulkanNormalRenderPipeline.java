@@ -8,18 +8,22 @@ import me.cortex.voxy.client.core.rendering.bounding.VulkanBoundStore;
 import me.cortex.voxy.client.core.rendering.hierachical.AsyncNodeManager;
 import me.cortex.voxy.client.core.rendering.hierachical.VulkanHierarchicalOcclusionTraverser;
 import me.cortex.voxy.client.core.rendering.hierachical.VulkanNodeCleaner;
+import me.cortex.voxy.client.core.rendering.post.VulkanFinalComposite;
+import me.cortex.voxy.client.core.rendering.post.VulkanSSAO;
 import me.cortex.voxy.client.core.rendering.section.backend.mdic.VulkanMDICSectionRenderer;
 import me.cortex.voxy.client.core.rendering.section.backend.mdic.VulkanMDICViewport;
 import me.cortex.voxy.client.core.rendering.util.VulkanColorTarget;
 import me.cortex.voxy.client.core.rendering.util.VulkanDepthStencilTarget;
+import me.cortex.voxy.client.core.util.GPUTiming;
 import me.cortex.voxy.client.core.util.IrisUtil;
+import me.cortex.voxy.client.core.vulkan.VoxyVulkanContext;
+import org.lwjgl.vulkan.VK12;
 
 import java.util.Objects;
 import java.util.function.BooleanSupplier;
 
 /**
- * Vulkan owner for the normal pipeline through the original temporal terrain pass.
- * SSAO, translucent terrain and final composite remain the next Round VII contract.
+ * Vulkan owner for the original normal pipeline through final Minecraft-target composite.
  */
 public final class VulkanNormalRenderPipeline implements AutoCloseable {
     private final RenderProperties properties;
@@ -29,7 +33,10 @@ public final class VulkanNormalRenderPipeline implements AutoCloseable {
     private final BooleanSupplier frexStillHasWork;
     private final VulkanDepthStencilTarget depthStencilTarget;
     private final VulkanColorTarget colourTarget;
+    private final VulkanColorTarget ssaoColourTarget;
     private final VulkanBoundRenderer boundRenderer;
+    private final VulkanSSAO ssao;
+    private final VulkanFinalComposite finalComposite;
     private VulkanMDICSectionRenderer sectionRenderer;
     private boolean closed;
 
@@ -48,20 +55,35 @@ public final class VulkanNormalRenderPipeline implements AutoCloseable {
 
         VulkanDepthStencilTarget createdDepthStencil = null;
         VulkanColorTarget createdColour = null;
+        VulkanColorTarget createdSsaoColour = null;
         VulkanBoundRenderer createdBounds = null;
+        VulkanSSAO createdSsao = null;
+        VulkanFinalComposite createdFinalComposite = null;
         try {
             createdDepthStencil = new VulkanDepthStencilTarget(this.properties);
             createdColour = new VulkanColorTarget("Voxy normal terrain colour");
+            createdSsaoColour = new VulkanColorTarget(
+                    "Voxy normal SSAO/translucent colour",
+                    VK12.VK_IMAGE_USAGE_STORAGE_BIT
+            );
             createdBounds = new VulkanBoundRenderer(this.properties);
+            createdSsao = new VulkanSSAO(this.properties);
+            createdFinalComposite = new VulkanFinalComposite(this.properties);
         } catch (RuntimeException | Error exception) {
+            if (createdFinalComposite != null) createdFinalComposite.close();
+            if (createdSsao != null) createdSsao.close();
             if (createdBounds != null) createdBounds.close();
+            if (createdSsaoColour != null) createdSsaoColour.close();
             if (createdColour != null) createdColour.close();
             if (createdDepthStencil != null) createdDepthStencil.close();
             throw exception;
         }
         this.depthStencilTarget = createdDepthStencil;
         this.colourTarget = createdColour;
+        this.ssaoColourTarget = createdSsaoColour;
         this.boundRenderer = createdBounds;
+        this.ssao = createdSsao;
+        this.finalComposite = createdFinalComposite;
     }
 
     /** Mirrors AbstractRenderPipeline.setSectionRenderer's one-time construction-cycle handoff. */
@@ -74,9 +96,9 @@ public final class VulkanNormalRenderPipeline implements AutoCloseable {
     }
 
     /**
-     * Executes the exact normal-pipeline prefix ending after the temporal indirect-count draw.
+     * Executes the exact original normal-pipeline order through the host target composite.
      */
-    public FrameTargets runFrontHalf(
+    public void runFrame(
             VulkanMDICViewport viewport,
             GpuTextureView sourceDepth,
             GpuTextureView sourceColour,
@@ -106,6 +128,7 @@ public final class VulkanNormalRenderPipeline implements AutoCloseable {
 
         // NormalRenderPipeline.setup: resize offscreen owners, then rebuild the Minecraft depth/stencil mask.
         this.colourTarget.resize(viewport.width, viewport.height);
+        this.ssaoColourTarget.resize(viewport.width, viewport.height);
         this.depthStencilTarget.setup(
                 sourceDepth,
                 sourceWidth,
@@ -124,6 +147,8 @@ public final class VulkanNormalRenderPipeline implements AutoCloseable {
                     viewport.height
             );
             do {
+                // Original AbstractRenderPipeline.innerPrimaryWork advances the one global download stream here.
+                VoxyVulkanContext.get().downloadStream().tick();
                 this.nodeManager.tick(this.traversal.getNodeBuffer(), this.nodeCleaner);
                 this.nodeCleaner.tick(this.traversal.getNodeBuffer());
                 this.traversal.doTraversal(viewport);
@@ -135,7 +160,32 @@ public final class VulkanNormalRenderPipeline implements AutoCloseable {
         }
 
         renderer.renderTemporal(viewport, this.colourTarget, this.depthStencilTarget, lightmap);
-        return new FrameTargets(this.colourTarget, this.depthStencilTarget);
+        // The original MDIC postOpaquePreperation hook is empty for this renderer.
+        GPUTiming.INSTANCE.marker("ao");
+        this.ssao.compute(
+                viewport,
+                this.ssaoColourTarget,
+                this.colourTarget,
+                this.depthStencilTarget,
+                sourceDepth
+        );
+        GPUTiming.INSTANCE.marker("RT");
+        renderer.renderTranslucent(
+                viewport,
+                this.ssaoColourTarget,
+                this.depthStencilTarget,
+                lightmap
+        );
+        GPUTiming.INSTANCE.marker();
+        this.finalComposite.render(
+                viewport,
+                this.ssaoColourTarget,
+                this.depthStencilTarget,
+                sourceDepth,
+                sourceColour,
+                sourceWidth,
+                sourceHeight
+        );
     }
 
     /**
@@ -201,15 +251,11 @@ public final class VulkanNormalRenderPipeline implements AutoCloseable {
         if (this.closed) return;
         this.closed = true;
         if (this.sectionRenderer != null) this.sectionRenderer.close();
+        this.finalComposite.close();
+        this.ssao.close();
         this.boundRenderer.close();
+        this.ssaoColourTarget.close();
         this.colourTarget.close();
         this.depthStencilTarget.close();
-    }
-
-    public record FrameTargets(VulkanColorTarget colour, VulkanDepthStencilTarget depthStencil) {
-        public FrameTargets {
-            Objects.requireNonNull(colour, "colour");
-            Objects.requireNonNull(depthStencil, "depthStencil");
-        }
     }
 }

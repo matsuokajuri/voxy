@@ -3,6 +3,7 @@ package me.cortex.voxy.client.core.rendering.hierachical;
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
 import me.cortex.voxy.client.core.vulkan.VoxyVulkanBuffer;
 import me.cortex.voxy.client.core.vulkan.VoxyVulkanBufferUsage;
+import me.cortex.voxy.client.core.vulkan.VoxyVulkanContext;
 import me.cortex.voxy.client.core.vulkan.VulkanCommandRecorder;
 import me.cortex.voxy.client.core.vulkan.VulkanDownloadStream;
 import me.cortex.voxy.client.core.vulkan.VulkanSync;
@@ -35,7 +36,7 @@ public final class VulkanNodeCleaner implements AutoCloseable {
     private final VulkanComputePipeline resultTransformer;
     private final VulkanComputePipeline batchClear;
     private final VulkanUploadStream uploads = new VulkanUploadStream();
-    private final VulkanDownloadStream downloads = new VulkanDownloadStream();
+    private final VulkanDownloadStream downloads = VoxyVulkanContext.get().downloadStream();
     private final VoxyVulkanBuffer visibilityBuffer;
     private final VoxyVulkanBuffer outputBuffer;
     private VoxyVulkanBuffer idListBuffer;
@@ -146,7 +147,6 @@ public final class VulkanNodeCleaner implements AutoCloseable {
 
     public void tick(VoxyVulkanBuffer nodeDataBuffer) {
         this.ensureOpen();
-        this.downloads.tick();
         this.visibilityId++;
         if (!this.shouldCleanGeometry()) return;
 

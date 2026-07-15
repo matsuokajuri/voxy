@@ -71,7 +71,7 @@ public final class VulkanImageReadback {
             });
 
             ByteBuffer output = ByteBuffer.allocateDirect(byteCount).order(ByteOrder.nativeOrder());
-            VulkanDownloadStream download = new VulkanDownloadStream();
+            VulkanDownloadStream download = VoxyVulkanContext.get().downloadStream();
             download.download(transfer, 0L, byteCount, (pointer, size) ->
                     output.put(MemoryUtil.memByteBuffer(pointer, Math.toIntExact(size))));
             download.flushWaitClear();

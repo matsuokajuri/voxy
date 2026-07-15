@@ -49,7 +49,7 @@ public class VoxyClient implements ClientModInitializer {
 
         if (systemSupported) {
             VoxyCommon.setInstanceFactory(VoxyClientInstance::new);
-            Logger.info("Voxy Vulkan host is ready; formal renderer activation remains blocked until the original render chain has Vulkan owners");
+            Logger.info("Voxy Vulkan host and formal renderer chain are ready for runtime validation");
         }
     }
 

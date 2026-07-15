@@ -225,7 +225,7 @@ public final class VoxyRenderSystem {
         return viewport;
     }
 
-    /** Executes the formal Vulkan normal-pipeline prefix through the temporal indirect-count draw. */
+    /** Executes the formal Vulkan normal pipeline through the Minecraft-target composite. */
     public void renderOpaque(
             VulkanMDICViewport viewport,
             GpuTextureView sourceDepth,
@@ -261,7 +261,7 @@ public final class VoxyRenderSystem {
         GPUTiming.INSTANCE.marker("RO");
 
         VulkanBoundStore boundStore = this.selectBoundStore();
-        this.pipeline.runFrontHalf(
+        this.pipeline.runFrame(
                 viewport,
                 sourceDepth,
                 sourceColour,

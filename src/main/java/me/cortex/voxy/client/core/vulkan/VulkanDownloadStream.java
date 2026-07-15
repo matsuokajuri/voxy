@@ -3,10 +3,10 @@ package me.cortex.voxy.client.core.vulkan;
 import com.mojang.blaze3d.buffers.GpuBuffer;
 import com.mojang.blaze3d.buffers.GpuBufferSlice;
 import com.mojang.blaze3d.buffers.GpuFence;
-import com.mojang.blaze3d.systems.CommandEncoder;
 import com.mojang.blaze3d.vulkan.VulkanGpuBuffer;
-import org.lwjgl.system.MemoryUtil;
+import me.cortex.voxy.common.util.AllocationArena;
 import org.lwjgl.system.MemoryStack;
+import org.lwjgl.system.MemoryUtil;
 import org.lwjgl.vulkan.VK12;
 import org.lwjgl.vulkan.VkBufferCopy;
 
@@ -19,10 +19,11 @@ import java.util.List;
 
 /**
  * Vulkan equivalent of the original asynchronous DownloadStream.
- * A callback receives a mapped pointer only after the graphics-queue submit containing the copy has completed;
- * the pointer becomes invalid for client use as soon as that callback returns.
+ * GPU copies target one persistently mapped host-visible ring owned by this stream. Each allocation remains
+ * reserved until the graphics-queue fence for its frame completes, and the callback pointer remains valid only
+ * for the duration of that callback.
  */
-public final class VulkanDownloadStream {
+public final class VulkanDownloadStream implements AutoCloseable {
     public static final long DEFAULT_CAPACITY = 1L << 25;
     private static final long FORCE_WAIT_TIMEOUT_NS = 5_000_000_000L;
 
@@ -32,10 +33,17 @@ public final class VulkanDownloadStream {
     }
 
     private final long capacity;
+    private final AllocationArena allocationArena = new AllocationArena();
+    private final GpuBuffer downloadBuffer;
+    private final VulkanGpuBuffer vkDownloadBuffer;
+    private final GpuBufferSlice.MappedView mappedView;
+    private final ByteBuffer mappedData;
+    private final long mappedBaseAddress;
     private final ArrayList<PendingDownload> currentDownloads = new ArrayList<>();
     private final Deque<DownloadFrame> frames = new ArrayDeque<>();
     private long currentBytes;
     private long inFlightBytes;
+    private boolean closed;
 
     public VulkanDownloadStream() {
         this(DEFAULT_CAPACITY);
@@ -45,7 +53,55 @@ public final class VulkanDownloadStream {
         if (capacity <= 0L) {
             throw new IllegalArgumentException("Download capacity must be greater than zero");
         }
+        if (capacity > Integer.MAX_VALUE) {
+            throw new IllegalArgumentException("Download capacity cannot exceed Java's mapped-buffer limit");
+        }
+
+        Resources resources = createResources(capacity);
         this.capacity = capacity;
+        this.downloadBuffer = resources.buffer();
+        this.vkDownloadBuffer = resources.vkBuffer();
+        this.mappedView = resources.mappedView();
+        this.mappedData = resources.mappedData();
+        this.mappedBaseAddress = MemoryUtil.memAddress(this.mappedData);
+        this.allocationArena.setLimit(capacity);
+    }
+
+    private static Resources createResources(long capacity) {
+        // Locked Minecraft 26.2 VulkanGpuBuffer.Direct requires HOST_VISIBLE | HOST_COHERENT for every
+        // MAP_READ/MAP_WRITE allocation and additionally prefers HOST_CACHED for MAP_READ. Fence completion plus
+        // TRANSFER_WRITE -> HOST_READ is therefore sufficient; a VMA invalidate is neither needed nor exposed.
+        GpuBuffer buffer = VoxyVulkanContext.get().vulkanDevice().createBuffer(
+                () -> "Voxy persistent download stream",
+                GpuBuffer.USAGE_MAP_READ | GpuBuffer.USAGE_HINT_CLIENT_STORAGE | GpuBuffer.USAGE_COPY_DST,
+                capacity
+        );
+        if (!(buffer instanceof VulkanGpuBuffer vkBuffer)) {
+            buffer.close();
+            throw new IllegalStateException("Minecraft Vulkan device returned a non-Vulkan download buffer");
+        }
+
+        GpuBufferSlice.MappedView mapped = null;
+        try {
+            mapped = buffer.map(true, false);
+            ByteBuffer data = mapped.data().duplicate().order(ByteOrder.nativeOrder());
+            data.clear();
+            return new Resources(buffer, vkBuffer, mapped, data);
+        } catch (RuntimeException | Error failure) {
+            if (mapped != null) {
+                try {
+                    mapped.close();
+                } catch (Throwable closeFailure) {
+                    failure.addSuppressed(closeFailure);
+                }
+            }
+            try {
+                buffer.close();
+            } catch (Throwable closeFailure) {
+                failure.addSuppressed(closeFailure);
+            }
+            throw failure;
+        }
     }
 
     public void download(VoxyVulkanBuffer source, DownloadResultConsumer resultConsumer) {
@@ -53,6 +109,7 @@ public final class VulkanDownloadStream {
     }
 
     public void download(VoxyVulkanBuffer source, long sourceOffset, long size, DownloadResultConsumer resultConsumer) {
+        this.ensureOpen();
         if (source.isClosed()) {
             throw new IllegalStateException("Cannot download from a closed Vulkan buffer");
         }
@@ -64,6 +121,9 @@ public final class VulkanDownloadStream {
         if (size > Integer.MAX_VALUE) {
             throw new IllegalArgumentException("A single download cannot exceed 2 GiB");
         }
+        if ((sourceOffset & 3L) != 0L || (size & 3L) != 0L) {
+            throw new IllegalArgumentException("Vulkan buffer downloads require 4-byte aligned offsets and sizes");
+        }
         if (resultConsumer == null) {
             throw new NullPointerException("resultConsumer");
         }
@@ -73,63 +133,93 @@ public final class VulkanDownloadStream {
         if (allocationSize > this.capacity) {
             throw new IllegalArgumentException("Download allocation exceeds the original 32 MiB stream capacity");
         }
-        if (this.inFlightBytes + allocationSize > this.capacity) {
-            this.forceDrainForCapacity();
-        }
-        if (this.inFlightBytes + allocationSize > this.capacity) {
-            throw new IllegalStateException("Unable to free enough completed Vulkan download storage");
-        }
 
-        CommandEncoder encoder = VoxyVulkanContext.get().hostDevice().createCommandEncoder();
-        GpuBufferSlice.MappedView mapped = encoder.transientMemory()
-                .allocateStaging(allocationSize, alignment, GpuBuffer.USAGE_COPY_DST);
-        GpuBufferSlice readbackSlice = mapped.slice().slice(0L, size);
-        VulkanCommandRecorder.record(commandBuffer -> {
-            VulkanSync.bufferBarrier(
-                    commandBuffer,
-                    source.vkBuffer(),
-                    sourceOffset,
-                    size,
-                    source.policy().declaredAccess(),
-                    VulkanSync.TRANSFER_READ
-            );
-            try (MemoryStack stack = MemoryStack.stackPush()) {
-                VkBufferCopy.Buffer region = VkBufferCopy.calloc(1, stack);
-                region.srcOffset(sourceOffset);
-                region.dstOffset(readbackSlice.offset());
-                region.size(size);
-                VK12.vkCmdCopyBuffer(
+        int allocationBytes = Math.toIntExact(allocationSize);
+        long allocationOffset = this.allocate(allocationBytes);
+        try {
+            VulkanCommandRecorder.record(commandBuffer -> {
+                VulkanSync.bufferBarrier(
                         commandBuffer,
                         source.vkBuffer(),
-                        ((VulkanGpuBuffer) readbackSlice.buffer()).vkBuffer(),
-                        region
+                        sourceOffset,
+                        size,
+                        source.policy().declaredAccess(),
+                        VulkanSync.TRANSFER_READ
                 );
-            }
-            VulkanSync.bufferBarrier(
-                    commandBuffer,
-                    ((VulkanGpuBuffer) readbackSlice.buffer()).vkBuffer(),
-                    readbackSlice.offset(),
-                    size,
-                    VulkanSync.TRANSFER_WRITE,
-                    VulkanSync.HOST_READ
-            );
-        });
+                VulkanSync.bufferBarrier(
+                        commandBuffer,
+                        this.vkDownloadBuffer.vkBuffer(),
+                        allocationOffset,
+                        size,
+                        VulkanSync.HOST_READ,
+                        VulkanSync.TRANSFER_WRITE
+                );
+                try (MemoryStack stack = MemoryStack.stackPush()) {
+                    VkBufferCopy.Buffer region = VkBufferCopy.calloc(1, stack);
+                    region.srcOffset(sourceOffset);
+                    region.dstOffset(allocationOffset);
+                    region.size(size);
+                    VK12.vkCmdCopyBuffer(
+                            commandBuffer,
+                            source.vkBuffer(),
+                            this.vkDownloadBuffer.vkBuffer(),
+                            region
+                    );
+                }
+                VulkanSync.bufferBarrier(
+                        commandBuffer,
+                        this.vkDownloadBuffer.vkBuffer(),
+                        allocationOffset,
+                        size,
+                        VulkanSync.TRANSFER_WRITE,
+                        VulkanSync.HOST_READ
+                );
+            });
+        } catch (RuntimeException | Error failure) {
+            this.allocationArena.free(allocationOffset);
+            throw failure;
+        }
 
-        ByteBuffer data = mapped.data().duplicate().order(ByteOrder.nativeOrder());
-        data.clear();
-        data.limit((int) size);
-        data = data.slice().order(ByteOrder.nativeOrder());
-        this.currentDownloads.add(new PendingDownload(mapped, data, size, allocationSize, resultConsumer));
+        this.currentDownloads.add(new PendingDownload(
+                allocationOffset,
+                size,
+                allocationSize,
+                resultConsumer
+        ));
         this.currentBytes += allocationSize;
         this.inFlightBytes += allocationSize;
     }
 
+    private long allocate(int allocationBytes) {
+        long allocationOffset = this.allocationArena.alloc(allocationBytes);
+        if (allocationOffset == AllocationArena.SIZE_LIMIT) {
+            this.sealCurrentFrame();
+            if (!this.frames.isEmpty()) {
+                VoxyVulkanContext.get().hostDevice().createCommandEncoder().submit();
+            }
+            while (allocationOffset == AllocationArena.SIZE_LIMIT && !this.frames.isEmpty()) {
+                DownloadFrame first = this.frames.peekFirst();
+                if (first == null || !first.fence().awaitCompletion(FORCE_WAIT_TIMEOUT_NS)) {
+                    throw new IllegalStateException("Timed out waiting for Vulkan download storage");
+                }
+                this.releaseFrame(this.frames.removeFirst(), true);
+                allocationOffset = this.allocationArena.alloc(allocationBytes);
+            }
+        }
+        if (allocationOffset == AllocationArena.SIZE_LIMIT) {
+            throw new IllegalStateException("Unable to free enough completed Vulkan download storage");
+        }
+        return allocationOffset;
+    }
+
     public void tick() {
+        this.ensureOpen();
         this.sealCurrentFrame();
         this.drainCompleted(true);
     }
 
     public void flushWaitClear() {
+        this.ensureOpen();
         this.sealCurrentFrame();
         if (this.frames.isEmpty()) {
             return;
@@ -140,6 +230,7 @@ public final class VulkanDownloadStream {
     }
 
     public void waitDiscard() {
+        this.ensureOpen();
         this.sealCurrentFrame();
         if (this.frames.isEmpty()) {
             return;
@@ -147,20 +238,6 @@ public final class VulkanDownloadStream {
 
         VoxyVulkanContext.get().hostDevice().createCommandEncoder().submit();
         this.waitForAllFrames(false);
-    }
-
-    private void forceDrainForCapacity() {
-        this.sealCurrentFrame();
-        if (this.frames.isEmpty()) {
-            return;
-        }
-
-        VoxyVulkanContext.get().hostDevice().createCommandEncoder().submit();
-        DownloadFrame first = this.frames.peekFirst();
-        if (first == null || !first.fence().awaitCompletion(FORCE_WAIT_TIMEOUT_NS)) {
-            throw new IllegalStateException("Timed out waiting for Vulkan download storage");
-        }
-        this.drainCompleted(true);
     }
 
     private void sealCurrentFrame() {
@@ -197,15 +274,15 @@ public final class VulkanDownloadStream {
     private void releaseFrame(DownloadFrame frame, boolean runCallbacks) {
         Throwable failure = null;
         for (PendingDownload download : frame.downloads()) {
-            if (runCallbacks && failure == null) {
+            if (runCallbacks) {
                 try {
-                    download.consumer().consume(MemoryUtil.memAddress(download.data()), download.size());
+                    download.consumer().consume(this.mappedBaseAddress + download.allocationOffset(), download.size());
                 } catch (Throwable exception) {
-                    failure = exception;
+                    failure = mergeFailure(failure, exception);
                 }
             }
             try {
-                download.mappedView().close();
+                this.allocationArena.free(download.allocationOffset());
             } catch (Throwable exception) {
                 failure = mergeFailure(failure, exception);
             }
@@ -239,6 +316,12 @@ public final class VulkanDownloadStream {
         throw new IllegalStateException("Unexpected checked failure while releasing Vulkan downloads", failure);
     }
 
+    private void ensureOpen() {
+        if (this.closed) {
+            throw new IllegalStateException("Vulkan download stream is closed");
+        }
+    }
+
     public long capacity() {
         return this.capacity;
     }
@@ -247,9 +330,36 @@ public final class VulkanDownloadStream {
         return this.inFlightBytes;
     }
 
-    private record PendingDownload(
+    @Override
+    public void close() {
+        if (this.closed) return;
+        this.waitDiscard();
+        this.closed = true;
+
+        Throwable failure = null;
+        try {
+            this.mappedView.close();
+        } catch (Throwable exception) {
+            failure = exception;
+        }
+        try {
+            this.downloadBuffer.close();
+        } catch (Throwable exception) {
+            failure = mergeFailure(failure, exception);
+        }
+        rethrowFailure(failure);
+    }
+
+    private record Resources(
+            GpuBuffer buffer,
+            VulkanGpuBuffer vkBuffer,
             GpuBufferSlice.MappedView mappedView,
-            ByteBuffer data,
+            ByteBuffer mappedData
+    ) {
+    }
+
+    private record PendingDownload(
+            long allocationOffset,
             long size,
             long allocationSize,
             DownloadResultConsumer consumer

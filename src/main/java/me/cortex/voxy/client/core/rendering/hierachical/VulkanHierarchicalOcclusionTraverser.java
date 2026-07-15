@@ -9,6 +9,7 @@ import me.cortex.voxy.client.core.rendering.VulkanViewport;
 import me.cortex.voxy.client.core.rendering.building.RenderGenerationService;
 import me.cortex.voxy.client.core.vulkan.VoxyVulkanBuffer;
 import me.cortex.voxy.client.core.vulkan.VoxyVulkanBufferUsage;
+import me.cortex.voxy.client.core.vulkan.VoxyVulkanContext;
 import me.cortex.voxy.client.core.vulkan.VoxyVulkanSampler;
 import me.cortex.voxy.client.core.vulkan.VulkanCommandRecorder;
 import me.cortex.voxy.client.core.vulkan.VulkanDownloadStream;
@@ -62,7 +63,7 @@ public final class VulkanHierarchicalOcclusionTraverser implements AutoCloseable
     private final VulkanComputePipeline traversal;
     private final VoxyVulkanSampler hizSampler;
     private final VulkanUploadStream uploads = new VulkanUploadStream();
-    private final VulkanDownloadStream downloads = new VulkanDownloadStream();
+    private final VulkanDownloadStream downloads = VoxyVulkanContext.get().downloadStream();
 
     private final VoxyVulkanBuffer requestBuffer;
     private final VoxyVulkanBuffer nodeBuffer;
@@ -259,7 +260,6 @@ public final class VulkanHierarchicalOcclusionTraverser implements AutoCloseable
 
     public void doTraversal(VulkanViewport<?> viewport) {
         this.ensureOpen();
-        this.downloads.tick();
         this.uploadUniform(viewport);
         this.uploadQueueMetadata();
         this.uploads.commit();

@@ -118,7 +118,7 @@ public final class VulkanMDICSectionRenderer implements AutoCloseable {
     private final VoxyVulkanSampler lightmapSampler;
     private final VoxyVulkanSampler depthSampler;
     private final VulkanUploadStream uploads = new VulkanUploadStream();
-    private final VulkanDownloadStream downloads = new VulkanDownloadStream();
+    private final VulkanDownloadStream downloads = VoxyVulkanContext.get().downloadStream();
     private boolean closed;
 
     public VulkanMDICSectionRenderer(
@@ -658,7 +658,6 @@ public final class VulkanMDICSectionRenderer implements AutoCloseable {
 
     public void buildDrawCalls(VulkanMDICViewport viewport, VoxyVulkanImageView depthStencilView) {
         this.ensureOpen();
-        this.downloads.tick();
         if (this.geometryData.getSectionCount() == 0) return;
         this.validateDepthTarget(depthStencilView);
         this.uploadUniform(viewport);
@@ -668,7 +667,6 @@ public final class VulkanMDICSectionRenderer implements AutoCloseable {
 
         VulkanCommandRecorder.record(commandBuffer -> {
             VulkanPushDescriptors prepDescriptors = new VulkanPushDescriptors()
-                    .uniformBuffer(0, this.uniformBuffer, 0L, UNIFORM_BYTES)
                     .storageBuffer(1, viewport.drawCountCallBuffer, 0L, viewport.drawCountCallBuffer.size())
                     .storageBuffer(2, viewport.indirectLookupBuffer, 0L, viewport.indirectLookupBuffer.size());
             VulkanSync.bufferBarrier(

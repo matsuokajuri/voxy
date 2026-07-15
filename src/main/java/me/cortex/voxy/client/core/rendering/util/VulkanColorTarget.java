@@ -14,6 +14,7 @@ public final class VulkanColorTarget implements AutoCloseable {
     private static final int COLOR_ASPECT = VK12.VK_IMAGE_ASPECT_COLOR_BIT;
 
     private final String label;
+    private final int additionalVulkanUsage;
     private VoxyVulkanImage image;
     private VoxyVulkanImageView view;
     private int width;
@@ -21,7 +22,12 @@ public final class VulkanColorTarget implements AutoCloseable {
     private boolean closed;
 
     public VulkanColorTarget(String label) {
+        this(label, 0);
+    }
+
+    public VulkanColorTarget(String label, int additionalVulkanUsage) {
         this.label = label;
+        this.additionalVulkanUsage = additionalVulkanUsage;
     }
 
     public void resize(int width, int height) {
@@ -37,7 +43,7 @@ public final class VulkanColorTarget implements AutoCloseable {
             createdImage = new VoxyVulkanImage(
                     this.label,
                     GpuTexture.USAGE_TEXTURE_BINDING | GpuTexture.USAGE_RENDER_ATTACHMENT,
-                    0,
+                    this.additionalVulkanUsage,
                     FORMAT,
                     width,
                     height,
@@ -66,6 +72,14 @@ public final class VulkanColorTarget implements AutoCloseable {
     public void transitionToSampled(VkCommandBuffer commandBuffer) {
         this.ensureAllocated();
         this.image.transition(commandBuffer, 0, 1, 0, 1, VulkanImageStates.SHADER_SAMPLED);
+    }
+
+    public void transitionToComputeStorage(VkCommandBuffer commandBuffer) {
+        this.ensureAllocated();
+        if ((this.image.vkUsage() & VK12.VK_IMAGE_USAGE_STORAGE_BIT) == 0) {
+            throw new IllegalStateException("Voxy colour target was not allocated for storage-image access");
+        }
+        this.image.transition(commandBuffer, 0, 1, 0, 1, VulkanImageStates.COMPUTE_STORAGE);
     }
 
     public VoxyVulkanImageView view() {
