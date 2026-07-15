@@ -1,7 +1,7 @@
 #version 460 core
 #extension GL_ARB_gpu_shader_int64 : enable
 
-#ifdef GL_ARB_gpu_shader_int64
+#if defined(GL_ARB_gpu_shader_int64) && !defined(QUAD_DATA_USE_IVEC2)
 #define QUAD_DATA_USE_64_BIT
 #endif
 

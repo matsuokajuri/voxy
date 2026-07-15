@@ -1,5 +1,6 @@
 package me.cortex.voxy.client.core;
 
+import com.mojang.blaze3d.opengl.GlConst;
 import me.cortex.voxy.client.core.gl.GlBuffer;
 import me.cortex.voxy.client.core.model.ModelBakerySubsystem;
 import me.cortex.voxy.client.core.rendering.Viewport;
@@ -146,7 +147,7 @@ public class IrisVoxyRenderPipeline extends AbstractRenderPipeline {
             glStencilFunc(GL_EQUAL, 0, 0xFF);//set the depth to 1 where the mask is 0
             this.shaderDepthHackFixTransformBlit.blit();
             glStencilFunc(GL_EQUAL, 1, 0xFF);//revert the mask test
-            glDepthFunc(this.properties.closerEqualDepthCompare());
+            glDepthFunc(GlConst.toGl(this.properties.closerEqualDepthCompare()));
             glColorMask(true, true, true, true);
         }
 

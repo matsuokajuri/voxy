@@ -1,7 +1,7 @@
 package me.cortex.voxy.client.core.util;
 
 import me.cortex.voxy.client.core.VoxyRenderSystem;
-import me.cortex.voxy.client.core.rendering.Viewport;
+import me.cortex.voxy.client.core.rendering.section.backend.mdic.VulkanMDICViewport;
 import net.caffeinemc.mods.sodium.client.render.chunk.ChunkRenderMatrices;
 import net.caffeinemc.mods.sodium.client.util.FogParameters;
 import net.fabricmc.loader.api.FabricLoader;
@@ -15,7 +15,7 @@ import java.io.IOException;
 public class IrisUtil {
 
     public record CapturedViewportParameters(ChunkRenderMatrices matrices, FogParameters parameters, int width, int height, double x, double y, double z) {
-        public Viewport<?> apply(VoxyRenderSystem vrs) {
+        public VulkanMDICViewport apply(VoxyRenderSystem vrs) {
             return vrs.setupViewport(this.matrices.projection(), this.matrices.modelView(), this.parameters, this.width, this.height, this.x, this.y, this.z);
         }
     }

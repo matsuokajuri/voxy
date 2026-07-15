@@ -4,7 +4,7 @@ import me.cortex.voxy.client.VoxyClientInstance;
 import me.cortex.voxy.client.config.VoxyConfig;
 import me.cortex.voxy.client.core.IVoxyRenderSystemHolder;
 import me.cortex.voxy.client.core.VoxyRenderSystem;
-import me.cortex.voxy.client.core.util.IrisUtil;
+import me.cortex.voxy.client.core.vulkan.VoxyVulkanContext;
 import me.cortex.voxy.common.Logger;
 import me.cortex.voxy.common.world.WorldEngine;
 import me.cortex.voxy.commonImpl.VoxyCommon;
@@ -79,6 +79,10 @@ public abstract class MixinLevelRenderer implements IVoxyRenderSystemHolder {
             Logger.info("Not creating renderer due to null instance");
             return;
         }
+        if (!VoxyVulkanContext.isFormalRendererConnected()) {
+            Logger.info("Not creating renderer because the formal Vulkan render chain is not connected; the OpenGL renderer will not be used");
+            return;
+        }
         WorldEngine world = this.identifier.getOrCreateEngine(true);
         if (world == null) {
             Logger.warn("Not creating renderer due to null engine");
@@ -91,15 +95,7 @@ public abstract class MixinLevelRenderer implements IVoxyRenderSystemHolder {
     private void voxy$createEngineDirect(WorldEngine world) {
         var instance = world.instanceIn;
         if (instance == null) throw new IllegalStateException();//in theory this could be null if is like in a test suit or something
-        try {
-            this.renderer = new VoxyRenderSystem(world, instance.getServiceManager());
-        } catch (RuntimeException e) {
-            if (IrisUtil.irisShaderPackEnabled()) {
-                IrisUtil.disableIrisShaders();
-            } else {
-                throw e;
-            }
-        }
+        this.renderer = new VoxyRenderSystem(world, instance.getServiceManager());
         instance.updateDedicatedThreads();
     }
 }

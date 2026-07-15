@@ -31,7 +31,7 @@ public class FullscreenBlit {
 
     public <T extends Shader> FullscreenBlit(RenderProperties properties, String vertId, String fragId, Consumer<Shader.Builder<T>> applyer) {
         this.shader = ((Shader.Builder<T>)Shader.make())
-                .apply(properties::apply)
+                .apply(builder -> properties.shaderDefines().forEach(builder::define))
                 .add(ShaderType.VERTEX, vertId)
                 .add(ShaderType.FRAGMENT, fragId)
                 .apply(applyer)

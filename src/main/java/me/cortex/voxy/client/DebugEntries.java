@@ -2,6 +2,7 @@ package me.cortex.voxy.client;
 
 import me.cortex.voxy.client.core.IVoxyRenderSystemHolder;
 import me.cortex.voxy.client.core.util.GPUTiming;
+import me.cortex.voxy.client.core.vulkan.VoxyVulkanContext;
 import me.cortex.voxy.commonImpl.VoxyCommon;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
@@ -47,16 +48,21 @@ public class DebugEntries {
         });
     }
 
-    private static boolean previousGpuDebugEnabled = false;
+    private static boolean previousGpuDebugRequested = false;
+    private static boolean gpuDebugEnabled = false;
     public static void onRebuild(Map<Identifier, DebugScreenEntryStatus> allStatuses, List<Identifier> enabled) {
         var entry = allStatuses.getOrDefault(GPU_DEBUG, DebugScreenEntryStatus.NEVER);
-        if ((entry!=DebugScreenEntryStatus.NEVER)!=previousGpuDebugEnabled) {
-            previousGpuDebugEnabled ^= true;
-
-            GPUTiming.INSTANCE.setEnabled(previousGpuDebugEnabled);
-            RenderStatistics.enabled = previousGpuDebugEnabled;
-            var renderer = Minecraft.getInstance().levelExtractor;
-            if (renderer!=null)renderer.allChanged();
+        boolean requested = entry != DebugScreenEntryStatus.NEVER;
+        boolean canEnable = requested && VoxyVulkanContext.isInitialized();
+        if (requested != previousGpuDebugRequested || canEnable != gpuDebugEnabled) {
+            previousGpuDebugRequested = requested;
+            boolean enabledNow = GPUTiming.INSTANCE.setEnabled(requested);
+            if (enabledNow != gpuDebugEnabled) {
+                gpuDebugEnabled = enabledNow;
+                RenderStatistics.enabled = enabledNow;
+                var renderer = Minecraft.getInstance().levelExtractor;
+                if (renderer != null) renderer.allChanged();
+            }
         }
     }
 }

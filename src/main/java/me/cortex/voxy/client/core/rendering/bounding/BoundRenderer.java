@@ -1,5 +1,6 @@
 package me.cortex.voxy.client.core.rendering.bounding;
 
+import com.mojang.blaze3d.opengl.GlConst;
 import me.cortex.voxy.client.core.AbstractRenderPipeline;
 import me.cortex.voxy.client.core.RenderProperties;
 import me.cortex.voxy.client.core.gl.GlBuffer;
@@ -50,7 +51,7 @@ public class BoundRenderer {
                 .addSource(ShaderType.VERTEX, vert)
                 .defineIf("TAA", taa != null)
                 .add(ShaderType.FRAGMENT, "voxy:chunkoutline/outline.fsh")
-                .apply(this.properties::apply)
+                .apply(builder -> this.properties.shaderDefines().forEach(builder::define))
                 .compile()
                 .ubo(0, this.uniformBuffer);
     }
@@ -107,7 +108,7 @@ public class BoundRenderer {
             //"reverse depth buffer" it goes from 0->1 where 1 is far away
             glEnable(GL_CULL_FACE);
             glEnable(GL_DEPTH_TEST);
-            glDepthFunc(this.properties.furtherDepthCompare());
+            glDepthFunc(GlConst.toGl(this.properties.furtherDepthCompare()));
         }
 
         glBindVertexArray(GlVertexArray.STATIC_VAO);
@@ -128,7 +129,7 @@ public class BoundRenderer {
         {
             glFrontFace(GL_CCW);//Restore winding order
 
-            glDepthFunc(this.properties.closerEqualDepthCompare());
+            glDepthFunc(GlConst.toGl(this.properties.closerEqualDepthCompare()));
 
             //TODO: check this is correct
             glEnable(GL_CULL_FACE);

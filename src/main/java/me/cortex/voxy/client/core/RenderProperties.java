@@ -3,30 +3,33 @@ package me.cortex.voxy.client.core;
 import com.mojang.blaze3d.pipeline.DepthStencilState;
 import com.mojang.blaze3d.platform.CompareOp;
 import com.mojang.blaze3d.systems.RenderSystem;
-import me.cortex.voxy.client.core.gl.shader.Shader;
 import me.cortex.voxy.client.core.util.IrisUtil;
 import me.cortex.voxy.client.iris.IGetIrisVoxyPipelineData;
 import net.irisshaders.iris.Iris;
 
-import static org.lwjgl.opengl.GL11C.*;
+import java.util.Map;
 
 public record RenderProperties(boolean isZero2One, boolean isReverseZ, boolean useBlockAtlasUVs) {
 
-    public <T extends Shader.Builder<J>, J extends Shader> T apply(T builder) {
-        return (T) builder.defineIf("USE_ZERO_ONE_DEPTH", this.isZero2One)
-                .defineIf("USE_REVERSE_Z", this.isReverseZ);
+    public Map<String, String> shaderDefines() {
+        if (this.isZero2One && this.isReverseZ) {
+            return Map.of("USE_ZERO_ONE_DEPTH", "", "USE_REVERSE_Z", "");
+        }
+        if (this.isZero2One) return Map.of("USE_ZERO_ONE_DEPTH", "");
+        if (this.isReverseZ) return Map.of("USE_REVERSE_Z", "");
+        return Map.of();
     }
 
-    public int closerEqualDepthCompare() {
-        return this.isReverseZ?GL_GEQUAL:GL_LEQUAL;
+    public CompareOp closerEqualDepthCompare() {
+        return this.isReverseZ ? CompareOp.GREATER_THAN_OR_EQUAL : CompareOp.LESS_THAN_OR_EQUAL;
     }
 
-    public int closerDepthCompare() {
-        return this.isReverseZ?GL_GREATER:GL_LESS;
+    public CompareOp closerDepthCompare() {
+        return this.isReverseZ ? CompareOp.GREATER_THAN : CompareOp.LESS_THAN;
     }
 
-    public int furtherDepthCompare() {
-        return this.isReverseZ?GL_LESS:GL_GREATER;
+    public CompareOp furtherDepthCompare() {
+        return this.isReverseZ ? CompareOp.LESS_THAN : CompareOp.GREATER_THAN;
     }
 
     public float clearDepth() {

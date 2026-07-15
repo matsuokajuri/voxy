@@ -2,15 +2,10 @@ package me.cortex.voxy.client.mixin.sodium;
 
 import com.mojang.blaze3d.buffers.GpuBuffer;
 import com.mojang.blaze3d.buffers.GpuBufferSlice;
-import com.mojang.blaze3d.opengl.GlCommandEncoder;
-import com.mojang.blaze3d.opengl.GlRenderPass;
-import com.mojang.blaze3d.opengl.GlTextureView;
-import com.mojang.blaze3d.systems.RenderPass;
-import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.GpuSampler;
 import me.cortex.voxy.client.VoxyClient;
 import me.cortex.voxy.client.core.IVoxyRenderSystemHolder;
-import me.cortex.voxy.client.core.rendering.Viewport;
+import me.cortex.voxy.client.core.rendering.section.backend.mdic.VulkanMDICViewport;
 import me.cortex.voxy.client.core.util.IrisUtil;
 import net.caffeinemc.mods.sodium.client.render.chunk.ChunkRenderMatrices;
 import net.caffeinemc.mods.sodium.client.render.chunk.DefaultChunkRenderer;
@@ -21,17 +16,12 @@ import net.caffeinemc.mods.sodium.client.render.chunk.terrain.TerrainRenderPass;
 import net.caffeinemc.mods.sodium.client.render.chunk.vertex.format.ChunkVertexType;
 import net.caffeinemc.mods.sodium.client.render.viewport.CameraTransform;
 import net.caffeinemc.mods.sodium.client.util.FogParameters;
-import net.caffeinemc.mods.sodium.mixin.core.CommandEncoderAccessor;
-import net.caffeinemc.mods.sodium.mixin.core.RenderPassAccessor;
+import net.minecraft.client.Minecraft;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-
-import java.util.Collections;
-import java.util.Optional;
-import java.util.OptionalDouble;
 
 @Mixin(value = DefaultChunkRenderer.class, remap = false)
 public abstract class MixinDefaultChunkRenderer extends ShaderChunkRenderer {
@@ -60,14 +50,19 @@ public abstract class MixinDefaultChunkRenderer extends ShaderChunkRenderer {
         if (renderPass == DefaultTerrainRenderPasses.CUTOUT) {
             var renderer = IVoxyRenderSystemHolder.getNullable();
             if (renderer != null) {
-                Viewport<?> viewport = null;
+                VulkanMDICViewport viewport;
                 var target = renderPass.getTarget();
                 if (IrisUtil.irisShaderPackEnabled()) {
                     viewport = renderer.getViewport();
                 } else {
                     viewport = renderer.setupViewport(matrices.projection(), matrices.modelView(), fogParameters, target.width, target.height, camera.x, camera.y, camera.z);
                 }
-                renderer.renderOpaque(viewport, ((GlTextureView)target.getDepthTextureView()).glId(), ((GlTextureView)target.getColorTextureView()).glId());
+                renderer.renderOpaque(
+                        viewport,
+                        target.getDepthTextureView(),
+                        target.getColorTextureView(),
+                        Minecraft.getInstance().gameRenderer.lightmap()
+                );
             }
         }
     }

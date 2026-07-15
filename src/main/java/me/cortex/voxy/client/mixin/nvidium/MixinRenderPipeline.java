@@ -7,6 +7,7 @@ import net.caffeinemc.mods.sodium.client.render.chunk.ChunkRenderMatrices;
 import net.caffeinemc.mods.sodium.client.render.chunk.terrain.TerrainRenderPass;
 import net.caffeinemc.mods.sodium.client.render.viewport.Viewport;
 import net.caffeinemc.mods.sodium.client.util.FogParameters;
+import net.minecraft.client.Minecraft;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -18,7 +19,16 @@ public class MixinRenderPipeline {
     private void voxy$injectRender(TerrainRenderPass pass, Viewport frustum, FogParameters fogParameters, ChunkRenderMatrices crm, double px, double py, double pz, GpuSampler terrainSampler, CallbackInfo ci) {
         var renderer = IVoxyRenderSystemHolder.getNullable();
         if (renderer != null) {
-            renderer.renderOpaque(renderer.setupViewport(crm.projection(), crm.modelView(), fogParameters, pass.getTarget().width, pass.getTarget().height, px, py, pz), 0, 0);
+            var target = pass.getTarget();
+            renderer.renderOpaque(
+                    renderer.setupViewport(
+                            crm.projection(), crm.modelView(), fogParameters,
+                            target.width, target.height, px, py, pz
+                    ),
+                    target.getDepthTextureView(),
+                    target.getColorTextureView(),
+                    Minecraft.getInstance().gameRenderer.lightmap()
+            );
         }
     }
 }

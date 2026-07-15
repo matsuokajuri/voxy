@@ -1,7 +1,7 @@
 package me.cortex.voxy.client;
 
-import me.cortex.voxy.client.core.gl.Capabilities;
-import me.cortex.voxy.client.core.rendering.util.SharedIndexBuffer;
+import com.mojang.blaze3d.systems.GpuDevice;
+import me.cortex.voxy.client.core.vulkan.VoxyVulkanContext;
 import me.cortex.voxy.common.Logger;
 import me.cortex.voxy.commonImpl.VoxyCommon;
 import net.fabricmc.api.ClientModInitializer;
@@ -20,16 +20,14 @@ import java.util.function.Function;
 public class VoxyClient implements ClientModInitializer {
     private static final HashSet<String> FREX = new HashSet<>();
     private static FileLock EXCLUSIVE_LOCK;
-    public static void initVoxyClient() {
-        Capabilities.init();//Ensure clinit is called
-
-        if (Capabilities.INSTANCE.hasBrokenDepthSampler) {
-            Logger.error("AMD broken depth sampler detected, voxy does not work correctly and has been disabled, this will hopefully be fixed in the future");
-        }
-
-        boolean systemSupported = Capabilities.INSTANCE.compute && Capabilities.INSTANCE.indirectParameters && !Capabilities.INSTANCE.hasBrokenDepthSampler;
-        if (!systemSupported) {
-             Logger.error("Voxy is unsupported on your system.");
+    public static void initVoxyClient(GpuDevice device) {
+        boolean systemSupported;
+        try {
+            VoxyVulkanContext.initialize(device);
+            systemSupported = true;
+        } catch (RuntimeException exception) {
+            Logger.error("Voxy Vulkan host initialization failed. Voxy will remain disabled; no fallback renderer will be used.", exception);
+            systemSupported = false;
         }
 
         if (systemSupported && System.getProperty("voxy.exclusiveLock", "false").equalsIgnoreCase("true")) {
@@ -50,22 +48,14 @@ public class VoxyClient implements ClientModInitializer {
         }
 
         if (systemSupported) {
-
-            SharedIndexBuffer.INSTANCE.id();
-
             VoxyCommon.setInstanceFactory(VoxyClientInstance::new);
-
-            if (!Capabilities.INSTANCE.subgroup) {
-                Logger.warn("GPU does not support subgroup operations, expect some performance degradation");
-            }
-
+            Logger.info("Voxy Vulkan host is ready; formal renderer activation remains blocked until the original render chain has Vulkan owners");
         }
     }
 
     @Override
     public void onInitializeClient() {
         DebugEntries.init();
-
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> {
             if (VoxyCommon.isAvailable()) {
                 dispatcher.register(VoxyCommands.register());

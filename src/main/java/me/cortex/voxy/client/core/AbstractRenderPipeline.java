@@ -1,5 +1,6 @@
 package me.cortex.voxy.client.core;
 
+import com.mojang.blaze3d.opengl.GlConst;
 import me.cortex.voxy.client.RenderStatistics;
 import me.cortex.voxy.client.TimingStatistics;
 import me.cortex.voxy.client.VoxyClient;
@@ -169,7 +170,7 @@ public abstract class AbstractRenderPipeline extends TrackedObject {
         this.depthStencilSetup.blit();
 
 
-        glDepthFunc(this.properties.closerEqualDepthCompare());
+        glDepthFunc(GlConst.toGl(this.properties.closerEqualDepthCompare()));
         glColorMask(true,true,true,true);
 
         //Make voxy terrain render only where there isnt mc terrain
@@ -211,7 +212,7 @@ public abstract class AbstractRenderPipeline extends TrackedObject {
             DownloadStream.INSTANCE.tick();
             TimingStatistics.D.stop();
 
-            this.nodeManager.tick(this.traversal.getNodeBuffer(), this.nodeCleaner);
+            rejectRetiredOpenGlExecution();
             //glFlush();
 
             this.nodeCleaner.tick(this.traversal.getNodeBuffer());//Probably do this here??
@@ -225,6 +226,12 @@ public abstract class AbstractRenderPipeline extends TrackedObject {
             this.traversal.doTraversal(viewport);
             TimingStatistics.F.stop();
         } while (this.frexStillHasWork.getAsBoolean());
+    }
+
+    private static void rejectRetiredOpenGlExecution() {
+        throw new UnsupportedOperationException(
+                "The OpenGL render pipeline is retained only as a migration reference; no fallback is available"
+        );
     }
 
     @Override

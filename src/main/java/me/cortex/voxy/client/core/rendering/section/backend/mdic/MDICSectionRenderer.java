@@ -1,5 +1,6 @@
 package me.cortex.voxy.client.core.rendering.section.backend.mdic;
 
+import com.mojang.blaze3d.opengl.GlConst;
 
 import me.cortex.voxy.client.RenderStatistics;
 import me.cortex.voxy.client.VoxyClient;
@@ -106,7 +107,7 @@ public class MDICSectionRenderer extends AbstractSectionRenderer<MDICViewport, B
             vertex += "\n"+taa;//inject it at the end
         }
         var builder = Shader.make()
-                .apply(this.properties::apply)
+                .apply(shaderBuilder -> this.properties.shaderDefines().forEach(shaderBuilder::define))
                 .defineIf("TAA_PATCH", taa != null)
                 .defineIf("DEBUG_RENDER", false)
 
@@ -134,14 +135,14 @@ public class MDICSectionRenderer extends AbstractSectionRenderer<MDICViewport, B
 
         if (this.pipeline.hasTAA()) {
             this.cullShader = Shader.make()
-                    .apply(this.properties::apply)
+                    .apply(shaderBuilder -> this.properties.shaderDefines().forEach(shaderBuilder::define))
                     .addSource(ShaderType.VERTEX, ShaderLoader.parse("voxy:lod/gl46/cull/raster.vert")+"\n\n\n\n"+pipeline.taaFunction("getTAA"))
                     .define("TAA")
                     .add(ShaderType.FRAGMENT, "voxy:lod/gl46/cull/raster.frag")
                     .compile();
         } else {
             this.cullShader = Shader.make()
-                    .apply(this.properties::apply)
+                    .apply(shaderBuilder -> this.properties.shaderDefines().forEach(shaderBuilder::define))
                     .add(ShaderType.VERTEX, "voxy:lod/gl46/cull/raster.vert")
                     .add(ShaderType.FRAGMENT, "voxy:lod/gl46/cull/raster.frag")
                     .compile();
@@ -170,9 +171,8 @@ public class MDICSectionRenderer extends AbstractSectionRenderer<MDICViewport, B
 
     private void bindRenderingBuffers(MDICViewport viewport) {
         glBindBufferBase(GL_UNIFORM_BUFFER, 0, this.uniform.id);
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, this.geometryManager.getGeometryBuffer().id);
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, this.geometryManager.getMetadataBuffer().id);
-        this.modelStore.bind(3, 4, 0);
+        this.geometryManager.rejectOpenGlBinding();
+        this.modelStore.rejectOpenGlBinding();
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 5, viewport.positionScratchBuffer.id);
         LightMapHelper.bind(1);
         glBindTextureUnit(2, viewport.depthBoundingBuffer.getDepthTex().id);
@@ -189,7 +189,7 @@ public class MDICSectionRenderer extends AbstractSectionRenderer<MDICViewport, B
         glDisable(GL_CULL_FACE);
         glDisable(GL_BLEND);
         glEnable(GL_DEPTH_TEST);
-        glDepthFunc(this.properties.closerEqualDepthCompare());
+        glDepthFunc(GlConst.toGl(this.properties.closerEqualDepthCompare()));
         this.terrainShader.bind();
         glBindVertexArray(GlVertexArray.STATIC_VAO);//Needs to be before binding
         this.pipeline.setupAndBindOpaque(viewport);
@@ -234,7 +234,7 @@ public class MDICSectionRenderer extends AbstractSectionRenderer<MDICViewport, B
 
         glDisable(GL_CULL_FACE);
         glEnable(GL_DEPTH_TEST);
-        glDepthFunc(this.properties.closerEqualDepthCompare());
+        glDepthFunc(GlConst.toGl(this.properties.closerEqualDepthCompare()));
         this.translucentTerrainShader.bind();
         glBindVertexArray(GlVertexArray.STATIC_VAO);//Needs to be before binding
         this.pipeline.setupAndBindTranslucent(viewport);
@@ -281,13 +281,13 @@ public class MDICSectionRenderer extends AbstractSectionRenderer<MDICViewport, B
             }
             glBindVertexArray(GlVertexArray.STATIC_VAO);
             glBindBufferBase(GL_UNIFORM_BUFFER, 0, this.uniform.id);
-            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, this.geometryManager.getMetadataBuffer().id);
+            this.geometryManager.rejectOpenGlBinding();
             glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, viewport.visibilityBuffer.id);
             glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, viewport.indirectLookupBuffer.id);
             glBindBuffer(GL_DRAW_INDIRECT_BUFFER, viewport.drawCountCallBuffer.id);
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, SharedIndexBuffer.INSTANCE.id());
             glEnable(GL_DEPTH_TEST);
-            glDepthFunc(this.properties.closerEqualDepthCompare());
+            glDepthFunc(GlConst.toGl(this.properties.closerEqualDepthCompare()));
             glColorMask(false, false, false, false);
             glDepthMask(false);
             glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT|GL_COMMAND_BARRIER_BIT);
@@ -308,7 +308,7 @@ public class MDICSectionRenderer extends AbstractSectionRenderer<MDICViewport, B
             glBindBufferBase(GL_UNIFORM_BUFFER, 0, this.uniform.id);
             glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, viewport.drawCallBuffer.id);
             glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, viewport.drawCountCallBuffer.id);
-            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, this.geometryManager.getMetadataBuffer().id);
+            this.geometryManager.rejectOpenGlBinding();
             glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 4, viewport.visibilityBuffer.id);
             glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 5, viewport.indirectLookupBuffer.id);
             glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 6, viewport.positionScratchBuffer.id);
@@ -350,7 +350,7 @@ public class MDICSectionRenderer extends AbstractSectionRenderer<MDICViewport, B
             glBindBufferBase(GL_UNIFORM_BUFFER, 0, this.uniform.id);
             glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, viewport.drawCallBuffer.id);
             glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, viewport.drawCountCallBuffer.id);
-            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, this.geometryManager.getMetadataBuffer().id);
+            this.geometryManager.rejectOpenGlBinding();
             glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 4, viewport.indirectLookupBuffer.id);
             glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 5, this.distanceCountBuffer.id);
 

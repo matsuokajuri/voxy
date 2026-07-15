@@ -1,207 +1,150 @@
 package me.cortex.voxy.client.core.util;
 
-import it.unimi.dsi.fastutil.ints.IntArrayFIFOQueue;
-import it.unimi.dsi.fastutil.objects.ObjectArrayFIFOQueue;
-import me.cortex.voxy.common.util.TrackedObject;
+import com.mojang.blaze3d.systems.GpuQueryPool;
+import com.mojang.blaze3d.systems.RenderSystem;
+import me.cortex.voxy.client.core.vulkan.VoxyVulkanContext;
+import me.cortex.voxy.common.Logger;
 
-import java.lang.reflect.Array;
+import java.util.ArrayDeque;
 import java.util.Arrays;
+import java.util.Deque;
+import java.util.OptionalLong;
 
-import static org.lwjgl.opengl.ARBTimerQuery.GL_TIMESTAMP;
-import static org.lwjgl.opengl.ARBTimerQuery.glQueryCounter;
-import static org.lwjgl.opengl.GL15.glDeleteQueries;
-import static org.lwjgl.opengl.GL15.glGenQueries;
-import static org.lwjgl.opengl.GL15C.*;
-import static org.lwjgl.opengl.GL33.glGetQueryObjecti64;
+public final class GPUTiming {
+    private static final int MAX_MARKERS = 64;
+    private static final double NANOSECONDS_PER_MILLISECOND = 1_000_000.0;
 
-public class GPUTiming {
-    public static GPUTiming INSTANCE = new GPUTiming();
+    public static final GPUTiming INSTANCE = new GPUTiming();
 
-    private final GlTimestampQuerySet<String> timingSet = new GlTimestampQuerySet(String.class);
+    private final Deque<GpuQueryPool> freePools = new ArrayDeque<>();
+    private final Deque<PendingFrame> pendingFrames = new ArrayDeque<>();
+    private final String[] currentLabels = new String[MAX_MARKERS];
 
+    private GpuQueryPool currentPool;
+    private int currentCount;
     private float[] timings = new float[0];
-    private String[] lables = new String[0];
+    private String[] labels = new String[0];
+    private boolean enabled;
+    private boolean closed;
 
-    private boolean enabled = false;
+    private GPUTiming() {
+    }
 
     public void marker() {
         this.marker(null);
     }
 
-    public void marker(String lable) {
-        if (this.enabled) {
-            this.timingSet.capture(lable);
+    public void marker(String label) {
+        if (!this.enabled) return;
+        RenderSystem.assertOnRenderThread();
+        this.ensureOpen();
+        if (this.currentCount >= MAX_MARKERS) {
+            throw new IllegalStateException("Voxy GPU timing exceeded " + MAX_MARKERS + " markers in one frame");
         }
+        if (this.currentPool == null) {
+            this.currentPool = this.freePools.pollFirst();
+            if (this.currentPool == null) {
+                this.currentPool = VoxyVulkanContext.get().hostDevice().createTimestampQueryPool(MAX_MARKERS);
+            }
+        }
+
+        int slot = this.currentCount++;
+        this.currentLabels[slot] = label;
+        VoxyVulkanContext.get().hostDevice().createCommandEncoder().writeTimestamp(this.currentPool, slot);
     }
 
-    public void setEnabled(boolean enable) {
-        if (this.enabled != enable) {
-            this.enabled = enable;
+    public boolean setEnabled(boolean enable) {
+        if (enable && !VoxyVulkanContext.isInitialized()) {
+            Logger.warn("Voxy GPU timing requires the Minecraft Vulkan host; the debug timing request was not enabled");
+            this.enabled = false;
+            return false;
         }
+        this.ensureOpen();
+        this.enabled = enable;
+        return this.enabled;
     }
 
     public String getDebug() {
-        if (!this.enabled) {
-            return "";
-        }
-        StringBuilder str = new StringBuilder("GpuTime: [");
+        if (!this.enabled) return "";
+        StringBuilder result = new StringBuilder("GpuTime: [");
         for (int i = 0; i < this.timings.length; i++) {
-            if (this.lables[i] != null) {
-                str.append(this.lables[i]+":"+String.format("%.2f", this.timings[i]));
-            } else {
-                str.append(String.format("%.2f", this.timings[i]));
+            if (this.labels[i] != null) {
+                result.append(this.labels[i]).append(':');
             }
-            if (i!=this.timings.length-1) {
-                str.append(", ");
-            }
+            result.append(String.format("%.2f", this.timings[i]));
+            if (i != this.timings.length - 1) result.append(", ");
         }
-        str.append(']');
-        return str.toString();
+        return result.append(']').toString();
     }
 
     public void tick() {
-        this.timingSet.download((meta,data)->{
-            long current = data[0];
+        if (this.closed) return;
+        RenderSystem.assertOnRenderThread();
+        this.enqueueCurrentFrame();
+        while (!this.pendingFrames.isEmpty()) {
+            PendingFrame frame = this.pendingFrames.getFirst();
+            OptionalLong[] values = frame.pool().getValues(0, frame.labels().length);
+            if (Arrays.stream(values).anyMatch(OptionalLong::isEmpty)) return;
 
-            if (data.length-1!=this.timings.length) {
-                this.timings = new float[data.length-1];
-                this.lables = new String[meta.length-1];
-            }
+            this.consume(frame.labels(), values);
+            this.pendingFrames.removeFirst();
+            this.freePools.addLast(frame.pool());
+        }
+    }
 
-            Arrays.fill(this.lables, null);
-            for (int i = 1; i < meta.length; i++) {
-                long next = data[i];
-                long delta = next - current;
-                float time = (float) (((double)delta)/1_000_000);
-                this.timings[i-1] = Math.max(this.timings[i-1]*0.99f+time*0.01f, time);
-                this.lables[i-1] = meta[i-1];
-                current = next;
-            }
-        });
-        this.timingSet.tick();
+    private void enqueueCurrentFrame() {
+        if (this.currentCount == 0) return;
+        this.pendingFrames.addLast(new PendingFrame(
+                this.currentPool,
+                Arrays.copyOf(this.currentLabels, this.currentCount)
+        ));
+        Arrays.fill(this.currentLabels, 0, this.currentCount, null);
+        this.currentPool = null;
+        this.currentCount = 0;
+    }
+
+    private void consume(String[] frameLabels, OptionalLong[] values) {
+        int intervalCount = values.length - 1;
+        if (intervalCount != this.timings.length) {
+            this.timings = new float[intervalCount];
+            this.labels = new String[intervalCount];
+        } else {
+            Arrays.fill(this.labels, null);
+        }
+
+        double timestampPeriod = VoxyVulkanContext.get().hostDevice().getDeviceInfo().timestampPeriod();
+        if (!(timestampPeriod > 0.0)) {
+            throw new IllegalStateException("Minecraft Vulkan device reported an invalid timestamp period: " + timestampPeriod);
+        }
+        long current = values[0].getAsLong();
+        for (int i = 1; i < values.length; i++) {
+            long next = values[i].getAsLong();
+            long deltaTicks = next - current;
+            float milliseconds = (float) (deltaTicks * timestampPeriod / NANOSECONDS_PER_MILLISECOND);
+            this.timings[i - 1] = Math.max(this.timings[i - 1] * 0.99f + milliseconds * 0.01f, milliseconds);
+            this.labels[i - 1] = frameLabels[i - 1];
+            current = next;
+        }
     }
 
     public void free() {
-        this.timingSet.free();
+        if (this.closed) return;
+        this.closed = true;
+        this.enabled = false;
+        if (this.currentPool != null) {
+            this.currentPool.close();
+            this.currentPool = null;
+        }
+        while (!this.pendingFrames.isEmpty()) this.pendingFrames.removeFirst().pool().close();
+        while (!this.freePools.isEmpty()) this.freePools.removeFirst().close();
+        Arrays.fill(this.currentLabels, null);
+        this.currentCount = 0;
     }
 
-    public interface TimingDataConsumer <T> {
-        void accept(T metadata, long[] timings);
+    private void ensureOpen() {
+        if (this.closed) throw new IllegalStateException("Voxy GPU timing has already been closed");
     }
-    private static final class GlTimestampQuerySet <T> extends TrackedObject {
 
-        private record InflightRequest<T>(int[] queries, T[] meta, TimingDataConsumer<T[]> callback) {
-            private boolean callbackIfReady(IntArrayFIFOQueue queryPool) {
-                boolean ready = glGetQueryObjecti(this.queries[this.queries.length-1], GL_QUERY_RESULT_AVAILABLE) == GL_TRUE;
-                if (!ready) {
-                    return false;
-                }
-                long[] results = new long[this.queries.length];
-                for (int i = 0; i < this.queries.length; i++) {
-                    results[i] = glGetQueryObjecti64(this.queries[i], GL_QUERY_RESULT);
-                    queryPool.enqueue(this.queries[i]);
-                }
-                this.callback.accept(this.meta, results);
-                return true;
-            }
-        }
-        private final IntArrayFIFOQueue POOL = new IntArrayFIFOQueue();
-        private final ObjectArrayFIFOQueue<InflightRequest<T>> INFLIGHT = new ObjectArrayFIFOQueue();
-
-        private final int[] queries = new int[64];
-        private final T[] metadata;
-        private int index;
-
-
-        private GlTimestampQuerySet(Class<T> metaClass) {
-            this.metadata = (T[]) Array.newInstance(metaClass, 64);
-        }
-
-        public void capture(T metadata) {
-            if (this.index > this.metadata.length) {
-                throw new IllegalStateException();
-            }
-            int slot = this.index++;
-            this.metadata[slot] = metadata;
-            int query = this.getQuery();
-            glQueryCounter(query, GL_TIMESTAMP);
-            this.queries[slot] = query;
-
-        }
-
-        public void download(TimingDataConsumer<T[]> consumer) {
-            if (this.index != 0) {
-                var queries = Arrays.copyOf(this.queries, this.index);
-                var metadata = Arrays.copyOf(this.metadata, this.index);
-                Arrays.fill(this.metadata, null);
-                this.index = 0;
-                this.INFLIGHT.enqueue(new InflightRequest(queries, metadata, consumer));
-            }
-        }
-
-        public void tick() {
-            while (!INFLIGHT.isEmpty()) {
-                if (INFLIGHT.first().callbackIfReady(POOL)) {
-                    INFLIGHT.dequeue();
-                } else {
-                    break;
-                }
-            }
-        }
-
-        private int getQuery() {
-            if (POOL.isEmpty()) {
-                return glGenQueries();
-            } else {
-                return POOL.dequeueInt();
-            }
-        }
-
-        @Override
-        public void free() {
-            super.free0();
-            while (!POOL.isEmpty()) {
-                glDeleteQueries(POOL.dequeueInt());
-            }
-            while (!INFLIGHT.isEmpty()) {
-                glDeleteQueries(INFLIGHT.dequeue().queries);
-            }
-        }
+    private record PendingFrame(GpuQueryPool pool, String[] labels) {
     }
-    /*
-    private static final class GlTimestampQuerySet extends TrackedObject {
-        private final int query = glGenQueries();
-        public final GlBuffer store;
-        public final int[] metadata;
-        public int index;
-        public GlTimestampQuerySet(int maxCount) {
-            this.store = new GlBuffer(maxCount*8L);
-            this.metadata = new int[maxCount];
-        }
-
-        public void capture(int metadata) {
-            if (this.index>this.metadata.length) {
-                throw new IllegalStateException();
-            }
-            int slot = this.index++;
-            this.metadata[slot] = metadata;
-            glQueryCounter(this.query, GL_TIMESTAMP);//This should be gpu side, so should be fast
-            glFinish();
-            glGetQueryBufferObjectui64v(this.query, this.store.id, GL_QUERY_RESULT_NO_WAIT, slot*8L);
-            glMemoryBarrier(-1);
-        }
-
-        public void download(TimingDataConsumer consumer) {
-            var meta = Arrays.copyOf(this.metadata, this.index);
-            this.index = 0;
-            //DownloadStream.INSTANCE.download(this.store, buffer->consumer.accept(meta, buffer));
-        }
-
-        @Override
-        public void free() {
-            super.free0();
-            glDeleteQueries(this.query);
-            this.store.free();
-        }
-    }*/
 }

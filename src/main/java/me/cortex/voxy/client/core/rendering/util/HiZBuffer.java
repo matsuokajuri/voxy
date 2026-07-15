@@ -1,5 +1,6 @@
 package me.cortex.voxy.client.core.rendering.util;
 
+import com.mojang.blaze3d.opengl.GlConst;
 import me.cortex.voxy.client.core.RenderProperties;
 import me.cortex.voxy.client.core.gl.GlFramebuffer;
 import me.cortex.voxy.client.core.gl.GlTexture;
@@ -38,7 +39,7 @@ public class HiZBuffer {
         glNamedFramebufferDrawBuffer(this.fb.id, GL_NONE);
         this.type = type;
         this.hiz = Shader.make()
-                .apply(properties::apply)
+                .apply(builder -> properties.shaderDefines().forEach(builder::define))
                 .add(ShaderType.VERTEX, "voxy:hiz/blit.vsh")
                 .add(ShaderType.FRAGMENT, "voxy:hiz/blit.fsh")
                 .compile()
@@ -110,7 +111,7 @@ public class HiZBuffer {
         glTextureParameteri(this.texture.id, GL_TEXTURE_BASE_LEVEL, 0);
         glTextureParameteri(this.texture.id, GL_TEXTURE_MAX_LEVEL, 1000);//TODO: CHECK IF ITS -1 or -0
 
-        glDepthFunc(this.properties.closerEqualDepthCompare());
+        glDepthFunc(GlConst.toGl(this.properties.closerEqualDepthCompare()));
         glDisable(GL_DEPTH_TEST);
         glBindFramebuffer(GL_FRAMEBUFFER, boundFB);
         glViewport(0, 0, width, height);

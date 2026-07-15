@@ -68,7 +68,7 @@ public class SSAO {
 
     public SSAO(RenderProperties properties, boolean betterSSAO, int samples) {
         var builder = Shader.make()
-                .apply(properties::apply)
+                .apply(shaderBuilder -> properties.shaderDefines().forEach(shaderBuilder::define))
                 .add(ShaderType.COMPUTE, "voxy:post/ssao.comp");
 
         this.spp = samples;
