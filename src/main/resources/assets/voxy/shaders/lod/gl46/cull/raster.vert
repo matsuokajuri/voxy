@@ -1,7 +1,5 @@
 #version 460 core
 #extension GL_ARB_gpu_shader_int64 : enable
-#define VISIBILITY_ACCESS
-
 #define SECTION_METADATA_BUFFER_BINDING 1
 #define VISIBILITY_BUFFER_BINDING 2
 #define INDIRECT_SECTION_LOOKUP_BINDING 3

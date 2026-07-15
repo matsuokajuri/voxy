@@ -50,6 +50,11 @@ public class MixinVulkanBackend {
                 VkPhysicalDeviceFeatures.DRAWINDIRECTFIRSTINSTANCE
         ));
         requiredFeatures.add(new VulkanFeature(
+                VulkanBackend.VK10_FEATURES_STRUCT,
+                "fragmentStoresAndAtomics",
+                VkPhysicalDeviceFeatures.FRAGMENTSTORESANDATOMICS
+        ));
+        requiredFeatures.add(new VulkanFeature(
                 VulkanBackend.VK12_FEATURES_STRUCT,
                 "drawIndirectCount",
                 VkPhysicalDeviceVulkan12Features.DRAWINDIRECTCOUNT

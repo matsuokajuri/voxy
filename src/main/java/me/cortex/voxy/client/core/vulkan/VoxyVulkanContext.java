@@ -81,6 +81,13 @@ public final class VoxyVulkanContext {
                     "drawIndirectFirstInstance was not added to Minecraft's required Vulkan device features"
             );
         }
+        boolean fragmentStoresAndAtomicsRequired = VulkanBackend.REQUIRED_DEVICE_FEATURES.stream()
+                .anyMatch(feature -> feature.name().equals("fragmentStoresAndAtomics"));
+        if (!fragmentStoresAndAtomicsRequired) {
+            throw new IllegalStateException(
+                    "fragmentStoresAndAtomics was not added to Minecraft's required Vulkan device features"
+            );
+        }
 
         HostCapabilities capabilities = queryHostCapabilities(vulkanDevice);
         if (!capabilities.drawIndirectCount()) {
@@ -91,6 +98,11 @@ public final class VoxyVulkanContext {
         if (!capabilities.drawIndirectFirstInstance()) {
             throw new UnsupportedOperationException(
                     "The selected Vulkan physical device does not support drawIndirectFirstInstance required by Voxy MDIC"
+            );
+        }
+        if (!capabilities.fragmentStoresAndAtomics()) {
+            throw new UnsupportedOperationException(
+                    "The selected Vulkan physical device does not support fragmentStoresAndAtomics required by the Voxy MDIC cull visibility write"
             );
         }
         if (!capabilities.pushDescriptors()) {
@@ -158,6 +170,7 @@ public final class VoxyVulkanContext {
                     vulkan12Features.drawIndirectCount(),
                     features.features().shaderInt64(),
                     features.features().drawIndirectFirstInstance(),
+                    features.features().fragmentStoresAndAtomics(),
                     representativeFragmentTestExtension
                             && representativeFragmentTestFeatures.representativeFragmentTest(),
                     pushDescriptors,
@@ -201,6 +214,7 @@ public final class VoxyVulkanContext {
                 "vendorId=0x" + Integer.toHexString(this.capabilities.vendorId()) + ",",
                 "shaderInt64Available=" + this.capabilities.shaderInt64Available() + ",",
                 "drawIndirectFirstInstance=" + this.capabilities.drawIndirectFirstInstance() + ",",
+                "fragmentStoresAndAtomics=" + this.capabilities.fragmentStoresAndAtomics() + ",",
                 "representativeFragmentTest=" + this.capabilities.representativeFragmentTest() + ",",
                 "maxStorageBufferRange=" + this.capabilities.maxStorageBufferRange() + ",",
                 "minStorageBufferOffsetAlignment=" + this.capabilities.minStorageBufferOffsetAlignment() + ",",
@@ -282,6 +296,7 @@ public final class VoxyVulkanContext {
             boolean drawIndirectCount,
             boolean shaderInt64Available,
             boolean drawIndirectFirstInstance,
+            boolean fragmentStoresAndAtomics,
             boolean representativeFragmentTest,
             boolean pushDescriptors,
             boolean synchronization2,
