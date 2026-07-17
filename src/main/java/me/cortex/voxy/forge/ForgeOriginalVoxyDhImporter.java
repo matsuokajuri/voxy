@@ -145,7 +145,7 @@ public final class ForgeOriginalVoxyDhImporter implements IDataImporter {
     static boolean detectRequiredLibraries(RequiredLibraryLoader loader) {
         try {
             loader.load("org.sqlite.JDBC");
-            loader.load("org.tukaani.xz.XZInputStream");
+            loader.load("me.cortex.voxy.dependency.xz.XZInputStream");
             return true;
         } catch (ClassNotFoundException | NoClassDefFoundError exception) {
             return false;

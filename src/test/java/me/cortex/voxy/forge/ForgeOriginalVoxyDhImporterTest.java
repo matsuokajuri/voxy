@@ -32,7 +32,7 @@ class ForgeOriginalVoxyDhImporterTest {
             }
         }));
         assertFalse(ForgeOriginalVoxyDhImporter.detectRequiredLibraries(className -> {
-            if (className.equals("org.tukaani.xz.XZInputStream")) {
+            if (className.equals("me.cortex.voxy.dependency.xz.XZInputStream")) {
                 throw new NoClassDefFoundError(className);
             }
         }));

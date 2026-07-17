@@ -4,6 +4,7 @@ plugins {
     id 'maven-publish'
     id 'net.minecraftforge.gradle' version '[6.0,6.2)'
     id 'org.spongepowered.mixin' version '0.7.38'
+    id 'com.github.johnrengelman.shadow' version '8.1.1'
 }
 
 version = project.mod_version
@@ -92,6 +93,33 @@ jarJar.enable()
 configurations {
     zstdJarJarNative
     lmdbJarJarNative
+    xzRelocation
+}
+
+def relocateXz = tasks.register(
+        'relocateXz',
+        com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar) {
+    description = 'Relocates XZ so Distant Horizons and Voxy do not export the same Java module package.'
+    archiveBaseName.set('voxy-xz')
+    archiveVersion.set('1.10')
+    archiveClassifier.set('relocated')
+    destinationDirectory.set(layout.buildDirectory.dir('relocated-dependencies'))
+    configurations = [project.configurations.xzRelocation]
+    relocate 'org.tukaani.xz', 'me.cortex.voxy.dependency.xz'
+    exclude 'META-INF/**'
+}
+
+// MixinGradle attaches an addMixins task to every Jar task. This archive is only a
+// relocated third-party dependency and has no mixin metadata; letting it participate
+// would create compileJava -> relocateXz -> addMixinsToRelocateXz -> compileJava.
+afterEvaluate {
+    relocateXz.configure {
+        setDependsOn(dependsOn.findAll { dependency ->
+            !(dependency instanceof TaskProvider && dependency.name == 'addMixinsToRelocateXz') &&
+                    !(dependency instanceof Task && dependency.name == 'addMixinsToRelocateXz') &&
+                    dependency.toString() != 'addMixinsToRelocateXz'
+        })
+    }
 }
 
 minecraft {
@@ -116,8 +144,13 @@ minecraft {
 
         client {
             property 'forge.enabledGameTestNamespaces', project.mod_id
-            def quickPlayWorld = (project.findProperty('voxyQuickPlayWorld') ?: '新的世界').toString()
-            args '--quickPlaySingleplayer', quickPlayWorld
+            def quickPlayServer = (project.findProperty('voxyQuickPlayServer') ?: '').toString().trim()
+            if (!quickPlayServer.isEmpty()) {
+                args '--quickPlayMultiplayer', quickPlayServer
+            } else {
+                def quickPlayWorld = (project.findProperty('voxyQuickPlayWorld') ?: '新的世界').toString()
+                args '--quickPlaySingleplayer', quickPlayWorld
+            }
             if (project.hasProperty('voxyRenderdocCompat')) {
                 property 'voxy.forge.renderdocCompatGeometryBuffer', 'true'
             }
@@ -134,7 +167,7 @@ repositories {
     mavenCentral()
     flatDir {
         dirs 'dev-mods'
-        ['voxyEmbeddiumDevJar', 'voxyOculusDevJar', 'voxyAcediumDevJar', 'voxyVivecraftDevJar', 'voxyBobbyDevJar', 'voxyChunkyDevJar'].each { propertyName ->
+        ['voxyEmbeddiumDevJar', 'voxyOculusDevJar', 'voxyAcediumDevJar', 'voxyVivecraftDevJar', 'voxyBobbyDevJar', 'voxyChunkyDevJar', 'voxyDistantHorizonsDevJar'].each { propertyName ->
             def configuredPath = (project.findProperty(propertyName) ?: '').toString().trim()
             if (!configuredPath.isEmpty()) {
                 dirs file(configuredPath).parentFile
@@ -167,7 +200,11 @@ def acediumDevJars = optionalFrontendJars('voxyAcediumDevJar', 'acedium*.jar')
 def vivecraftDevJars = optionalFrontendJars('voxyVivecraftDevJar', 'vivecraft*.jar')
 def bobbyDevJars = optionalFrontendJars('voxyBobbyDevJar', 'bobby*.jar')
 def chunkyDevJars = optionalFrontendJars('voxyChunkyDevJar', 'chunky*.jar')
+def distantHorizonsDevJars = optionalFrontendJars('voxyDistantHorizonsDevJar', 'DistantHorizons*.jar')
 def bobbyDevJarPath = (project.findProperty('voxyBobbyDevJar') ?: '').toString().trim()
+def distantHorizonsDevJarPath = (project.findProperty('voxyDistantHorizonsDevJar') ?: '').toString().trim()
+def bobbyCacheTestPath = (project.findProperty('voxyBobbyCacheTestPath') ?: '').toString().trim()
+def distantHorizonsDatabaseTestPath = (project.findProperty('voxyDhDatabaseTestPath') ?: '').toString().trim()
 def includeOculusInDevRuntime = !project.hasProperty('voxyOculusDevRuntime')
         || project.property('voxyOculusDevRuntime').toString().toBoolean()
 def includeAcediumInDevRuntime = !project.hasProperty('voxyAcediumDevRuntime')
@@ -178,6 +215,8 @@ def includeBobbyInDevRuntime = !project.hasProperty('voxyBobbyDevRuntime')
         || project.property('voxyBobbyDevRuntime').toString().toBoolean()
 def includeChunkyInDevRuntime = !project.hasProperty('voxyChunkyDevRuntime')
         || project.property('voxyChunkyDevRuntime').toString().toBoolean()
+def includeDistantHorizonsInDevRuntime = !project.hasProperty('voxyDistantHorizonsDevRuntime')
+        || project.property('voxyDistantHorizonsDevRuntime').toString().toBoolean()
 
 dependencies {
     minecraft "net.minecraftforge:forge:${project.minecraft_version}-${project.forge_version}"
@@ -212,9 +251,11 @@ dependencies {
     minecraftLibrary("org.xerial:sqlite-jdbc:3.49.1.0") {
         transitive = false
     }
-    minecraftLibrary("org.tukaani:xz:1.10") {
+    xzRelocation("org.tukaani:xz:1.10") {
         transitive = false
     }
+    compileOnly files(relocateXz.flatMap { it.archiveFile })
+    minecraftLibrary files(relocateXz.flatMap { it.archiveFile })
     minecraftLibrary("redis.clients:jedis:5.1.0") {
         transitive = false
     }
@@ -262,10 +303,6 @@ dependencies {
     jarJar(group: 'org.lz4', name: 'lz4-java', version: '[1.8.0,1.9)') {
         transitive = false
         jarJar.pin(it, '1.8.0')
-    }
-    jarJar(group: 'org.tukaani', name: 'xz', version: '[1.10,2.0)') {
-        transitive = false
-        jarJar.pin(it, '1.10')
     }
     jarJar(group: 'redis.clients', name: 'jedis', version: '[5.1.0,5.2)') {
         transitive = false
@@ -315,6 +352,13 @@ dependencies {
             runtimeOnly fg.deobf(chunkyDevJar)
         }
     }
+
+    for (def distantHorizonsDevJar : distantHorizonsDevJars) {
+        compileOnly fg.deobf(distantHorizonsDevJar)
+        if (includeDistantHorizonsInDevRuntime) {
+            runtimeOnly fg.deobf(distantHorizonsDevJar)
+        }
+    }
 }
 
 // JarJar's metadata uses compatibility ranges, while the original Voxy build packages the
@@ -325,7 +369,6 @@ def jarJarPayload = configurations.detachedConfiguration(
         dependencies.create('org.lwjgl:lwjgl-lmdb:3.3.1'),
         dependencies.create('org.rocksdb:rocksdbjni:10.2.1'),
         dependencies.create('org.lz4:lz4-java:1.8.0'),
-        dependencies.create('org.tukaani:xz:1.10'),
         dependencies.create('redis.clients:jedis:5.1.0'),
         dependencies.create('org.apache.commons:commons-pool2:2.12.0'))
 jarJarPayload.transitive = false
@@ -357,7 +400,7 @@ def makeExcludedRocksDB = tasks.register('makeExcludedRocksDB', Zip) {
 
 test {
     useJUnitPlatform {
-        excludeTags 'bobby-exact-artifact'
+        excludeTags 'bobby-exact-artifact', 'compat-real-data'
     }
 }
 
@@ -382,6 +425,41 @@ tasks.register('bobbyExactArtifactTest', Test) {
     }
 }
 
+tasks.register('compatRealDataTest', Test) {
+    description = 'Decodes real Bobby Reforged region data and a real Distant Horizons database.'
+    group = 'verification'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform {
+        includeTags 'compat-real-data'
+    }
+    [
+            voxyBobbyDevJar: bobbyDevJarPath,
+            voxyBobbyCacheTestPath: bobbyCacheTestPath,
+            voxyDistantHorizonsDevJar: distantHorizonsDevJarPath,
+            voxyDhDatabaseTestPath: distantHorizonsDatabaseTestPath
+    ].each { name, configuredPath ->
+        if (!configuredPath.isEmpty()) {
+            systemProperty name, file(configuredPath).absolutePath
+        }
+    }
+    doFirst {
+        [
+                voxyBobbyDevJar: bobbyDevJarPath,
+                voxyBobbyCacheTestPath: bobbyCacheTestPath,
+                voxyDistantHorizonsDevJar: distantHorizonsDevJarPath,
+                voxyDhDatabaseTestPath: distantHorizonsDatabaseTestPath
+        ].each { name, configuredPath ->
+            if (configuredPath.isEmpty()) {
+                throw new GradleException("compatRealDataTest requires -P${name}=<path>")
+            }
+            if (!file(configuredPath).exists()) {
+                throw new GradleException("${name} does not exist: ${file(configuredPath)}")
+            }
+        }
+    }
+}
+
 // Forge Jar-in-Jar identifies classifier siblings by the same group/name, so native entries
 // would collide with their class jars. Preserve official native resource paths in the outer jar.
 tasks.named('jarJar') {
@@ -400,6 +478,16 @@ tasks.named('jarJar') {
         include 'windows/**'
         include 'linux/**'
     }
+}
+
+tasks.named('jar', Jar) {
+    dependsOn(relocateXz)
+    from({ zipTree(relocateXz.get().archiveFile.get().asFile) })
+}
+
+tasks.named('jarJar', Jar) {
+    dependsOn(relocateXz)
+    from({ zipTree(relocateXz.get().archiveFile.get().asFile) })
 }
 
 tasks.named('processResources', ProcessResources).configure {

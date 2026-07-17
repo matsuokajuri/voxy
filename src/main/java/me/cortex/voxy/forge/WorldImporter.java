@@ -363,7 +363,7 @@ public final class WorldImporter implements IDataImporter {
         }
     }
 
-    private static InputStream createInputStream(MemoryBuffer data) {
+    static InputStream createInputStream(MemoryBuffer data) {
         return new InputStream() {
             private long offset;
 
@@ -390,7 +390,7 @@ public final class WorldImporter implements IDataImporter {
         };
     }
 
-    private DataInputStream decompress(byte flags, MemoryBuffer stream) throws IOException {
+    static DataInputStream decompress(byte flags, MemoryBuffer stream) throws IOException {
         RegionFileVersion chunkStreamVersion = RegionFileVersion.fromId(flags);
         if (chunkStreamVersion == null) {
             Logger.error("Chunk has invalid chunk stream version");

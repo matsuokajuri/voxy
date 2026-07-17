@@ -5,9 +5,9 @@ import net.jpountz.lz4.LZ4FrameInputStream;
 import org.lwjgl.system.MemoryUtil;
 import org.lwjgl.util.zstd.ZSTDInBuffer;
 import org.lwjgl.util.zstd.ZSTDOutBuffer;
-import org.tukaani.xz.BasicArrayCache;
-import org.tukaani.xz.ResettableArrayCache;
-import org.tukaani.xz.XZInputStream;
+import me.cortex.voxy.dependency.xz.BasicArrayCache;
+import me.cortex.voxy.dependency.xz.ResettableArrayCache;
+import me.cortex.voxy.dependency.xz.XZInputStream;
 
 import java.io.BufferedInputStream;
 import java.io.ByteArrayInputStream;

@@ -5,8 +5,8 @@ import org.junit.jupiter.api.Test;
 import org.lwjgl.system.MemoryUtil;
 import org.lwjgl.util.zstd.ZSTDInBuffer;
 import org.lwjgl.util.zstd.ZSTDOutBuffer;
-import org.tukaani.xz.LZMA2Options;
-import org.tukaani.xz.XZOutputStream;
+import me.cortex.voxy.dependency.xz.LZMA2Options;
+import me.cortex.voxy.dependency.xz.XZOutputStream;
 
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;

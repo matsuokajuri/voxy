@@ -2559,7 +2559,7 @@ dependency and Mixin surfaces:
 | Integration | Original behavior | Forge 1.20.1 classification |
 | --- | --- | --- |
 | Bobby | imports `.bobby` region cache and changes Sodium unload-ingest timing | Bobby Reforged is the real Forge 1.20.1 owner and retains `modId="bobby"`; XXV ports both the cache importer and the original split unload hooks through Minecraft/Embeddium |
-| Distant Horizons | optional direct SQLite/XZ/ZSTD importer | XXV ports the optional direct DH database importer and supported decoders/compressors without requiring DH at runtime |
+| Distant Horizons | optional direct SQLite/XZ/ZSTD importer | XXV ports the optional direct DH database importer and supported decoders/compressors; XXXVI qualifies the two-stage workflow against real DH 3.2.0-b data because that DH release explicitly rejects a simultaneous Voxy installation |
 | Flashback | records/replays Voxy storage paths through Flashback metadata and Fabric mixins | Fabric-only Flashback classes are absent; platform-N/A |
 | FREX flawless frames | repeats GPU traversal until queued work drains during a Fabric entrypoint callback | Fabric rendering entrypoint is absent; explicit platform-N/A false state replaces the stale reflection to excluded Fabric source |
 | Nvidium / Acedium | injects Voxy draw after Nvidium replaces Sodium's terrain pipeline | Acedium is the Forge fork of Nvidium, retains the `me.cortex.nvidium.RenderPipeline` class, and publishes both `acedium` plus compatibility `nvidium` mod entries; the guarded Voxy Mixin selects the exact Acedium owner |
@@ -2787,7 +2787,7 @@ owners; no preview or substitute route was introduced.
 
 | Original area | XXV Forge result |
 | --- | --- |
-| Distant Horizons import | Direct, optional DH SQLite import was ported with the original database-selection/task lifecycle and Forge-side decoders for supported DH data/compression versions. The importer remains classpath-optional and has focused decoder/import tests. |
+| Distant Horizons import | Direct, optional DH SQLite import was ported with the original database-selection/task lifecycle and Forge-side decoders for supported DH data/compression versions. XXXVI validates real DH 3.2.0-b output and the supported two-stage producer/importer workflow; DH itself must not be installed in the Voxy import client. |
 | Bobby import | `.bobby` region-cache import is exposed through the original import manager/world importer lifecycle. |
 | Chunky | The real Forge Chunky server-generation callback is bridged only for the integrated server dimension matching the active client identity. Dedicated/multiplayer server chunks cannot leak into the client engine. |
 | Acedium | A real optional rendering-pipeline mixin preserves the original Nvidium compatibility intent when the Forge fork's own `acedium` mod entry is installed. |
@@ -3382,8 +3382,9 @@ The Distant Horizons decoder now uses the already packaged LWJGL Zstd binding
 instead of adding a second zstd-jni native stack. Streaming decompression,
 truncation/error checks, XZ array-cache reset, format/compression gates, and the
 SQL single-reconnect path are covered by focused tests. The DH command is
-registered only when optional SQLite JDBC and required XZ classes are present;
-normal Voxy use does not require or package SQLite. This matches original's
+registered only when optional SQLite JDBC and Voxy's privately relocated XZ
+classes are present; normal Voxy use does not require or package SQLite. This
+matches original's
 runtime-library treatment rather than turning DH into a hard Voxy dependency.
 
 ### XXVI.6 artifact-size root cause and correction
@@ -3406,8 +3407,10 @@ as a development/runtime library. XXVI ports that mechanism to Forge JarJar:
   `librocksdbjni-linux64.so`; its entries are stored so the outer mod JAR can
   compress the selected native payload once;
 - zstd-jni and sqlite-jdbc are absent from JarJar metadata and the artifact;
-- XZ 1.10 remains packaged because original packages it and DH compression
-  modes require it;
+- XZ 1.10 bytecode remains packaged under the private
+  `me.cortex.voxy.dependency.xz` namespace because DH compression modes require
+  it; neither the original `org.tukaani.xz` package nor a nested XZ JarJar module
+  remains, avoiding a Java module split-package conflict with DH 3.2.0-b;
 - LWJGL Zstd/LMDB use the Minecraft 1.20.1-compatible 3.3.1 API/native set;
 - `-PincludeOtherArchs=true` remains the explicit wider-architecture build
   switch, matching original policy.
@@ -4433,3 +4436,84 @@ the filename identify release `5.0.1`, its internal `mods.toml` still declares
 file hash and this real metadata, plus the mixin/refmap entries and Voxy unload
 split, so a replacement artifact or incompatible contract cannot silently pass
 as the qualified build.
+
+## XXXVI Bobby Reforged and Distant Horizons real-data regression
+
+### XXXVI.1 Bobby Reforged production-path cache qualification
+
+The exact Bobby Reforged `1.20.1_v5.0.1` artifact from XXXV was exercised
+against a real Minecraft 1.20.1 server rather than a synthetic region fixture.
+Bobby produced a local ignored cache at:
+
+```text
+run/.bobby/127.0.0.1_25565/-4672863472195697072/minecraft/overworld
+```
+
+The `compatRealDataTest` gate verifies the exact Bobby artifact hash, scans
+multiple real `.mca` files, and sends every allocated chunk through
+`WorldImporter.createInputStream`, the production Anvil decompressor. It checks
+region coordinates, full chunk status, section lists, and non-air block-state
+palettes. The end-to-end `/voxy import bobby` run then imported 3,047 real
+chunks and completed normally. Bobby's `last_access` metadata file produces the
+same harmless "Unknown file" diagnostic as original `WorldImporter`; it is not
+an import failure and does not justify a Forge-only parser divergence.
+
+### XXXVI.2 Distant Horizons 3.2.0-b real database qualification
+
+The optional DH gate now pins the official Forge/Fabric artifact:
+
+```text
+DistantHorizons-3.2.0-b-1.20.1-fabric-forge.jar
+  SHA-1 5667440fdca4d4543c345c9ba6fda2dda64928ca
+```
+
+An unmodified DH client generated
+`run/saves/新的世界/data/DistantHorizons.sqlite`. The real database uses V2
+data with compression mode 4, mapping tables, and adjacent-column blobs. The
+real-data gate validates the SQLite schema and detail-zero population, then
+decodes 32 database rows—including four adjacent blobs—through
+`ForgeOriginalVoxyDhDataDecoder` and verifies every referenced mapping ID.
+This supplements the focused synthetic corruption/edge-case tests; it does not
+replace them.
+
+### XXXVI.3 two-stage compatibility policy
+
+DH 3.2.0-b explicitly displays an unsupported-mod error when `voxy` and
+`distanthorizons` are installed in the same client. Consequently, the qualified
+contract is an offline, two-stage import workflow:
+
+```text
+launch Distant Horizons without Voxy -> generate/update DistantHorizons.sqlite
+remove Distant Horizons              -> launch Voxy and import that database
+```
+
+The Forge adapter does not claim simultaneous-runtime compatibility and does
+not bypass DH's policy. `voxyDistantHorizonsDevJar` exists to pin and inspect
+the producer artifact for regression testing; it is not a normal Voxy runtime
+prerequisite.
+
+### XXXVI.4 private XZ ownership
+
+DH 3.2.0-b embeds `org.tukaani.xz`, while the prior Voxy artifact exposed XZ
+1.10 as another Java module. Loading both caused a split-package module
+resolution failure before Minecraft startup. Voxy now relocates its required XZ
+classes to `me.cortex.voxy.dependency.xz`; the decoder and its tests use that
+private namespace. Formal `jarJar` inspection found 132 relocated XZ entries,
+zero original-package entries, and zero nested XZ modules. This retains the
+original import algorithm without competing with the producer mod's package.
+
+### XXXVI.5 end-to-end import, persistence, and visual evidence
+
+With official Embeddium 0.3.31, Oculus 1.8.0, and Bobby Reforged 5.0.1 loaded,
+Voxy imported the real Bobby cache and the DH-produced database in one client
+session. The DH scan accepted all 1,120 detail-zero rows and scheduled 17,920
+chunks, with zero failed or unscheduled rows. Normal shutdown persisted the
+formal WorldEngine storage as 135 files totaling 698,740,077 bytes.
+
+Restarting the same world reopened the same WorldIdentifier and storage path
+without rerunning either command. Geometry commitment grew from approximately
+67 MB to 473 MB as the persisted data was rebuilt into the visible formal
+renderer. The user confirmed the LOD result visually, reported no problem, and
+closed the client normally. This qualifies Bobby cache ingestion, DH database
+decoding/import, WorldEngine persistence, and restart visibility as one real
+data lifecycle; it does not qualify unsupported simultaneous DH runtime use.
