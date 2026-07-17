@@ -11,7 +11,6 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.world.level.block.state.BlockState;
 
 import javax.annotation.Nullable;
-import java.util.Arrays;
 import java.util.List;
 
 import static org.lwjgl.opengl.GL11C.glFinish;
@@ -154,8 +153,9 @@ final class ForgeOriginalVoxyRenderSystem {
             // and MDIC owners are still compiling. The callbacks stay inside the constructor
             // boundary but are attached last, once every owner they feed exists.
             world.setDirtyCallback(this.nodeManager::worldEvent);
-            Arrays.stream(world.getMapper().getBiomeEntries()).forEach(this.modelService::addBiome);
-            world.getMapper().setBiomeCallback(this.modelService::addBiome);
+            for (var biome : world.getMapper().setBiomeCallbackAndGetSnapshot(this.modelService::addBiome)) {
+                this.modelService.addBiome(biome);
+            }
             this.nodeManager.start();
 
             Logger.info("Voxy render system created with " + ORIGINAL_GEOMETRY_MAX_SECTION_COUNT

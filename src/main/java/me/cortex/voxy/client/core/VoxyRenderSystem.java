@@ -37,7 +37,6 @@ import org.joml.Matrix4f;
 import org.joml.Matrix4fc;
 import org.lwjgl.opengl.GL11;
 
-import java.util.Arrays;
 import java.util.List;
 
 import static org.lwjgl.opengl.GL11.GL_VIEWPORT;
@@ -114,8 +113,9 @@ public class VoxyRenderSystem {
 
                 world.setDirtyCallback(this.nodeManager::worldEvent);
 
-                Arrays.stream(world.getMapper().getBiomeEntries()).forEach(this.modelService::addBiome);
-                world.getMapper().setBiomeCallback(this.modelService::addBiome);
+                for (var biome : world.getMapper().setBiomeCallbackAndGetSnapshot(this.modelService::addBiome)) {
+                    this.modelService.addBiome(biome);
+                }
 
                 this.nodeManager.start();
             }

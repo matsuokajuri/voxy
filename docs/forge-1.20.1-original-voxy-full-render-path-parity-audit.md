@@ -1871,6 +1871,45 @@ displayed the persisted LOD normally, and again shut down cleanly. Neither log
 contains a Voxy, ZSTD, RocksDB, native-size, or lock failure. This closes Forxy
 壹轮 without changing the established Forge migration parity claim.
 
+#### Forxy 贰轮 delta: Mapper snapshot and lock safety
+
+Forxy keeps the shared original `Mapper` as the single mapping owner and hardens
+its inherited concurrency and corrupt-entry behavior. Block and biome
+registration, callback replacement, and dense snapshot validation now release
+their existing locks through `try/finally`. A snapshot is a validated id-indexed
+prefix captured under the corresponding registration lock.
+
+The old render-system bootstrap performed `getBiomeEntries()` and
+`setBiomeCallback()` as separate operations, leaving a concurrent-registration
+gap. `setBiomeCallbackAndGetSnapshot()` now linearizes callback installation and
+snapshot capture. Both the retained original client owner and the active Forge
+`ForgeOriginalVoxyRenderSystem` use that API, so each biome is delivered either
+through the initial snapshot or the callback exactly once.
+
+The inherited corrupt-block path decoded an invalid stored entry to air, then
+randomly assigned its numeric id to an unrelated real block and force-resaved
+the invented mapping. Forxy instead retains that nonzero id as an in-memory air
+missing-state placeholder, excludes it from reverse state lookup, and preserves
+the original stored bytes. Canonical air remains id `0`; valid mapping encoding,
+storage-before-callback order, and existing numeric ids are unchanged.
+
+`MapperSnapshotSafetyTest` covers the two former stranded-lock failures,
+repeated stable corrupt-entry loading with byte preservation, concurrent block
+and biome insertion against dense snapshots, exact-once callback/snapshot
+partitioning, and persistence-before-callback ordering. Its 6 tests and the
+clean 146-test suite pass; `compileJava test jarJar` produced the formal all-JAR
+and `git diff --check` passed apart from existing line-ending notices.
+
+The runtime gate used two post-change client processes against the same existing
+quick-play world and `Serializer -> ZSTD(level 1) -> RocksDB` configuration.
+Both built the formal `ForgeOriginalVoxyRenderPipeline` /
+`MDICSectionRenderer`, displayed LOD normally by user confirmation, and closed
+the renderer, network-session storage owner, and Forge instance normally. The
+second process reopened the persisted world without a forced mapping resave,
+missing-state decode, Mapper lock failure, ZSTD failure, or RocksDB failure.
+This closes Forxy 贰轮 without changing the established Forge migration parity
+claim.
+
 ### XXI.2 original storage config JSON and production TYPE registry
 
 XXI.2 ports the original configuration mechanism around the XXI.1 production

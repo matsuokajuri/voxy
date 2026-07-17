@@ -158,20 +158,56 @@ All 壹轮 completion gates are therefore closed.
 Goal: make mapping snapshots and failed-entry recovery deterministic without
 changing valid mapping IDs.
 
-- [ ] Put block and biome snapshot locks behind `try/finally` or an equivalent
+- [x] Put block and biome snapshot locks behind `try/finally` or an equivalent
       scoped owner.
-- [ ] Test an exception during snapshot validation and prove the next access can
+- [x] Test an exception during snapshot validation and prove the next access can
       still acquire the lock.
-- [ ] Define snapshot consistency while mappings are added concurrently.
-- [ ] Replace random invalid-block substitution with a deterministic missing or
+- [x] Define snapshot consistency while mappings are added concurrently.
+- [x] Replace random invalid-block substitution with a deterministic missing or
       error-state policy that cannot silently map one corrupt entry to an
       unrelated real block.
-- [ ] Preserve air id `0`, stored numeric ids, callback order, and existing valid
+- [x] Preserve air id `0`, stored numeric ids, callback order, and existing valid
       serialized mappings.
-- [ ] Add concurrent block/biome insertion and snapshot stress tests.
+- [x] Add concurrent block/biome insertion and snapshot stress tests.
 
 Exit evidence: valid mapping bytes remain compatible, invalid entries have a
 stable outcome, and no exception can strand either mapping lock.
+
+### 贰轮 implementation record
+
+- The shared active `Mapper` remains the sole id owner. Block and biome
+  registration, callback replacement, and dense snapshot capture now use their
+  existing `ReentrantLock` owners with `try/finally`; there is no Forge-only
+  mapping route.
+- A snapshot is a validated dense id prefix captured while the corresponding
+  registration lock is held. New atomic callback-and-snapshot methods divide
+  concurrent entries at one lock boundary: every entry is delivered either in
+  the returned initial snapshot or by the installed callback, never through a
+  gap between two separate calls. Both the original and Forge render-system
+  constructors use this contract.
+- A stored block mapping that decodes to air at a nonzero id is retained in the
+  id array as an in-memory air/missing placeholder. It is deliberately absent
+  from the reverse block-state map, so canonical air remains id `0`; the corrupt
+  entry's original storage bytes are not overwritten and no unrelated real
+  block can be selected.
+- `MapperSnapshotSafetyTest` first reproduced both stranded snapshot locks and
+  the inherited random invalid-state path. It now covers block/biome validation
+  exceptions, repeated corrupt-entry loading with byte preservation, concurrent
+  registration plus dense snapshots, exact-once biome bootstrap delivery, and
+  storage-before-callback ordering. The focused 6-test class and the clean full
+  146-test suite pass with zero failures.
+- `compileJava test jarJar` passed with 146 tests and the formal all-JAR was
+  produced; `git diff --check` passed apart from Git's existing line-ending
+  notices.
+- Two post-change client processes opened the same quick-play world and existing
+  `Serializer -> ZSTD(level 1) -> RocksDB` configuration. Both constructed the
+  formal `ForgeOriginalVoxyRenderPipeline` / `MDICSectionRenderer`, displayed LOD
+  normally by user confirmation, and shut down the renderer, network-session
+  storage owner, and Forge instance cleanly. The second process reread the same
+  persisted world without a forced mapping resave, missing-state decode, Mapper
+  lock failure, ZSTD failure, or RocksDB failure.
+
+All 贰轮 completion gates are therefore closed.
 
 ## 叁轮：optional storage position iteration
 
@@ -402,7 +438,7 @@ The following do not become work merely because a marker exists:
 ## Progress summary
 
 - [x] 壹轮：native ZSTD result validation
-- [ ] 贰轮：Mapper snapshot and lock safety
+- [x] 贰轮：Mapper snapshot and lock safety
 - [ ] 叁轮：optional storage position iteration
 - [ ] 肆轮：service cancellation accounting
 - [ ] 伍轮：storage recovery and format versioning
