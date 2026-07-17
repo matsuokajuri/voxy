@@ -1834,6 +1834,43 @@ load/write counters. Whole-mod parity deliberately remains false: the default
 production backend is now persistent, while original dynamic configuration and
 the optional storage/compressor/adaptor inventory are handled separately below.
 
+#### Forxy 壹轮 delta: native ZSTD result validation
+
+Forxy intentionally hardens the inherited ZSTD failure boundary without
+changing the compressor, stored bytes, backend ownership, or default
+`Serializer -> ZSTD(level 1) -> RocksDB` route. Original
+`common/config/compressors/ZSTDCompressor` passes the `size_t` result of
+`nZSTD_decompressDCtx` directly to `MemoryBuffer.subSize()` despite its own
+`TODO:FIXME: DONT ASSUME IT DOESNT FAIL`; the active Forge namespace port had
+preserved that behavior.
+
+The active Forge ZSTD owner now rejects null native contexts, checks the
+experimental decompression parameter result, and applies `ZSTD_isError` plus
+`ZSTD_getErrorName` to parameter setup, compression, and decompression before a
+result is treated as a byte count. Successful results must fit their destination
+and decompressed data must remain between the characterized serialized-section
+minimum (65,560 bytes) and the existing conservative maximum (524,296 bytes).
+A parameter-setup failure also frees its not-yet-registered context.
+
+The pre-change focused suite produced the intended red baseline: the valid
+round trip passed while truncated-frame, random-data, destination-too-small,
+undersized-section, and oversized-input expectations failed. The post-change
+suite adds eight native/boundary cases plus a real default-config restart test
+that writes RocksDB through ZSTD and the section serializer, closes all owners,
+rereads `config.json`, reopens RocksDB, and compares all section values. A clean
+2026-07-17 `compileJava test jarJar` run passed 42 suites / 140 tests with no
+failure, error, or skip; `git diff --check` and formal JarJar content checks also
+passed.
+
+The final runtime gate used two post-change client processes. The first opened
+`run/saves/新的世界/voxy/74d2036cf9ebdb83178e6f984bd8904e/storage`,
+exercised real LOD writes, and closed every storage/session owner normally. The
+database then contained 137 files / 607,033,029 bytes. The second process reread
+the existing config, opened the identical world identifier and RocksDB path,
+displayed the persisted LOD normally, and again shut down cleanly. Neither log
+contains a Voxy, ZSTD, RocksDB, native-size, or lock failure. This closes Forxy
+壹轮 without changing the established Forge migration parity claim.
+
 ### XXI.2 original storage config JSON and production TYPE registry
 
 XXI.2 ports the original configuration mechanism around the XXI.1 production

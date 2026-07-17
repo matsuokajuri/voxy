@@ -13,6 +13,8 @@ import java.util.Arrays;
 import java.util.function.LongConsumer;
 
 public class SectionSerializationStorage extends SectionStorage {
+    public static final int MINIMUM_SERIALIZED_SECTION_SIZE =
+            Long.BYTES * 3 + WorldSection.SECTION_VOLUME * Short.BYTES;
     public static final int BIGGEST_SERIALIZED_SECTION_SIZE = 32 * 32 * 32 * 8 * 2 + 8;
 
     private final StorageBackend backend;
