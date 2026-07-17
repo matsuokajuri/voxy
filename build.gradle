@@ -400,7 +400,26 @@ def makeExcludedRocksDB = tasks.register('makeExcludedRocksDB', Zip) {
 
 test {
     useJUnitPlatform {
-        excludeTags 'bobby-exact-artifact', 'compat-real-data'
+        excludeTags 'bobby-exact-artifact', 'compat-real-data', 'redis-real-backend'
+    }
+}
+
+tasks.register('redisRealBackendTest', Test) {
+    description = 'Verifies paged position iteration and restart against a real Redis service.'
+    group = 'verification'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform {
+        includeTags 'redis-real-backend'
+    }
+    def redisTestPort = (project.findProperty('voxyRedisTestPort') ?: '').toString().trim()
+    if (!redisTestPort.isEmpty()) {
+        systemProperty 'voxyRedisTestPort', redisTestPort
+    }
+    doFirst {
+        if (redisTestPort.isEmpty()) {
+            throw new GradleException('redisRealBackendTest requires -PvoxyRedisTestPort=<port>')
+        }
     }
 }
 

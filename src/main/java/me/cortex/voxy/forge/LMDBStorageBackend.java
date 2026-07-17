@@ -6,6 +6,7 @@ import me.cortex.voxy.common.config.storage.StorageBackend;
 import me.cortex.voxy.common.config.storage.lmdb.LMDBInterface;
 import me.cortex.voxy.common.util.MemoryBuffer;
 import me.cortex.voxy.common.util.UnsafeUtil;
+import me.cortex.voxy.common.world.WorldEngine;
 import org.lwjgl.system.MemoryUtil;
 import org.lwjgl.util.lmdb.MDBVal;
 
@@ -13,6 +14,7 @@ import java.nio.ByteBuffer;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.LongConsumer;
 import java.util.function.Supplier;
 
@@ -26,9 +28,11 @@ final class LMDBStorageBackend extends StorageBackend {
 
     private final AtomicInteger accessingCounts = new AtomicInteger();
     private final ReentrantLock resizeLock = new ReentrantLock();
+    private final ReentrantReadWriteLock lifecycleLock = new ReentrantReadWriteLock(true);
     private final LMDBInterface dbi;
     private final LMDBInterface.Database sectionDatabase;
     private final LMDBInterface.Database idMappingDatabase;
+    private boolean closed;
 
     LMDBStorageBackend(String file) {
         this.dbi = new LMDBInterface.Builder()
@@ -47,26 +51,35 @@ final class LMDBStorageBackend extends StorageBackend {
     }
 
     private <T> T resizingTransaction(Supplier<T> transaction) {
-        while (true) {
-            try {
-                return this.synchronizedTransaction(transaction);
-            } catch (Throwable throwable) {
-                if (throwable.getMessage().startsWith("Code: -30792")) {
-                    if (this.resizeLock.tryLock()) {
-                        while (this.accessingCounts.get() != 0) {
-                            Thread.onSpinWait();
+        return this.withOpenReadLock(() -> {
+            while (true) {
+                try {
+                    return this.synchronizedTransactionBody(transaction);
+                } catch (Throwable throwable) {
+                    String message = throwable.getMessage();
+                    if (message != null && message.startsWith("Code: -30792")) {
+                        this.resizeLock.lock();
+                        try {
+                            while (this.accessingCounts.get() != 0) {
+                                Thread.onSpinWait();
+                            }
+                            this.growEnv();
+                        } finally {
+                            this.resizeLock.unlock();
                         }
-                        this.growEnv();
-                        this.resizeLock.unlock();
+                    } else {
+                        throw throwable;
                     }
-                } else {
-                    throw throwable;
                 }
             }
-        }
+        });
     }
 
     private <T> T synchronizedTransaction(Supplier<T> transaction) {
+        return this.withOpenReadLock(() -> this.synchronizedTransactionBody(transaction));
+    }
+
+    private <T> T synchronizedTransactionBody(Supplier<T> transaction) {
         try {
             this.accessingCounts.getAndAdd(1);
             while (this.resizeLock.isLocked()) {
@@ -82,9 +95,34 @@ final class LMDBStorageBackend extends StorageBackend {
         }
     }
 
+    private <T> T withOpenReadLock(Supplier<T> operation) {
+        var lock = this.lifecycleLock.readLock();
+        lock.lock();
+        try {
+            if (this.closed) {
+                throw new IllegalStateException("LMDB storage is closed");
+            }
+            return operation.get();
+        } finally {
+            lock.unlock();
+        }
+    }
+
     @Override
     public void iteratePositions(int level, LongConsumer consumer) {
-        throw new IllegalStateException("Not yet implemented");
+        this.synchronizedTransaction(() -> this.sectionDatabase.transaction(MDB_RDONLY, transaction -> {
+            try (var cursor = transaction.createCursor()) {
+                MDBVal keyPointer = MDBVal.malloc(transaction.stack);
+                MDBVal valuePointer = MDBVal.malloc(transaction.stack);
+                while (cursor.get(MDB_NEXT, keyPointer, valuePointer) != MDB_NOTFOUND) {
+                    long key = Objects.requireNonNull(keyPointer.mv_data()).getLong(0);
+                    if (level == -1 || WorldEngine.getLevel(key) == level) {
+                        consumer.accept(key);
+                    }
+                }
+            }
+            return null;
+        }));
     }
 
     @Override
@@ -156,13 +194,29 @@ final class LMDBStorageBackend extends StorageBackend {
 
     @Override
     public void flush() {
-        this.dbi.flush(true);
+        this.withOpenReadLock(() -> {
+            this.dbi.flush(true);
+            return null;
+        });
     }
 
     @Override
     public void close() {
-        this.sectionDatabase.close();
-        this.idMappingDatabase.close();
-        this.dbi.close();
+        if (this.lifecycleLock.getReadHoldCount() != 0) {
+            throw new IllegalStateException("Cannot close LMDB storage from an active operation callback");
+        }
+        var lock = this.lifecycleLock.writeLock();
+        lock.lock();
+        try {
+            if (this.closed) {
+                return;
+            }
+            this.closed = true;
+            this.sectionDatabase.close();
+            this.idMappingDatabase.close();
+            this.dbi.close();
+        } finally {
+            lock.unlock();
+        }
     }
 }

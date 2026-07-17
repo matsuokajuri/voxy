@@ -1910,6 +1910,44 @@ missing-state decode, Mapper lock failure, ZSTD failure, or RocksDB failure.
 This closes Forxy 贰轮 without changing the established Forge migration parity
 claim.
 
+#### Forxy 叁轮 delta: optional storage position iteration
+
+Forxy closes the inherited optional-backend enumeration gaps while preserving
+the established storage formats and ownership. `iteratePositions(level,
+consumer)` now treats `-1` as all levels and any other value as an exact encoded
+level filter; ordering remains backend-defined, callbacks are synchronous, and
+callback exceptions propagate. LMDB walks an `MDB_NEXT` cursor in a read-only
+transaction, Redis uses bounded binary `HSCAN` pages with duplicate suppression,
+and ReadonlyCachingLayer returns a deduplicated cache-first union.
+
+ReadonlyCachingLayer now merges ID mappings without mutating its read-only
+source: conflicting bytes for an existing ID fail explicitly, missing source
+mappings are copied into the cache, and cache-only mappings remain intact. Its
+inherited `flush()`-closes-children defect is corrected. Lifecycle read/write
+locks on LMDB, Redis, and ReadonlyCachingLayer prevent close racing an active
+operation; close requested from inside an operation callback is rejected rather
+than attempting an unsafe lock upgrade.
+
+`OptionalStorageIterationTest` contains 13 default tests plus one tagged real-
+Redis test. It covers empty/mixed-level stores, duplicates, callback failure,
+large sets, restart, mapping replication/conflict, flush semantics, and
+close-during-iteration including reentrant-close rejection. A clean build passed
+all 159 default tests and `jarJar`.
+Redis 7.0.15 then passed the dedicated 2,048-key multi-level create, enumerate,
+close, reopen, and cleanup test before `SHUTDOWN NOSAVE`.
+
+Two client processes validated a real ReadonlyCachingLayer chain against the
+same existing source world and isolated `forxy-round3-readonly-cache`. The
+second process reopened the populated cache; both created the formal
+`ForgeOriginalVoxyRenderPipeline` / `MDICSectionRenderer`, visuals passed user
+confirmation, and the renderer, network-session storage owner, and Forge
+instance shut down normally. No mapping conflict, closed-storage error, or Voxy
+fatal error appeared. The default world config was restored byte-for-byte with
+SHA-256
+`437c1c6b67283dba6bdf52898c502b15e8de008f7dfe9d44053213965c706c9f`.
+This closes Forxy 叁轮 without changing the established Forge migration parity
+claim.
+
 ### XXI.2 original storage config JSON and production TYPE registry
 
 XXI.2 ports the original configuration mechanism around the XXI.1 production
@@ -2007,9 +2045,10 @@ ConditionalConfig:
   NotImplementedException; Forge registers and preserves that exact behavior
 
 ReadonlyCachingLayer:
-  original is registered, but iteratePositions() is unimplemented and flush()
-  closes both children instead of flushing them; Forge ports that exact behavior,
-  marks it upstream-incomplete, and does not use or recommend it as production
+  at the historical XXI.3 checkpoint Forge preserved the original unimplemented
+  iteratePositions() and flush()-closes-children behavior; Forxy 叁轮 later adds
+  deduplicated enumeration, mapping replication, correct flush, and lifecycle
+  safety without making it the default production backend
 ```
 
 Runtime validation used a backed-up config and an isolated
@@ -2067,10 +2106,11 @@ flush = forced mdb_env_sync
 close = section DB, mapping DB, environment
 ```
 
-`iteratePositions()` remains an unconditional `Not yet implemented` exception
-because that is the current original LMDB implementation; XXI.4 does not claim
-or invent functionality absent upstream. The active WorldEngine persistence
-path used by this port does not call it during the validated load/save lifecycle.
+At the historical XXI.4 checkpoint `iteratePositions()` remained the original
+unconditional `Not yet implemented` exception. Forxy 叁轮 later closes that
+technical debt with read-only cursor iteration, exact level filtering, callback
+exception propagation, and lifecycle-safe close; the stored LMDB format and
+validated load/save route are unchanged.
 
 ForgeGradle packages `org.lwjgl:lwjgl-lmdb:3.3.1` through Jar-in-Jar and embeds
 the official Windows/Linux x64 native resources at their original LWJGL paths,
@@ -2121,8 +2161,10 @@ close = JedisPool.close
 
 The original JSON Config exposes only `host`, `port`, and `prefix`; it does not
 expose the backend constructor's optional user/password fields, and Forge keeps
-that exact surface. `iteratePositions()` remains `Not yet implemented`, matching
-upstream rather than inventing a Redis scan route.
+that exact surface. At the historical XXI.5 checkpoint `iteratePositions()`
+still matched the upstream `Not yet implemented` behavior. Forxy 叁轮 later
+adds bounded binary `HSCAN`, exact level filtering, duplicate suppression, and
+lifecycle-safe close without changing the Redis hash/key format.
 
 ForgeGradle packages the same original dependencies:
 
@@ -2159,10 +2201,10 @@ The default ZSTD/RocksDB config was restored byte-for-byte by SHA-256, and the
 temporary Redis process exited through `SHUTDOWN NOSAVE`. Together XXI.1-XXI.5
 now cover every storage/compressor/config TYPE actually emitted by the original
 build. `LZMA2` is not emitted because its entire source implementation is
-commented out; `ConditionalConfig` and `ReadonlyCachingLayer` retain their
-documented upstream-incomplete behavior. Whole-mod parity remains false for the
-remaining non-storage inventory and targeted regressions; renderer readiness is
-unchanged.
+commented out. `ConditionalConfig` retains its documented upstream-incomplete
+behavior; the historical ReadonlyCachingLayer gaps are closed by Forxy 叁轮 as
+recorded above. Whole-mod parity remains false for the remaining non-storage
+inventory and targeted regressions; renderer readiness is unchanged.
 
 ### XXI.6 original active-world ownership and identifier-routed ingest
 

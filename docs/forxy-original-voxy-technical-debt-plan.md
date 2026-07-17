@@ -214,22 +214,59 @@ All 贰轮 completion gates are therefore closed.
 Goal: make every advertised optional backend implement the section-position
 enumeration required by restart and world discovery.
 
-- [ ] Specify `iteratePositions(level, consumer)` ordering, level filtering,
+- [x] Specify `iteratePositions(level, consumer)` ordering, level filtering,
       duplicate handling, and callback exception behavior from the working
       RocksDB contract.
-- [ ] Implement LMDB cursor iteration without leaking transactions, cursors, or
+- [x] Implement LMDB cursor iteration without leaking transactions, cursors, or
       native buffers.
-- [ ] Implement bounded Redis iteration without loading an unbounded keyspace in
+- [x] Implement bounded Redis iteration without loading an unbounded keyspace in
       one allocation.
-- [ ] Implement read-only cache enumeration as a deduplicated union of cache and
+- [x] Implement read-only cache enumeration as a deduplicated union of cache and
       source positions.
-- [ ] Replicate ID mappings into the read-only cache without mutating the
+- [x] Replicate ID mappings into the read-only cache without mutating the
       read-only source.
-- [ ] Add empty, mixed-level, duplicate, large-set, restart, and close-during-
+- [x] Add empty, mixed-level, duplicate, large-set, restart, and close-during-
       iteration tests for each backend.
 
 Exit evidence: LMDB, Redis, and ReadonlyCaching can create, close, reopen, and
 enumerate a real multi-level world without `Not yet implemented` exceptions.
+
+### 叁轮 implementation record
+
+`iteratePositions(level, consumer)` now has one explicit cross-backend
+contract: `level == -1` enumerates every stored position, any other value keeps
+only that exact encoded level, backend order is deliberately unspecified, the
+callback is synchronous, and callback exceptions propagate to the caller.
+LMDB performs cursor iteration inside a read-only transaction, Redis uses
+bounded binary `HSCAN` pages with duplicate suppression, and
+ReadonlyCachingLayer returns a deduplicated cache-first union.
+
+ReadonlyCachingLayer also merges source/cache ID mappings under one mapping
+lock, rejects conflicting bytes for the same ID, copies missing source entries
+only into the cache, and preserves cache-only mappings. Its inherited `flush()`
+bug now flushes rather than closes both children. LMDB, Redis, and the cache
+layer use lifecycle read/write locks so close waits for active operations;
+attempted close from an operation callback is rejected instead of deadlocking.
+
+`OptionalStorageIterationTest` supplies 13 default tests plus one tagged real-
+Redis integration test. The coverage includes empty and mixed-level stores,
+duplicates, callback failure, 1,024-key RocksDB/LMDB restart sets, a 4,096 /
+6,144-entry cache/source union, a 2,048-entry multi-page Redis scan, mapping
+replication/conflict handling, flush behavior, close-during-iteration, and
+reentrant-close rejection. The clean default build passed all 159 tests plus
+`jarJar`; Redis 7.0.15 passed
+the dedicated 2,048-key create/enumerate/restart test and exited through
+`SHUTDOWN NOSAVE`.
+
+The runtime gate used two client processes against the same existing source
+world and isolated `forxy-round3-readonly-cache`. Both built the formal
+`ForgeOriginalVoxyRenderPipeline` / `MDICSectionRenderer`; the second process
+reopened the populated cache, visuals passed user confirmation, and every
+renderer/session/storage owner shut down normally. No mapping conflict,
+closed-storage error, or Voxy fatal error was logged. The original world config
+was restored byte-for-byte with SHA-256
+`437c1c6b67283dba6bdf52898c502b15e8de008f7dfe9d44053213965c706c9f`.
+All 叁轮 completion gates are therefore closed.
 
 ## 肆轮：service cancellation accounting
 
@@ -439,7 +476,7 @@ The following do not become work merely because a marker exists:
 
 - [x] 壹轮：native ZSTD result validation
 - [x] 贰轮：Mapper snapshot and lock safety
-- [ ] 叁轮：optional storage position iteration
+- [x] 叁轮：optional storage position iteration
 - [ ] 肆轮：service cancellation accounting
 - [ ] 伍轮：storage recovery and format versioning
 - [ ] 陆轮：cache, allocator, and worker efficiency
