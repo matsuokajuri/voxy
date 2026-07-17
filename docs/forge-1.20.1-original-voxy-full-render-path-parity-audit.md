@@ -4409,3 +4409,27 @@ against the new Oculus pipeline, and the user reported no visible regression.
 The client shut down normally and Gradle completed successfully. Vivecraft's
 subsequent OpenVR initialization attempt reported missing SteamVR/OpenVR paths,
 which is expected on this machine and does not qualify physical VR passes.
+
+## XXXV Bobby Reforged 1.20.1-5.0.1 exact-artifact build gate
+
+The official CurseForge file `4650227` was added as an optional development
+input through `voxyBobbyDevJar`. The downloaded `bobby-1.20.1_v5.0.1.jar` is
+86,682 bytes with SHA-256
+`4eb8296c24fa88cfc27145dc006b8acdea75d5f5175dd8b49dc5ef9709e66ee4`.
+The artifact remains local and is not packaged into Voxy.
+
+The exact JAR confirms the active Forge assumptions rather than only its public
+project description. It declares `modId="bobby"`, is client-side, and registers
+required `ClientChunkManagerMixin` and Sodium chunk-manager mixins with
+`defaultRequire=1`. Its refmap maps Bobby's `unload` injection to
+`ClientChunkCache.m_104455_(II)V`; Forge Voxy's Mojmap-equivalent `drop` HEAD
+hook therefore captures the final real chunk before Bobby substitutes or
+persists it, while the Embeddium removal hook remains suppressed to avoid a
+duplicate ingest. No runtime adapter change was required.
+
+The published file has one upstream packaging quirk: although CurseForge and
+the filename identify release `5.0.1`, its internal `mods.toml` still declares
+`version="5.0.0"`. The dedicated `bobbyExactArtifactTest` pins both the official
+file hash and this real metadata, plus the mixin/refmap entries and Voxy unload
+split, so a replacement artifact or incompatible contract cannot silently pass
+as the qualified build.

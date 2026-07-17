@@ -134,7 +134,7 @@ repositories {
     mavenCentral()
     flatDir {
         dirs 'dev-mods'
-        ['voxyEmbeddiumDevJar', 'voxyOculusDevJar', 'voxyAcediumDevJar', 'voxyVivecraftDevJar'].each { propertyName ->
+        ['voxyEmbeddiumDevJar', 'voxyOculusDevJar', 'voxyAcediumDevJar', 'voxyVivecraftDevJar', 'voxyBobbyDevJar', 'voxyChunkyDevJar'].each { propertyName ->
             def configuredPath = (project.findProperty(propertyName) ?: '').toString().trim()
             if (!configuredPath.isEmpty()) {
                 dirs file(configuredPath).parentFile
@@ -165,12 +165,19 @@ def embeddiumDevJars = optionalFrontendJars('voxyEmbeddiumDevJar', 'embeddium*.j
 def oculusDevJars = optionalFrontendJars('voxyOculusDevJar', 'oculus*.jar')
 def acediumDevJars = optionalFrontendJars('voxyAcediumDevJar', 'acedium*.jar')
 def vivecraftDevJars = optionalFrontendJars('voxyVivecraftDevJar', 'vivecraft*.jar')
+def bobbyDevJars = optionalFrontendJars('voxyBobbyDevJar', 'bobby*.jar')
+def chunkyDevJars = optionalFrontendJars('voxyChunkyDevJar', 'chunky*.jar')
+def bobbyDevJarPath = (project.findProperty('voxyBobbyDevJar') ?: '').toString().trim()
 def includeOculusInDevRuntime = !project.hasProperty('voxyOculusDevRuntime')
         || project.property('voxyOculusDevRuntime').toString().toBoolean()
 def includeAcediumInDevRuntime = !project.hasProperty('voxyAcediumDevRuntime')
         || project.property('voxyAcediumDevRuntime').toString().toBoolean()
 def includeVivecraftInDevRuntime = !project.hasProperty('voxyVivecraftDevRuntime')
         || project.property('voxyVivecraftDevRuntime').toString().toBoolean()
+def includeBobbyInDevRuntime = !project.hasProperty('voxyBobbyDevRuntime')
+        || project.property('voxyBobbyDevRuntime').toString().toBoolean()
+def includeChunkyInDevRuntime = !project.hasProperty('voxyChunkyDevRuntime')
+        || project.property('voxyChunkyDevRuntime').toString().toBoolean()
 
 dependencies {
     minecraft "net.minecraftforge:forge:${project.minecraft_version}-${project.forge_version}"
@@ -294,6 +301,20 @@ dependencies {
             runtimeOnly fg.deobf(vivecraftDevJar)
         }
     }
+
+    for (def bobbyDevJar : bobbyDevJars) {
+        compileOnly fg.deobf(bobbyDevJar)
+        if (includeBobbyInDevRuntime) {
+            runtimeOnly fg.deobf(bobbyDevJar)
+        }
+    }
+
+    for (def chunkyDevJar : chunkyDevJars) {
+        compileOnly fg.deobf(chunkyDevJar)
+        if (includeChunkyInDevRuntime) {
+            runtimeOnly fg.deobf(chunkyDevJar)
+        }
+    }
 }
 
 // JarJar's metadata uses compatibility ranges, while the original Voxy build packages the
@@ -335,7 +356,30 @@ def makeExcludedRocksDB = tasks.register('makeExcludedRocksDB', Zip) {
 }
 
 test {
-    useJUnitPlatform()
+    useJUnitPlatform {
+        excludeTags 'bobby-exact-artifact'
+    }
+}
+
+tasks.register('bobbyExactArtifactTest', Test) {
+    description = 'Verifies the exact Bobby Reforged 1.20.1-5.0.1 artifact and Voxy unload contract.'
+    group = 'verification'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform {
+        includeTags 'bobby-exact-artifact'
+    }
+    if (!bobbyDevJarPath.isEmpty()) {
+        systemProperty 'voxyBobbyDevJar', file(bobbyDevJarPath).absolutePath
+    }
+    doFirst {
+        if (bobbyDevJarPath.isEmpty()) {
+            throw new GradleException('bobbyExactArtifactTest requires -PvoxyBobbyDevJar=<bobby-1.20.1_v5.0.1.jar>')
+        }
+        if (!file(bobbyDevJarPath).isFile()) {
+            throw new GradleException("Bobby Reforged dev jar does not exist: ${file(bobbyDevJarPath)}")
+        }
+    }
 }
 
 // Forge Jar-in-Jar identifies classifier siblings by the same group/name, so native entries
