@@ -48,10 +48,13 @@ disable rendering. XXV removed those fields rather than preserving a second,
 status-only ownership model. Current acceptance is based on the real owners,
 build/JAR evidence, logs, and the final user-observed runtime gate.
 
-## Required Forge frontends
+## Forge frontends
 
-Embeddium replaces Sodium and Oculus replaces Iris. Both are hard client
-prerequisites. They are platform frontends, not substitute Voxy renderers.
+Embeddium replaces Sodium and remains the hard client prerequisite. Oculus
+replaces Iris but is optional, matching original Voxy: an Embeddium-only client
+uses the normal render pipeline, while an installed Oculus activates the
+shaderpack compatibility path. They are platform frontends, not substitute Voxy
+renderers.
 
 ## Required original owners and current route
 
@@ -104,7 +107,7 @@ sidecar for it.
 
 XXV has additionally established:
 
-- original DH and Bobby import routes, eligible Chunky/Acedium/GPU-selection
+- original DH and Bobby Reforged import/unload routes, eligible Chunky/Acedium/GPU-selection
   compatibility, formal F3 data, and original GL/GPU debug/timing owners;
 - removal of the parity/status registrar and write-only readiness/statistics
   shells without changing render control flow;
@@ -121,14 +124,12 @@ XXV has additionally established:
 - config effects now preserve the active `WorldEngine` for renderer-only
   changes, reload Oculus for enabled/rendering changes like original
   `IrisUtil.reload()`, and restore the original render-distance minimum.
-- strict enabled-lifecycle parity remains a documented non-blocker: Forge
-  immediately tears down the renderer, cancels imports, clears/reselects the
-  active world, and reloads Oculus, but keeps its event shell/service pool as
-  long-lived singletons and lets the released `WorldEngine` reach normal idle
-  cleanup. Original `VoxyCommon.shutdownInstance/createInstance` replaces all
-  instance owners immediately. This stable Forge event-shell adaptation is not
-  evidence against renderer readiness and remains a documented TODO outside the
-  completed focused frontend acceptance gate.
+- XXVI replaced the pre-XXVI process-lifetime service owners with one
+  `SessionRuntime` per network connection. Disabling Voxy now destroys the render
+  owner, imports, ingest/saving services, unified service pool, active-world map,
+  and storage owners before a later enable creates a fresh instance. The earlier
+  event-shell strict-lifecycle TODO is historical and closed; only the lightweight
+  Forge event listener shell remains process-scoped.
 
 ## Current command surface
 
@@ -246,8 +247,9 @@ absent.
 The subsequent login gate also corrected original Voxy's newer
 `ClientChunkCache.drop(ChunkPos)` handler to Forge 1.20.1's real
 `drop(int,int)` descriptor. The handler remains a required HEAD injection and
-uses the same direct storage-ring lookup, coordinate validation, and Bobby-only
-pre-unload ingestion. Final bytecode and the all-vanilla-Mixin signature audit
+uses the same direct storage-ring lookup, coordinate validation, and Bobby
+Reforged-only pre-unload ingestion. Final bytecode and the all-vanilla-Mixin
+signature audit
 confirm this adapter and every remaining vanilla target match 1.20.1.
 
 The renderer-construction gate then exposed one source-processing omission in
@@ -290,7 +292,7 @@ The run then shut down the renderer, server, persistent `WorldEngine`, and Voxy
 instance cleanly at `20:34:22-20:34:23`; `runClient` exited 0 with
 `BUILD SUCCESSFUL`. The targeted scan found no Voxy error/warning,
 option-identifier/initializer error, or config failure. All focused frontend
-runtime fields and current whole-mod acceptance therefore pass. The documented
-long-lived Forge event-shell adaptation for enabled changes remains a separate
-non-blocking strict-lifecycle TODO, and IterationT remains post-migration
-compatibility work because original Voxy has no adaptation for it.
+runtime fields and current whole-mod acceptance therefore pass. XXVI later closed
+the enabled-config strict-lifecycle difference with per-network-session ownership.
+IterationT remains post-migration compatibility work because original Voxy has no
+adaptation for it.

@@ -14,9 +14,10 @@ written.
   behavior and performance on Forge as closely as the platform allows.
 - Main branch: `forge-1.20.1-skeleton`.
 - Environment: Windows, PowerShell, Gradle, Java, Forge 1.20.1.
-- Hard client prerequisites: **Embeddium** (Forge replacement for Sodium) and
-  **Oculus** (Forge replacement for Iris / the shaderpack frontend). Dev runs
-  must load both.
+- Hard client prerequisite: **Embeddium** (Forge replacement for Sodium).
+  **Oculus** is the optional Forge replacement for Iris / shaderpack
+  integration. Dev qualification must cover both the Embeddium-only normal path
+  and the Embeddium + Oculus shaderpack path.
 
 ## 2. Supreme rule: port, don't substitute
 
@@ -171,8 +172,11 @@ Prefer for verbose shell commands: `rtk git status`, `rtk git diff`,
 - **The WorldEngine is in-memory** (`voxy-client.toml: enableWorldEngineSkeleton`).
   There is no on-disk LOD cache; each session re-ingests as chunks load, and LOD
   beyond MC render distance reflects only what was ingested this session.
-- **Two parallel geometry/MDIC paths exist.** The active render route is
-  `ForgeOriginalVoxy*`. A legacy `ForgeVoxy*` / `ForgeCpu*` / `ForgeMdicCommand*`
-  path is still wired into `ForgeVoxyInstance` and the Embeddium mixin but does
-  NOT drive the visible MDIC render. Do not extend the legacy path; retire it only
-  after tracing which path drives the visible render.
+- **The historical parallel geometry/MDIC island is retired.** XIX removed the
+  closed `ForgeCpu*` / `ForgeMdicCommand*` / `ForgeSectionGeometry*` family, and
+  XXII removed its remaining config/runtime names. The current visible route is
+  the single `ForgeOriginalVoxyModelPipeline -> ForgeOriginalVoxyRenderSystem`
+  owner. Its package-local `RenderGenerationService`, `RenderDataFactory`,
+  `BuiltSection`, `AsyncNodeManager`, and `MDICSectionRenderer` are active formal
+  ports, not legacy leftovers. Trace construction sites before deleting a class;
+  a generic name in `me.cortex.voxy.forge` does not make it a prototype.

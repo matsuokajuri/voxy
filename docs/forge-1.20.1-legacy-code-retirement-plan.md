@@ -127,3 +127,20 @@ rediscovery adapter.
 
 compileJava passed immediately after the deletion, confirming the island
 mapping.
+
+## 2026-07-16 re-audit: retirement remains complete (XXIX.1)
+
+CodeGraph plus exact source-reference scans reconfirmed that the historical
+`ForgeCpu*`, `ForgeGpuGeometry*`, `ForgeMdicCommand*`,
+`ForgeMdicVisibility*`, `ForgeSectionGeometry*`, and
+`ForgeVoxyBuiltSection*` families remain absent. `ForgeVoxyInstance` owns only
+the current `ForgeOriginalVoxyModelPipeline`, and both the Embeddium cutout hook
+and the Acedium hook call its single `renderOriginalVoxyAfterTerrain` entry.
+
+The package-local `RenderGenerationService`, `RenderDataFactory`,
+`BuiltSection`, `AsyncNodeManager`, `BasicSectionGeometryData`, and
+`MDICSectionRenderer` must not be classified as the removed island. They are the
+active Forge adaptations constructed by `ForgeOriginalVoxyRenderSystem` and
+carry the visible original-parity geometry/MDIC route. XXIX.1 adds a source
+contract test that locks both sides of this boundary: retired family names stay
+absent, while the active construction chain remains connected.

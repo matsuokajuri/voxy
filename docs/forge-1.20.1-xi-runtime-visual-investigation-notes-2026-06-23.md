@@ -1997,7 +1997,7 @@ were found and fixed, verified in-game:
    distance) satisfied fogCoversAllRendering every frame and the final blit
    was skipped silently. Fix: ForgeOriginalVoxyFogParameters classifies fog
    ending near the render distance as non-environmental; only genuinely dense
-   environmental fog (lava/blindness/nether-style) keeps real distances.
+   environmental fog (fluid and priority mob-effect fog) keeps real distances.
 ```
 
 Supporting change: per-frame silent guard failures in the model pipeline and
@@ -2047,6 +2047,32 @@ disables vanilla render-distance fog outright while LOD rendering is active
 equivalent: a ViewportEvent.RenderFog listener in ForgeVoxyInstance extends
 FOG_TERRAIN/FogType.NONE fog to infinity when the LOD owner is active, no
 shaderpack is active, and the current fog is classified as render-distance fog
-(same near-render-distance test as ForgeOriginalVoxyFogParameters); water/
-lava/powder-snow fog by type and short environmental fog by distance are left
-untouched.
+(same classification as ForgeOriginalVoxyFogParameters); water/lava/
+powder-snow fog by type and priority mob-effect fog are left untouched.
+
+## 2026-07-17 no-Oculus Nether distance-fog classification repaired
+
+User visual ground truth from the Embeddium-only qualification found that the
+Overworld and End exposed LOD correctly, while the Nether retained a fog wall
+at the vanilla chunk boundary and hid the LOD behind it. The formal Nether
+WorldEngine and `ForgeOriginalVoxyRenderPipeline`/`MDICSectionRenderer` were
+present in the same run, excluding missing ingest or renderer construction.
+
+Root cause: Forge 1.20.1 combines environmental and render-distance fog into
+one pair. Ordinary terrain fog ends at the full vanilla render distance, but
+the `DimensionSpecialEffects#isFoggyAt` branch used by the Nether ends at
+`min(renderDistance, 192) * 0.5`. The previous `>= 0.75 * renderDistance`
+heuristic therefore misclassified Nether distance fog as environmental fog.
+Original Voxy has separate `renderDistanceStart/End` fields and always pushes
+that pair to infinity, including the foggy-dimension branch.
+
+`ForgeOriginalVoxyFogParameters` now classifies clear-air fog using both the
+ordinary distance threshold and the active dimension effect. Water, lava, and
+powder-snow remain environmental by `FogType`; blindness and darkness remain
+environmental by explicit priority-effect detection. The shared RenderFog
+listener uses the same classifier, so the live vanilla/Embeddium fog state and
+the Voxy final-blit fog capture cannot diverge.
+
+Automated validation passed `40` suites / `125` tests with zero failures,
+errors, or skips. Final visual confirmation remains the no-Oculus Nether client
+retest.

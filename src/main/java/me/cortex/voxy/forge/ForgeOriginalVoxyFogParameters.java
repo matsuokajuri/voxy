@@ -1,7 +1,12 @@
 package me.cortex.voxy.forge;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
+import net.minecraft.util.Mth;
+import net.minecraft.world.effect.MobEffects;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.level.material.FogType;
 
 record ForgeOriginalVoxyFogParameters(
         float environmentalStart,
@@ -33,7 +38,9 @@ record ForgeOriginalVoxyFogParameters(
         float alpha = colour.length > 3 ? colour[3] : 1.0F;
 
         boolean fogIsVeryClose = end < 10.0F;
-        if ((!useEnvironmentalFog || isRenderDistanceFog(end)) && !fogIsVeryClose) {
+        Camera camera = Minecraft.getInstance().gameRenderer.getMainCamera();
+        if ((!useEnvironmentalFog || isRenderDistanceFog(camera, camera.getFluidInCamera(), end))
+                && !fogIsVeryClose) {
             start = DISABLED_FOG_DISTANCE;
             end = DISABLED_FOG_DISTANCE;
         }
@@ -44,14 +51,40 @@ record ForgeOriginalVoxyFogParameters(
         return Minecraft.getInstance().options.getEffectiveRenderDistance() * 16.0F;
     }
 
-    //1.20.1 exposes a single fog state, so the terrain render-distance fog (its end tracks the
-    // vanilla render distance) is indistinguishable from environmental fog by source. Original
-    // Voxy's environmentalEnd carries only genuinely environmental fog (weather/lava/nether);
-    // classifying render-distance fog as environmental made fogCoversAllRendering true every
-    // frame on the no-shaderpack path, which skipped the final blit and blanked all LOD. This
-    // single classification is shared with the ViewportEvent.RenderFog listener in
-    // ForgeVoxyInstance so the two sites cannot diverge.
-    static boolean isRenderDistanceFog(float fogEnd) {
-        return fogEnd >= vanillaRenderDistanceBlocks() * 0.75F;
+    //1.20.1 exposes a single fog state. Ordinary terrain fog ends at the vanilla render distance,
+    // while DimensionSpecialEffects#isFoggyAt (the Nether path) uses a separate half-distance
+    // formula. Both are the old-version equivalents of original Voxy's renderDistanceStart/End
+    // and must be disabled. Fluid fog and priority mob-effect fog are environmentalStart/End and
+    // remain intact. This classification is shared with the RenderFog listener so capture and the
+    // live RenderSystem state cannot diverge.
+    static boolean isRenderDistanceFog(Camera camera, FogType fogType, float fogEnd) {
+        Minecraft minecraft = Minecraft.getInstance();
+        boolean clearAir = fogType == FogType.NONE;
+        boolean priorityMobEffectFog = camera.getEntity() instanceof LivingEntity living
+                && (living.hasEffect(MobEffects.BLINDNESS) || living.hasEffect(MobEffects.DARKNESS));
+        boolean dimensionDistanceFog = false;
+        if (clearAir && minecraft.level != null) {
+            dimensionDistanceFog = minecraft.level.effects().isFoggyAt(
+                    Mth.floor(camera.getPosition().x),
+                    Mth.floor(camera.getPosition().z));
+        }
+        return isRenderDistanceFog(
+                fogEnd,
+                vanillaRenderDistanceBlocks(),
+                clearAir,
+                dimensionDistanceFog,
+                priorityMobEffectFog);
+    }
+
+    static boolean isRenderDistanceFog(
+            float fogEnd,
+            float vanillaRenderDistance,
+            boolean clearAir,
+            boolean dimensionDistanceFog,
+            boolean priorityMobEffectFog) {
+        if (!clearAir || priorityMobEffectFog) {
+            return false;
+        }
+        return dimensionDistanceFog || fogEnd >= vanillaRenderDistance * 0.75F;
     }
 }

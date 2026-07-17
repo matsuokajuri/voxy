@@ -134,7 +134,7 @@ repositories {
     mavenCentral()
     flatDir {
         dirs 'dev-mods'
-        ['voxyEmbeddiumDevJar', 'voxyOculusDevJar'].each { propertyName ->
+        ['voxyEmbeddiumDevJar', 'voxyOculusDevJar', 'voxyAcediumDevJar', 'voxyVivecraftDevJar'].each { propertyName ->
             def configuredPath = (project.findProperty(propertyName) ?: '').toString().trim()
             if (!configuredPath.isEmpty()) {
                 dirs file(configuredPath).parentFile
@@ -163,6 +163,14 @@ def optionalFrontendJars = { propertyName, includePattern ->
 
 def embeddiumDevJars = optionalFrontendJars('voxyEmbeddiumDevJar', 'embeddium*.jar')
 def oculusDevJars = optionalFrontendJars('voxyOculusDevJar', 'oculus*.jar')
+def acediumDevJars = optionalFrontendJars('voxyAcediumDevJar', 'acedium*.jar')
+def vivecraftDevJars = optionalFrontendJars('voxyVivecraftDevJar', 'vivecraft*.jar')
+def includeOculusInDevRuntime = !project.hasProperty('voxyOculusDevRuntime')
+        || project.property('voxyOculusDevRuntime').toString().toBoolean()
+def includeAcediumInDevRuntime = !project.hasProperty('voxyAcediumDevRuntime')
+        || project.property('voxyAcediumDevRuntime').toString().toBoolean()
+def includeVivecraftInDevRuntime = !project.hasProperty('voxyVivecraftDevRuntime')
+        || project.property('voxyVivecraftDevRuntime').toString().toBoolean()
 
 dependencies {
     minecraft "net.minecraftforge:forge:${project.minecraft_version}-${project.forge_version}"
@@ -268,7 +276,23 @@ dependencies {
 
     for (def oculusDevJar : oculusDevJars) {
         compileOnly fg.deobf(oculusDevJar)
-        runtimeOnly fg.deobf(oculusDevJar)
+        if (includeOculusInDevRuntime) {
+            runtimeOnly fg.deobf(oculusDevJar)
+        }
+    }
+
+    for (def acediumDevJar : acediumDevJars) {
+        compileOnly fg.deobf(acediumDevJar)
+        if (includeAcediumInDevRuntime) {
+            runtimeOnly fg.deobf(acediumDevJar)
+        }
+    }
+
+    for (def vivecraftDevJar : vivecraftDevJars) {
+        compileOnly fg.deobf(vivecraftDevJar)
+        if (includeVivecraftInDevRuntime) {
+            runtimeOnly fg.deobf(vivecraftDevJar)
+        }
     }
 }
 

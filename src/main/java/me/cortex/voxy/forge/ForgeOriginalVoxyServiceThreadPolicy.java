@@ -1,14 +1,11 @@
 package me.cortex.voxy.forge;
 
 import me.cortex.voxy.config.ForgeVoxyConfig;
-
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
+import me.cortex.voxy.forge.mixin.ForgeOriginalVoxyEmbeddiumWorldRendererAccessor;
+import me.jellysquid.mods.sodium.client.render.SodiumWorldRenderer;
+import me.jellysquid.mods.sodium.client.render.chunk.RenderSectionManager;
 
 final class ForgeOriginalVoxyServiceThreadPolicy {
-    private static final String SODIUM_WORLD_RENDERER_CLASS =
-            "me.jellysquid.mods.sodium.client.render.SodiumWorldRenderer";
-
     private ForgeOriginalVoxyServiceThreadPolicy() {
     }
 
@@ -40,37 +37,21 @@ final class ForgeOriginalVoxyServiceThreadPolicy {
     }
 
     private static EmbeddiumBuilderThreads queryEmbeddiumBuilderThreads() {
-        try {
-            Class<?> rendererClass = Class.forName(SODIUM_WORLD_RENDERER_CLASS);
-            Method instanceNullable = rendererClass.getMethod("instanceNullable");
-            Object renderer = instanceNullable.invoke(null);
-            if (renderer == null) {
-                return new EmbeddiumBuilderThreads(false, 0, "none");
-            }
-            Field managerField = rendererClass.getDeclaredField("renderSectionManager");
-            managerField.setAccessible(true);
-            Object manager = managerField.get(renderer);
-            if (manager == null) {
-                return new EmbeddiumBuilderThreads(false, 0, "none");
-            }
-            Object builder = manager.getClass().getMethod("getBuilder").invoke(manager);
-            if (builder == null) {
-                return new EmbeddiumBuilderThreads(false, 0, "none");
-            }
-            Object count = builder.getClass().getMethod("getTotalThreadCount").invoke(builder);
-            if (!(count instanceof Integer threadCount)) {
-                return new EmbeddiumBuilderThreads(false, 0, "none");
-            }
-            return new EmbeddiumBuilderThreads(
-                    true,
-                    Math.max(0, threadCount),
-                    "none");
-        } catch (ReflectiveOperationException | RuntimeException e) {
-            return new EmbeddiumBuilderThreads(
-                    false,
-                    0,
-                    e.getClass().getSimpleName() + ":" + String.valueOf(e.getMessage()));
+        SodiumWorldRenderer renderer = SodiumWorldRenderer.instanceNullable();
+        if (renderer == null) {
+            return new EmbeddiumBuilderThreads(false, 0, "none");
         }
+        if (!(renderer instanceof ForgeOriginalVoxyEmbeddiumWorldRendererAccessor accessor)) {
+            throw new IllegalStateException("embeddium-world-renderer-accessor-missing");
+        }
+        RenderSectionManager manager = accessor.voxy$getRenderSectionManager();
+        if (manager == null || manager.getBuilder() == null) {
+            return new EmbeddiumBuilderThreads(false, 0, "none");
+        }
+        return new EmbeddiumBuilderThreads(
+                true,
+                Math.max(0, manager.getBuilder().getTotalThreadCount()),
+                "none");
     }
 
     record Selection(

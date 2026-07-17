@@ -10,10 +10,10 @@ import me.cortex.voxy.common.world.WorldEngine;
 import me.cortex.voxy.common.world.other.Mapper;
 import me.cortex.voxy.config.ForgeVoxyConfig;
 import me.jellysquid.mods.sodium.client.render.chunk.ChunkRenderMatrices;
-import me.jellysquid.mods.sodium.client.render.viewport.CameraTransform;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.SectionPos;
 import org.joml.Matrix4f;
+import org.joml.FrustumIntersection;
 import org.joml.Matrix4fc;
 import org.lwjgl.system.MemoryStack;
 
@@ -511,7 +511,20 @@ public final class ForgeOriginalVoxyModelPipeline {
         }
     }
 
-    public void renderEmbeddiumCutout(ChunkRenderMatrices matrices, CameraTransform camera) {
+    public void renderEmbeddiumCutout(
+            ChunkRenderMatrices matrices,
+            double cameraX,
+            double cameraY,
+            double cameraZ) {
+        this.renderEmbeddiumCutout(matrices, cameraX, cameraY, cameraZ, null);
+    }
+
+    public void renderEmbeddiumCutout(
+            ChunkRenderMatrices matrices,
+            double cameraX,
+            double cameraY,
+            double cameraZ,
+            FrustumIntersection suppliedFrustum) {
         if (!ForgeVoxyConfig.isEnabledEarlySafe()) {
             return;
         }
@@ -564,14 +577,14 @@ public final class ForgeOriginalVoxyModelPipeline {
             }
             viewport = selector == null ? null : selector.getViewport();
             Minecraft minecraft = Minecraft.getInstance();
-            if (minecraft.level == null || minecraft.player == null || matrices == null || camera == null) {
+            if (minecraft.level == null || minecraft.player == null || matrices == null) {
                 return;
             }
             if (viewport == null || traversal == null || sectionRenderer == null || renderPipeline == null || chunkBoundRenderer == null || geometryData == null
                     || modelStore == null || !traversal.ready()) {
                 //A null viewport during the Oculus shadow pass is the expected per-frame skip, not
                 // a failure state.
-                if (viewport == null && selector != null && selector.lastSelectionWasOculusShadowSkip()) {
+                if (viewport == null && selector != null && selector.lastSelectionWasExpectedSkip()) {
                     return;
                 }
                 this.recordNonFatalFailure("visible-frame-not-ready:"
@@ -630,10 +643,13 @@ public final class ForgeOriginalVoxyModelPipeline {
             viewport.setVanillaProjection(vanillaProjection)
                     .setProjection(voxyProjection)
                     .setModelView(modelView)
-                    .setCamera(camera.x, camera.y, camera.z)
+                    .setCamera(cameraX, cameraY, cameraZ)
                     .setScreenSize(width, height)
                     .setFogParameters(fogParameters)
                     .update();
+            if (suppliedFrustum != null) {
+                viewport.copyFrustumFrom(suppliedFrustum);
+            }
             viewport.frameId++;
             glViewport(0, 0, viewport.width, viewport.height);
             renderPipeline.preSetup(viewport);
@@ -651,8 +667,8 @@ public final class ForgeOriginalVoxyModelPipeline {
                     sourceWidth,
                     sourceHeight);
             postDynamicWorkEligible = true;
-            postDynamicCameraX = camera.x;
-            postDynamicCameraZ = camera.z;
+            postDynamicCameraX = cameraX;
+            postDynamicCameraZ = cameraZ;
             GPUTiming.INSTANCE.marker("RO");
             sectionRenderer.renderOpaque(viewport, geometryData, modelStore, renderPipeline);
             viewport.buildHizFromSourceDepth(depthTexture, width, height);

@@ -24,11 +24,12 @@ until their references are removed.
 
 ## Forge frontend prerequisites
 
-The Forge port now treats these client mods as hard prerequisites:
+The Forge port requires Embeddium and supports Oculus as an optional shaderpack
+frontend, matching original Voxy's Sodium/Iris dependency policy:
 
 ```text
-Embeddium
-Oculus
+Embeddium: required
+Oculus: optional
 ```
 
 Embeddium is the Forge replacement for the original Sodium frontend. Oculus is

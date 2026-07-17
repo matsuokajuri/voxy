@@ -10,6 +10,7 @@ import net.minecraft.world.level.chunk.LevelChunk;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Pseudo;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Group;
 import org.spongepowered.asm.mixin.injection.Redirect;
 
 import java.util.concurrent.CompletableFuture;
@@ -18,6 +19,7 @@ import java.util.concurrent.CompletableFuture;
 @Pseudo
 @Mixin(targets = "org.popcraft.chunky.platform.ForgeWorld", remap = false)
 public abstract class ForgeOriginalVoxyChunkyForgeWorldMixin {
+    @Group(name = "voxy$chunkyGetOrScheduleFuture", min = 1)
     @Redirect(
             method = "getChunkAtAsync(II)Ljava/util/concurrent/CompletableFuture;",
             at = @At(
@@ -36,6 +38,7 @@ public abstract class ForgeOriginalVoxyChunkyForgeWorldMixin {
 
     //Forge 1.20.1 production runtime name. The enclosing Chunky target is external and
     //remap=false, so the nested Minecraft invocation cannot receive a refmap entry.
+    @Group(name = "voxy$chunkyGetOrScheduleFuture", min = 1)
     @Redirect(
             method = "getChunkAtAsync(II)Ljava/util/concurrent/CompletableFuture;",
             at = @At(

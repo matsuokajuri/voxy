@@ -71,7 +71,7 @@ class Pass2ParityRepairSourceContractTest {
         String body = source.substring(method, end);
 
         int shadow = body.indexOf("ForgeOculusShadowStateBridge.shadowActive()");
-        int vivecraft = body.indexOf("ForgeVivecraftRenderPassBridge.currentNonVanillaRenderPass()");
+        int vivecraft = body.indexOf("ForgeVivecraftRenderPassBridge.currentSelection()");
         assertTrue(shadow >= 0 && vivecraft > shadow);
     }
 

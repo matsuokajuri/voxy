@@ -2,24 +2,24 @@ package me.cortex.voxy.forge;
 
 import it.unimi.dsi.fastutil.objects.Object2IntMap;
 import net.minecraft.world.level.block.state.BlockState;
+import net.irisshaders.iris.shaderpack.materialmap.WorldRenderingSettings;
 
 import javax.annotation.Nullable;
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 
 final class ForgeOculusWorldRenderingSettingsBridge {
-    private static final String WORLD_RENDERING_SETTINGS = "net.irisshaders.iris.shaderpack.materialmap.WorldRenderingSettings";
-
     private ForgeOculusWorldRenderingSettingsBridge() {
     }
 
     static Result getBlockStateIds() {
+        if (!ForgeOculusAvailability.installed()) {
+            return new Result(true, null, "oculus-not-installed", "none");
+        }
+        return getBlockStateIds0();
+    }
+
+    private static Result getBlockStateIds0() {
         try {
-            Class<?> type = Class.forName(WORLD_RENDERING_SETTINGS);
-            Field instanceField = type.getField("INSTANCE");
-            Object instance = instanceField.get(null);
-            Method method = type.getMethod("getBlockStateIds");
-            Object value = method.invoke(instance);
+            Object value = WorldRenderingSettings.INSTANCE.getBlockStateIds();
             if (value == null) {
                 return new Result(true, null, "oculus-world-rendering-settings-null", "none");
             }
@@ -29,23 +29,26 @@ final class ForgeOculusWorldRenderingSettingsBridge {
             @SuppressWarnings("unchecked")
             Object2IntMap<BlockState> typed = (Object2IntMap<BlockState>) map;
             return new Result(true, typed, "oculus-world-rendering-settings", "none");
-        } catch (ReflectiveOperationException | RuntimeException e) {
+        } catch (RuntimeException | LinkageError e) {
             return new Result(false, null, "oculus-world-rendering-settings", "oculus-block-state-id-map-" + e.getClass().getSimpleName());
         }
     }
 
     static ReloadState isReloadRequired() {
+        if (!ForgeOculusAvailability.installed()) {
+            return new ReloadState(true, false, "oculus-not-installed", "none");
+        }
+        return isReloadRequired0();
+    }
+
+    private static ReloadState isReloadRequired0() {
         try {
-            Class<?> type = Class.forName(WORLD_RENDERING_SETTINGS);
-            Field instanceField = type.getField("INSTANCE");
-            Object instance = instanceField.get(null);
-            Method method = type.getMethod("isReloadRequired");
-            Object value = method.invoke(instance);
+            Object value = WorldRenderingSettings.INSTANCE.isReloadRequired();
             if (!(value instanceof Boolean reloadRequired)) {
                 return new ReloadState(false, false, "oculus-world-rendering-settings", "oculus-reload-flag-wrong-type");
             }
             return new ReloadState(true, reloadRequired, "oculus-world-rendering-settings", "none");
-        } catch (ReflectiveOperationException | RuntimeException e) {
+        } catch (RuntimeException | LinkageError e) {
             return new ReloadState(
                     false,
                     false,

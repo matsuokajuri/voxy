@@ -114,6 +114,21 @@ final class MDICViewport {
         return this;
     }
 
+    MDICViewport copyFrustumFrom(FrustumIntersection source) {
+        if (source == null) {
+            throw new IllegalArgumentException("source");
+        }
+        try {
+            Vector4f[] sourcePlanes = (Vector4f[]) PLANES_FIELD.get(source);
+            for (int i = 0; i < this.frustumPlanes.length; i++) {
+                this.frustumPlanes[i].set(sourcePlanes[i]);
+            }
+        } catch (IllegalAccessException e) {
+            throw new IllegalStateException("Unable to copy supplied frustum planes", e);
+        }
+        return this;
+    }
+
     void buildHizFromSourceDepth(int sourceDepthTextureId, int sourceWidth, int sourceHeight) {
         this.hiZBuffer.buildMipChain(sourceDepthTextureId, sourceWidth, sourceHeight);
     }

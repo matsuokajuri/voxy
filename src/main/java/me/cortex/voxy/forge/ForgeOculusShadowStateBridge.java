@@ -1,43 +1,22 @@
 package me.cortex.voxy.forge;
 
-import java.lang.reflect.Field;
+import net.irisshaders.iris.shadows.ShadowRenderer;
 
 final class ForgeOculusShadowStateBridge {
-    private static final String SHADOW_RENDERER = "net.irisshaders.iris.shadows.ShadowRenderer";
-    private static Field activeField;
-    private static boolean initialized;
-
     private ForgeOculusShadowStateBridge() {
     }
 
     static boolean shadowActive() {
-        Field field = activeField();
-        if (field == null) {
+        if (!ForgeOculusAvailability.installed()) {
             return false;
         }
-        try {
-            //ShadowRenderer.ACTIVE is only ever reset by Oculus's own shadow pass; after the
-            // shaderpack is disabled mid-session the flag can be left stuck true. Gate on an
-            // actually-active shaderpack pipeline here so EVERY caller is protected.
-            return field.getBoolean(null) && ForgeOriginalVoxyOculusPipelineBridge.shaderpackActive();
-        } catch (IllegalAccessException | RuntimeException ignored) {
-            return false;
-        }
+        return shadowActive0();
     }
 
-    private static Field activeField() {
-        if (initialized) {
-            return activeField;
-        }
-        initialized = true;
-        try {
-            Class<?> type = Class.forName(SHADOW_RENDERER);
-            Field field = type.getField("ACTIVE");
-            field.setAccessible(true);
-            activeField = field;
-        } catch (ReflectiveOperationException | RuntimeException ignored) {
-            activeField = null;
-        }
-        return activeField;
+    private static boolean shadowActive0() {
+        //ShadowRenderer.ACTIVE is only ever reset by Oculus's own shadow pass; after the
+        // shaderpack is disabled mid-session the flag can be left stuck true. Gate on an
+        // actually-active shaderpack pipeline here so EVERY caller is protected.
+        return ShadowRenderer.ACTIVE && ForgeOriginalVoxyOculusPipelineBridge.shaderpackActive();
     }
 }

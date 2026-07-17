@@ -10,6 +10,7 @@ import me.cortex.voxy.common.world.service.VoxelIngestService;
 import me.cortex.voxy.commonImpl.ImportManager;
 import me.cortex.voxy.config.ForgeVoxyConfig;
 import net.minecraft.client.Minecraft;
+import org.joml.FrustumIntersection;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.server.level.ServerLevel;
@@ -108,10 +109,10 @@ public final class ForgeVoxyInstance {
     //Original Voxy disables vanilla's render-distance fog whenever LOD rendering is active
     // (MixinFogRenderer pushes FogData.renderDistanceStart/End to infinity) so vanilla terrain
     // does not fade into a fog band right before the LOD picks up. 1.20.1 has one combined fog
-    // state, so this uses the same classification as ForgeOriginalVoxyFogParameters: only fog
-    // ending near the vanilla render distance is render-distance fog; environmental fog
-    // (water/lava/powder snow by type; blindness/darkness/nether thickness by short distance)
-    // is left untouched. The Oculus shaderpack path manages its own fog and is skipped.
+    // state, so this uses the same classification as ForgeOriginalVoxyFogParameters: ordinary
+    // distance fog and DimensionSpecialEffects#isFoggyAt distance fog are disabled, while
+    // environmental fog (water/lava/powder snow and blindness/darkness) is left untouched. The
+    // Oculus shaderpack path manages its own fog and is skipped.
     private void onRenderFog(net.minecraftforge.client.event.ViewportEvent.RenderFog event) {
         if (event.getMode() != net.minecraft.client.renderer.FogRenderer.FogMode.FOG_TERRAIN) {
             return;
@@ -123,7 +124,10 @@ public final class ForgeVoxyInstance {
         }
         if (ForgeVoxyConfig.ORIGINAL_VOXY_USE_ENVIRONMENTAL_FOG.get()) {
             if (event.getType() != net.minecraft.world.level.material.FogType.NONE
-                    || !ForgeOriginalVoxyFogParameters.isRenderDistanceFog(event.getFarPlaneDistance())) {
+                    || !ForgeOriginalVoxyFogParameters.isRenderDistanceFog(
+                            event.getCamera(),
+                            event.getType(),
+                            event.getFarPlaneDistance())) {
                 return;
             }
         } else if (event.getFarPlaneDistance() < 10.0F) {
@@ -209,9 +213,29 @@ public final class ForgeVoxyInstance {
     public void renderOriginalVoxyAfterTerrain(
             me.jellysquid.mods.sodium.client.render.chunk.ChunkRenderMatrices matrices,
             me.jellysquid.mods.sodium.client.render.viewport.CameraTransform camera) {
+        if (camera == null) {
+            return;
+        }
+        this.renderOriginalVoxyAfterTerrain(matrices, camera.x, camera.y, camera.z);
+    }
+
+    public void renderOriginalVoxyAfterTerrain(
+            me.jellysquid.mods.sodium.client.render.chunk.ChunkRenderMatrices matrices,
+            double cameraX,
+            double cameraY,
+            double cameraZ) {
+        this.renderOriginalVoxyAfterTerrain(matrices, cameraX, cameraY, cameraZ, null);
+    }
+
+    public void renderOriginalVoxyAfterTerrain(
+            me.jellysquid.mods.sodium.client.render.chunk.ChunkRenderMatrices matrices,
+            double cameraX,
+            double cameraY,
+            double cameraZ,
+            FrustumIntersection frustum) {
         ForgeOriginalVoxyModelPipeline pipeline = this.getOriginalVoxyModelPipeline();
         if (pipeline != null) {
-            pipeline.renderEmbeddiumCutout(matrices, camera);
+            pipeline.renderEmbeddiumCutout(matrices, cameraX, cameraY, cameraZ, frustum);
         }
     }
 

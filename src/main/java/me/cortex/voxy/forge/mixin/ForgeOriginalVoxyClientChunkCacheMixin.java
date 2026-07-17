@@ -16,7 +16,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(ClientChunkCache.class)
 public class ForgeOriginalVoxyClientChunkCacheMixin implements ICheekyClientChunkCache {
     @Unique
-    private static final boolean VOXY$BOBBY_INSTALLED = ModList.get().isLoaded("bobby");
+    //Bobby Reforged keeps original Bobby's mod id and .bobby cache/lifecycle contract.
+    private static final boolean VOXY$BOBBY_REFORGED_INSTALLED = ModList.get().isLoaded("bobby");
 
     @Shadow
     private volatile ClientChunkCache.Storage storage;
@@ -35,7 +36,7 @@ public class ForgeOriginalVoxyClientChunkCacheMixin implements ICheekyClientChun
 
     @Inject(method = "drop", at = @At("HEAD"))
     private void voxy$captureBobbyChunkBeforeUnload(int x, int z, CallbackInfo ci) {
-        if (!VOXY$BOBBY_INSTALLED
+        if (!VOXY$BOBBY_REFORGED_INSTALLED
                 || !ForgeVoxyConfig.ENABLED.get()
                 || !ForgeVoxyConfig.INGEST_ENABLED.get()) {
             return;

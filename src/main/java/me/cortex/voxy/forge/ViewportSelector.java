@@ -7,6 +7,7 @@ import java.util.function.Supplier;
 final class ViewportSelector {
     private static final Object DEFAULT_VIEWPORT_KEY = new Object();
     static final String OCULUS_SHADOW_SKIPPED_KEY = "oculus-shadow-skipped";
+    static final String VIVECRAFT_API_SKIPPED_KEY = "vivecraft-api-skipped";
 
     private final Supplier<MDICViewport> creator;
     private final MDICViewport defaultViewport;
@@ -25,9 +26,14 @@ final class ViewportSelector {
             this.lastSelectedKey = OCULUS_SHADOW_SKIPPED_KEY;
             return null;
         }
-        Object vivecraftPass = ForgeVivecraftRenderPassBridge.currentNonVanillaRenderPass();
-        if (vivecraftPass != null) {
-            return this.select(vivecraftPass, "vivecraft-" + String.valueOf(vivecraftPass));
+        ForgeVivecraftRenderPassBridge.RenderPassSelection vivecraft =
+                ForgeVivecraftRenderPassBridge.currentSelection();
+        if (vivecraft.skipVoxy()) {
+            this.lastSelectedKey = VIVECRAFT_API_SKIPPED_KEY;
+            return null;
+        }
+        if (vivecraft.viewportKey() != null) {
+            return this.select(vivecraft.viewportKey(), "vivecraft-" + vivecraft.label());
         }
         return this.select(DEFAULT_VIEWPORT_KEY, "default");
     }
@@ -46,6 +52,11 @@ final class ViewportSelector {
 
     boolean lastSelectionWasOculusShadowSkip() {
         return OCULUS_SHADOW_SKIPPED_KEY.equals(this.lastSelectedKey);
+    }
+
+    boolean lastSelectionWasExpectedSkip() {
+        return this.lastSelectionWasOculusShadowSkip()
+                || VIVECRAFT_API_SKIPPED_KEY.equals(this.lastSelectedKey);
     }
 
     void free() {

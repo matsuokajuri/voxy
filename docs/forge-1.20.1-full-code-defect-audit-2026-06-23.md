@@ -1442,8 +1442,9 @@ src/main/java/me/cortex/voxy/forge/**
 
 Why this is a problem:
 
-The project is a client renderer and Embeddium/Oculus are hard client
-prerequisites, so this is not a gameplay-side bug. But the current package is
+The project is a client renderer; Embeddium is a hard client prerequisite and
+Oculus is an optional client integration, so this is not a gameplay-side bug.
+But the current package is
 not proven safe if the Forge mod is accidentally placed on a dedicated server:
 the main mod class and included Forge package contain client-only descriptors
 and implementation types, while only some listener registration is dist-guarded.

@@ -7,18 +7,18 @@ This branch is being remediated toward original Voxy renderer parity on Forge
 original model, geometry, visibility, MDIC, shader, and lifecycle mechanisms
 rather than replacing them with preview/debug paths.
 
-## Required Forge frontends
+## Forge frontends
 
-The Forge port now requires these client-side mods:
+The Forge port requires:
 
 ```text
 Embeddium
-Oculus
 ```
 
 Embeddium is the Forge-side replacement for the original Voxy Sodium frontend.
-Oculus is the Forge-side replacement for the original Iris/shaderpack
-integration point and provides the Iris mod identity on Forge.
+Oculus is optional, matching original Voxy's Iris policy. When installed it is
+the Forge-side Iris/shaderpack integration point; without it Voxy uses the
+normal render pipeline.
 
 Historical cached-LoD preview commands and debug renderers are deprecated as
 implementation direction. See `AGENTS.md`,

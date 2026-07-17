@@ -37,7 +37,7 @@ They are for inspection only. They must not be committed into this repository.
 | Original Voxy frontend | Forge frontend | Forge mod id | Notes |
 | --- | --- | --- | --- |
 | Sodium | Embeddium | `embeddium` | hard client prerequisite |
-| Iris | Oculus | `oculus` | hard client prerequisite; Oculus metadata declares `provides = ["iris"]` |
+| Iris | Oculus | `oculus` | optional shaderpack integration; Oculus metadata declares `provides = ["iris"]` |
 | Fabric Loader / Fabric API | Forge/FML | `forge` | platform replacement, not an extra runtime mod |
 
 Forge runtime checks must use `ModList` and these ids:
@@ -58,18 +58,29 @@ Preferred local layout:
 ```text
 dev-mods/embeddium-*.jar
 dev-mods/oculus-*.jar
+dev-mods/acedium-*.jar
+dev-mods/vivecraft-*.jar
 ```
 
 Alternative explicit paths:
 
 ```powershell
-.\gradlew compileJava -PvoxyEmbeddiumDevJar=C:\path\embeddium.jar -PvoxyOculusDevJar=C:\path\oculus.jar
+.\gradlew compileJava `
+  -PvoxyEmbeddiumDevJar=C:\path\embeddium.jar `
+  -PvoxyOculusDevJar=C:\path\oculus.jar `
+  -PvoxyAcediumDevJar=C:\path\acedium.jar `
+  -PvoxyVivecraftDevJar=C:\path\vivecraft.jar
 ```
 
-Gradle adds the resolved jars as deobfuscated `compileOnly` and `runtimeOnly`
-frontend dependencies. The current active source set compiles the real
-Embeddium/Oculus adapters, so these are no longer optional placeholder inputs;
-they mirror the hard client prerequisites declared in Forge metadata.
+Gradle adds resolved frontend jars as deobfuscated `compileOnly` inputs.
+Embeddium is also always present in the dev runtime. Oculus is added to the dev
+runtime by default when its jar is supplied, but
+`-PvoxyOculusDevRuntime=false` deliberately exercises the original-compatible
+no-Oculus normal path. Acedium and Vivecraft are likewise optional compile/dev-
+runtime inputs; `-PvoxyAcediumDevRuntime=false` and
+`-PvoxyVivecraftDevRuntime=false` keep their JARs on the ABI compile gate while
+excluding them from a client launch. Forge metadata requires Embeddium and marks
+the other integrations optional.
 
 ## Active Forge frontend ownership
 
@@ -193,12 +204,12 @@ in-memory/persistent world owner. The Oculus reload adapter follows original
 shaders are enabled in config. The standalone
 `ForgeOriginalVoxyConfigScreen` is retired.
 
-Enabled is the one strict lifecycle deviation: original
-`VoxyCommon.shutdownInstance/createInstance` immediately replaces all instance
-owners, while Forge keeps its event shell and service pool as long-lived
-singletons and lets the released `WorldEngine` reach normal idle cleanup. This
-stable Forge event-shell adaptation remains a non-blocking parity TODO and does
-not change the completed focused frontend acceptance matrix.
+XXVI closed the earlier enabled-lifecycle deviation. Forge keeps only its
+lightweight event-listener shell process-scoped; each network connection owns a
+fresh `SessionRuntime` containing the service pool, ingest/saving services,
+imports, active-world map, storage, and renderer. Applying disabled tears that
+session owner down, and a later enable creates a replacement, matching original
+`VoxyCommon.shutdownInstance/createInstance` ownership semantics.
 
 Original ModMenu itself remains Fabric-only. Its user-visible behavior is
 mapped: Forge's Mod List config factory opens Embeddium's `SodiumOptionsGUI`,
@@ -304,7 +315,7 @@ semantics.
 
 | Historical blocker | Current resolution |
 | --- | --- |
-| frontend jars were optional local dev inputs | Embeddium/Oculus are hard Forge client prerequisites and active compile/runtime inputs; reference source trees remain uncommitted |
+| frontend jars were optional local dev inputs | Embeddium is a required compile/runtime frontend; Oculus remains a compile-time adapter input but is an optional runtime integration, with explicit present/absent qualification; reference source trees remain uncommitted |
 | original Sodium config API had no direct package match | resolved through official Embeddium `OptionGUIConstructionEvent` plus `OptionPage`/`OptionGroup`/`OptionImpl`/`OptionStorage` |
 | FogParameters/FogStorage needed a dedicated audit | viewport/fog input is mapped at the actual Embeddium/Oculus render boundary |
 | only ChunkJobQueue sharing was ported | active Embeddium cutout rendering, option pages, and service-thread sharing all use real frontend owners |
@@ -336,7 +347,7 @@ without a visual anomaly.
 Clean renderer/server/`WorldEngine`/instance shutdown followed at
 `20:34:22-20:34:23`; `runClient` exited 0 with `BUILD SUCCESSFUL`, and the
 targeted scan found no Voxy error/warning, option-identifier/initializer error,
-or config failure. The focused frontend gate therefore passes. This result does
-not close or remove the separate enabled-config strict lifecycle TODO;
-IterationT likewise remains post-migration compatibility work because original
+or config failure. The focused frontend gate therefore passes. XXVI subsequently
+closed the enabled-config strict-lifecycle TODO with per-network-session
+ownership. IterationT remains post-migration compatibility work because original
 Voxy has no pack-specific adaptation for it.

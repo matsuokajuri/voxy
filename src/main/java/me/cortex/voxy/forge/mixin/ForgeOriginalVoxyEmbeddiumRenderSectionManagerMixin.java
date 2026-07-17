@@ -36,7 +36,8 @@ public class ForgeOriginalVoxyEmbeddiumRenderSectionManagerMixin {
     @Final
     private Long2ReferenceMap<RenderSection> sectionByPosition;
 
-    private static final boolean VOXY_BOBBY_INSTALLED = ModList.get().isLoaded("bobby");
+    //Bobby Reforged keeps original Bobby's mod id and suppresses this Embeddium unload hook.
+    private static final boolean VOXY_BOBBY_REFORGED_INSTALLED = ModList.get().isLoaded("bobby");
 
     private long voxy$cachedChunkPos = Long.MIN_VALUE;
     private int voxy$cachedChunkStatus;
@@ -94,7 +95,7 @@ public class ForgeOriginalVoxyEmbeddiumRenderSectionManagerMixin {
 
     @Inject(method = "onChunkRemoved", at = @At("HEAD"))
     private void voxy$ingestOnChunkRemove(int x, int z, CallbackInfo ci) {
-        if (VOXY_BOBBY_INSTALLED
+        if (VOXY_BOBBY_REFORGED_INSTALLED
                 || !ForgeVoxyConfig.ENABLED.get()
                 || !ForgeVoxyConfig.INGEST_ENABLED.get()) {
             return;

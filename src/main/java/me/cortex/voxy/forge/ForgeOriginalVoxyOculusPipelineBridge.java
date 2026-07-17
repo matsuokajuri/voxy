@@ -14,6 +14,13 @@ public final class ForgeOriginalVoxyOculusPipelineBridge {
     }
 
     public static boolean shaderpackActive() {
+        if (!ForgeOculusAvailability.installed()) {
+            return false;
+        }
+        return shaderpackActive0();
+    }
+
+    private static boolean shaderpackActive0() {
         try {
             return Iris.getCurrentPack().isPresent();
         } catch (RuntimeException ignored) {
@@ -28,6 +35,9 @@ public final class ForgeOriginalVoxyOculusPipelineBridge {
     //Original IrisUtil.disableIrisShaders(): used when render-system construction fails with an
     // active shaderpack so the Oculus-triggered reload can retry on the normal path.
     public static void disableShaders() {
+        if (!ForgeOculusAvailability.installed()) {
+            return;
+        }
         try {
             net.irisshaders.iris.api.v0.IrisApi.getInstance().getConfig().setShadersEnabledAndApply(false);
         } catch (RuntimeException | LinkageError e) {
@@ -38,6 +48,9 @@ public final class ForgeOriginalVoxyOculusPipelineBridge {
     //Forge/Oculus equivalent of original IrisUtil.reload(), used by enabled/rendering changes so
     //the presence of the Voxy patch in ProgramSet is rebuilt from the newly saved configuration.
     static void reloadShaders() {
+        if (!ForgeOculusAvailability.installed()) {
+            return;
+        }
         var api = net.irisshaders.iris.api.v0.IrisApi.getInstance();
         if (!api.isShaderPackInUse() && !api.getConfig().areShadersEnabled()) {
             return;
@@ -63,6 +76,13 @@ public final class ForgeOriginalVoxyOculusPipelineBridge {
     }
 
     static Result captureCurrentData() {
+        if (!ForgeOculusAvailability.installed()) {
+            return Result.inactive(null, "oculus-not-installed");
+        }
+        return captureCurrentData0();
+    }
+
+    private static Result captureCurrentData0() {
         try {
             WorldRenderingPipeline pipeline = Iris.getPipelineManager().getPipelineNullable();
             if (pipeline == null) {
@@ -91,6 +111,9 @@ public final class ForgeOriginalVoxyOculusPipelineBridge {
     // the new pipeline, capturing data from a generation that is about to be destroyed. This
     // check lets the frame path detect that and restart the owner against the live pipeline.
     static boolean pipelineGenerationChanged(Object capturedPipelineInstance) {
+        if (!ForgeOculusAvailability.installed()) {
+            return false;
+        }
         try {
             return Iris.getPipelineManager().getPipelineNullable() != capturedPipelineInstance;
         } catch (RuntimeException ignored) {
