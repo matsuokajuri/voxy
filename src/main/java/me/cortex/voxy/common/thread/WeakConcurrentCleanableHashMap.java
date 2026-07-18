@@ -53,18 +53,25 @@ public class WeakConcurrentCleanableHashMap<K extends LongSupplier, V> {
         var i2v = this.i2v[bucket];
         var lock = this.i2vLocks[bucket];
         lock.lock();
-        if (i2v.containsKey(id)) {
-            lock.unlock();
-            return i2v.get(id);
-        } else {
-            var v = valueOnAbsent.get();
-            i2v.put(id, v);
+        try {
+            if (i2v.containsKey(id)) {
+                return i2v.get(id);
+            }
+            var value = valueOnAbsent.get();
+            i2v.put(id, value);
             this.k2iLock.lock();
+            try {
+                this.k2i.put(new WeakReference<>(key, this.cleanupQueue), id);
+                this.count.incrementAndGet();
+            } catch (RuntimeException | Error throwable) {
+                i2v.remove(id);
+                throw throwable;
+            } finally {
+                this.k2iLock.unlock();
+            }
+            return value;
+        } finally {
             lock.unlock();
-            this.k2i.put(new WeakReference<>(key, this.cleanupQueue), id);
-            this.k2iLock.unlock();
-            this.count.incrementAndGet();
-            return v;
         }
     }
 
@@ -73,12 +80,15 @@ public class WeakConcurrentCleanableHashMap<K extends LongSupplier, V> {
         if (ref != null) {
             LongArrayFIFOQueue ids = new LongArrayFIFOQueue();
             this.k2iLock.lock();
-            do {
-                long id = this.k2i.removeLong(ref);
-                if (id < 0) continue;
-                ids.enqueue(id);
-            } while ((ref = (WeakReference<K>) this.cleanupQueue.poll()) != null);
-            this.k2iLock.unlock();
+            try {
+                do {
+                    long id = this.k2i.removeLong(ref);
+                    if (id < 0) continue;
+                    ids.enqueue(id);
+                } while ((ref = (WeakReference<K>) this.cleanupQueue.poll()) != null);
+            } finally {
+                this.k2iLock.unlock();
+            }
             if (ids.isEmpty()) return;
             int count = ids.size();
             while (!ids.isEmpty()) {
@@ -86,8 +96,12 @@ public class WeakConcurrentCleanableHashMap<K extends LongSupplier, V> {
                 int bucket = Id2Seg(id, this.i2v.length - 1);
                 var lock = this.i2vLocks[bucket];
                 lock.lock();
-                var val = this.i2v[bucket].remove(id);
-                lock.unlock();
+                V val;
+                try {
+                    val = this.i2v[bucket].remove(id);
+                } finally {
+                    lock.unlock();
+                }
                 if (val != null) {
                     this.valueCleaner.accept(val);
                 } else {
@@ -108,16 +122,22 @@ public class WeakConcurrentCleanableHashMap<K extends LongSupplier, V> {
         for (var lock : this.i2vLocks) {
             lock.lock();
         }
-        this.k2iLock.lock();
-        this.k2i.clear();//Clear here while its safe to do so
-        for (var i2v : this.i2v) {
-            values.addAll(i2v.values());
-            i2v.clear();
-        }
-        this.count.set(0);
-        this.k2iLock.unlock();
-        for (var lock : this.i2vLocks) {
-            lock.unlock();
+        try {
+            this.k2iLock.lock();
+            try {
+                this.k2i.clear();//Clear here while its safe to do so
+                for (var i2v : this.i2v) {
+                    values.addAll(i2v.values());
+                    i2v.clear();
+                }
+                this.count.set(0);
+            } finally {
+                this.k2iLock.unlock();
+            }
+        } finally {
+            for (int index = this.i2vLocks.length - 1; index >= 0; index--) {
+                this.i2vLocks[index].unlock();
+            }
         }
         return values;
     }

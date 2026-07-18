@@ -273,20 +273,57 @@ All 叁轮 completion gates are therefore closed.
 Goal: keep service-local task permits, global job counts, and pooled wake permits
 consistent when work is stolen, drained, or cancelled during shutdown.
 
-- [ ] Model the invariants between `Service.tasks`,
+- [x] Model the invariants between `Service.tasks`,
       `ServiceManager.totalJobs`, and `MultiThreadPrioritySemaphore` permits.
-- [ ] Add deterministic race tests for execute versus run, steal, drain, service
+- [x] Add deterministic race tests for execute versus run, steal, drain, service
       shutdown, manager shutdown, and thread-count changes.
-- [ ] Design an explicit cancellation/retraction mechanism; do not simulate it
+- [x] Design an explicit cancellation/retraction mechanism; do not simulate it
       with an unsafe negative semaphore release.
-- [ ] Prove cancelled jobs cannot leave workers spinning and cannot consume a
+- [x] Prove cancelled jobs cannot leave workers spinning and cannot consume a
       wake intended for another live service.
-- [ ] Preserve Embeddium builder-thread sharing through
+- [x] Preserve Embeddium builder-thread sharing through
       `SemaphoreBlockImpersonator`.
-- [ ] Stress repeated renderer/session shutdown and re-enable cycles.
+- [x] Stress repeated renderer/session shutdown and re-enable cycles.
 
 Exit evidence: counters and permits return to zero, all workers terminate, and
 no submitted live job is lost or executed after its service cleanup.
+
+### 肆轮 implementation record
+
+The accounting invariant is now explicit. Every accepted `Service` submission
+creates exactly one local task permit, one `ServiceManager` global job count,
+one global pooled token, and one pooled wake signal per semaphore block. A claim
+consumes the local permit and pooled token/signal; a claimed job, including one
+that throws, completes the global count exactly once. Steal, drain, and service
+shutdown cancel queued work under the service lifecycle lock and retract the
+matching pooled signals. Claimed work remains visible through `runningJobs`, so
+executor cleanup waits until it has actually left the service.
+
+`ServiceManager` now has explicit completion and cancellation paths,
+wait/notification shutdown, and a recoverable rejection when shutdown is
+requested while services remain live. `MultiThreadPrioritySemaphore` retracts
+only positive acquired permits, reconciles each block's pooled signal floor,
+and therefore does not use a negative semaphore release. The unified pool emits
+the exact number of worker-exit permits and rejects thread-count changes after
+shutdown. `PerThreadContextExecutor` now releases its running-job count even
+when context creation or execution throws. The resulting exception-path test
+also exposed and fixed inherited lock leaks in
+`WeakConcurrentCleanableHashMap` construction, cleanup, and clear paths.
+
+Embeddium 0.3.31's actual `ChunkJobQueue` bytecode was checked against the
+adapter contract: it uses `release(int)`, `acquire()`, `tryAcquire()`, and
+`availablePermits()`, all of which remain covered by
+`SemaphoreBlockImpersonator`. Nine deterministic cancellation-accounting tests
+cover submission/shutdown linearization, steal/drain retraction, borrowed-block
+execution, limited borrowed work, context-factory failure, premature manager
+shutdown, and repeated `4 -> 1 -> 0 -> 3 -> 0` worker resizing across three
+cycles. A clean build passed all 168 tests and `jarJar`.
+
+The Embeddium + Oculus client then created the formal original-Voxy renderer and
+passed user visual confirmation. Both renderer-owner shutdowns completed, then
+the network session, Forge instance, and Minecraft stopped normally; no job-
+accounting, service-manager, executor, or fatal error was logged. All 肆轮 exit
+gates are therefore closed.
 
 ## 伍轮：storage recovery and format versioning
 
@@ -477,7 +514,7 @@ The following do not become work merely because a marker exists:
 - [x] 壹轮：native ZSTD result validation
 - [x] 贰轮：Mapper snapshot and lock safety
 - [x] 叁轮：optional storage position iteration
-- [ ] 肆轮：service cancellation accounting
+- [x] 肆轮：service cancellation accounting
 - [ ] 伍轮：storage recovery and format versioning
 - [ ] 陆轮：cache, allocator, and worker efficiency
 - [ ] 柒轮：level-aware mipping

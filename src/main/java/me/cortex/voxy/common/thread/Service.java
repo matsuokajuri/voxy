@@ -4,6 +4,8 @@ import me.cortex.voxy.common.Logger;
 import me.cortex.voxy.common.util.Pair;
 
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 
@@ -15,8 +17,11 @@ public class Service {
     final BooleanSupplier limiter;
 
     private final Semaphore tasks = new Semaphore(0);
+    private final ReentrantLock lifecycleLock = new ReentrantLock();
+    private final Condition noRunningJobs = this.lifecycleLock.newCondition();
     private volatile boolean isLive = true;
     private volatile boolean isStopping = false;
+    private int runningJobs;
 
     Service(Supplier<Pair<Runnable, Runnable>> ctxSupplier, ServiceManager sm, long weight, String name, BooleanSupplier limiter) {
         this.sm = sm;
@@ -28,26 +33,53 @@ public class Service {
     }
 
     public void execute() {
-        if (this.isStopping) {
-            Logger.error("Tried executing on a dead service");
-            return;
+        this.lifecycleLock.lock();
+        try {
+            if (this.isStopping || !this.isLive) {
+                Logger.error("Tried executing on a dead service");
+                return;
+            }
+            this.tasks.release();
+            try {
+                this.sm.execute(this);
+            } catch (RuntimeException exception) {
+                if (!this.tasks.tryAcquire()) {
+                    exception.addSuppressed(new IllegalStateException("Unable to roll back failed service submission"));
+                }
+                throw exception;
+            }
+        } finally {
+            this.lifecycleLock.unlock();
         }
-        this.tasks.release();
-        this.sm.execute(this);
     }
 
     boolean runJob() {
-        if (this.isStopping||!this.isLive) {
-            return false;
+        this.lifecycleLock.lock();
+        try {
+            if (this.isStopping || !this.isLive || !this.tasks.tryAcquire()) {
+                return false;
+            }
+            this.runningJobs++;
+        } finally {
+            this.lifecycleLock.unlock();
         }
-        if (!this.tasks.tryAcquire()) {
-            //Failed to get the job, probably due to a race condition
-            return false;
+
+        try {
+            if (!this.executor.run()) {
+                throw new IllegalStateException("Executor failed to run");
+            }
+            return true;
+        } finally {
+            this.lifecycleLock.lock();
+            try {
+                this.runningJobs--;
+                if (this.runningJobs == 0) {
+                    this.noRunningJobs.signalAll();
+                }
+            } finally {
+                this.lifecycleLock.unlock();
+            }
         }
-        if (!this.executor.run()) {//Run the job
-            throw new IllegalStateException("Executor failed to run");
-        }
-        return true;
     }
 
     public boolean isLive() {
@@ -70,31 +102,55 @@ public class Service {
     }
 
     public int shutdown() {
-        if (this.isStopping) {
-            throw new IllegalStateException("Service not live");
+        int remaining;
+        this.lifecycleLock.lock();
+        try {
+            if (this.isStopping || !this.isLive) {
+                throw new IllegalStateException("Service not live");
+            }
+            this.isStopping = true;
+            this.sm.removeService(this);
+            remaining = this.tasks.drainPermits();
+            this.sm.cancelJobs(remaining);
+            while (this.runningJobs != 0) {
+                this.noRunningJobs.awaitUninterruptibly();
+            }
+        } finally {
+            this.lifecycleLock.unlock();
         }
-        this.isStopping = true;//First mark the service as stopping
-        this.sm.removeService(this);//Remove the service this is so that new jobs are never executed
-        this.executor.shutdown();//Await shutdown of all running jobs
-        int remaining = this.tasks.drainPermits();//Drain the remaining tasks to 0
-        this.isLive = false;//Mark the service as dead
-        this.sm.remJobs(remaining);
+
+        try {
+            this.executor.shutdown();
+        } finally {
+            this.isLive = false;
+        }
         return remaining;
     }
 
     public boolean steal() {
-        if (!this.tasks.tryAcquire()) {
-            return false;
+        this.lifecycleLock.lock();
+        try {
+            if (this.isStopping || !this.isLive || !this.tasks.tryAcquire()) {
+                return false;
+            }
+            this.sm.cancelJobs(1);
+            return true;
+        } finally {
+            this.lifecycleLock.unlock();
         }
-        this.sm.remJobs(1);
-        return true;
     }
 
     public int drain() {
-        int tasks = this.tasks.drainPermits();
-        if (tasks != 0) {
-            this.sm.remJobs(tasks);
+        this.lifecycleLock.lock();
+        try {
+            if (this.isStopping || !this.isLive) {
+                return 0;
+            }
+            int drained = this.tasks.drainPermits();
+            this.sm.cancelJobs(drained);
+            return drained;
+        } finally {
+            this.lifecycleLock.unlock();
         }
-        return tasks;
     }
 }

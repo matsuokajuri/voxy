@@ -1948,6 +1948,38 @@ SHA-256
 This closes Forxy 叁轮 without changing the established Forge migration parity
 claim.
 
+#### Forxy 肆轮 delta: service cancellation accounting
+
+Forxy closes the inherited cancellation-accounting gap without replacing the
+original shared service-pool route. Every accepted service submission now owns
+one local task permit, one global job count, one global pooled token, and one
+pooled wake signal per semaphore block. Claim, completion, steal, drain, and
+shutdown each consume or retract that accounting exactly once under the service
+lifecycle lock; claimed jobs remain counted until executor cleanup may safely
+run.
+
+`ServiceManager` has distinct completion and cancellation paths plus blocking
+shutdown notification. `MultiThreadPrioritySemaphore` tracks pooled signals per
+block and retracts them through positive `tryAcquire` operations only, avoiding
+negative semaphore release and stale borrowed-worker wakes. The unified pool
+uses exact worker-exit permits, while context creation/execution failures can no
+longer strand running-job counts. Tests for that exception route also exposed
+and fixed inherited `WeakConcurrentCleanableHashMap` lock leaks.
+
+The Embeddium 0.3.31 `ChunkJobQueue` bytecode was verified to use the exact
+`release(int)`, `acquire()`, `tryAcquire()`, and `availablePermits()` semaphore
+surface already implemented by `SemaphoreBlockImpersonator`, preserving builder
+thread sharing. Nine deterministic accounting/race tests pass, including three
+full worker-resize/shutdown cycles, and a clean build passes all 168 tests plus
+`jarJar`.
+
+An Embeddium + Oculus client run created the formal
+`ForgeOriginalVoxyRenderPipeline` / `MDICSectionRenderer` and passed user visual
+confirmation. Both renderer-owner shutdowns completed normally, followed by
+clean network-session, Forge-instance, and Minecraft shutdown, with no job-
+accounting, service-manager, executor, or fatal error. This closes Forxy 肆轮
+without changing the established Forge migration parity claim.
+
 ### XXI.2 original storage config JSON and production TYPE registry
 
 XXI.2 ports the original configuration mechanism around the XXI.1 production

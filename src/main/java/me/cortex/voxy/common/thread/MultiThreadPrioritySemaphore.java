@@ -5,6 +5,7 @@ import me.cortex.voxy.common.util.TrackedObject;
 import java.util.*;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.IntSupplier;
 
 //Basiclly acts as a priority based mutlti semaphore
@@ -13,14 +14,19 @@ public class MultiThreadPrioritySemaphore {
     public static final class Block extends TrackedObject {
         private final Semaphore blockSemaphore = new Semaphore(0);//The work pool semaphore
         private final Semaphore localSemaphore = new Semaphore(0);//The local semaphore
-        //private final AtomicInteger debt = new AtomicInteger();//the debt of the work pool semphore with respect to the usage
+        private final AtomicInteger pooledSignals = new AtomicInteger();
         private final MultiThreadPrioritySemaphore man;
 
-        Block(MultiThreadPrioritySemaphore man) {
+        Block(MultiThreadPrioritySemaphore man, int initialPooledSignals) {
             this.man = man;
+            if (initialPooledSignals != 0) {
+                this.pooledSignals.set(initialPooledSignals);
+                this.blockSemaphore.release(initialPooledSignals);
+            }
         }
 
         public void release(int permits) {
+            requireNonNegativePermits(permits);
             //release local then block to prevent race conditions
             this.localSemaphore.release(permits);
             this.blockSemaphore.release(permits);
@@ -78,7 +84,7 @@ public class MultiThreadPrioritySemaphore {
                     if (this.localSemaphore.tryAcquire()) {//We prioritize locals first
                         return;
                     }
-                    if (this.man.tryRun(this)) {//Returns true if it captured a local job
+                    if (this.tryClaimPooledSignal() && this.man.tryRun(this)) {//Returns true if it captured a local job
                         break;
                     }
                 }
@@ -99,6 +105,14 @@ public class MultiThreadPrioritySemaphore {
             return this.localSemaphore.availablePermits();
         }
 
+        int availablePooledSignals() {
+            return this.pooledSignals.get();
+        }
+
+        int availableWakePermits() {
+            return this.blockSemaphore.availablePermits();
+        }
+
         public boolean tryAcquire() {
             if (this.localSemaphore.availablePermits()==0) return false;//Quick exit
             if (!this.blockSemaphore.tryAcquire()) return false;//There is definatly none
@@ -109,6 +123,25 @@ public class MultiThreadPrioritySemaphore {
                 //We must release the other permit as we dont do processing here
                 this.blockSemaphore.release(1);
                 return false;
+            }
+        }
+
+        private boolean tryClaimPooledSignal() {
+            return subtractAtMost(this.pooledSignals, 1) == 1;
+        }
+
+        private void pooledRelease(int permits) {
+            this.pooledSignals.addAndGet(permits);
+            this.blockSemaphore.release(permits);
+        }
+
+        private void pooledRetract(int permits) {
+            int retracted = subtractAtMost(this.pooledSignals, permits);
+            drainAtMost(this.blockSemaphore, retracted);
+            int wakeFloor = this.localSemaphore.availablePermits() + this.pooledSignals.get();
+            int wakePermits = this.blockSemaphore.availablePermits();
+            if (wakePermits < wakeFloor) {
+                this.blockSemaphore.release(wakeFloor - wakePermits);
             }
         }
     }
@@ -123,7 +156,7 @@ public class MultiThreadPrioritySemaphore {
     }
 
     public synchronized Block createBlock() {
-        var block = new Block(this);
+        var block = new Block(this, this.pooledSemaphore.availablePermits());
         var blocks = Arrays.copyOf(this.blocks, this.blocks.length+1);
         blocks[blocks.length-1] = block;
         this.blocks = blocks;
@@ -145,11 +178,24 @@ public class MultiThreadPrioritySemaphore {
         this.blocks = blocks;
     }
 
-    public void pooledRelease(int permits) {
+    public synchronized void pooledRelease(int permits) {
+        requireNonNegativePermits(permits);
         this.pooledSemaphore.release(permits);
         for (var block : this.blocks) {
-            block.blockSemaphore.release(permits);
+            block.pooledRelease(permits);
         }
+    }
+
+    public synchronized void pooledRetract(int permits) {
+        requireNonNegativePermits(permits);
+        drainAtMost(this.pooledSemaphore, permits);
+        for (var block : this.blocks) {
+            block.pooledRetract(permits);
+        }
+    }
+
+    int availablePooledPermits() {
+        return this.pooledSemaphore.availablePermits();
     }
 
     private boolean tryRun(Block block) {
@@ -179,6 +225,30 @@ public class MultiThreadPrioritySemaphore {
                     throw new RuntimeException(e);
                 }
             }
+        }
+    }
+
+    private static int subtractAtMost(AtomicInteger value, int requested) {
+        while (true) {
+            int current = value.get();
+            int removed = Math.min(current, requested);
+            if (removed == 0 || value.compareAndSet(current, current - removed)) {
+                return removed;
+            }
+        }
+    }
+
+    private static int drainAtMost(Semaphore semaphore, int requested) {
+        int removed = 0;
+        while (removed < requested && semaphore.tryAcquire()) {
+            removed++;
+        }
+        return removed;
+    }
+
+    private static void requireNonNegativePermits(int permits) {
+        if (permits < 0) {
+            throw new IllegalArgumentException("Permit count must be non-negative");
         }
     }
 }

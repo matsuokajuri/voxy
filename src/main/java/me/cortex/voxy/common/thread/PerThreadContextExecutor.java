@@ -67,19 +67,21 @@ public class PerThreadContextExecutor extends TrackedObject {
 
     boolean run() {
         this.currentRunning.incrementAndGet();
-        if (!this.isLive) {
-            this.currentRunning.decrementAndGet();
-            this.exceptionHandler.accept(new IllegalStateException("Executor is in shutdown"));
-            return false;
-        }
-        var ctx = this.contexts.computeIfAbsent(THREAD_CTX.get(), this.contextFactory);
         try {
-            ctx.execute.run();
-        } catch (Exception e) {
-            this.exceptionHandler.accept(e);
+            if (!this.isLive) {
+                this.exceptionHandler.accept(new IllegalStateException("Executor is in shutdown"));
+                return false;
+            }
+            try {
+                var ctx = this.contexts.computeIfAbsent(THREAD_CTX.get(), this.contextFactory);
+                ctx.execute.run();
+            } catch (Exception exception) {
+                this.exceptionHandler.accept(exception);
+            }
+            return true;
+        } finally {
+            this.currentRunning.decrementAndGet();
         }
-        this.currentRunning.decrementAndGet();
-        return true;
     }
 
     public void shutdown() {
@@ -91,7 +93,7 @@ public class PerThreadContextExecutor extends TrackedObject {
             Thread.onSpinWait();//TODO: maybe add a sleep or something
         }
         for (var ctx : this.contexts.clear()) {
-            ctx.cleanup.run();
+            this.ctxCleaner(ctx);
         }
 
         this.free0();

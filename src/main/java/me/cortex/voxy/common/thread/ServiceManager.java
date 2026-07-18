@@ -25,13 +25,16 @@ public class ServiceManager {
     }
 
     private final IntConsumer jobRelease;
+    private final IntConsumer jobRetract;
+    private final Object jobMonitor = new Object();
     private final ThreadLocal<ThreadCtx> accelerationContext = ThreadLocal.withInitial(ThreadCtx::new);
     private final AtomicInteger totalJobs = new AtomicInteger();
     private volatile Service[] services = new Service[0];
     private volatile boolean isShutdown = false;
 
-    public ServiceManager(IntConsumer jobRelease) {
+    public ServiceManager(IntConsumer jobRelease, IntConsumer jobRetract) {
         this.jobRelease = jobRelease;
+        this.jobRetract = jobRetract;
     }
 
 
@@ -51,6 +54,9 @@ public class ServiceManager {
         return this.createService(ctxFactory, weight, name, null);
     }
     public synchronized Service createService(Supplier<Pair<Runnable, Runnable>> ctxFactory, long weight, String name, BooleanSupplier limiter) {
+        if (this.isShutdown) {
+            throw new IllegalStateException("Service manager is shutdown");
+        }
         Service newService = new Service(ctxFactory, this, weight, name, limiter);
         var newServices = Arrays.copyOf(this.services, this.services.length+1);
         newServices[newServices.length-1] = newService;
@@ -116,35 +122,49 @@ public class ServiceManager {
                 continue;//Failed to select a live service, try again
             }
 
-            if (!selectedService.runJob()) {
-                //We failed to run the service, try again
-                continue;
+            try {
+                if (!selectedService.runJob()) {
+                    //We failed to run the service, try again
+                    continue;
+                }
+            } catch (RuntimeException | Error throwable) {
+                this.completeJob();
+                throw throwable;
             }
-            if (this.totalJobs.decrementAndGet() < 0) {
-                throw new IllegalStateException("Job count <0");
-            }
+            this.completeJob();
             break;
         }
         return 0;
     }
 
     public void shutdown() {
-        if (this.isShutdown) {
-            throw new IllegalStateException("Service manager already shutdown");
-        }
-        this.isShutdown = true;
-        while (this.services.length != 0) {
-            Thread.yield();
-            synchronized (this) {
+        synchronized (this) {
+            if (this.isShutdown) {
+                throw new IllegalStateException("Service manager already shutdown");
+            }
+            if (this.services.length != 0) {
                 for (var s : this.services) {
                     if (s.isLive()) {
                         throw new IllegalStateException("Service '" + s.name + "' was not in shutdown when manager shutdown");
                     }
                 }
+                throw new IllegalStateException("Service manager still contains stopped services");
             }
+            this.isShutdown = true;
         }
-        while (this.totalJobs.get()!=0) {
-            Thread.yield();
+
+        synchronized (this.jobMonitor) {
+            boolean interrupted = false;
+            while (this.totalJobs.get() != 0) {
+                try {
+                    this.jobMonitor.wait();
+                } catch (InterruptedException exception) {
+                    interrupted = true;
+                }
+            }
+            if (interrupted) {
+                Thread.currentThread().interrupt();
+            }
         }
     }
 
@@ -165,16 +185,55 @@ public class ServiceManager {
     }
 
     void execute(Service service) {
+        if (this.isShutdown) {
+            throw new IllegalStateException("Cannot submit to a shutdown service manager");
+        }
         this.totalJobs.incrementAndGet();
-        this.jobRelease.accept(1);
+        try {
+            this.jobRelease.accept(1);
+        } catch (RuntimeException exception) {
+            this.completeJob();
+            throw exception;
+        }
     }
 
-    void remJobs(int remaining) {
-        //TODO:FIXME: THIS NEEDS TO BUBBLE UP TO THE jobRelease thing
-        // AFAK! if this is zero inside the runAJob loop, it must return
+    void cancelJobs(int cancelled) {
+        if (cancelled == 0) {
+            return;
+        }
+        if (cancelled < 0) {
+            throw new IllegalArgumentException("Cancelled job count must be non-negative");
+        }
+        this.subtractJobs(cancelled, "Cancelled more jobs than were submitted");
+        this.jobRetract.accept(cancelled);
+    }
 
-        if (this.totalJobs.addAndGet(-remaining)<0) {
-            throw new IllegalStateException("total jobs <0");
+    int totalJobCount() {
+        return this.totalJobs.get();
+    }
+
+    boolean isShutdown() {
+        return this.isShutdown;
+    }
+
+    private void completeJob() {
+        this.subtractJobs(1, "Completed a job when no submitted jobs remained");
+    }
+
+    private void subtractJobs(int count, String failureMessage) {
+        while (true) {
+            int current = this.totalJobs.get();
+            if (current < count) {
+                throw new IllegalStateException(failureMessage + ": current=" + current + ", requested=" + count);
+            }
+            if (this.totalJobs.compareAndSet(current, current - count)) {
+                if (current == count) {
+                    synchronized (this.jobMonitor) {
+                        this.jobMonitor.notifyAll();
+                    }
+                }
+                return;
+            }
         }
     }
 

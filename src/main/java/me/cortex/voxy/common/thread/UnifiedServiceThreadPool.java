@@ -15,19 +15,27 @@ public class UnifiedServiceThreadPool {
     private final ThreadGroup dedicatedPool;
     private final List<Thread> threads = new ArrayList<>();
     private int threadId = 0;
+    private volatile boolean isShutdown;
 
     public UnifiedServiceThreadPool() {
         this.dedicatedPool = new ThreadGroup("Voxy Dedicated Service");
-        this.serviceManager = new ServiceManager(this::release);
+        this.serviceManager = new ServiceManager(this::release, this::retract);
         this.groupSemaphore = new MultiThreadPrioritySemaphore(this.serviceManager::tryRunAJob);
 
         this.selfBlock = this.groupSemaphore.createBlock();
     }
 
     private final void release(int i) {this.groupSemaphore.pooledRelease(i);}
+    private void retract(int permits) {this.groupSemaphore.pooledRetract(permits);}
 
     public boolean setNumThreads(int threads) {
+        if (threads < 0) {
+            throw new IllegalArgumentException("Thread count must be non-negative");
+        }
         synchronized (this.threads) {
+            if (this.isShutdown) {
+                throw new IllegalStateException("Unified service thread pool is shutdown");
+            }
             int diff = threads - this.threads.size();
             if (diff==0) return false;//Already correct
             if (diff<0) {//Remove threads
@@ -65,7 +73,13 @@ public class UnifiedServiceThreadPool {
 
     public void shutdown() {
         this.serviceManager.shutdown();
-        this.selfBlock.release(10000);
+        synchronized (this.threads) {
+            if (this.isShutdown) {
+                throw new IllegalStateException("Unified service thread pool already shutdown");
+            }
+            this.isShutdown = true;
+            this.selfBlock.release(this.threads.size());
+        }
         while (true) {
             synchronized (this.threads) {
                 if (this.threads.isEmpty()) {
@@ -79,6 +93,12 @@ public class UnifiedServiceThreadPool {
             }
         }
         this.selfBlock.free();
+    }
+
+    int getNumThreads() {
+        synchronized (this.threads) {
+            return this.threads.size();
+        }
     }
 
 
