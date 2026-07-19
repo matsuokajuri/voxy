@@ -290,6 +290,10 @@ public class Mapper {
         return this.blockId2stateEntry.get(blockId).opacity;
     }
 
+    int getBlockStateMipProperties(int blockId) {
+        return this.blockId2stateEntry.get(blockId).mipProperties;
+    }
+
     public int getIdForBiome(Holder<Biome> biome) {
         String biomeId = biome.unwrapKey().orElseThrow().location().toString();
         var entry = this.biome2biomeEntry.get(biomeId);
@@ -405,6 +409,7 @@ public class Mapper {
         public final int id;
         public final BlockState state;
         public final int opacity;
+        final int mipProperties;
         public StateEntry(int id, BlockState state) {
             this.id = id;
             this.state = state;
@@ -414,6 +419,31 @@ public class Mapper {
             } else {
                 this.opacity = state.getLightBlock(EmptyBlockGetter.INSTANCE, BlockPos.ZERO);
             }
+            this.mipProperties = packMipProperties(state, this.opacity);
+        }
+
+        private static int packMipProperties(BlockState state, int opacity) {
+            int visualCoverage;
+            boolean hasFluid = !state.getFluidState().isEmpty();
+            if (state.isAir()) {
+                visualCoverage = 0;
+            } else if (hasFluid) {
+                visualCoverage = 255;
+            } else {
+                double volume = 0.0;
+                for (var box : state.getShape(EmptyBlockGetter.INSTANCE, BlockPos.ZERO).toAabbs()) {
+                    double width = Math.max(0.0, Math.min(1.0, box.maxX) - Math.max(0.0, box.minX));
+                    double height = Math.max(0.0, Math.min(1.0, box.maxY) - Math.max(0.0, box.minY));
+                    double depth = Math.max(0.0, Math.min(1.0, box.maxZ) - Math.max(0.0, box.minZ));
+                    volume += width * height * depth;
+                }
+                visualCoverage = Math.max(1, Math.min(255, (int) Math.round(volume * 255.0)));
+            }
+            int lightEmission = Math.max(0, Math.min(15, state.getLightEmission()));
+            return visualCoverage
+                    | (Math.max(0, Math.min(15, opacity)) << 8)
+                    | (lightEmission << 12)
+                    | (hasFluid ? 1 << 16 : 0);
         }
 
         public byte[] serialize() {

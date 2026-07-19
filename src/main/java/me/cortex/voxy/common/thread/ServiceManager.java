@@ -11,6 +11,9 @@ import java.util.function.IntConsumer;
 import java.util.function.Supplier;
 
 public class ServiceManager {
+    private static final int MAX_SERVICES = Long.SIZE;
+    private static final long MAX_SERVICE_WEIGHT = Long.MAX_VALUE / Integer.MAX_VALUE;
+
     private static final class ThreadCtx {
         int shiftFactor = 0;
         long seed;//Random seed used for selecting service
@@ -20,7 +23,7 @@ public class ServiceManager {
         }
 
         long rand(long size) {
-            return (this.seed = HashCommon.mix(this.seed))%size;
+            return Long.remainderUnsigned(this.seed = HashCommon.mix(this.seed), size);
         }
     }
 
@@ -56,6 +59,12 @@ public class ServiceManager {
     public synchronized Service createService(Supplier<Pair<Runnable, Runnable>> ctxFactory, long weight, String name, BooleanSupplier limiter) {
         if (this.isShutdown) {
             throw new IllegalStateException("Service manager is shutdown");
+        }
+        if (weight <= 0 || weight > MAX_SERVICE_WEIGHT) {
+            throw new IllegalArgumentException("Service weight is outside the safe positive range: " + weight);
+        }
+        if (this.services.length == MAX_SERVICES) {
+            throw new IllegalStateException("Service manager supports at most " + MAX_SERVICES + " live services");
         }
         Service newService = new Service(ctxFactory, this, weight, name, limiter);
         var newServices = Arrays.copyOf(this.services, this.services.length+1);
@@ -102,13 +111,14 @@ public class ServiceManager {
             long sample = ctx.rand(totalWeight);//Random number
 
             for (int i = 0; i < services.length; i++) {
-                var service = services[(i+shiftFactor)%services.length];
-                if (service.limiter!=null && (((skipMsk&(1L<<i))!=0)|| !service.limiter.getAsBoolean())) {
-                    skipMsk |= 1L<<i;
+                int serviceIndex = (i+shiftFactor)%services.length;
+                var service = services[serviceIndex];
+                if (service.limiter!=null && (((skipMsk&(1L<<serviceIndex))!=0)|| !service.limiter.getAsBoolean())) {
+                    skipMsk |= 1L<<serviceIndex;
                     continue;
                 }
                 sample -= service.numJobs() * service.weight;
-                if (sample<=0) {
+                if (sample<0) {
                     selectedService = service;
                     break;
                 }

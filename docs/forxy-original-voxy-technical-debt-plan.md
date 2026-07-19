@@ -475,20 +475,43 @@ shader regression reported. All 陆轮 exit gates are therefore closed.
 Goal: make distant voxel selection preserve meaningful visibility and lighting
 instead of choosing primarily by occurrence count.
 
-- [ ] Build deterministic 2x2x2 fixtures for opaque, cutout, translucent, fluid,
+- [x] Build deterministic 2x2x2 fixtures for opaque, cutout, translucent, fluid,
       emissive, thin, and mixed-light inputs.
-- [ ] Define level-aware weighting for opacity and visual bounding boxes.
-- [ ] Define whether light should use maximum, weighted average, or a material-
+- [x] Define level-aware weighting for opacity and visual bounding boxes.
+- [x] Define whether light should use maximum, weighted average, or a material-
       aware rule; test skylight and block light separately.
-- [ ] Preserve thin but visually dominant structures without making sparse noise
+- [x] Preserve thin but visually dominant structures without making sparse noise
       dominate every higher LOD.
-- [ ] Guarantee stable selection independent of input traversal order.
+- [x] Guarantee stable selection independent of input traversal order.
 - [ ] Measure CPU cost during Chunky generation, Bobby import, and DH import.
 - [ ] Visually qualify day/night, water, forests, emissive blocks, and high-
       contrast silhouettes across several LOD levels.
 
 Exit evidence: fixture rules are explicit and stable, real-world detail/light
 improves, and ingest throughput stays within an accepted measured budget.
+
+Automated implementation status (2026-07-19):
+
+- `Mipper.mip` now receives the target level from both the four voxelized-
+  section passes and higher-LOD child recovery. Block occurrence count owns the
+  representative; cached opacity, outline-shape volume, fluid state, and light
+  emission resolve equal support. Block id and biome id provide deterministic
+  final tie breaks, so input traversal order cannot change the result.
+- Sparse non-air detail requires one source through levels 1-2, two at level 3,
+  three at level 4, and four above it. Very thin shapes require one additional
+  source from level 4 onward. Emissive material is preserved through level 4,
+  then requires increasing support instead of expanding forever.
+- Block light uses the maximum of the eight inputs. Non-air output uses maximum
+  non-air skylight; air output uses the ceiling average skylight. The selected
+  block's lowest present biome id is the stable representative.
+- The deterministic suite covers opaque stone, cutout leaves, translucent
+  glass, water, glowstone, iron bars, mixed block/skylight, 256 traversal
+  permutations, and the level 1-4 section chain. The non-gating worst-case mixed
+  material benchmark measured 86.2 ns per mip, about 50.4 us for all 585 mips
+  in one section, within the explicit 120 ns/op and 12x comparison budget.
+- Runtime import timing is gated by `-PvoxyAuditRound7Mipping` and reports the
+  average whole-section mipping time every 1,024 sections. Chunky/Bobby/DH and
+  visual qualification remain open until the client passes below are recorded.
 
 ## 捌轮：model and material fidelity
 

@@ -48,7 +48,12 @@ public class ForgeOriginalVoxyLevelRendererRenderStateCaptureMixin {
             LightTexture lightTexture,
             Matrix4f projection,
             CallbackInfo ci) {
-        ForgeOriginalVoxyRenderStateCapture.captureProjection(projection);
+        ForgeOriginalVoxyRenderStateCapture.captureViewport(
+                projection,
+                poseStack.last().pose(),
+                camera.getPosition().x,
+                camera.getPosition().y,
+                camera.getPosition().z);
         ForgeOriginalVoxyRenderStateCapture.captureLightTexture(lightTexture);
         if (voxy$shouldResetViewport(
                 ForgeVoxyInstance.INSTANCE.hasActiveOriginalVoxyRenderOwner(),

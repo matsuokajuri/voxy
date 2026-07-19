@@ -74,6 +74,51 @@ class MappingStorageVersioningTest {
     }
 
     @Test
+    void futureInterruptedUpgradeBackupIsRefusedWithoutMutatingStorage() {
+        MemoryStorageBackend backend = new MemoryStorageBackend();
+        byte[] damagedStone = new byte[] {1};
+        byte[] stone = new Mapper.StateEntry(1, Blocks.STONE.defaultBlockState()).serialize();
+        Int2ObjectOpenHashMap<byte[]> backupMappings = new Int2ObjectOpenHashMap<>();
+        backupMappings.put(STONE_KEY, stone);
+        put(backend, STONE_KEY, damagedStone);
+        put(backend, MappingStorageMetadata.BACKUP_KEY, MappingStorageMetadata.encodeBackup(
+                new MappingStorageMetadata.Backup(0, currentDataVersion() + 1, backupMappings)));
+        put(backend, MappingStorageMetadata.MANIFEST_KEY, MappingStorageMetadata.encodeManifest(
+                new MappingStorageMetadata.Manifest(
+                        0,
+                        0,
+                        MappingStorageMetadata.State.UPGRADING,
+                        MappingStorageMetadata.CURRENT_SCHEMA_VERSION,
+                        currentDataVersion(),
+                        "future backup")));
+        Int2ObjectOpenHashMap<byte[]> before = backend.getIdMappingsData();
+        try {
+            IllegalStateException failure = assertThrows(IllegalStateException.class, () -> new Mapper(backend));
+            assertTrue(failure.getMessage().contains("newer than the running version"));
+            assertSnapshotsEqual(before, backend.getIdMappingsData());
+        } finally {
+            backend.close();
+        }
+    }
+
+    @Test
+    void negativeMetadataVersionsAreRejectedAtTheEnvelopeBoundary() {
+        Int2ObjectOpenHashMap<byte[]> mappings = new Int2ObjectOpenHashMap<>();
+        assertThrows(
+                IllegalStateException.class,
+                () -> new MappingStorageMetadata.Manifest(
+                        -1,
+                        0,
+                        MappingStorageMetadata.State.COMMITTED,
+                        MappingStorageMetadata.CURRENT_SCHEMA_VERSION,
+                        currentDataVersion(),
+                        "negative"));
+        assertThrows(
+                IllegalStateException.class,
+                () -> new MappingStorageMetadata.Backup(0, -1, mappings));
+    }
+
+    @Test
     void interruptedUpgradeRestoresVerifiedBackupBeforeRetry() {
         MemoryStorageBackend backend = new MemoryStorageBackend();
         byte[] stone = new Mapper.StateEntry(1, Blocks.STONE.defaultBlockState()).serialize();

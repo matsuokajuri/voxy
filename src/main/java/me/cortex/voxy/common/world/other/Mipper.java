@@ -1,83 +1,287 @@
 package me.cortex.voxy.common.world.other;
 
-import static me.cortex.voxy.common.world.other.Mapper.withLight;
+/** Selects a deterministic representative voxel for one 2x2x2 source cell. */
+public final class Mipper {
+    private static final int VISUAL_COVERAGE_MASK = 0xFF;
+    private static final int BLOCK_ID_MASK = (1 << 20) - 1;
 
-//Mipper for data
-public class Mipper {
-    //TODO: compute the opacity of the block then mip w.r.t those blocks
-    // as distant horizons done
+    private Mipper() {
+    }
 
-
-    //TODO: also pass in the level its mipping from, cause at lower levels you want to preserve block details
-    // but at higher details you want more air
-
-
-
-    //TODO: instead of opacity only, add a level to see if the visual bounding box allows for seeing through top down etc
+    /**
+     * @param targetLevel the level written by this mip operation; level one represents a 2-block cell
+     */
     public static long mip(long I000, long I100, long I001, long I101,
                            long I010, long I110, long I011, long I111,
-                          Mapper mapper) {
-        //TODO: do a stable sort on all the entires, w.r.t the opacity and maybe light as a secondary???
-        // then select the highest value
-        // UPDATE, dumbass, the highest value _is_ the max/min
-
-
-
-        int max = -1;
-
-        //TODO: mip with respect to all the variables, what that means is take whatever has the highest count and return that
-        //TODO: also average out the light level and set that as the new light level
-        //For now just take the most top corner
-
-        //TODO: i think it needs to compute the _max_ light level, since e.g. if a point is bright irl
-        // you can see it from really really damn far away.
-        // it could be a heavily weighted average with a huge preference to the top most lighting value
-        if (!Mapper.isAir(I111)) {
-            max = (mapper.getBlockStateOpacity(I111)<<4)|0b111;
-        }
-        if (!Mapper.isAir(I110)) {
-            max = Math.max((mapper.getBlockStateOpacity(I110)<<4)|0b110, max);
-        }
-        if (!Mapper.isAir(I011)) {
-            max = Math.max((mapper.getBlockStateOpacity(I011)<<4)|0b011, max);
-        }
-        if (!Mapper.isAir(I010)) {
-            max = Math.max((mapper.getBlockStateOpacity(I010)<<4)|0b010, max);
-        }
-        if (!Mapper.isAir(I101)) {
-            max = Math.max((mapper.getBlockStateOpacity(I101)<<4)|0b101, max);
-        }
-        if (!Mapper.isAir(I100)) {
-            max = Math.max((mapper.getBlockStateOpacity(I100)<<4)|0b100, max);
-        }
-        if (!Mapper.isAir(I001)) {
-            max = Math.max((mapper.getBlockStateOpacity(I001)<<4)|0b001, max);
-        }
-        if (!Mapper.isAir(I000)) {
-            max = Math.max((mapper.getBlockStateOpacity(I000)<<4), max);
+                           Mapper mapper, int targetLevel) {
+        if (targetLevel < 1) {
+            throw new IllegalArgumentException("Mipping target level must be positive");
         }
 
-        if (max != -1) {
-            return switch (max&0b111) {
-                case 0 -> I000;
-                case 1 -> I001;
-                case 2 -> I010;
-                case 3 -> I011;
-                case 4 -> I100;
-                case 5 -> I101;
-                case 6 -> I110;
-                case 7 -> I111;
-                default -> throw new IllegalStateException("Unexpected value: " + (max&0b111));
+        int B000 = Mapper.getBlockId(I000);
+        int B100 = Mapper.getBlockId(I100);
+        int B001 = Mapper.getBlockId(I001);
+        int B101 = Mapper.getBlockId(I101);
+        int B010 = Mapper.getBlockId(I010);
+        int B110 = Mapper.getBlockId(I110);
+        int B011 = Mapper.getBlockId(I011);
+        int B111 = Mapper.getBlockId(I111);
+
+        int nonAirCount = nonAir(B000) + nonAir(B100) + nonAir(B001) + nonAir(B101)
+                + nonAir(B010) + nonAir(B110) + nonAir(B011) + nonAir(B111);
+
+        long pair = sortPair(B000, B100);
+        B000 = (int) (pair >>> 32);
+        B100 = (int) pair;
+        pair = sortPair(B001, B101);
+        B001 = (int) (pair >>> 32);
+        B101 = (int) pair;
+        pair = sortPair(B010, B110);
+        B010 = (int) (pair >>> 32);
+        B110 = (int) pair;
+        pair = sortPair(B011, B111);
+        B011 = (int) (pair >>> 32);
+        B111 = (int) pair;
+        pair = sortPair(B000, B001);
+        B000 = (int) (pair >>> 32);
+        B001 = (int) pair;
+        pair = sortPair(B100, B101);
+        B100 = (int) (pair >>> 32);
+        B101 = (int) pair;
+        pair = sortPair(B010, B011);
+        B010 = (int) (pair >>> 32);
+        B011 = (int) pair;
+        pair = sortPair(B110, B111);
+        B110 = (int) (pair >>> 32);
+        B111 = (int) pair;
+        pair = sortPair(B100, B001);
+        B100 = (int) (pair >>> 32);
+        B001 = (int) pair;
+        pair = sortPair(B110, B011);
+        B110 = (int) (pair >>> 32);
+        B011 = (int) pair;
+        pair = sortPair(B000, B010);
+        B000 = (int) (pair >>> 32);
+        B010 = (int) pair;
+        pair = sortPair(B101, B111);
+        B101 = (int) (pair >>> 32);
+        B111 = (int) pair;
+        pair = sortPair(B100, B110);
+        B100 = (int) (pair >>> 32);
+        B110 = (int) pair;
+        pair = sortPair(B001, B011);
+        B001 = (int) (pair >>> 32);
+        B011 = (int) pair;
+        pair = sortPair(B100, B010);
+        B100 = (int) (pair >>> 32);
+        B010 = (int) pair;
+        pair = sortPair(B101, B011);
+        B101 = (int) (pair >>> 32);
+        B011 = (int) pair;
+        pair = sortPair(B001, B010);
+        B001 = (int) (pair >>> 32);
+        B010 = (int) pair;
+        pair = sortPair(B101, B110);
+        B101 = (int) (pair >>> 32);
+        B110 = (int) pair;
+        pair = sortPair(B101, B010);
+        B101 = (int) (pair >>> 32);
+        B010 = (int) pair;
+
+        int selectedBlock = 0;
+        long bestRank = -1L;
+        int currentBlock = B000;
+        int currentCount = 1;
+        for (int index = 1; index < 8; index++) {
+            int nextBlock = switch (index) {
+                case 1 -> B100;
+                case 2 -> B001;
+                case 3 -> B101;
+                case 4 -> B010;
+                case 5 -> B110;
+                case 6 -> B011;
+                case 7 -> B111;
+                default -> throw new IllegalStateException();
             };
-        } else {
-            int blockLight = (Mapper.getLightId(I000) & 0xF0) + (Mapper.getLightId(I001) & 0xF0) + (Mapper.getLightId(I010) & 0xF0) + (Mapper.getLightId(I011) & 0xF0) +
-                    (Mapper.getLightId(I100) & 0xF0) + (Mapper.getLightId(I101) & 0xF0) + (Mapper.getLightId(I110) & 0xF0) + (Mapper.getLightId(I111) & 0xF0);
-            int skyLight = (Mapper.getLightId(I000) & 0x0F) + (Mapper.getLightId(I001) & 0x0F) + (Mapper.getLightId(I010) & 0x0F) + (Mapper.getLightId(I011) & 0x0F) +
-                    (Mapper.getLightId(I100) & 0x0F) + (Mapper.getLightId(I101) & 0x0F) + (Mapper.getLightId(I110) & 0x0F) + (Mapper.getLightId(I111) & 0x0F);
-            blockLight = (blockLight / 8) & 0xF0;
-            skyLight = (int) Math.ceil((double) skyLight / 8);
-
-            return withLight(I111, blockLight | skyLight);
+            if (nextBlock == currentBlock) {
+                currentCount++;
+                continue;
+            }
+            long rank = rankBlock(currentBlock, currentCount, mapper, targetLevel);
+            if (rank > bestRank) {
+                bestRank = rank;
+                selectedBlock = currentBlock;
+            }
+            currentBlock = nextBlock;
+            currentCount = 1;
         }
+        long rank = rankBlock(currentBlock, currentCount, mapper, targetLevel);
+        if (rank > bestRank) {
+            selectedBlock = currentBlock;
+        }
+
+        int selectedProperties = selectedBlock == 0 ? 0 : mapper.getBlockStateMipProperties(selectedBlock);
+        if (selectedBlock != 0 && nonAirCount < requiredSupport(selectedProperties, targetLevel)) {
+            selectedBlock = 0;
+        }
+
+        int selectedBiome = selectedBlock == 0 ? 0 : selectBiome(selectedBlock,
+                I000, I100, I001, I101, I010, I110, I011, I111);
+        int light = aggregateLight(selectedBlock, selectedProperties,
+                I000, I100, I001, I101, I010, I110, I011, I111);
+        return Mapper.composeMappingId((byte) light, selectedBlock, selectedBiome);
+    }
+
+    private static long rankBlock(
+            int block,
+            int count,
+            Mapper mapper,
+            int targetLevel) {
+        if (block == 0) {
+            return -1L;
+        }
+        int properties = mapper.getBlockStateMipProperties(block);
+        int coverage = properties & VISUAL_COVERAGE_MASK;
+        int opacity = (properties >>> 8) & 15;
+        int emission = (properties >>> 12) & 15;
+        int fluid = (properties >>> 16) & 1;
+
+        // Occurrence count owns the result. Material properties resolve equal support without
+        // making one isolated opaque voxel erase a repeated translucent or fluid surface.
+        int materialPriority = (emission << 13) | (opacity << 8) | coverage;
+        if (fluid != 0) {
+            materialPriority += Math.max(0, 4 - targetLevel) << 5;
+        }
+        return ((long) count << 40)
+                | ((long) materialPriority << 20)
+                | (BLOCK_ID_MASK - block);
+    }
+
+    private static long sortPair(int left, int right) {
+        return ((long) Math.min(left, right) << 32) | Integer.toUnsignedLong(Math.max(left, right));
+    }
+
+    private static int requiredSupport(int properties, int targetLevel) {
+        int emission = (properties >>> 12) & 15;
+        if (emission != 0) {
+            if (targetLevel <= 4) {
+                return 1;
+            }
+            return Math.min(8, Math.max(2, baseSupport(targetLevel) - 1));
+        }
+
+        int support = baseSupport(targetLevel);
+        int coverage = properties & VISUAL_COVERAGE_MASK;
+        if (coverage <= 32 && targetLevel >= 4) {
+            support++;
+        }
+        return Math.min(8, support);
+    }
+
+    private static int baseSupport(int targetLevel) {
+        if (targetLevel <= 2) {
+            return 1;
+        }
+        if (targetLevel == 3) {
+            return 2;
+        }
+        if (targetLevel == 4) {
+            return 3;
+        }
+        return 4;
+    }
+
+    private static int selectBiome(
+            int selectedBlock,
+            long I000, long I100, long I001, long I101,
+            long I010, long I110, long I011, long I111) {
+        int selectedBiome = 1 << 9;
+        selectedBiome = minimumBiome(selectedBlock, I000, selectedBiome);
+        selectedBiome = minimumBiome(selectedBlock, I100, selectedBiome);
+        selectedBiome = minimumBiome(selectedBlock, I001, selectedBiome);
+        selectedBiome = minimumBiome(selectedBlock, I101, selectedBiome);
+        selectedBiome = minimumBiome(selectedBlock, I010, selectedBiome);
+        selectedBiome = minimumBiome(selectedBlock, I110, selectedBiome);
+        selectedBiome = minimumBiome(selectedBlock, I011, selectedBiome);
+        selectedBiome = minimumBiome(selectedBlock, I111, selectedBiome);
+        return selectedBiome == 1 << 9 ? 0 : selectedBiome;
+    }
+
+    private static int aggregateLight(
+            int selectedBlock,
+            int selectedProperties,
+            long I000, long I100, long I001, long I101,
+            long I010, long I110, long I011, long I111) {
+        int L000 = Mapper.getLightId(I000);
+        int L100 = Mapper.getLightId(I100);
+        int L001 = Mapper.getLightId(I001);
+        int L101 = Mapper.getLightId(I101);
+        int L010 = Mapper.getLightId(I010);
+        int L110 = Mapper.getLightId(I110);
+        int L011 = Mapper.getLightId(I011);
+        int L111 = Mapper.getLightId(I111);
+        if (selectedBlock == 0) {
+            int blockLight = max8(
+                    L000 >>> 4, L100 >>> 4, L001 >>> 4, L101 >>> 4,
+                    L010 >>> 4, L110 >>> 4, L011 >>> 4, L111 >>> 4);
+            int skyLight = ((L000 & 15) + (L100 & 15) + (L001 & 15) + (L101 & 15)
+                    + (L010 & 15) + (L110 & 15) + (L011 & 15) + (L111 & 15) + 7) / 8;
+            return (blockLight << 4) | skyLight;
+        }
+
+        int count = selected(selectedBlock, I000) + selected(selectedBlock, I100)
+                + selected(selectedBlock, I001) + selected(selectedBlock, I101)
+                + selected(selectedBlock, I010) + selected(selectedBlock, I110)
+                + selected(selectedBlock, I011) + selected(selectedBlock, I111);
+        if (count == 0) {
+            throw new IllegalStateException("Selected mip material was not present in its source cell");
+        }
+        int blockLightSum = selectedBlockLight(selectedBlock, I000, L000)
+                + selectedBlockLight(selectedBlock, I100, L100)
+                + selectedBlockLight(selectedBlock, I001, L001)
+                + selectedBlockLight(selectedBlock, I101, L101)
+                + selectedBlockLight(selectedBlock, I010, L010)
+                + selectedBlockLight(selectedBlock, I110, L110)
+                + selectedBlockLight(selectedBlock, I011, L011)
+                + selectedBlockLight(selectedBlock, I111, L111);
+        int skyLightSum = selectedSkyLight(selectedBlock, I000, L000)
+                + selectedSkyLight(selectedBlock, I100, L100)
+                + selectedSkyLight(selectedBlock, I001, L001)
+                + selectedSkyLight(selectedBlock, I101, L101)
+                + selectedSkyLight(selectedBlock, I010, L010)
+                + selectedSkyLight(selectedBlock, I110, L110)
+                + selectedSkyLight(selectedBlock, I011, L011)
+                + selectedSkyLight(selectedBlock, I111, L111);
+        int emission = (selectedProperties >>> 12) & 15;
+        int blockLight = Math.max(emission, (blockLightSum + count / 2) / count);
+        int skyLight = (skyLightSum + count / 2) / count;
+        return (blockLight << 4) | skyLight;
+    }
+
+    private static int max8(int a, int b, int c, int d, int e, int f, int g, int h) {
+        return Math.max(Math.max(Math.max(a, b), Math.max(c, d)),
+                Math.max(Math.max(e, f), Math.max(g, h)));
+    }
+
+    private static int selected(int selectedBlock, long mapping) {
+        return Mapper.getBlockId(mapping) == selectedBlock ? 1 : 0;
+    }
+
+    private static int selectedBlockLight(int selectedBlock, long mapping, int light) {
+        return Mapper.getBlockId(mapping) == selectedBlock ? light >>> 4 : 0;
+    }
+
+    private static int selectedSkyLight(int selectedBlock, long mapping, int light) {
+        return Mapper.getBlockId(mapping) == selectedBlock ? light & 15 : 0;
+    }
+
+    private static int minimumBiome(int selectedBlock, long mapping, int current) {
+        return Mapper.getBlockId(mapping) == selectedBlock
+                ? Math.min(current, Mapper.getBiomeId(mapping))
+                : current;
+    }
+
+    private static int nonAir(int block) {
+        return block == 0 ? 0 : 1;
     }
 }

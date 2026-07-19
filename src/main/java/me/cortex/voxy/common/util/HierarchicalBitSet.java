@@ -16,6 +16,9 @@ public class HierarchicalBitSet {
     private final long[] C = new long[64*64];
     private final long[] D = new long[64*64*64];
     public HierarchicalBitSet(int limit) {//Fixed size of 64^4
+        if (limit < 0) {
+            throw new IllegalArgumentException("Negative limit");
+        }
         this.limit = limit;
         if (limit > (1<<(6*4))) {
             throw new IllegalArgumentException("Limit greater than capacity");
@@ -225,6 +228,9 @@ public class HierarchicalBitSet {
     }
 
     public boolean isSet(int idx) {
+        if (idx < 0 || idx >= this.limit) {
+            throw new IndexOutOfBoundsException(idx);
+        }
         return (this.D[idx>>6]&(1L<<(idx&0x3f)))!=0;
     }
 

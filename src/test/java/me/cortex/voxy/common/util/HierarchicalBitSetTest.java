@@ -12,6 +12,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class HierarchicalBitSetTest {
     @Test
+    void constructorAndQueriesRejectIndicesOutsideTheLogicalLimit() {
+        assertThrows(IllegalArgumentException.class, () -> new HierarchicalBitSet(-1));
+        HierarchicalBitSet bitSet = new HierarchicalBitSet(1);
+        assertThrows(IndexOutOfBoundsException.class, () -> bitSet.isSet(-1));
+        assertThrows(IndexOutOfBoundsException.class, () -> bitSet.isSet(1));
+    }
+
+    @Test
     void consecutiveAllocationCanExactlyFillLimitIncludingCount64() {
         HierarchicalBitSet bitSet = new HierarchicalBitSet(64);
         assertEquals(0, bitSet.allocateNextConsecutiveCounted(64));

@@ -149,8 +149,63 @@ public final class ForgeOriginalVoxyModelPipeline {
     private boolean renderEmbeddiumCutoutActive;
     private boolean serviceThreadPoolShutdown;
     private long chunkBoundOwnerGeneration;
+    private long preparedOculusViewportGeneration = Long.MIN_VALUE;
+    private ForgeOriginalVoxyRenderSystem preparedOculusViewportOwner;
     ForgeOriginalVoxyModelPipeline(ForgeVoxyInstance instance) {
         this.instance = instance;
+    }
+
+    /** Mirrors original MixinIrisRenderingPipeline#voxy$injectViewportSetup. */
+    public void prepareOculusViewportFromCapturedState() {
+        if (!RenderSystem.isOnRenderThread()
+                || !ForgeOriginalVoxyOculusPipelineBridge.shaderpackActive()
+                || ForgeOriginalVoxyOculusPipelineBridge.shadowActive()) {
+            return;
+        }
+        ForgeOriginalVoxyRenderStateCapture.CapturedViewport captured =
+                ForgeOriginalVoxyRenderStateCapture.viewportCopy();
+        if (captured == null) {
+            return;
+        }
+        ForgeOriginalVoxyRenderSystem currentRenderSystem;
+        synchronized (this) {
+            if (!this.ownerReady || this.stale || this.renderSystem == null) {
+                return;
+            }
+            currentRenderSystem = this.renderSystem;
+        }
+        ViewportSelector selector = currentRenderSystem.viewportSelector();
+        MDICViewport viewport = selector == null ? null : selector.getViewport();
+        if (viewport == null) {
+            return;
+        }
+        Minecraft minecraft = Minecraft.getInstance();
+        int width = minecraft.getMainRenderTarget().width;
+        int height = minecraft.getMainRenderTarget().height;
+        float[] renderScale = currentRenderSystem.renderPipeline().renderScalingFactor();
+        if (renderScale != null) {
+            width = (int) (width * renderScale[0]);
+            height = (int) (height * renderScale[1]);
+        }
+        if (width <= 0 || height <= 0) {
+            return;
+        }
+        Matrix4f vanillaProjection = new Matrix4f(captured.projection());
+        Matrix4f voxyProjection = computeProjectionMat(
+                currentRenderSystem.renderPipeline().properties(),
+                vanillaProjection,
+                captured.projection());
+        viewport.setVanillaProjection(vanillaProjection)
+                .setProjection(voxyProjection)
+                .setModelView(captured.modelView())
+                .setCamera(captured.cameraX(), captured.cameraY(), captured.cameraZ())
+                .setScreenSize(width, height)
+                .setFogParameters(ForgeOriginalVoxyFogParameters.captureFromRenderSystem(
+                        ForgeVoxyConfig.ORIGINAL_VOXY_USE_ENVIRONMENTAL_FOG.get()))
+                .update();
+        viewport.frameId++;
+        this.preparedOculusViewportGeneration = captured.generation();
+        this.preparedOculusViewportOwner = currentRenderSystem;
     }
 
     ServiceManager getServiceManager() {
@@ -629,28 +684,40 @@ public final class ForgeOriginalVoxyModelPipeline {
             }
             ForgeOriginalVoxyFogParameters fogParameters = ForgeOriginalVoxyFogParameters.captureFromRenderSystem(
                     ForgeVoxyConfig.ORIGINAL_VOXY_USE_ENVIRONMENTAL_FOG.get());
-            Matrix4f vanillaProjection = new Matrix4f(matrices.projection());
-            Matrix4f modelView = new Matrix4f(matrices.modelView());
-            Matrix4f rawMinecraftProjection = ForgeOriginalVoxyRenderStateCapture.projectionCopy();
-            if (rawMinecraftProjection == null) {
-                this.recordNonFatalFailure("original-hoc-raw-projection-not-captured");
-                return;
+            ForgeOriginalVoxyRenderStateCapture.CapturedViewport capturedViewport =
+                    ForgeOriginalVoxyRenderStateCapture.viewportCopy();
+            boolean usePreparedOculusViewport = ForgeOriginalVoxyOculusPipelineBridge.shaderpackActive()
+                    && capturedViewport != null
+                    && this.preparedOculusViewportOwner == renderSystem
+                    && this.preparedOculusViewportGeneration == capturedViewport.generation();
+            if (usePreparedOculusViewport) {
+                // The original Iris path only refreshes the viewport once in beginLevelRendering;
+                // preserve those camera matrices and merely take the now-current terrain fog.
+                viewport.setFogParameters(fogParameters);
+            } else {
+                Matrix4f vanillaProjection = new Matrix4f(matrices.projection());
+                Matrix4f modelView = new Matrix4f(matrices.modelView());
+                Matrix4f rawMinecraftProjection = ForgeOriginalVoxyRenderStateCapture.projectionCopy();
+                if (rawMinecraftProjection == null) {
+                    this.recordNonFatalFailure("original-hoc-raw-projection-not-captured");
+                    return;
+                }
+                Matrix4f voxyProjection = computeProjectionMat(
+                        RenderProperties.getRenderProperties(),
+                        vanillaProjection,
+                        rawMinecraftProjection);
+                viewport.setVanillaProjection(vanillaProjection)
+                        .setProjection(voxyProjection)
+                        .setModelView(modelView)
+                        .setCamera(cameraX, cameraY, cameraZ)
+                        .setScreenSize(width, height)
+                        .setFogParameters(fogParameters)
+                        .update();
+                viewport.frameId++;
             }
-            Matrix4f voxyProjection = computeProjectionMat(
-                    RenderProperties.getRenderProperties(),
-                    vanillaProjection,
-                    rawMinecraftProjection);
-            viewport.setVanillaProjection(vanillaProjection)
-                    .setProjection(voxyProjection)
-                    .setModelView(modelView)
-                    .setCamera(cameraX, cameraY, cameraZ)
-                    .setScreenSize(width, height)
-                    .setFogParameters(fogParameters)
-                    .update();
             if (suppliedFrustum != null) {
                 viewport.copyFrustumFrom(suppliedFrustum);
             }
-            viewport.frameId++;
             glViewport(0, 0, viewport.width, viewport.height);
             renderPipeline.preSetup(viewport);
             TimingStatistics.E.start();

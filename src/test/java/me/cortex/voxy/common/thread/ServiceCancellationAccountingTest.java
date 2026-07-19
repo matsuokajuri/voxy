@@ -286,6 +286,70 @@ class ServiceCancellationAccountingTest {
     }
 
     @Test
+    @Timeout(20)
+    void rotatedSelectionUsesLimiterBitsFromTheOriginalServiceIndex() {
+        AtomicBoolean allowFirst = new AtomicBoolean();
+        AtomicInteger secondRuns = new AtomicInteger();
+        ServiceManager manager = new ServiceManager(ignored -> {
+        }, ignored -> {
+        });
+        Service first = manager.createService(
+                () -> new me.cortex.voxy.common.util.Pair<>(() -> {
+                }, () -> {
+                }),
+                1,
+                "limited-first",
+                allowFirst::get);
+        Service second = manager.createServiceNoCleanup(() -> () -> secondRuns.incrementAndGet(), 1, "runnable-second");
+        try {
+            first.execute();
+            second.execute();
+            second.execute();
+
+            assertEquals(0, manager.tryRunAJob());
+            assertEquals(0, manager.tryRunAJob());
+            assertEquals(2, secondRuns.get());
+            assertEquals(1, first.numJobs());
+
+            assertEquals(1, first.drain());
+            first.shutdown();
+            second.shutdown();
+            manager.shutdown();
+        } finally {
+            allowFirst.set(true);
+        }
+    }
+
+    @Test
+    void serviceCreationEnforcesTheSchedulerMaskAndWeightInvariants() {
+        ServiceManager manager = new ServiceManager(ignored -> {
+        }, ignored -> {
+        });
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> manager.createServiceNoCleanup(() -> () -> {
+                }, 0));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> manager.createServiceNoCleanup(() -> () -> {
+                }, Long.MAX_VALUE));
+
+        Service[] services = new Service[Long.SIZE];
+        for (int index = 0; index < services.length; index++) {
+            services[index] = manager.createServiceNoCleanup(() -> () -> {
+            }, 1, "mask-bound-" + index);
+        }
+        assertThrows(
+                IllegalStateException.class,
+                () -> manager.createServiceNoCleanup(() -> () -> {
+                }, 1, "mask-overflow"));
+        for (Service service : services) {
+            service.shutdown();
+        }
+        manager.shutdown();
+    }
+
+    @Test
     @Timeout(30)
     void repeatedThreadCountChangesAndPoolShutdownLeaveNoWorkers() throws Exception {
         for (int cycle = 0; cycle < 3; cycle++) {

@@ -4,6 +4,7 @@ import me.cortex.voxy.forge.ForgeOriginalVoxyOculusPatchDataAccess;
 import me.cortex.voxy.forge.ForgeOriginalVoxyOculusPipelineDataAccess;
 import me.cortex.voxy.forge.ForgeOriginalVoxyOculusRenderPipelineData;
 import me.cortex.voxy.forge.ForgeOriginalVoxyOculusShaderPatch;
+import me.cortex.voxy.forge.ForgeVoxyInstance;
 import net.irisshaders.iris.gl.buffer.ShaderStorageBufferHolder;
 import net.irisshaders.iris.pipeline.IrisRenderingPipeline;
 import net.irisshaders.iris.shaderpack.programs.ProgramSet;
@@ -42,6 +43,24 @@ public class ForgeOriginalVoxyOculusIrisRenderingPipelineMixin implements ForgeO
                     this.customUniforms,
                     this.updateNotifier,
                     this.shaderStorageBufferHolder);
+        }
+    }
+
+    // Original Voxy applies the LevelRenderer-captured camera matrices here, before Iris begins
+    // mutating texture/framebuffer state. The Forge port previously rebuilt the viewport from the
+    // later Embeddium terrain-pass matrices, which are not the same depth-history owner under
+    // Oculus and makes a shadow crossing the vanilla/LOD seam reproject inconsistently.
+    @Inject(
+            method = "beginLevelRendering",
+            at = @At(
+                    value = "INVOKE",
+                    target = "Lcom/mojang/blaze3d/systems/RenderSystem;activeTexture(I)V",
+                    shift = At.Shift.BEFORE),
+            remap = false)
+    private void voxy$injectViewportSetup(CallbackInfo ci) {
+        var pipeline = ForgeVoxyInstance.INSTANCE.getOriginalVoxyModelPipeline();
+        if (pipeline != null) {
+            pipeline.prepareOculusViewportFromCapturedState();
         }
     }
 

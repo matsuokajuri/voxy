@@ -1993,7 +1993,7 @@ unrelated block or biome mappings.
 
 Section corruption is no longer silently converted to saved air. A corrupt
 higher-level section is reconstructed and persisted only when all eight direct
-children are valid, using the original `Mipper.mip` ordering. Otherwise it is
+children are valid, using the active `Mipper.mip` contract. Otherwise it is
 retained and reported as unavailable through `WorldSection` and both
 `ActiveSectionTracker` cache tiers. Fragmented mapping storage similarly repairs
 only from a verified superset or strict byte majority, refuses ties before
@@ -2047,6 +2047,31 @@ suite, tagged performance harness, real Bobby/DH data gate, two Embeddium-only
 client passes, and Oculus 1.8.0 + Complementary Unbound client pass all completed
 without a Voxy fatal error or reported visual/persistence regression. This
 closes Forxy 陆轮 without changing the established renderer-parity claim.
+
+#### Forxy 柒轮 delta: level-aware deterministic mipping (runtime qualification pending)
+
+The inherited original `Mipper` selected the highest-opacity non-air corner and
+returned that corner's light, so equal materials depended on input order, one
+sparse voxel could expand indefinitely, and block/sky light used unrelated
+rules for air and solid output. Forxy retains the original 2x2x2 ownership and
+packed Mapper ids but passes the actual target level from
+`WorldVoxilizedSectionMipper` and higher-LOD recovery.
+
+Selection is allocation-free and deterministic. Occurrence count is primary;
+cached block-state opacity, outline-shape volume, fluid presence, and emission
+resolve equal support, followed by stable numeric block/biome tie breaks.
+Levels 1-2 preserve a single detail sample, then support thresholds rise to
+2/3/4; thin shapes tighten from level 4 and isolated emissive material survives
+through level 4 without propagating forever. Block light uses the input maximum,
+while skylight uses the non-air maximum for solid output and ceiling average for
+air output. Fixtures cover opaque, cutout, translucent, fluid, emissive, thin,
+mixed-light, traversal permutations, and the four in-section levels.
+
+The non-gating mixed-material benchmark measured 86.2 ns per mip and 50.4 us for
+all 585 mips in one section, within the declared 120 ns/op and 12x comparison
+budget. A gated `-PvoxyAuditRound7Mipping` runtime counter is connected for the
+Chunky/Bobby/DH import passes. Renderer parity is unchanged; visual and real
+import timing qualification remain pending before 柒轮 can be closed.
 
 ### XXI.2 original storage config JSON and production TYPE registry
 

@@ -134,7 +134,8 @@ public class WorldEngine {
                                 childValue(children, sourceX + 1, sourceY + 1, sourceZ),
                                 childValue(children, sourceX, sourceY + 1, sourceZ + 1),
                                 childValue(children, sourceX + 1, sourceY + 1, sourceZ + 1),
-                                this.mapper);
+                                this.mapper,
+                                parent.lvl);
                     }
                 }
             }

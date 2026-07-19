@@ -74,6 +74,9 @@ final class SectionArrayPool {
         int count = this.cached.incrementAndGet();
         if (count <= this.target.get()) {
             this.arrays.add(array);
+            if (this.cached.get() > this.target.get()) {
+                this.trimToTarget();
+            }
             return;
         }
         this.cached.decrementAndGet();
@@ -145,7 +148,7 @@ final class SectionArrayPool {
         }
     }
 
-    private void trimToTarget() {
+    private synchronized void trimToTarget() {
         while (this.cached.get() > this.target.get()) {
             long[] removed = this.arrays.poll();
             if (removed == null) {

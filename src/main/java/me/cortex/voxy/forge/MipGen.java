@@ -46,7 +46,9 @@ final class MipGen {
             solidMask |= (anyTransparent ? 1 : 0) << face;
         }
 
-        if (!darkened) {
+        if (darkened) {
+            fillEmptyAreasWithDarkColor(levels[0], solidMask);
+        } else {
             solidify(levels[0], solidMask);
         }
 
@@ -109,7 +111,9 @@ final class MipGen {
             solidMask |= (anyTransparent ? 1 : 0) << face;
         }
 
-        if (!darkened) {
+        if (darkened) {
+            fillEmptyAreasWithDarkColor(addr, solidMask);
+        } else {
             solidify(addr, solidMask);
         }
 
@@ -187,6 +191,44 @@ final class MipGen {
         }
     }
 
+    /**
+     * Ports the base-level preprocessing performed by modern Minecraft for
+     * {@code MipmapStrategy.DARK_CUTOUT}. Original Voxy downloads that already-processed
+     * GPU atlas; Forge 1.20.1 does not provide the strategy, so its transparent leaf texels
+     * otherwise remain black before Voxy forces leaves onto the solid LOD layer.
+     */
+    private static void fillEmptyAreasWithDarkColor(int[] base, byte mask) {
+        for (int face = 0; face < ForgeModelAtlasLayout.FACE_COUNT; face++) {
+            if (((mask >> face) & 1) == 0) {
+                continue;
+            }
+            int tileX = (face >> 1) * MODEL_TEXTURE_SIZE;
+            int tileY = (face & 1) * MODEL_TEXTURE_SIZE;
+            int darkest = -1;
+            int darkestBrightness = Integer.MAX_VALUE;
+            for (int i = 0; i < MODEL_TEXTURE_SIZE * MODEL_TEXTURE_SIZE; i++) {
+                int colour = base[getOffset(tileX, tileY, i)];
+                if ((colour & 0xFF000000) == 0) {
+                    continue;
+                }
+                int brightness = (colour & 0xFF)
+                        + ((colour >>> 8) & 0xFF)
+                        + ((colour >>> 16) & 0xFF);
+                if (brightness < darkestBrightness) {
+                    darkestBrightness = brightness;
+                    darkest = colour;
+                }
+            }
+            int fill = darkCutoutFillColour(darkest);
+            for (int i = 0; i < MODEL_TEXTURE_SIZE * MODEL_TEXTURE_SIZE; i++) {
+                int offset = getOffset(tileX, tileY, i);
+                if ((base[offset] & 0xFF000000) == 0) {
+                    base[offset] = fill;
+                }
+            }
+        }
+    }
+
     private static void solidify(long baseAddr, byte mask) {
         for (int face = 0; face < ForgeModelAtlasLayout.FACE_COUNT; face++) {
             if (((mask >> face) & 1) == 0) {
@@ -236,6 +278,47 @@ final class MipGen {
                 }
             }
         }
+    }
+
+    private static void fillEmptyAreasWithDarkColor(long baseAddr, byte mask) {
+        for (int face = 0; face < ForgeModelAtlasLayout.FACE_COUNT; face++) {
+            if (((mask >> face) & 1) == 0) {
+                continue;
+            }
+            int tileX = (face >> 1) * MODEL_TEXTURE_SIZE;
+            int tileY = (face & 1) * MODEL_TEXTURE_SIZE;
+            int darkest = -1;
+            int darkestBrightness = Integer.MAX_VALUE;
+            for (int i = 0; i < MODEL_TEXTURE_SIZE * MODEL_TEXTURE_SIZE; i++) {
+                int colour = MemoryUtil.memGetInt(
+                        baseAddr + getOffset(tileX, tileY, i) * ForgeModelAtlasPixelFormat.BYTES_PER_PIXEL);
+                if ((colour & 0xFF000000) == 0) {
+                    continue;
+                }
+                int brightness = (colour & 0xFF)
+                        + ((colour >>> 8) & 0xFF)
+                        + ((colour >>> 16) & 0xFF);
+                if (brightness < darkestBrightness) {
+                    darkestBrightness = brightness;
+                    darkest = colour;
+                }
+            }
+            int fill = darkCutoutFillColour(darkest);
+            for (int i = 0; i < MODEL_TEXTURE_SIZE * MODEL_TEXTURE_SIZE; i++) {
+                long address = baseAddr
+                        + getOffset(tileX, tileY, i) * ForgeModelAtlasPixelFormat.BYTES_PER_PIXEL;
+                if ((MemoryUtil.memGetInt(address) & 0xFF000000) == 0) {
+                    MemoryUtil.memPutInt(address, fill);
+                }
+            }
+        }
+    }
+
+    private static int darkCutoutFillColour(int darkest) {
+        int r = ((darkest & 0xFF) * 3) / 4;
+        int g = (((darkest >>> 8) & 0xFF) * 3) / 4;
+        int b = (((darkest >>> 16) & 0xFF) * 3) / 4;
+        return r | (g << 8) | (b << 16);
     }
 
     private static int getOffset(int tileX, int tileY, int i) {

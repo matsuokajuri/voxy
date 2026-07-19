@@ -11,6 +11,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.Objects;
 import java.util.zip.CRC32;
 import org.lwjgl.system.MemoryUtil;
 
@@ -42,12 +43,24 @@ public final class MappingStorageMetadata {
             int targetSchemaVersion,
             int targetDataVersion,
             String detail) {
+        public Manifest {
+            validateNonNegativeVersion("schema", schemaVersion);
+            validateNonNegativeVersion("Minecraft data", dataVersion);
+            validateNonNegativeVersion("target schema", targetSchemaVersion);
+            validateNonNegativeVersion("target Minecraft data", targetDataVersion);
+            Objects.requireNonNull(state, "state");
+        }
     }
 
     public record Backup(
             int schemaVersion,
             int dataVersion,
             Int2ObjectOpenHashMap<byte[]> mappings) {
+        public Backup {
+            validateNonNegativeVersion("backup schema", schemaVersion);
+            validateNonNegativeVersion("backup Minecraft data", dataVersion);
+            Objects.requireNonNull(mappings, "mappings");
+        }
     }
 
     public static final class UpgradeSession {
@@ -151,6 +164,7 @@ public final class MappingStorageMetadata {
             IMappingStorage storage,
             Int2ObjectOpenHashMap<byte[]> rawMappings,
             int currentDataVersion) {
+        validateNonNegativeVersion("running Minecraft data", currentDataVersion);
         byte[] manifestBytes = rawMappings.get(MANIFEST_KEY);
         Int2ObjectOpenHashMap<byte[]> mappings = dataMappings(rawMappings);
         validateDataMappings(mappings);
@@ -161,12 +175,29 @@ public final class MappingStorageMetadata {
 
         Manifest manifest = decodeManifest(manifestBytes);
         if (manifest.state() != State.COMMITTED) {
+            validateSupportedVersions(manifest.schemaVersion(), manifest.dataVersion(), currentDataVersion);
+            if (manifest.targetSchemaVersion() > CURRENT_SCHEMA_VERSION) {
+                throw new IllegalStateException(
+                        "Mapping target schema " + manifest.targetSchemaVersion()
+                                + " is newer than supported schema " + CURRENT_SCHEMA_VERSION);
+            }
+            if (manifest.targetDataVersion() > currentDataVersion) {
+                throw new IllegalStateException(
+                        "Mapping target Minecraft data version " + manifest.targetDataVersion()
+                                + " is newer than the running version " + currentDataVersion);
+            }
             byte[] backupBytes = rawMappings.get(BACKUP_KEY);
             if (backupBytes == null) {
                 throw new IllegalStateException(
                         "Mapping upgrade is " + manifest.state() + " but no recovery backup exists");
             }
             Backup backup = decodeBackup(backupBytes);
+            validateSupportedVersions(backup.schemaVersion(), backup.dataVersion(), currentDataVersion);
+            if (backup.schemaVersion() != manifest.schemaVersion()
+                    || backup.dataVersion() != manifest.dataVersion()) {
+                throw new IllegalStateException(
+                        "Mapping recovery backup version does not match the interrupted upgrade manifest");
+            }
             restoreMappings(storage, backup.mappings());
             return new UpgradeSession(
                     storage,
@@ -178,16 +209,7 @@ public final class MappingStorageMetadata {
                     true);
         }
 
-        if (manifest.schemaVersion() > CURRENT_SCHEMA_VERSION) {
-            throw new IllegalStateException(
-                    "Mapping schema " + manifest.schemaVersion() + " is newer than supported schema "
-                            + CURRENT_SCHEMA_VERSION);
-        }
-        if (manifest.dataVersion() > currentDataVersion) {
-            throw new IllegalStateException(
-                    "Mapping Minecraft data version " + manifest.dataVersion()
-                            + " is newer than the running version " + currentDataVersion);
-        }
+        validateSupportedVersions(manifest.schemaVersion(), manifest.dataVersion(), currentDataVersion);
         boolean upgradeRequired = manifest.schemaVersion() < CURRENT_SCHEMA_VERSION
                 || manifest.dataVersion() < currentDataVersion;
         return new UpgradeSession(
@@ -411,6 +433,25 @@ public final class MappingStorageMetadata {
             }
         } catch (IOException exception) {
             throw new IllegalStateException("Unable to decode mapping metadata", exception);
+        }
+    }
+
+    private static void validateNonNegativeVersion(String label, int version) {
+        if (version < 0) {
+            throw new IllegalStateException("Negative mapping " + label + " version " + version);
+        }
+    }
+
+    private static void validateSupportedVersions(int schemaVersion, int dataVersion, int currentDataVersion) {
+        if (schemaVersion > CURRENT_SCHEMA_VERSION) {
+            throw new IllegalStateException(
+                    "Mapping schema " + schemaVersion + " is newer than supported schema "
+                            + CURRENT_SCHEMA_VERSION);
+        }
+        if (dataVersion > currentDataVersion) {
+            throw new IllegalStateException(
+                    "Mapping Minecraft data version " + dataVersion
+                            + " is newer than the running version " + currentDataVersion);
         }
     }
 }

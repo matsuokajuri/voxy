@@ -160,6 +160,9 @@ minecraft {
             if (project.hasProperty('voxyAuditRound6Performance')) {
                 property 'voxy.forge.auditRound6Performance', 'true'
             }
+            if (project.hasProperty('voxyAuditRound7Mipping')) {
+                property 'voxy.forge.auditRound7Mipping', 'true'
+            }
         }
 
         server {
@@ -406,7 +409,7 @@ def makeExcludedRocksDB = tasks.register('makeExcludedRocksDB', Zip) {
 
 test {
     useJUnitPlatform {
-        excludeTags 'bobby-exact-artifact', 'compat-real-data', 'redis-real-backend', 'round6-performance'
+        excludeTags 'bobby-exact-artifact', 'compat-real-data', 'redis-real-backend', 'round6-performance', 'round7-performance'
     }
 }
 
@@ -417,6 +420,19 @@ tasks.register('round6PerformanceTest', Test) {
     classpath = sourceSets.test.runtimeClasspath
     useJUnitPlatform {
         includeTags 'round6-performance'
+    }
+    testLogging {
+        showStandardStreams = true
+    }
+}
+
+tasks.register('round7PerformanceTest', Test) {
+    description = 'Runs the non-gating Forxy round-seven mipping CPU comparison.'
+    group = 'verification'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform {
+        includeTags 'round7-performance'
     }
     testLogging {
         showStandardStreams = true
