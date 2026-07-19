@@ -2010,6 +2010,44 @@ client paths passed user visual confirmation and clean renderer/storage/session
 shutdown without mapping-version, RocksDB, or Voxy fatal errors. This closes
 Forxy 伍轮 without changing the established Forge renderer-parity claim.
 
+#### Forxy 陆轮 delta: cache, allocator, and worker efficiency
+
+Forxy removes the original `ActiveSectionTracker` busy loader wait in favor of a
+completion holder that reserves pending references before publication. The
+secondary cache is sharded over the existing tracker slices while preserving its
+global capacity and `nullOnEmpty` load-status semantics. An eight-waiter harness
+reduced measured waiting-thread CPU from about 906 ms to zero with the same
+single physical section load. `WorldSection` array reuse is now allocation-rate
+and memory-pressure adaptive rather than a fixed roughly 100 MiB reserve; the
+qualified Embeddium and Oculus workloads reused 96,031 and 131,785 arrays while
+allocating 2,134 and 2,109, and both contracted to 32 cached arrays on shutdown.
+
+`AllocationArena` explicitly enforces its packed 30-bit maximum before an
+allocation can be represented incorrectly. `HierarchicalBitSet` performs
+consecutive allocation and high-water rollback by words while preserving the
+lowest-ID allocation order. Boundary and randomized model tests cover the exact
+arena maximum, coalescing/no-overlap, exact 64-bit bit-set runs, exact-limit fill,
+and 50,000 mixed bit operations.
+
+The render-generation cache experiment also has runtime ground truth. Blindly
+cloning every completed mesh produced zero hits, 40,544 evictions, and
+98,185,184 retained bytes, so that policy was removed. The retained bounded
+owner accepts only late results the node manager would otherwise discard, uses
+per-position striped dirty epochs, and has an unlocked empty-cache miss path.
+Final Embeddium and Oculus runs retained zero bytes and performed no eviction;
+no cache hit-rate improvement is claimed. The original unimplemented GPU
+`downloadAndRemove` route was not invented because it would require unmeasured
+readback synchronization.
+
+Mapped staging/compute uploads, the two-object synchronization buffer reuse, and
+the reusable geometry buffer were already active on the formal Forge owner.
+`allocFromLargest` has no consumer and the current three-SSBO dispatches do not
+justify multibind, so no speculative alternatives were retained. The default
+suite, tagged performance harness, real Bobby/DH data gate, two Embeddium-only
+client passes, and Oculus 1.8.0 + Complementary Unbound client pass all completed
+without a Voxy fatal error or reported visual/persistence regression. This
+closes Forxy 陆轮 without changing the established renderer-parity claim.
+
 ### XXI.2 original storage config JSON and production TYPE registry
 
 XXI.2 ports the original configuration mechanism around the XXI.1 production

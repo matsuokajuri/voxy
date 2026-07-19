@@ -5,6 +5,7 @@ import it.unimi.dsi.fastutil.objects.Object2IntMap;
 import me.cortex.voxy.common.Logger;
 import me.cortex.voxy.common.thread.ServiceManager;
 import me.cortex.voxy.common.world.WorldEngine;
+import me.cortex.voxy.common.world.WorldSection;
 import me.cortex.voxy.config.ForgeVoxyConfig;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
@@ -207,6 +208,14 @@ final class ForgeOriginalVoxyRenderSystem {
             this.worldIn.setDirtyCallback(null);
             this.worldIn.getMapper().setBiomeCallback(null);
             this.worldIn.getMapper().setStateCallback(null);
+
+            if (Boolean.getBoolean("voxy.forge.auditRound6Performance")) {
+                Logger.info("Forxy Round 6 performance: sections["
+                        + this.worldIn.round6SectionTrackerPerformanceSummary()
+                        + "], arrays[" + WorldSection.round6ArrayPoolPerformanceSummary()
+                        + "], geometryCache[" + this.nodeManager.round6GeometryCachePerformanceSummary()
+                        + "]");
+            }
 
             this.nodeManager.stop();
 

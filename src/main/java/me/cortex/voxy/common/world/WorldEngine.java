@@ -234,6 +234,14 @@ public class WorldEngine {
         return this.sectionTracker.getLoadedCacheCount();
     }
 
+    public String round6SectionTrackerPerformanceSummary() {
+        return "loaderWaits=" + this.sectionTracker.getLoaderWaitCount()
+                + ", loaderWaitNanos=" + this.sectionTracker.getLoaderWaitNanos()
+                + ", secondaryHits=" + this.sectionTracker.getSecondaryCacheHits()
+                + ", secondaryMisses=" + this.sectionTracker.getSecondaryCacheMisses()
+                + ", secondaryEvictions=" + this.sectionTracker.getSecondaryCacheEvictions();
+    }
+
     public void free() {
         if (!this.isLive) throw new IllegalStateException();
         this.isLive = false;

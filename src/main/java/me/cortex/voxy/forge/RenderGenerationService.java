@@ -27,10 +27,12 @@ final class RenderGenerationService {
         boolean hasDoneModelRequestOuter;
         int attempts;
         int addin;
+        final long cacheEpoch;
         long priority = Long.MIN_VALUE;
 
-        private BuildTask(long position) {
+        private BuildTask(long position, long cacheEpoch) {
             this.position = position;
+            this.cacheEpoch = cacheEpoch;
         }
 
         private void updatePriority() {
@@ -55,6 +57,7 @@ final class RenderGenerationService {
     private final boolean emitMeshlets;
     private final Service service;
     private Consumer<BuiltSection> resultConsumer;
+    private GeometryCache geometryCache;
     private long lastChangedTime;
 
     //Original RenderGenerationService receives the ModelBakerySubsystem and reads its factory.
@@ -81,6 +84,13 @@ final class RenderGenerationService {
         this.resultConsumer = consumer;
     }
 
+    void setGeometryCache(GeometryCache geometryCache) {
+        if (this.geometryCache != null) {
+            throw new IllegalStateException("render-generation-cache-already-set");
+        }
+        this.geometryCache = geometryCache;
+    }
+
     void enqueueTask(long pos) {
         if (!this.service.isLive()) {
             return;
@@ -91,7 +101,8 @@ final class RenderGenerationService {
         try {
             task = this.taskMap.computeIfAbsent(pos, p -> {
                 isOurs[0] = true;
-                return new BuildTask(p);
+                GeometryCache cache = this.geometryCache;
+                return new BuildTask(p, cache == null ? Long.MIN_VALUE : cache.snapshotEpoch(p));
             });
         } finally {
             this.taskMapLock.unlockWrite(stamp);
@@ -176,7 +187,7 @@ final class RenderGenerationService {
         this.removeTaskFromMap(task);
 
         if (section == null) {
-            this.emitResult(BuiltSection.empty(task.position));
+            this.emitResult(BuiltSection.empty(task.position).withCacheEpoch(task.cacheEpoch));
             return;
         }
 
@@ -199,7 +210,7 @@ final class RenderGenerationService {
         }
 
         if (mesh != null) {
-            this.emitResult(mesh);
+            this.emitResult(mesh.withCacheEpoch(task.cacheEpoch));
         }
     }
 

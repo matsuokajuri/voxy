@@ -394,25 +394,81 @@ Minecraft normally, with no mapping-version, RocksDB, or Voxy fatal error. All
 Goal: remove avoidable CPU allocation, cache contention, and worker stalls before
 changing visual algorithms.
 
-- [ ] Benchmark imports, rapid flight, steady camera, and shutdown before each
+- [x] Benchmark imports, rapid flight, steady camera, and shutdown before each
       optimization.
-- [ ] Replace `ActiveSectionTracker`'s loader wait and secondary-cache policy
+- [x] Replace `ActiveSectionTracker`'s loader wait and secondary-cache policy
       only after proving acquire/release and null-on-empty semantics.
-- [ ] Make section-array reuse respond to allocation rate or memory pressure.
-- [ ] Remove `AllocationArena`'s greater-than-`2^30` failure boundary or enforce
+- [x] Make section-array reuse respond to allocation rate or memory pressure.
+- [x] Remove `AllocationArena`'s greater-than-`2^30` failure boundary or enforce
       a checked limit before construction; add alignment support if required by
       real consumers.
-- [ ] Reduce `HierarchicalBitSet` slow paths without changing allocation order.
-- [ ] Add render-generation caching with explicit dirty invalidation and bounded
+- [x] Reduce `HierarchicalBitSet` slow paths without changing allocation order.
+- [x] Add render-generation caching with explicit dirty invalidation and bounded
       ownership.
-- [ ] Evaluate mapped async uploads, `allocFromLargest`, multibind, and buffer
+- [x] Evaluate mapped async uploads, `allocFromLargest`, multibind, and buffer
       reuse independently; retain only measured improvements.
-- [ ] Add performance thresholds without making timing-sensitive unit tests
+- [x] Add performance thresholds without making timing-sensitive unit tests
       flaky.
 
 Exit evidence: identical visible output and persisted data with measured lower
 allocation, contention, or frame-time cost on at least one real workload and no
 regression on the others.
+
+### 陆轮 implementation record
+
+`ActiveSectionTracker` no longer burns CPU in `onSpinWait`/`yield` while another
+thread loads a section. A `CompletableFuture` holder reserves every pending
+acquire before publication, preserving the original reference count and
+`nullOnEmpty` status contract. The secondary cache is split across the existing
+64 tracker slices, with per-slice LRU limits whose sum is the original global
+budget. Deterministic concurrency tests cover one-load publication, waiter
+references, unavailable-section reuse, and the 64-entry global ceiling. The
+tagged contention harness reduced eight waiting threads from approximately
+906,250,000 CPU ns to zero while keeping one physical load.
+
+The fixed roughly 100 MiB `WorldSection` array reserve is now an adaptive pool.
+It grows only after measured allocation bursts, shrinks after quiet periods, and
+checks memory pressure every 64 releases; its hard target remains between 32 and
+400 arrays. Real Embeddium and Oculus runs reused 96,031 and 131,785 arrays while
+allocating 2,134 and 2,109 respectively, then both returned to a 32-array target
+at shutdown. This provides a non-timing allocation threshold without pinning the
+old maximum during ordinary play.
+
+`AllocationArena` now rejects non-positive or unrepresentable requests and
+enforces the packed 30-bit maximum (`2^30-1`) before construction, preventing
+silent packed-size corruption. Its active consumers already supply their own
+required alignment, so an unused internal alignment mode was not added.
+`HierarchicalBitSet` now finds and updates consecutive runs by words, supports an
+exact 64-bit run and exact-limit fill, and rolls the high-water mark back by word
+rather than by bit. Randomized model tests preserve lowest-ID allocation order,
+coalescing, overlap safety, and exact boundary behavior.
+
+The CPU geometry cache has explicit per-position striped epochs, dirty and
+neighbor invalidation, byte and 2,048-entry limits, and unambiguous ownership.
+Runtime evidence rejected the first admission policy: cloning every generated
+mesh produced zero hits, 40,544 evictions, and 98,185,184 retained bytes. The
+retained policy takes ownership only of a late result that the node manager
+would otherwise discard; ordinary generated geometry is never cloned, and an
+empty cache misses without taking its lock. Both final client runs reported zero
+retained bytes and zero evictions. This keeps the safe late-result case without
+claiming a hit-rate improvement that the tested workload did not produce.
+
+The remaining candidates were audited independently. The active Forge owner
+already uploads geometry and metadata through persistently mapped staging plus
+compute copies, reuses two synchronization result objects, and returns the large
+geometry buffer through `RenderResourceReuse`. `allocFromLargest` has no real
+consumer, three SSBO bindings do not justify a multibind conversion, and the
+original `downloadAndRemove` GPU-to-CPU cache hook is still unimplemented; adding
+a synchronous GPU readback would introduce an unmeasured stall. None of those
+speculative paths was added.
+
+The default suite, the tagged performance harness, and the real Bobby Reforged
+region/Distant Horizons SQLite decoder gate pass. Embeddium-only rapid-flight,
+return-flight, steady-camera, and normal-shutdown runs passed user visual
+confirmation. Oculus 1.8.0 with Complementary Unbound also applied both external
+Voxy shader patches, passed the same visual workload, and shut down normally.
+There was no Voxy fatal error, persisted-data mutation, LOD flash, hole, seam, or
+shader regression reported. All 陆轮 exit gates are therefore closed.
 
 ## 柒轮：level-aware mipping
 
@@ -559,7 +615,7 @@ The following do not become work merely because a marker exists:
 - [x] 叁轮：optional storage position iteration
 - [x] 肆轮：service cancellation accounting
 - [x] 伍轮：storage recovery and format versioning
-- [ ] 陆轮：cache, allocator, and worker efficiency
+- [x] 陆轮：cache, allocator, and worker efficiency
 - [ ] 柒轮：level-aware mipping
 - [ ] 捌轮：model and material fidelity
 - [ ] 玖轮：RenderDataFactory correctness

@@ -111,12 +111,11 @@ final class NodeManager {
         this.recurseRemoveNode(pos);
     }
 
-    void processGeometryResult(BuiltSection sectionResult) {
+    boolean processGeometryResult(BuiltSection sectionResult) {
         long pos = sectionResult.position;
         int nodeId = this.activeSectionMap.get(pos);
         if (nodeId == -1) {
-            sectionResult.free();
-            return;
+            return false;
         }
         if ((nodeId & NODE_TYPE_MSK) == NODE_TYPE_REQUEST) {
             if ((nodeId & REQUEST_TYPE_MSK) == REQUEST_TYPE_SINGLE) {
@@ -142,7 +141,7 @@ final class NodeManager {
             } else {
                 throw new IllegalStateException();
             }
-            return;
+            return true;
         }
         if ((nodeId & NODE_TYPE_MSK) != NODE_TYPE_INNER && (nodeId & NODE_TYPE_MSK) != NODE_TYPE_LEAF) {
             throw new IllegalStateException();
@@ -153,13 +152,13 @@ final class NodeManager {
                 throw new IllegalStateException();
             }
             Logger.warn("Recieved geometry update but not watching it, discarding");
-            sectionResult.free();
-            return;
+            return false;
         }
         this.nodeData.unmarkNodeGeometryInFlight(nodeId);
         if (this.updateNodeGeometry(nodeId, sectionResult) != 0) {
             this.invalidateNode(nodeId);
         }
+        return true;
     }
 
     void processChildChange(long pos, byte childExistence) {

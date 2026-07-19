@@ -45,6 +45,7 @@ sourceSets {
             include 'me/cortex/voxy/common/voxelization/WorldConversionFactory.java'
             include 'me/cortex/voxy/common/voxelization/WorldVoxilizedSectionMipper.java'
             include 'me/cortex/voxy/common/world/WorldSection.java'
+            include 'me/cortex/voxy/common/world/SectionArrayPool.java'
             include 'me/cortex/voxy/common/world/ActiveSectionTracker.java'
             include 'me/cortex/voxy/common/world/WorldEngine.java'
             include 'me/cortex/voxy/common/world/WorldUpdater.java'
@@ -155,6 +156,9 @@ minecraft {
             }
             if (project.hasProperty('voxyRenderdocCompat')) {
                 property 'voxy.forge.renderdocCompatGeometryBuffer', 'true'
+            }
+            if (project.hasProperty('voxyAuditRound6Performance')) {
+                property 'voxy.forge.auditRound6Performance', 'true'
             }
         }
 
@@ -402,7 +406,20 @@ def makeExcludedRocksDB = tasks.register('makeExcludedRocksDB', Zip) {
 
 test {
     useJUnitPlatform {
-        excludeTags 'bobby-exact-artifact', 'compat-real-data', 'redis-real-backend'
+        excludeTags 'bobby-exact-artifact', 'compat-real-data', 'redis-real-backend', 'round6-performance'
+    }
+}
+
+tasks.register('round6PerformanceTest', Test) {
+    description = 'Runs the non-gating Forxy round-six allocation and contention benchmark harness.'
+    group = 'verification'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform {
+        includeTags 'round6-performance'
+    }
+    testLogging {
+        showStandardStreams = true
     }
 }
 

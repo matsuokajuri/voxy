@@ -2,10 +2,6 @@ package me.cortex.voxy.common.util;
 
 import it.unimi.dsi.fastutil.longs.LongRBTreeSet;
 
-//FIXME: NOTE: if there is a free block of size > 2^30 EVERYTHING BREAKS, need to either increase size
-// or automatically split and manage multiple blocks which is very painful
-//OR instead of addr, defer to a long[] and use indicies
-
 //TODO: replace the LongAVLTreeSet with a custom implementation that doesnt cause allocations when searching
 // and see if something like a RBTree is any better
 public class AllocationArena {
@@ -15,10 +11,11 @@ public class AllocationArena {
     private static final int SIZE_BITS = 64 - ADDR_BITS;
     private static final long SIZE_MSK = (1L<<SIZE_BITS)-1;
     private static final long ADDR_MSK = (1L<<ADDR_BITS)-1;
+    public static final long MAX_ALLOCATION_SIZE = SIZE_MSK;
     private final LongRBTreeSet FREE = new LongRBTreeSet(Long::compareUnsigned);//Size Address
     private final LongRBTreeSet TAKEN = new LongRBTreeSet(Long::compareUnsigned);//Address Size
 
-    private long sizeLimit = Long.MAX_VALUE;
+    private long sizeLimit = MAX_ALLOCATION_SIZE;
     private long totalSize;
     //Flags
     private boolean resized;//If the required memory of the entire buffer grew
@@ -26,7 +23,7 @@ public class AllocationArena {
     public void reset() {
         this.FREE.clear();
         this.TAKEN.clear();
-        this.sizeLimit = Long.MAX_VALUE;
+        this.sizeLimit = MAX_ALLOCATION_SIZE;
         this.totalSize = 0;
         this.resized = false;
     }
@@ -48,19 +45,19 @@ public class AllocationArena {
     }
 
     public int getLargestFreeBlockSize(int index) {
+        if (index < 0 || index >= this.FREE.size()) {
+            throw new IndexOutOfBoundsException(index);
+        }
         var iter = this.FREE.tailSet(-1).iterator();
         for (;index>0&&iter.hasPrevious();index--){iter.previousLong();}
         long slot = iter.previousLong();
         return (int) (slot>>ADDR_BITS);
     }
 
-    /*
-    public long allocFromLargest(int size) {//Allocates from the largest avalible block, this is useful for expanding later on
-
-    }*/
-
-    public long alloc(int size) {//TODO: add alignment support
-        if (size == 0) throw new IllegalArgumentException();
+    public long alloc(int size) {
+        if (size <= 0 || Integer.toUnsignedLong(size) > MAX_ALLOCATION_SIZE) {
+            throw new IllegalArgumentException("Allocation size exceeds packed arena capacity: " + size);
+        }
         //This is stupid, iterator is not inclusive
         var iter = this.FREE.iterator(((long) size << ADDR_BITS)-1);
         if (!iter.hasNext()) {//No free space for allocation
@@ -145,6 +142,9 @@ public class AllocationArena {
 
     //Attempts to expand an allocation, returns true on success
     public boolean expand(long addr, int extra) {
+        if (extra <= 0) {
+            throw new IllegalArgumentException("Expansion size must be positive");
+        }
         addr &= ADDR_MSK;//encase addr stores shit in its upper bits
         var iter = this.TAKEN.iterator(addr<<SIZE_BITS);
         if (!iter.hasNext()) {
@@ -153,6 +153,9 @@ public class AllocationArena {
         long slot = iter.nextLong();
         if (slot>>SIZE_BITS != addr) {
             throw new IllegalStateException();
+        }
+        if ((slot & SIZE_MSK) + Integer.toUnsignedLong(extra) > MAX_ALLOCATION_SIZE) {
+            return false;
         }
         long updatedSlot = (slot & (ADDR_MSK << SIZE_BITS)) | ((slot & SIZE_MSK) + extra);
         //this.resized = false;
@@ -198,6 +201,10 @@ public class AllocationArena {
     }
     
     public void setLimit(long size) {
+        if (size < 0 || size > MAX_ALLOCATION_SIZE) {
+            throw new IllegalArgumentException(
+                    "AllocationArena limit must fit its packed " + SIZE_BITS + "-bit size field: " + size);
+        }
         this.sizeLimit = size;
         if (this.sizeLimit < this.totalSize) {
             throw new IllegalStateException("Size set smaller than current size");

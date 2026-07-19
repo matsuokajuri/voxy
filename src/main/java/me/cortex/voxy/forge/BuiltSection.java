@@ -13,6 +13,7 @@ final class BuiltSection {
     final MemoryBuffer geometryBuffer;
     final int[] offsets;
     final MemoryBuffer occupancy;
+    long cacheEpoch = Long.MIN_VALUE;
 
     private BuiltSection(long position, byte children) {
         this(position, children, -1, null, null, null);
@@ -52,7 +53,12 @@ final class BuiltSection {
                 this.geometryBuffer != null ? this.geometryBuffer.copy() : null,
                 this.offsets != null ? Arrays.copyOf(this.offsets, this.offsets.length) : null,
                 this.occupancy != null ? this.occupancy.copy() : null
-        );
+        ).withCacheEpoch(this.cacheEpoch);
+    }
+
+    BuiltSection withCacheEpoch(long cacheEpoch) {
+        this.cacheEpoch = cacheEpoch;
+        return this;
     }
 
     void free() {

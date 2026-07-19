@@ -57,7 +57,7 @@ final class AsyncNodeManager {
     private final BasicSectionGeometryData geometryData;
     private final SectionUpdateRouter router;
     private final NodeManager nodeManager;
-    private final GeometryCache geometryCache = new GeometryCache(1L << 32);
+    private final GeometryCache geometryCache = new GeometryCache(selectGeometryCacheBytes());
     private final ConcurrentLinkedDeque<MemoryBuffer> requestBatchQueue = new ConcurrentLinkedDeque<>();
     private final ConcurrentLinkedDeque<WorldSection> childUpdateQueue = new ConcurrentLinkedDeque<>();
     private final ConcurrentLinkedDeque<BuiltSection> geometryUpdateQueue = new ConcurrentLinkedDeque<>();
@@ -93,13 +93,14 @@ final class AsyncNodeManager {
                 geometryData.getGeometryCapacityBytes());
         this.router = new SectionUpdateRouter();
         this.router.setCallbacks(pos -> {
-            BuiltSection cachedGeometry = this.geometryCache.remove(pos);
+            BuiltSection cachedGeometry = this.geometryCache.take(pos);
             if (cachedGeometry != null) {
                 this.submitGeometryResult(cachedGeometry);
             } else {
                 renderGenerationService.enqueueTask(pos);
             }
         }, renderGenerationService::enqueueTask, this::submitChildChange);
+        renderGenerationService.setGeometryCache(this.geometryCache);
         renderGenerationService.setResultConsumer(this::submitGeometryResult);
         this.nodeManager = new NodeManager(maxNodeCount, this.geometryManager, this.router);
         this.nodeManager.setClear(new NodeManager.Cleaner() {
@@ -220,26 +221,26 @@ final class AsyncNodeManager {
     }
 
     void worldEvent(WorldSection section, int flags, int neighborMask) {
-        this.geometryCache.clear(section.key);
+        this.geometryCache.invalidate(section.key);
         this.router.forwardEvent(section, flags);
         if (neighborMask != 0) {
             if ((neighborMask & 0b000001) != 0) {
-                this.router.triggerRemesh(WorldEngine.getWorldSectionId(section.lvl, section.x, section.y - 1, section.z));
+                this.invalidateAndRemesh(WorldEngine.getWorldSectionId(section.lvl, section.x, section.y - 1, section.z));
             }
             if ((neighborMask & 0b000010) != 0) {
-                this.router.triggerRemesh(WorldEngine.getWorldSectionId(section.lvl, section.x, section.y + 1, section.z));
+                this.invalidateAndRemesh(WorldEngine.getWorldSectionId(section.lvl, section.x, section.y + 1, section.z));
             }
             if ((neighborMask & 0b000100) != 0) {
-                this.router.triggerRemesh(WorldEngine.getWorldSectionId(section.lvl, section.x - 1, section.y, section.z));
+                this.invalidateAndRemesh(WorldEngine.getWorldSectionId(section.lvl, section.x - 1, section.y, section.z));
             }
             if ((neighborMask & 0b001000) != 0) {
-                this.router.triggerRemesh(WorldEngine.getWorldSectionId(section.lvl, section.x + 1, section.y, section.z));
+                this.invalidateAndRemesh(WorldEngine.getWorldSectionId(section.lvl, section.x + 1, section.y, section.z));
             }
             if ((neighborMask & 0b010000) != 0) {
-                this.router.triggerRemesh(WorldEngine.getWorldSectionId(section.lvl, section.x, section.y, section.z - 1));
+                this.invalidateAndRemesh(WorldEngine.getWorldSectionId(section.lvl, section.x, section.y, section.z - 1));
             }
             if ((neighborMask & 0b100000) != 0) {
-                this.router.triggerRemesh(WorldEngine.getWorldSectionId(section.lvl, section.x, section.y, section.z + 1));
+                this.invalidateAndRemesh(WorldEngine.getWorldSectionId(section.lvl, section.x, section.y, section.z + 1));
             }
         }
     }
@@ -300,6 +301,29 @@ final class AsyncNodeManager {
                 + this.getUsedGeometryCapacity() / (1 << 20)
                 + "/" + this.getGeometryCapacity() / (1 << 20)
                 + "," + this.geometryData.getSectionCount());
+        debug.add("GC H/M/E/S: " + this.geometryCache.hits()
+                + "/" + this.geometryCache.misses()
+                + "/" + this.geometryCache.evictions()
+                + "/" + this.geometryCache.staleRejects());
+    }
+
+    String round6GeometryCachePerformanceSummary() {
+        return "hits=" + this.geometryCache.hits()
+                + ", misses=" + this.geometryCache.misses()
+                + ", evictions=" + this.geometryCache.evictions()
+                + ", staleRejects=" + this.geometryCache.staleRejects()
+                + ", entries=" + this.geometryCache.entryCount()
+                + ", bytes=" + this.geometryCache.currentSize();
+    }
+
+    private void invalidateAndRemesh(long position) {
+        this.geometryCache.invalidate(position);
+        this.router.triggerRemesh(position);
+    }
+
+    private static long selectGeometryCacheBytes() {
+        long heapScaled = Runtime.getRuntime().maxMemory() / 64L;
+        return Math.max(16L << 20, Math.min(64L << 20, heapScaled));
     }
 
     boolean hasWork() {
@@ -531,7 +555,9 @@ final class AsyncNodeManager {
     }
 
     private void processGeometryResult(BuiltSection section) {
-        this.nodeManager.processGeometryResult(section);
+        if (!this.nodeManager.processGeometryResult(section)) {
+            this.geometryCache.put(section, section.cacheEpoch);
+        }
     }
 
     private void publishSyncResults() {

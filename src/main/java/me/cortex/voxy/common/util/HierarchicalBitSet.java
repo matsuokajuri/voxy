@@ -7,6 +7,7 @@ import java.util.Random;
 
 public class HierarchicalBitSet {
     public static final int SET_FULL = -1;
+    public static final int LIMIT_REACHED = -2;
     private final int limit;
     private int cnt;
     //If a bit is 1 it means all children are also set
@@ -92,73 +93,65 @@ public class HierarchicalBitSet {
 
     //Returns the next free index from idx
     private int findNextFree(int idx) {
-        int pos;
-        do {
-            pos = Long.numberOfTrailingZeros((~this.A) & -(1L << (idx >> 18)));
-            idx = Math.max(pos << 18, idx);
-
-            pos = Long.numberOfTrailingZeros((~this.B[idx >> 18]) & -(1L << ((idx >> 12) & 0x3F)));
-            idx = Math.max((pos + ((idx >> 18) << 6)) << 12, idx);
-            if (pos == 64) continue;//Try again
-
-            pos = Long.numberOfTrailingZeros((~this.C[idx >> 12]) & -(1L << ((idx >> 6) & 0x3F)));
-            idx = Math.max((pos + ((idx >> 12) << 6)) << 6, idx);
-            if (pos == 64) continue;//Try again
-
-            pos = Long.numberOfTrailingZeros(((~this.D[idx >> 6]) & -(1L << (idx & 0x3F))));
-            idx = Math.max(pos + ((idx >> 6) << 6), idx);
-        } while (pos == 64);
-        //TODO: fixme: this is due to the fact of the acceleration structure
-        return idx;
+        if (idx < 0) {
+            throw new IllegalArgumentException("Negative bit index");
+        }
+        if (idx >= this.limit) {
+            return this.limit;
+        }
+        int wordIndex = idx >>> 6;
+        long available = ~this.D[wordIndex] & (-1L << (idx & 63));
+        while (available == 0L) {
+            wordIndex++;
+            if ((wordIndex << 6) >= this.limit) {
+                return this.limit;
+            }
+            available = ~this.D[wordIndex];
+        }
+        int result = (wordIndex << 6) + Long.numberOfTrailingZeros(available);
+        return Math.min(result, this.limit);
     }
 
 
-    //TODO: FIXME: THIS IS SLOW AS SHIT
     public int allocateNextConsecutiveCounted(int count) {
-        if (count > 64) {
-            throw new IllegalStateException("Count to large for current implementation which has fastpath");
+        if (count <= 0 || count > 64) {
+            throw new IllegalArgumentException("Count must be between 1 and 64");
         }
         if (this.A==-1) {
-            return -1;
+            return SET_FULL;
         }
-        if (this.cnt+count>=this.limit) {
-            return -2;//Limit reached
+        if (this.cnt + count > this.limit) {
+            return LIMIT_REACHED;
         }
-        long chkMsk = ((1L<<count)-1);
+        long chkMsk = count == 64 ? -1L : (1L << count) - 1L;
         int i = this.findNextFree(0);
-        while (true) {
+        while (i + count <= this.limit) {
             long fusedValue = this.D[i>>6]>>>(i&63);
             if (64-(i&63) < count) {
                 fusedValue |= this.D[(i>>6)+1] << (64-(i&63));
             }
 
             if ((fusedValue&chkMsk) != 0) {
-                //Space does not contain enough empty value
-                i += Long.numberOfTrailingZeros(fusedValue);//Skip as much as possible (i.e. skip to the next 1 bit)
-                i = this.findNextFree(i);
-
+                i = this.findNextFree(i + Long.numberOfTrailingZeros(fusedValue) + 1);
                 continue;
             }
-
-            //TODO: optimize this laziness
-            // (can  do it by first setting/updating the lower D index and propagating, then the upper D index (if it has/needs one))
-            for (int j = 0; j < count; j++) {
-                this.set(j + i);
-            }
+            this.setRange(i, count, chkMsk);
             return i;
         }
+        return SET_FULL;
     }
 
 
     public boolean free(int idx) {
+        if (idx < 0 || idx >= this.limit) {
+            throw new IndexOutOfBoundsException(idx);
+        }
         long v = this.D[idx>>6];
         boolean wasSet = (v&(1L<<(idx&0x3f)))!=0;
         this.cnt -= wasSet?1:0;
 
         if (wasSet && idx == this.endId) {
-            //Need to go back until we find the endIdx bit
-            for (this.endId--; this.endId>=0 && !this.isSet(this.endId); this.endId--);
-            //this.endId++;
+            this.endId = this.findPreviousSet(idx - 1);
         }
 
         this.D[idx>>6] = v&~(1L<<(idx&0x3f));
@@ -170,6 +163,58 @@ public class HierarchicalBitSet {
         this.A &= ~(1L<<(idx&0x3f));
 
         return wasSet;
+    }
+
+    private void setRange(int start, int count, long rangeMask) {
+        int wordIndex = start >>> 6;
+        int bitOffset = start & 63;
+        long firstMask = rangeMask << bitOffset;
+        this.setWordBits(wordIndex, firstMask);
+        if (bitOffset + count > 64) {
+            this.setWordBits(wordIndex + 1, rangeMask >>> (64 - bitOffset));
+        }
+        this.cnt += count;
+        if (start == this.endId + 1) {
+            this.endId += count;
+        }
+    }
+
+    private void setWordBits(int wordIndex, long mask) {
+        long previous = this.D[wordIndex];
+        if ((previous & mask) != 0L) {
+            throw new IllegalStateException("Attempted to allocate an occupied bit range");
+        }
+        long updated = previous | mask;
+        this.D[wordIndex] = updated;
+        if (updated != -1L) {
+            return;
+        }
+        int cIndex = wordIndex >>> 6;
+        long c = this.C[cIndex] |= 1L << (wordIndex & 63);
+        if (c != -1L) {
+            return;
+        }
+        int bIndex = cIndex >>> 6;
+        long b = this.B[bIndex] |= 1L << (cIndex & 63);
+        if (b == -1L) {
+            this.A |= 1L << bIndex;
+        }
+    }
+
+    private int findPreviousSet(int idx) {
+        if (idx < 0) {
+            return -1;
+        }
+        int wordIndex = idx >>> 6;
+        long mask = -1L >>> (63 - (idx & 63));
+        long occupied = this.D[wordIndex] & mask;
+        while (occupied == 0L) {
+            if (--wordIndex < 0) {
+                return -1;
+            }
+            occupied = this.D[wordIndex];
+        }
+        return (wordIndex << 6) + 63 - Long.numberOfLeadingZeros(occupied);
     }
 
     public int getCount() {
