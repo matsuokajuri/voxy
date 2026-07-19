@@ -6,10 +6,8 @@ import me.cortex.voxy.common.config.storage.StorageBackend;
 import me.cortex.voxy.common.util.ThreadLocalMemoryBuffer;
 import me.cortex.voxy.common.world.SaveLoadSystem3;
 import me.cortex.voxy.common.world.WorldSection;
-import me.cortex.voxy.common.world.other.Mapper;
 
 import java.nio.ByteBuffer;
-import java.util.Arrays;
 import java.util.function.LongConsumer;
 
 public class SectionSerializationStorage extends SectionStorage {
@@ -28,19 +26,17 @@ public class SectionSerializationStorage extends SectionStorage {
         var data = this.backend.getSectionData(into.key, MEMORY_CACHE.get().createUntrackedUnfreeableReference());
         if (data != null) {
             if (!SaveLoadSystem3.deserialize(into, data)) {
-                this.backend.deleteSectionData(into.key);
-                //TODO: regenerate the section from children
-                Arrays.fill(into._unsafeGetRawDataArray(), Mapper.AIR);
-                Logger.error("Section " + into.lvl + ", " + into.x + ", " + into.y + ", " + into.z + " was unable to load, removing");
-                return -1;
+                Logger.error("Persisted section " + into.key
+                        + " is corrupt; retaining its bytes until child recovery is resolved");
+                return LOAD_CORRUPT;
             } else {
-                return 0;
+                return LOAD_OK;
             }
         } else {
             //TODO: if we need to fetch an lod from a server, send the request here and block until the request is finished
             // the response should be put into the local db so that future data can just use that
             // the server can also send arbitrary updates to the client for arbitrary lods
-            return 1;
+            return LOAD_MISSING;
         }
     }
 

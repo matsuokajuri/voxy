@@ -46,7 +46,9 @@ final class ForgeOriginalVoxyStorageConfig {
         STORAGE_TYPES.register("FragmentationAdaptor", FragmentationAdaptorConfig.class);
         STORAGE_TYPES.register("AutoFragmentationAdaptor", AutoFragmentationAdaptorConfig.class);
         STORAGE_TYPES.register("ReadonlyCachingLayer", ReadonlyCachingLayerConfig.class);
-        STORAGE_TYPES.register("ConditionalConfig", ConditionalStorageConfig.class);
+        STORAGE_TYPES.reject(
+                "ConditionalConfig",
+                "upstream declares ConditionalConfig but does not define build semantics");
         COMPRESSOR_TYPES.register("ZSTD", ZstdConfig.class);
         COMPRESSOR_TYPES.register("LZ4", Lz4Config.class);
         GSON = new GsonBuilder()
@@ -83,6 +85,11 @@ final class ForgeOriginalVoxyStorageConfig {
                 } else {
                     source = "loaded";
                 }
+            } catch (UnsupportedStorageConfigException e) {
+                throw new IllegalStateException(
+                        "Refusing unsupported original Voxy storage configuration at " + configPath
+                                + "; the file was preserved unchanged",
+                        e);
             } catch (Exception e) {
                 VoxyForge.LOGGER.error(
                         "Failed to load original Voxy storage config; resetting it to the original default: {}",
@@ -360,23 +367,12 @@ final class ForgeOriginalVoxyStorageConfig {
         }
     }
 
-    static final class ConditionalStorageConfig extends StorageConfig {
-        @Override
-        StorageBackend build(ConfigBuildCtx context) {
-            throw new org.apache.commons.lang3.NotImplementedException();
-        }
-
-        @Override
-        String describe() {
-            return "ConditionalConfig(upstream-not-implemented)";
-        }
-    }
-
     private static final class ConfigTypeRegistry<T> implements TypeAdapterFactory {
         private static final String TYPE_FIELD = "TYPE";
         private final Class<T> baseType;
         private final Map<String, Class<? extends T>> nameToType = new LinkedHashMap<>();
         private final Map<Class<? extends T>, String> typeToName = new HashMap<>();
+        private final Map<String, String> rejectedTypes = new HashMap<>();
 
         private ConfigTypeRegistry(Class<T> baseType) {
             this.baseType = baseType;
@@ -388,6 +384,12 @@ final class ForgeOriginalVoxyStorageConfig {
             }
             if (this.typeToName.put(type, typeName) != null) {
                 throw new IllegalStateException("Duplicate config class " + type.getName());
+            }
+        }
+
+        private void reject(String typeName, String reason) {
+            if (this.nameToType.containsKey(typeName) || this.rejectedTypes.put(typeName, reason) != null) {
+                throw new IllegalStateException("Duplicate config type name " + typeName);
             }
         }
 
@@ -422,15 +424,26 @@ final class ForgeOriginalVoxyStorageConfig {
                     if (typeElement == null) {
                         throw new IllegalStateException("Storage config is missing " + TYPE_FIELD);
                     }
-                    Class<? extends T> type = ConfigTypeRegistry.this.nameToType.get(typeElement.getAsString());
+                    String typeName = typeElement.getAsString();
+                    String rejection = ConfigTypeRegistry.this.rejectedTypes.get(typeName);
+                    if (rejection != null) {
+                        throw new UnsupportedStorageConfigException(typeName + ": " + rejection);
+                    }
+                    Class<? extends T> type = ConfigTypeRegistry.this.nameToType.get(typeName);
                     if (type == null) {
-                        throw new IllegalStateException("Unknown storage config type " + typeElement.getAsString());
+                        throw new IllegalStateException("Unknown storage config type " + typeName);
                     }
                     return gson.getDelegateAdapter(
                             ConfigTypeRegistry.this,
                             TypeToken.get(type)).fromJsonTree(input);
                 }
             };
+        }
+    }
+
+    private static final class UnsupportedStorageConfigException extends RuntimeException {
+        private UnsupportedStorageConfigException(String message) {
+            super(message);
         }
     }
 }

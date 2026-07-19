@@ -4,6 +4,12 @@ import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import me.cortex.voxy.common.config.storage.StorageBackend;
 import me.cortex.voxy.common.util.MemoryBuffer;
 import me.cortex.voxy.common.world.WorldEngine;
+import me.cortex.voxy.common.world.other.Mapper;
+import me.cortex.voxy.common.world.other.MappingStorageMetadata;
+import net.minecraft.SharedConstants;
+import net.minecraft.server.Bootstrap;
+import net.minecraft.world.level.block.Blocks;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.Tag;
@@ -44,6 +50,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class OptionalStorageIterationTest {
     @TempDir
     Path temporaryDirectory;
+
+    @BeforeAll
+    static void bootstrapMinecraftRegistries() {
+        SharedConstants.tryDetectVersion();
+        Bootstrap.bootStrap();
+    }
 
     @Test
     void emptyOptionalBackendsProduceNoPositions() throws Exception {
@@ -243,6 +255,44 @@ class OptionalStorageIterationTest {
     }
 
     @Test
+    @Timeout(30)
+    void rocksDbAndLmdbPreserveVersionedMappingsAcrossRestart() throws Exception {
+        Path rocksPath = Files.createDirectory(this.temporaryDirectory.resolve("rocks-mappings"));
+        RocksDBStorageBackend rocks = new RocksDBStorageBackend(rocksPath.toString());
+        try {
+            assertEquals(1, new Mapper(rocks).getIdForBlockState(Blocks.STONE.defaultBlockState()));
+            rocks.flush();
+        } finally {
+            rocks.close();
+        }
+        RocksDBStorageBackend reopenedRocks = new RocksDBStorageBackend(rocksPath.toString());
+        try {
+            Mapper mapper = new Mapper(reopenedRocks);
+            assertEquals(Blocks.STONE.defaultBlockState(), mapper.getBlockStateFromBlockId(1));
+            assertTrue(reopenedRocks.getIdMappingsData().containsKey(MappingStorageMetadata.MANIFEST_KEY));
+        } finally {
+            reopenedRocks.close();
+        }
+
+        Path lmdbPath = Files.createDirectory(this.temporaryDirectory.resolve("lmdb-mappings"));
+        LMDBStorageBackend lmdb = new LMDBStorageBackend(lmdbPath.toString());
+        try {
+            assertEquals(1, new Mapper(lmdb).getIdForBlockState(Blocks.STONE.defaultBlockState()));
+            lmdb.flush();
+        } finally {
+            lmdb.close();
+        }
+        LMDBStorageBackend reopenedLmdb = new LMDBStorageBackend(lmdbPath.toString());
+        try {
+            Mapper mapper = new Mapper(reopenedLmdb);
+            assertEquals(Blocks.STONE.defaultBlockState(), mapper.getBlockStateFromBlockId(1));
+            assertTrue(reopenedLmdb.getIdMappingsData().containsKey(MappingStorageMetadata.MANIFEST_KEY));
+        } finally {
+            reopenedLmdb.close();
+        }
+    }
+
+    @Test
     void readonlyAndRedisLargeUnionsRemainCompleteAndDeduplicated() {
         RecordingStorageBackend cache = new RecordingStorageBackend();
         RecordingStorageBackend source = new RecordingStorageBackend();
@@ -389,10 +439,29 @@ class OptionalStorageIterationTest {
             reopened.close();
         }
 
+        String mappingPrefix = prefix + "versioned:";
+        RedisStorageBackend firstMappings = new RedisStorageBackend("127.0.0.1", port, mappingPrefix);
+        try {
+            assertEquals(1, new Mapper(firstMappings).getIdForBlockState(Blocks.STONE.defaultBlockState()));
+            firstMappings.flush();
+        } finally {
+            firstMappings.close();
+        }
+        RedisStorageBackend reopenedMappings = new RedisStorageBackend("127.0.0.1", port, mappingPrefix);
+        try {
+            Mapper mapper = new Mapper(reopenedMappings);
+            assertEquals(Blocks.STONE.defaultBlockState(), mapper.getBlockStateFromBlockId(1));
+            assertTrue(reopenedMappings.getIdMappingsData().containsKey(MappingStorageMetadata.MANIFEST_KEY));
+        } finally {
+            reopenedMappings.close();
+        }
+
         try (Jedis cleanup = new Jedis("127.0.0.1", port)) {
             cleanup.del(
                     (prefix + "world_sections").getBytes(StandardCharsets.UTF_8),
-                    (prefix + "id_mappings").getBytes(StandardCharsets.UTF_8));
+                    (prefix + "id_mappings").getBytes(StandardCharsets.UTF_8),
+                    (mappingPrefix + "world_sections").getBytes(StandardCharsets.UTF_8),
+                    (mappingPrefix + "id_mappings").getBytes(StandardCharsets.UTF_8));
         }
     }
 

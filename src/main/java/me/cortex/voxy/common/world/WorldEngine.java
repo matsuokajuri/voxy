@@ -2,6 +2,7 @@ package me.cortex.voxy.common.world;
 
 import me.cortex.voxy.common.Logger;
 import me.cortex.voxy.common.config.section.SectionStorage;
+import me.cortex.voxy.common.world.other.Mipper;
 import me.cortex.voxy.common.util.TrackedObject;
 import me.cortex.voxy.common.world.other.Mapper;
 
@@ -74,7 +75,86 @@ public class WorldEngine {
         this.storage = storage;
         this.mapper = new Mapper(this.storage);
         //5 cache size bits means that the section tracker has 32 separate maps that it uses
-        this.sectionTracker = new ActiveSectionTracker(6, storage::loadSection, cacheSize, this);
+        this.sectionTracker = new ActiveSectionTracker(6, this::loadSection, cacheSize, this);
+    }
+
+    private int loadSection(WorldSection section) {
+        int status = this.storage.loadSection(section);
+        if (status != SectionStorage.LOAD_CORRUPT) {
+            return status;
+        }
+        if (section.lvl == 0) {
+            Logger.error("Corrupt level-zero section is unavailable and was not replaced with invented data: "
+                    + pprintPos(section.key));
+            return SectionStorage.LOAD_UNAVAILABLE;
+        }
+        return this.recoverSectionFromChildren(section);
+    }
+
+    private int recoverSectionFromChildren(WorldSection parent) {
+        WorldSection[] children = new WorldSection[8];
+        try {
+            byte nonEmptyChildren = 0;
+            for (int childY = 0; childY < 2; childY++) {
+                for (int childZ = 0; childZ < 2; childZ++) {
+                    for (int childX = 0; childX < 2; childX++) {
+                        int childIndex = WorldSection.getChildIndex(childX, childY, childZ);
+                        WorldSection child = this.sectionTracker.acquire(
+                                parent.lvl - 1,
+                                parent.x * 2 + childX,
+                                parent.y * 2 + childY,
+                                parent.z * 2 + childZ,
+                                true);
+                        if (child == null) {
+                            Logger.error("Corrupt section " + pprintPos(parent.key)
+                                    + " cannot be regenerated because child " + childIndex + " is unavailable");
+                            return SectionStorage.LOAD_UNAVAILABLE;
+                        }
+                        children[childIndex] = child;
+                        if (child.getNonEmptyChildren() != 0) {
+                            nonEmptyChildren |= (byte) (1 << childIndex);
+                        }
+                    }
+                }
+            }
+
+            long[] output = parent._unsafeGetRawDataArray();
+            for (int y = 0; y < 32; y++) {
+                for (int z = 0; z < 32; z++) {
+                    for (int x = 0; x < 32; x++) {
+                        int sourceX = x << 1;
+                        int sourceY = y << 1;
+                        int sourceZ = z << 1;
+                        output[WorldSection.getIndex(x, y, z)] = Mipper.mip(
+                                childValue(children, sourceX, sourceY, sourceZ),
+                                childValue(children, sourceX + 1, sourceY, sourceZ),
+                                childValue(children, sourceX, sourceY, sourceZ + 1),
+                                childValue(children, sourceX + 1, sourceY, sourceZ + 1),
+                                childValue(children, sourceX, sourceY + 1, sourceZ),
+                                childValue(children, sourceX + 1, sourceY + 1, sourceZ),
+                                childValue(children, sourceX, sourceY + 1, sourceZ + 1),
+                                childValue(children, sourceX + 1, sourceY + 1, sourceZ + 1),
+                                this.mapper);
+                    }
+                }
+            }
+            parent._unsafeSetNonEmptyChildren(nonEmptyChildren);
+            this.storage.saveSection(parent);
+            this.storage.flush();
+            Logger.warn("Regenerated corrupt section from eight verified children: " + pprintPos(parent.key));
+            return SectionStorage.LOAD_RECOVERED;
+        } finally {
+            for (WorldSection child : children) {
+                if (child != null) {
+                    child.release();
+                }
+            }
+        }
+    }
+
+    private static long childValue(WorldSection[] children, int x, int y, int z) {
+        int childIndex = WorldSection.getChildIndex(x >>> 5, y >>> 5, z >>> 5);
+        return children[childIndex]._unsafeGetRawDataArray()[WorldSection.getIndex(x & 31, y & 31, z & 31)];
     }
 
     public boolean isOwningSessionRunning() {

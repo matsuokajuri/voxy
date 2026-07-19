@@ -3,6 +3,7 @@ package me.cortex.voxy.common.world;
 import it.unimi.dsi.fastutil.longs.Long2ObjectLinkedOpenHashMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import me.cortex.voxy.common.Logger;
+import me.cortex.voxy.common.config.section.SectionStorage;
 import me.cortex.voxy.common.world.other.Mapper;
 
 import java.lang.invoke.MethodHandles;
@@ -82,6 +83,13 @@ public class ActiveSectionTracker implements WorldSection.ReleaseTracker {
             if (holder != null) {//Return already loaded entry
                 section = holder.obj;
                 if (section != null) {
+                    if (nullOnEmpty && section.getStorageLoadStatus() != SectionStorage.LOAD_OK
+                            && section.getStorageLoadStatus() != SectionStorage.LOAD_RECOVERED) {
+                        section.acquire();
+                        lock.unlockRead(stamp);
+                        section.release();
+                        return null;
+                    }
                     section.acquire();
                     lock.unlockRead(stamp);
                     return section;
@@ -133,7 +141,7 @@ public class ActiveSectionTracker implements WorldSection.ReleaseTracker {
 
         //If this thread was the one to create the reference then its the thread to load the section
         if (isLoader) {
-            int status = 0;
+            int status = section == null ? SectionStorage.LOAD_OK : section.getStorageLoadStatus();
             if (section == null) {//Secondary cache miss
                 section = new WorldSection(WorldEngine.getLevel(key),
                         WorldEngine.getX(key),
@@ -144,19 +152,19 @@ public class ActiveSectionTracker implements WorldSection.ReleaseTracker {
                 status = this.loader.load(section);
 
                 if (status < 0) {
-                    //TODO: Instead if throwing an exception do something better, like attempting to regen
-                    //throw new IllegalStateException("Unable to load section: ");
-                    Logger.error("Unable to load section " + section.key + " setting to air");
-                    status = 1;
+                    Logger.error("Unable to load section " + section.key
+                            + "; exposing temporary air while persisted data remains unavailable");
+                    status = SectionStorage.LOAD_UNAVAILABLE;
                 }
 
                 //TODO: REWRITE THE section tracker _again_ to not be so shit and jank, and so that Arrays.fill is not 10% of the execution time
-                if (status == 1) {
+                if (status == SectionStorage.LOAD_MISSING || status == SectionStorage.LOAD_UNAVAILABLE) {
                     //We need to set the data to air as it is undefined state
                     int sky = 15;
                     int block = 0;
                     Arrays.fill(section.data, Mapper.composeMappingId((byte) (sky|(block<<4)),0,0));
                 }
+                section._setStorageLoadStatus(status);
                 section.acquire(1);
             }
             int preAcquireCount = (int) VolatileHolder.PRE_ACQUIRE_COUNT.getAndSet(holder, 0);
@@ -168,7 +176,8 @@ public class ActiveSectionTracker implements WorldSection.ReleaseTracker {
             VarHandle.storeStoreFence();//Do not reorder setting this object
             holder.obj = section;
             VarHandle.releaseFence();
-            if (nullOnEmpty && status == 1) {//If its air return null as stated, release the section aswell
+            if (nullOnEmpty && status != SectionStorage.LOAD_OK
+                    && status != SectionStorage.LOAD_RECOVERED) {//If unavailable return null as stated, release the section aswell
                 section.release();
                 return null;
             }

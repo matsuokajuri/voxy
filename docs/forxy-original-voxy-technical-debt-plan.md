@@ -330,21 +330,64 @@ gates are therefore closed.
 Goal: recover or fail explicitly when persistent data is corrupt, stale, or
 partially replicated.
 
-- [ ] Add a mapping data-version record and define upgrade, refusal, and backup
+- [x] Add a mapping data-version record and define upgrade, refusal, and backup
       behavior before changing the stored format.
-- [ ] Preserve backward reads for the current production database format.
-- [ ] Rebuild a corrupt higher-level section from valid children when possible;
+- [x] Preserve backward reads for the current production database format.
+- [x] Rebuild a corrupt higher-level section from valid children when possible;
       distinguish regenerated air from unavailable data.
-- [ ] Make fragmented storage detect divergent/missing replicas and repair them
+- [x] Make fragmented storage detect divergent/missing replicas and repair them
       only from a verified good copy.
-- [ ] Define and implement `ConditionalConfig`, or remove it from the advertised
+- [x] Define and implement `ConditionalConfig`, or remove it from the advertised
       configuration registry with an explicit compatibility decision.
-- [ ] Add crash-interruption, corrupt-value, partial-replica, old-version, and
+- [x] Add crash-interruption, corrupt-value, partial-replica, old-version, and
       failed-upgrade recovery tests.
-- [ ] Verify real RocksDB persistence and the optional backends from 叁轮.
+- [x] Verify real RocksDB persistence and the optional backends from 叁轮.
 
 Exit evidence: recovery never invents unrelated block mappings, never destroys
 the sole valid replica, and leaves an auditable result after a failed upgrade.
+
+### 伍轮 implementation record
+
+Mapping storage now reserves keys `0` and `1` for a CRC-protected manifest and
+full mapping backup. A database without either key remains the production legacy
+format: it is read as schema/data version zero, backed up and flushed before an
+`UPGRADING` manifest is written, then committed against the running Minecraft
+data version without changing any serialized mapping entry or assigned ID.
+Future schema/data versions are refused without writes. Interrupted upgrades
+restore the verified backup before retrying; a failed upgrade restores the
+original mapping bytes and leaves a `FAILED` manifest with an auditable reason.
+Structural validation rejects unknown mapping namespaces, empty payloads, and
+non-contiguous block or biome ID sequences instead of inventing replacements.
+
+Corrupt persisted sections are retained as evidence. A corrupt level-above-zero
+section is rebuilt only when all eight immediate children are valid, using the
+original `Mipper.mip` child order, then saved and flushed. Level-zero corruption
+or an incomplete child set is tagged `LOAD_UNAVAILABLE`; repeated
+`acquireIfExists` calls remain null, while an ordinary acquire may expose only
+explicitly tagged temporary air. `ActiveSectionTracker` preserves that status
+through both caches.
+
+Both fragmented-storage adaptors now use one reconciliation policy. Empty or
+partial compatible replicas may be filled from a structurally verified
+superset, byte divergence requires a strict majority, and ties or unverified
+extra keys fail before any write. No path deletes a sole copy. The original
+`ConditionalConfig` remains unimplemented upstream, so Forge no longer
+advertises it and explicitly refuses an existing occurrence while preserving
+the user's JSON unchanged.
+
+Eleven new default-suite cases cover legacy upgrade, future-version refusal,
+interrupted and failed upgrade rollback, partial and divergent replicas,
+higher-LOD reconstruction/unavailability, conditional-config refusal, and real
+RocksDB/LMDB reopen behavior. The clean default suite passes all 179 tests plus
+`jarJar`; a tagged test also passed against a SHA-256-verified Redis 7.2.14
+process on an isolated local port.
+
+The existing 902 MB RocksDB world was copied byte-for-byte before first upgrade.
+Embeddium-only then upgraded and rendered it, and Embeddium + Oculus reopened the
+same upgraded database. Both paths passed user visual confirmation and closed
+the renderer, persistent `WorldEngine`, network session, Forge instance, and
+Minecraft normally, with no mapping-version, RocksDB, or Voxy fatal error. All
+伍轮 exit gates are therefore closed.
 
 ## 陆轮：cache, allocator, and worker efficiency
 
@@ -515,7 +558,7 @@ The following do not become work merely because a marker exists:
 - [x] 贰轮：Mapper snapshot and lock safety
 - [x] 叁轮：optional storage position iteration
 - [x] 肆轮：service cancellation accounting
-- [ ] 伍轮：storage recovery and format versioning
+- [x] 伍轮：storage recovery and format versioning
 - [ ] 陆轮：cache, allocator, and worker efficiency
 - [ ] 柒轮：level-aware mipping
 - [ ] 捌轮：model and material fidelity

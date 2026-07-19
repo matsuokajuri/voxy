@@ -67,6 +67,7 @@ public final class WorldSection {
     //When the first bit is set it means its loaded
     @SuppressWarnings("all")
     private volatile int atomicState = 1;
+    private volatile int storageLoadStatus;
 
     WorldSection(int lvl, int x, int y, int z, ReleaseTracker tracker) {
         this.lvl = lvl;
@@ -86,6 +87,14 @@ public final class WorldSection {
 
     void primeForReuse() {
         ATOMIC_STATE_HANDLE.set(this, 1);
+    }
+
+    void _setStorageLoadStatus(int status) {
+        this.storageLoadStatus = status;
+    }
+
+    public int getStorageLoadStatus() {
+        return this.storageLoadStatus;
     }
 
     public long[] _unsafeGetRawDataArray() {

@@ -8,6 +8,7 @@ import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ForgeOriginalVoxyStorageConfigTest {
@@ -82,6 +83,20 @@ class ForgeOriginalVoxyStorageConfigTest {
 
         assertEquals("Serializer->Memory", first.backendChain());
         assertEquals("Serializer->RocksDB", second.backendChain());
+    }
+
+    @Test
+    void refusesUnimplementedConditionalConfigWithoutOverwritingIt() throws Exception {
+        String json = configWithBackend("ConditionalConfig");
+        Path configPath = this.temporaryDirectory.resolve("config.json");
+        Files.writeString(configPath, json);
+
+        IllegalStateException failure = assertThrows(
+                IllegalStateException.class,
+                () -> ForgeOriginalVoxyStorageConfig.loadOrCreate(this.temporaryDirectory));
+
+        assertTrue(failure.getMessage().contains("preserved unchanged"));
+        assertEquals(json, Files.readString(configPath));
     }
 
     private static String configWithBackend(String type) {

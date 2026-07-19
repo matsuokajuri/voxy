@@ -132,59 +132,84 @@ public class Mapper {
     }
 
     private void loadFromStorage() {
-        //TODO: FIXME: have/store the minecraft version the mappings are from (the data version)
-        // SharedConstants.getGameVersion().dataVersion().id()
-        // then use this to create an update path instead
-
-        var mappings = this.storage.getIdMappingsData();
-        List<StateEntry> sentries = new ArrayList<>();
-        List<BiomeEntry> bentries = new ArrayList<>();
-        boolean[] forceResave = new boolean[1];
-        for (var entry : mappings.int2ObjectEntrySet()) {
-            int entryType = entry.getIntKey()>>>30;
-            int id = entry.getIntKey() & ((1<<30)-1);
-            if (entryType == BLOCK_STATE_TYPE) {
-                var sentry = StateEntry.deserialize(id, entry.getValue(), forceResave);
-                if (sentry.state.isAir()) {
-                    Logger.error("Deserialization was air; preserving block id " + id + " as a deterministic missing-state placeholder");
-                    sentries.add(sentry);
-                    continue;
-                }
-                sentries.add(sentry);
-                var oldEntry = this.block2stateEntry.putIfAbsent(sentry.state, sentry);
-                if (oldEntry != null) {
-                    //forceResave[0] |= true;
-                    Logger.warn("Multiple mappings for blockstate, using old state, expect things to possibly go really badly. " + oldEntry.id + ":" + sentry.id + ":" + sentry.state );
-                }
-            } else if (entryType == BIOME_TYPE) {
-                var bentry = BiomeEntry.deserialize(id, entry.getValue());
-                bentries.add(bentry);
-                if (this.biome2biomeEntry.put(bentry.biome, bentry) != null) {
-                    throw new IllegalStateException("Multiple mappings for biome entry");
-                }
-            } else {
-                throw new IllegalStateException("Unknown entryType");
-            }
+        int currentDataVersion = SharedConstants.getCurrentVersion().getDataVersion().getVersion();
+        MappingStorageMetadata.UpgradeSession upgrade = MappingStorageMetadata.prepare(
+                this.storage,
+                this.storage.getIdMappingsData(),
+                currentDataVersion);
+        if (upgrade.recoveredInterruptedUpgrade()) {
+            Logger.warn("Recovered interrupted mapping upgrade from verified backup");
         }
+        upgrade.begin();
 
-        //Insert into the arrays
-        sentries.stream().sorted(Comparator.comparing(a->a.id)).forEach(entry -> {
-            if (this.blockId2stateEntry.size() != entry.id) {
-                throw new IllegalStateException("Block entry not ordered");
+        try {
+            var mappings = upgrade.mappings();
+            List<StateEntry> sentries = new ArrayList<>();
+            List<BiomeEntry> bentries = new ArrayList<>();
+            boolean[] forceResave = new boolean[1];
+            for (var entry : mappings.int2ObjectEntrySet()) {
+                int entryType = entry.getIntKey()>>>30;
+                int id = entry.getIntKey() & ((1<<30)-1);
+                try {
+                    if (entryType == BLOCK_STATE_TYPE) {
+                        var sentry = StateEntry.deserialize(
+                                id,
+                                entry.getValue(),
+                                forceResave,
+                                upgrade.sourceDataVersion());
+                        if (sentry.state.isAir()) {
+                            Logger.error("Deserialization was air; preserving block id " + id + " as a deterministic missing-state placeholder");
+                            sentries.add(sentry);
+                            continue;
+                        }
+                        sentries.add(sentry);
+                        var oldEntry = this.block2stateEntry.putIfAbsent(sentry.state, sentry);
+                        if (oldEntry != null) {
+                            Logger.warn("Multiple mappings for blockstate, using old state, expect things to possibly go really badly. " + oldEntry.id + ":" + sentry.id + ":" + sentry.state );
+                        }
+                    } else if (entryType == BIOME_TYPE) {
+                        var bentry = BiomeEntry.deserialize(id, entry.getValue());
+                        bentries.add(bentry);
+                        if (this.biome2biomeEntry.put(bentry.biome, bentry) != null) {
+                            throw new IllegalStateException("Multiple mappings for biome entry");
+                        }
+                    } else {
+                        throw new IllegalStateException("Unknown entryType");
+                    }
+                } catch (RuntimeException exception) {
+                    throw new IllegalStateException(
+                            "Unable to decode persisted mapping key " + entry.getIntKey(),
+                            exception);
+                }
             }
-            this.blockId2stateEntry.add(entry);
-        });
 
-        bentries.stream().sorted(Comparator.comparing(a->a.id)).forEach(entry -> {
-            if (this.biomeId2biomeEntry.size() != entry.id) {
-                throw new IllegalStateException("Biome entry not ordered. got " + entry.biome + " with id " + entry.id + " expected id " + this.biomeId2biomeEntry.size());
+            sentries.stream().sorted(Comparator.comparing(a->a.id)).forEach(entry -> {
+                if (this.blockId2stateEntry.size() != entry.id) {
+                    throw new IllegalStateException("Block entry not ordered");
+                }
+                this.blockId2stateEntry.add(entry);
+            });
+
+            bentries.stream().sorted(Comparator.comparing(a->a.id)).forEach(entry -> {
+                if (this.biomeId2biomeEntry.size() != entry.id) {
+                    throw new IllegalStateException("Biome entry not ordered. got " + entry.biome + " with id " + entry.id + " expected id " + this.biomeId2biomeEntry.size());
+                }
+                this.biomeId2biomeEntry.add(entry);
+            });
+
+            if (forceResave[0]) {
+                Logger.warn("Forced state resave triggered from Minecraft data version "
+                        + upgrade.sourceDataVersion() + " to " + currentDataVersion);
+                this.forceResaveStates();
             }
-            this.biomeId2biomeEntry.add(entry);
-        });
-
-        if (forceResave[0]) {
-            Logger.warn("Forced state resave triggered");
-            this.forceResaveStates();
+            upgrade.commit();
+        } catch (RuntimeException | Error failure) {
+            try {
+                upgrade.fail(failure);
+            } catch (RuntimeException rollbackFailure) {
+                failure.addSuppressed(rollbackFailure);
+            }
+            throw failure;
         }
     }
 
@@ -405,6 +430,10 @@ public class Mapper {
         }
 
         public static StateEntry deserialize(int id, byte[] data, boolean[] forceResave) {
+            return deserialize(id, data, forceResave, 0);
+        }
+
+        public static StateEntry deserialize(int id, byte[] data, boolean[] forceResave, int sourceDataVersion) {
             try {
                 var compound = NbtIo.readCompressed(new ByteArrayInputStream(data));
                 if (getIntOr(compound, "id", -1) != id) {
@@ -414,7 +443,11 @@ public class Mapper {
                 var state = BlockState.CODEC.parse(NbtOps.INSTANCE, bsc);
                 if (state.result().isEmpty()) {
                     Logger.info("Could not decode blockstate, attempting fixes, error: "+ state.error().map(error -> error.message()).orElse("unknown"));
-                    bsc = (CompoundTag) DataFixers.getDataFixer().update(References.BLOCK_STATE, new Dynamic<>(NbtOps.INSTANCE,bsc),0, SharedConstants.getCurrentVersion().getDataVersion().getVersion()).getValue();
+                    bsc = (CompoundTag) DataFixers.getDataFixer().update(
+                            References.BLOCK_STATE,
+                            new Dynamic<>(NbtOps.INSTANCE,bsc),
+                            sourceDataVersion,
+                            SharedConstants.getCurrentVersion().getDataVersion().getVersion()).getValue();
                     state = BlockState.CODEC.parse(NbtOps.INSTANCE, bsc);
                     if (state.result().isEmpty()) {
                         Logger.error("Could not decode blockstate setting to air. id:" + id + " error: " + state.error().map(error -> error.message()).orElse("unknown"));

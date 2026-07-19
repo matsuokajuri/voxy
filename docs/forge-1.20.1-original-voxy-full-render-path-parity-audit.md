@@ -1980,6 +1980,36 @@ clean network-session, Forge-instance, and Minecraft shutdown, with no job-
 accounting, service-manager, executor, or fatal error. This closes Forxy 肆轮
 without changing the established Forge migration parity claim.
 
+#### Forxy 伍轮 delta: storage recovery and format versioning
+
+Forxy now versions the original mapping bytes around the existing mapping key
+space rather than replacing their serialization. Reserved manifest/backup keys
+carry CRC-protected schema and Minecraft data-version state. Legacy databases
+remain readable and are backed up before upgrade; future versions are refused
+without mutation; interrupted or failed upgrades restore the verified original
+mapping snapshot and leave an auditable state. Mapping validation rejects
+unknown namespaces, empty records, and non-contiguous IDs instead of synthesizing
+unrelated block or biome mappings.
+
+Section corruption is no longer silently converted to saved air. A corrupt
+higher-level section is reconstructed and persisted only when all eight direct
+children are valid, using the original `Mipper.mip` ordering. Otherwise it is
+retained and reported as unavailable through `WorldSection` and both
+`ActiveSectionTracker` cache tiers. Fragmented mapping storage similarly repairs
+only from a verified superset or strict byte majority, refuses ties before
+writing, and never destroys a sole valid replica. Forge also stops advertising
+the upstream-unimplemented `ConditionalConfig`; encountering one is an explicit,
+non-rewriting compatibility refusal.
+
+The clean suite passes 179 tests plus `jarJar`, including legacy/future/failed
+mapping upgrades, corrupt higher-LOD recovery, replica divergence, real RocksDB
+and LMDB reopen, and conditional-config preservation. A tagged integration test
+also passed against an isolated Redis 7.2.14 process. A copied 902 MB production
+RocksDB world upgraded on Embeddium-only and reopened on Embeddium + Oculus; both
+client paths passed user visual confirmation and clean renderer/storage/session
+shutdown without mapping-version, RocksDB, or Voxy fatal errors. This closes
+Forxy 伍轮 without changing the established Forge renderer-parity claim.
+
 ### XXI.2 original storage config JSON and production TYPE registry
 
 XXI.2 ports the original configuration mechanism around the XXI.1 production
