@@ -2076,3 +2076,43 @@ the Voxy final-blit fog capture cannot diverge.
 Automated validation passed `40` suites / `125` tests with zero failures,
 errors, or skips. Final visual confirmation remains the no-Oculus Nether client
 retest.
+
+## 2026-07-20 Oculus cross-boundary shadow-caster coverage repaired
+
+The user isolated the remaining symptom to shadows crossing the visible
+vanilla/LOD boundary. A current-frame `colortex18` visualization stayed stable
+while moving. Captured current/previous camera positions and matrices matched
+the Voxy viewport exactly, and the physical history render-target binding and
+flip state matched the expected texture on every sampled frame. Those results
+exclude the earlier matrix, history, and viewport-timing hypotheses as the
+cause of this symptom.
+
+The actual divergence was shadow-caster coverage. Oculus renders visible
+vanilla terrain into its shadow map, while the Voxy shaderpack patch shades LOD
+terrain from the Voxy shadow path. A tree in the first LOD-only chunk therefore
+existed for Voxy but had no Embeddium mesh in the Oculus shadow traversal. Its
+shadow could continue into a visible vanilla chunk on the Voxy side but vanish
+from the vanilla shadow map at the boundary.
+
+A controlled one-ring experiment proved the mechanism: increasing only the
+shadow search distance produced zero ready outer columns, while actually
+loading and building one hidden vanilla ring produced `28/28` ready columns and
+visibly reduced the discontinuity. Longer shadows crossed more than one chunk,
+so the final experiment reserved three rings. At configured distance 6, runtime
+evidence showed:
+
+```text
+visible vanilla/LOD boundary = 6 chunks
+loaded Embeddium/Oculus range = 9 chunks
+Oculus shadow search range   = 144 blocks
+hidden columns ready/built   = 132/132
+```
+
+The user confirmed the three-ring result as visually correct. The production
+implementation keeps the saved/UI render-distance option unchanged, expands
+the integrated-server and Embeddium mesh range by three chunks only while Voxy
+and an Oculus shaderpack are active, clamps ordinary terrain traversal back to
+the configured distance, and exposes the expanded range only during the Oculus
+shadow pass. The expansion is capped at Minecraft's 32-chunk maximum. On a
+remote server, the client can use only the extra chunks that the server actually
+sends; the adapter does not fabricate unavailable terrain.

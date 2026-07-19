@@ -30,6 +30,8 @@
     "ForgeOriginalVoxyOculusMatrixUniformsMixin",
     "ForgeOriginalVoxyOculusProgramSetMixin",
     "ForgeOriginalVoxyOculusRenderTargetsMixin",
+    "ForgeOriginalVoxyOculusIntegratedServerShadowCasterRangeMixin",
+    "ForgeOriginalVoxyOculusShadowCasterRangeMixin",
     "ForgeOriginalVoxyOculusShaderPackSourceNamesMixin",
     "ForgeOriginalVoxyOculusStandardMacrosMixin",
     "ForgeOriginalVoxyOculusWorldRenderingSettingsMixin",

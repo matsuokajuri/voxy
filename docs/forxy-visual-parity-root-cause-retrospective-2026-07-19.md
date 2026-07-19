@@ -9,7 +9,7 @@
 | 问题 | 当前状态 | 可声称的结论 |
 | --- | --- | --- |
 | LOD 树叶发黑、发糊 | 已解决；用户于 2026-07-19 通过 Oculus + Complementary 实机确认 | 根因是 Forge 1.20.1 缺失现代 Minecraft 的 `DARK_CUTOUT` atlas level-zero 预处理 |
-| 跨 vanilla/LOD 边界的阴影形状或亮度变化 | 未解决 | 已排除本轮 history 邻域搜索和 viewport 生命周期缺口是主要症状根因；不得声称阴影已修复 |
+| 跨 vanilla/LOD 边界的阴影形状或亮度变化 | 已解决；用户于 2026-07-20 通过 Oculus + Complementary 实机确认 | 根因是 LOD-only 区块缺少可供 Oculus 阴影图使用的 Vanilla 投影几何；正式实现保留三圈仅供阴影遍历的隐藏 Vanilla 网格 |
 
 对应代码检查点是 `c10d2f57`。这笔提交保留了一个确实存在的 Oculus
 viewport 生命周期对齐，但提交信息和本文都不把它描述为阴影修复。
@@ -79,13 +79,31 @@ darkened mip。`MipGenDarkCutoutParityTest` 同时锁定 heap 和生产
 该次运行不具备阴影验收资格；后续最小 Embeddium + Oculus 运行才是有效
 复测。这也说明兼容全家桶不能作为视觉根因的第一复现环境。
 
-## 阴影问题尚未解决的直接原因
+## 前几轮为什么没有找到阴影根因
 
 前几轮仍然以“找到一个原版/Forge 差异”为停止条件，而不是以“测到这个差异
 正好改变了边界坏像素”为停止条件。viewport hook 的缺失是事实，但事实上的
 差异不自动等于因果。我们没有在同一帧、同一片跨界阴影上捕获 vanilla 和
 LOD 两侧的 shadow-space 坐标、级联选择、bias 与 shadow depth 样本，因此
 此前所有 shader/history/matrix 修改都缺少能闭环到目标像素的证据。
+
+后续证据排除了这些方向：当前帧 `colortex18` 遮罩在移动中稳定；Voxy 与
+Oculus 的 current/previous camera 和矩阵逐值一致；history render target 的
+物理纹理、翻转状态也始终命中预期目标。真正缺少的输入不是坐标或历史纹理，
+而是 Vanilla 阴影图的投影物几何：位于首个 LOD-only 区块中的树已经被 Voxy
+摄取和渲染，却没有对应的 Embeddium 网格进入 Oculus shadow pass。
+
+单独把阴影搜索半径加一圈时，运行时得到 `availableOuterColumns=0`、
+`builtOuterColumns=0`，视觉无从改善；把该圈真正加载并建模后得到 `28/28`，
+用户确认已有明显效果。由于低角度阴影会跨越多个区块，最终隐藏范围扩为三圈，
+配置距离 6 时得到 `visible=6, loaded=9, shadowBlocks=144` 和 `132/132`
+已建模隐藏列，用户确认效果符合预期。
+
+正式实现不修改保存的渲染距离：普通 Vanilla 渲染和 Voxy 分界仍使用用户值
+N；仅在 Voxy 与 Oculus 光影同时启用时，让单人服务端和 Embeddium 后台准备
+至 `min(N+3, 32)`，Oculus shadow pass 使用该完整范围，普通地形遍历仍裁到 N。
+远程服务器若没有发送 N+3 范围内的区块，客户端不能凭空补出投影物，这一限制
+属于网络数据可用性边界。
 
 ## 今后必须遵守的视觉诊断门槛
 
@@ -128,9 +146,9 @@ Forge 证据：
 没有“目标像素应出现什么差值”，就不能改正式代码。运行时生效但视觉不变的
 候选立即标记 `excluded`，不得换个名字继续扩展同一路线。
 
-### 四、阴影下一步只做输入捕获，不再猜修复
+### 四、本次阴影闭环采用的输入捕获顺序
 
-下一轮在一帧内捕获跨界阴影两侧的以下值，先比较再改代码：
+本次按以下顺序捕获并排除候选，之后才允许修改覆盖范围：
 
 1. vanilla 与 LOD 的 view/projection、inverse matrix、camera position 和 TAA
    jitter/frame index；
@@ -142,8 +160,10 @@ Forge 证据：
 5. 同帧 vanilla 正常像素、LOD 正常像素、跨界坏像素三者的 RenderDoc pixel
    history 或等价 gated probe。
 
-只有上述某一项在坏像素处出现与原版或同帧对照不一致，才允许围绕该项写
-修复。临时 shader 可用颜色编码一次只显示一个输入，但必须在提交前撤回。
+只有某一项在坏像素处出现与原版或同帧对照不一致，才允许围绕该项写修复。
+临时 shader 可用颜色编码一次只显示一个输入，但必须在提交前撤回。本次所有
+遮罩、矩阵、camera、history texture 和单圈计数探针均在正式实现前撤回；只
+保留一次性的正式范围启用日志。
 
 ### 五、完成条件
 
@@ -156,5 +176,5 @@ Forge 证据：
 ## 复盘后的状态
 
 - 树叶：原版依赖链、像素级夹具、生产 buffer 路径和用户实机结果已闭环。
-- 阴影：问题仍开放；下一动作是同帧 shadow-space 输入捕获，不是继续改
-  history、fog、mip 或通用亮度。
+- 阴影：缺失投影物几何、范围适配、运行时列计数和用户实机结果已闭环；
+  history、fog、mip、矩阵和 viewport 生命周期不再作为该症状的候选根因。

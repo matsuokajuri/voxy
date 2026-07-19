@@ -4783,12 +4783,16 @@ data lifecycle; it does not qualify unsupported simultaneous DH runtime use.
 The leaf and shader-shadow reports are deliberately split. The leaf defect is
 closed by exact modern `DARK_CUTOUT` level-zero preprocessing in Forge `MipGen`,
 its heap/native parity fixture, and user visual acceptance. The cross-
-vanilla/LOD shadow discontinuity remains open after the original Oculus
-viewport-capture lifecycle was restored and shown not to change the symptom.
+vanilla/LOD shadow discontinuity is also closed by the 2026-07-20 hidden
+shadow-caster range adaptation.
 
-The failed hypotheses, evidence boundary, and mandatory next diagnostic gate
-are recorded in
-`docs/forxy-visual-parity-root-cause-retrospective-2026-07-19.md`. No current
-readiness or parity statement may describe the shadow issue as fixed until a
-same-frame seam-pixel probe identifies the divergent shadow-space input and the
-user accepts the resulting visual regression.
+The decisive evidence was not a shadow-space matrix mismatch: the current LOD
+shadow mask, current/previous camera and matrices, and physical history target
+binding were stable and exact. The missing input was vanilla caster geometry
+beyond the visible boundary. The Forge/Oculus adapter now reserves three
+additional loaded and meshed chunk rings while keeping normal terrain traversal
+and the Voxy boundary at the configured distance; only the Oculus shadow pass
+uses the expanded range. At visible distance 6 the production path reported
+`visible=6, loaded=9`, and the user accepted the result visually. The diagnostic
+history and the earlier failed hypotheses remain recorded in
+`docs/forxy-visual-parity-root-cause-retrospective-2026-07-19.md`.
