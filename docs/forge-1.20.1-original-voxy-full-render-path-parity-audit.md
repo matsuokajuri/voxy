@@ -545,12 +545,23 @@ translucent -> translucent consumer + discard
 ```
 
 The original `MipmapStrategy.DARK_CUTOUT` signal is not present as a public
-Forge 1.20.1 field. The Forge route now follows Embeddium's lower texture
-pipeline instead: `SpriteContentsMixin` records sprite transparency and keeps
-the source texture dark for mipmapped leaf sprites while rewriting other
-transparent pixels. The bakery bridge uses that same Embeddium source condition
-and sprite transparency signal for the original Voxy dark-cutout bit. This is a
-documented version/API mapping, not a free-form texture-name fallback.
+Forge 1.20.1 field. A 2026-07-19 audit of the installed original Voxy 0.2.16 and
+Minecraft 26.1.2 artifacts established the complete dependency chain instead of
+inferring it from sprite transparency. Leaf `.png.mcmeta` selects
+`dark_cutout`; Minecraft's `MipmapGenerator` calls
+`TextureUtil.fillEmptyAreasWithDarkColor` on atlas level zero before upload;
+original Voxy then downloads that already-processed atlas. The preprocessing
+chooses the darkest non-transparent texel, multiplies each RGB channel by 3/4,
+and writes that RGB into every alpha-zero texel while preserving alpha zero.
+
+Forge 1.20.1 never performs that modern atlas preprocessing. The active Forge
+`MipGen` therefore ports it per 16x16 model face when the existing software-
+bakery dark-cutout bit is set, and retains `TextureUtils.mipColours(true, ...)`
+for the mip chain. Non-dark-cutout textures retain the original solidify route.
+`MipGenDarkCutoutParityTest` covers both heap and production `MemoryBuffer`
+paths. The user confirmed on 2026-07-19 that LOD leaves now match the original
+crisp dark-green-gap appearance; the earlier transparency heuristic was not a
+complete account of the original behavior.
 
 The original model upload owner has now been split away from the historical
 I/K-era formal store. `ForgeOriginalVoxyModelPipeline` creates a
@@ -3059,9 +3070,15 @@ Current supported command surface after removing the parity/status shell:
   visibility.
 - Chunk ingest retry is event-driven and keeps the same section-ingest contract;
   the retired polling/counter shell is gone.
-- The no-op Oculus viewport capture injected at `beginLevelRendering` was
-  removed. The actual Forge draw boundary receives Embeddium matrices, camera,
-  projection, light texture and Oculus targets directly.
+- The then-no-op Oculus viewport capture injected at `beginLevelRendering` was
+  removed during this historical cleanup. A 2026-07-19 artifact audit later
+  proved that original Voxy's corresponding hook is not semantically optional:
+  `LevelRenderer.renderLevel` captures the vanilla projection, model-view and
+  camera, and `IrisRenderingPipeline.beginLevelRendering` applies them before
+  Iris activates texture unit zero. Forge now restores that lifecycle and keeps
+  the later Embeddium cutout hook as a fallback. Runtime comparison nevertheless
+  showed no reduction in the reported cross-vanilla/LOD shadow discontinuity,
+  so this is a retained parity correction, not a claimed root-cause fix.
 - `CountingSectionStorage` and its five write-only counters were removed;
   `WorldEngine` now owns the real persistent `SectionStorage` directly.
 - Original `RenderResourceReuse`, model store, generation, geometry, node,
@@ -4760,3 +4777,18 @@ renderer. The user confirmed the LOD result visually, reported no problem, and
 closed the client normally. This qualifies Bobby cache ingestion, DH database
 decoding/import, WorldEngine persistence, and restart visibility as one real
 data lifecycle; it does not qualify unsupported simultaneous DH runtime use.
+
+## Forxy 2026-07-19 visual root-cause audit
+
+The leaf and shader-shadow reports are deliberately split. The leaf defect is
+closed by exact modern `DARK_CUTOUT` level-zero preprocessing in Forge `MipGen`,
+its heap/native parity fixture, and user visual acceptance. The cross-
+vanilla/LOD shadow discontinuity remains open after the original Oculus
+viewport-capture lifecycle was restored and shown not to change the symptom.
+
+The failed hypotheses, evidence boundary, and mandatory next diagnostic gate
+are recorded in
+`docs/forxy-visual-parity-root-cause-retrospective-2026-07-19.md`. No current
+readiness or parity statement may describe the shadow issue as fixed until a
+same-frame seam-pixel probe identifies the divergent shadow-space input and the
+user accepts the resulting visual regression.
