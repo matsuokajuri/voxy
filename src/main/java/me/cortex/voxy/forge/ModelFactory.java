@@ -45,8 +45,15 @@ import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.locks.ReentrantLock;
 
 final class ModelFactory {
+    private static final boolean AUDIT_MODEL_GPU_UPLOAD =
+            Boolean.getBoolean("voxy.forge.auditRound8ModelGpuUpload");
+    private static final int AUDIT_MODEL_GPU_UPLOAD_LIMIT = Math.max(
+            1,
+            Integer.getInteger("voxy.forge.auditRound8ModelGpuUploadCount", 32));
     private static final int MAX_BLOCK_STATE_IDS = 1 << 20;
     private static final int MAX_MODEL_IDS = 1 << 16;
+    static final int MODEL_CAPACITY_WARNING_START = MAX_MODEL_IDS * 3 / 4;
+    static final int MODEL_CAPACITY_WARNING_STEP = 1 << 12;
     private static final int MODEL_SIZE = ForgeModelStoreLayoutSpec.MODEL_RECORD_BYTES;
     private static final Direction[] DIRECTIONS = Direction.values();
     private final Biome DEFAULT_BIOME = Minecraft.getInstance().level.registryAccess()
@@ -67,11 +74,16 @@ final class ModelFactory {
     private final List<Biome> biomes = new ArrayList<>();
     private final List<BiomeModel> modelsRequiringBiomeColours = new ArrayList<>();
     private final long[] metadataCache = new long[MAX_MODEL_IDS];
+    private final long[][] faceOcclusionMasks = new long[MAX_MODEL_IDS][];
     private final int[] fluidStateLUT = new int[MAX_MODEL_IDS];
     private final int[] idMappings = new int[MAX_BLOCK_STATE_IDS];
     private Object2IntMap<BlockState> customBlockStateIdMapping;
 
     private int nextModelId;
+    private int nextModelCapacityWarning = MODEL_CAPACITY_WARNING_START;
+    private int mappedBlockStateCount;
+    private int deduplicatedBlockStateCount;
+    private int auditedGpuUploadCount;
 
     ModelFactory(Mapper mapper, ModelStore store) {
         this.mapper = mapper;
@@ -192,6 +204,22 @@ final class ModelFactory {
                 this.uploadResults.addFirst(upload);
                 throw new IllegalStateException("Original Voxy model upload failed: " + error);
             }
+            if (AUDIT_MODEL_GPU_UPLOAD
+                    && upload instanceof ModelBakeUpload modelUpload
+                    && this.auditedGpuUploadCount < AUDIT_MODEL_GPU_UPLOAD_LIMIT) {
+                UploadStream.instance().commit();
+                error = modelUpload.verifyGpu(this.store);
+                if (!"none".equals(error)) {
+                    this.uploadResults.addFirst(upload);
+                    throw new IllegalStateException("Original Voxy model GPU readback failed: " + error);
+                }
+                this.auditedGpuUploadCount++;
+                if (this.auditedGpuUploadCount == AUDIT_MODEL_GPU_UPLOAD_LIMIT) {
+                    VoxyForge.LOGGER.info(
+                            "Forxy Round 8 model GPU readback verified {} exact model records and mip chains.",
+                            this.auditedGpuUploadCount);
+                }
+            }
             upload.free();
             upload = this.uploadResults.poll();
         }
@@ -254,6 +282,18 @@ final class ModelFactory {
         return this.metadataCache[clientId];
     }
 
+    boolean isFaceCoverageOccludedBy(int modelId, int face, int occluderModelId, int occluderFace) {
+        if (modelId < 0 || modelId >= this.faceOcclusionMasks.length
+                || occluderModelId < 0 || occluderModelId >= this.faceOcclusionMasks.length) {
+            return false;
+        }
+        return FaceOcclusionMask.covers(
+                this.faceOcclusionMasks[occluderModelId],
+                occluderFace,
+                this.faceOcclusionMasks[modelId],
+                face);
+    }
+
     int getFluidClientStateId(int clientId) {
         if (clientId < 0 || clientId >= this.fluidStateLUT.length || this.fluidStateLUT[clientId] == -1) {
             throw new IdNotYetComputedException(clientId, false);
@@ -262,6 +302,13 @@ final class ModelFactory {
     }
 
     void free() {
+        VoxyForge.LOGGER.info(
+                "Original Voxy model summary: mappedBlockStates={}, uniqueModels={}, deduplicatedMappings={}, capacity={}/{}",
+                this.mappedBlockStateCount,
+                this.nextModelId,
+                this.deduplicatedBlockStateCount,
+                this.nextModelId,
+                MAX_MODEL_IDS);
         this.bakeQueue.clear();
         this.biomeQueue.clear();
         ResultUploader upload = this.uploadResults.poll();
@@ -283,7 +330,10 @@ final class ModelFactory {
         int softwareFlags = this.softwareBakery.renderToOutput(minecraft, bake.state(), this.bakeScratchBuffer.address);
         ColourDepthTextureData[] textures =
                 ForgeSoftwareModelTextureBakery.texturesFromOutput(this.bakeScratchBuffer.address);
-        ForgeOriginalVoxyModelLayer layer = chooseLayer(bake.state(), softwareFlags, textures);
+        ForgeOriginalVoxyModelLayer layer = ForgeSoftwareModelTextureBakery.chooseLayer(
+                bake.state(),
+                softwareFlags,
+                textures);
         ForgeSoftwareModelTextureBakery.BakeResult softwareBake =
                 new ForgeSoftwareModelTextureBakery.BakeResult(
                         textures,
@@ -310,10 +360,26 @@ final class ModelFactory {
         }
 
         TintPlan tint = this.createTintPlan(minecraft, bake.state(), softwareBake);
-        ModelEntry entry = new ModelEntry(softwareBake.textures(), fluidModelId, tint.dedupeColour());
+        boolean containsFluid = !(bake.state().getBlock() instanceof LiquidBlock)
+                && !bake.state().getFluidState().isEmpty()
+                && fluidModelId != -1;
+        tint = mergeContainedFluidBiomeColourDependency(
+                tint,
+                containsFluid,
+                containsFluid ? this.metadataCache[fluidModelId] : 0L);
+        PreparedRecord prepared = this.prepareRecord(bake.state(), softwareBake, tint, fluidModelId);
+        ModelSemanticKey semanticKey = ModelSemanticKey.from(
+                prepared,
+                softwareBake,
+                tint,
+                fluidModelId,
+                bake.state());
+        ModelEntry entry = new ModelEntry(softwareBake.textures(), semanticKey);
         Integer duplicate = this.modelTexture2id.get(entry);
         if (duplicate != null) {
             this.idMappings[bake.blockId()] = duplicate;
+            this.mappedBlockStateCount++;
+            this.deduplicatedBlockStateCount++;
             this.removeInFlight(bake.blockId());
             return true;
         }
@@ -323,24 +389,20 @@ final class ModelFactory {
             throw new IllegalStateException("Original Voxy model capacity exhausted at model id " + modelId);
         }
         this.nextModelId++;
+        this.recordModelCapacityHighWater();
 
-        boolean containsFluid = !(bake.state().getBlock() instanceof LiquidBlock)
-                && !bake.state().getFluidState().isEmpty()
-                && fluidModelId != -1;
-        tint = mergeContainedFluidBiomeColourDependency(
-                tint,
-                containsFluid,
-                containsFluid ? this.metadataCache[fluidModelId] : 0L);
         tint = this.finalizeTintForNewModel(modelId, tint);
-        RecordBuild build = this.buildRecord(bake.state(), softwareBake, tint, fluidModelId, modelId);
+        RecordBuild build = this.buildRecord(prepared, softwareBake, tint);
         this.modelTexture2id.put(entry, modelId);
         this.metadataCache[modelId] = build.voxyMetadata();
+        this.faceOcclusionMasks[modelId] = FaceOcclusionMask.copy(build.faceOcclusionMasks());
         if (bake.state().getBlock() instanceof LiquidBlock) {
             this.fluidStateLUT[modelId] = modelId;
         } else if (fluidModelId != -1) {
             this.fluidStateLUT[modelId] = fluidModelId;
         }
         this.idMappings[bake.blockId()] = modelId;
+        this.mappedBlockStateCount++;
         this.uploadResults.add(new ModelBakeUpload(bake.blockId(), modelId, build));
         this.removeInFlight(bake.blockId());
         return true;
@@ -358,12 +420,26 @@ final class ModelFactory {
         return fluidModelId == -1 ? Integer.MIN_VALUE : fluidModelId;
     }
 
-    private RecordBuild buildRecord(
+    private PreparedRecord prepareRecord(
+            BlockState state,
+            ForgeSoftwareModelTextureBakery.BakeResult softwareBake,
+            TintPlan tint,
+            int fluidModelId
+    ) {
+        return prepareRecord(
+                state,
+                softwareBake,
+                tint,
+                fluidModelId,
+                this.customBlockStateId(state));
+    }
+
+    static PreparedRecord prepareRecord(
             BlockState state,
             ForgeSoftwareModelTextureBakery.BakeResult softwareBake,
             TintPlan tint,
             int fluidModelId,
-            int modelId
+            int customId
     ) {
         ForgeOriginalVoxyModelLayer layer = softwareBake.layer();
         int checkMode = layer == ForgeOriginalVoxyModelLayer.SOLID
@@ -373,6 +449,7 @@ final class ModelFactory {
         Arrays.fill(words, 0);
         Arrays.fill(words, 0, ForgeModelStoreLayoutSpec.FACE_DATA_WORDS, -1);
         FaceUpload[] faces = new FaceUpload[ForgeModelAtlasLayout.FACE_COUNT];
+        long[] faceOcclusionMasks = FaceOcclusionMask.fromTextures(softwareBake.textures(), checkMode);
         int writtenFaces = 0;
         String primarySprite = "none";
 
@@ -404,28 +481,71 @@ final class ModelFactory {
                 faces,
                 tint.hasTint(),
                 tint.biomeDependent(),
-                fluidModelId);
+                fluidModelId,
+                faceOcclusionMasks);
         int flags = 0;
         flags |= tint.hasTint() ? 1 : 0;
         flags |= tint.biomeDependent() ? 2 : 0;
         flags |= layer == ForgeOriginalVoxyModelLayer.TRANSLUCENT ? 4 : 0;
         flags |= (softwareBake.flags() & 1) != 0 ? 8 : 0;
         words[ForgeModelStoreLayoutSpec.WORD_FLAGS_A] = flags;
-        words[ForgeModelStoreLayoutSpec.WORD_COLOUR_TINT] = tint.recordColourTint();
-        words[ForgeModelStoreLayoutSpec.WORD_CUSTOM_ID] = this.customBlockStateId(state);
-        MemoryBuffer mipChain = MipGen.putTexturesBuffer((softwareBake.flags() & 2) != 0, softwareBake.textures());
-        return new RecordBuild(
+        words[ForgeModelStoreLayoutSpec.WORD_COLOUR_TINT] = tint.dedupeColour();
+        words[ForgeModelStoreLayoutSpec.WORD_CUSTOM_ID] = customId;
+        return new PreparedRecord(
                 words,
-                tint.recordColourTint(),
                 faces,
                 flags,
                 writtenFaces,
                 primarySprite,
                 metadata,
+                faceOcclusionMasks);
+    }
+
+    private RecordBuild buildRecord(
+            PreparedRecord prepared,
+            ForgeSoftwareModelTextureBakery.BakeResult softwareBake,
+            TintPlan tint
+    ) {
+        int[] words = Arrays.copyOf(prepared.words(), prepared.words().length);
+        words[ForgeModelStoreLayoutSpec.WORD_COLOUR_TINT] = tint.recordColourTint();
+        MemoryBuffer mipChain = MipGen.putTexturesBuffer((softwareBake.flags() & 2) != 0, softwareBake.textures());
+        return new RecordBuild(
+                words,
+                tint.recordColourTint(),
+                prepared.faces(),
+                prepared.flags(),
+                prepared.writtenFaceCount(),
+                prepared.primarySprite(),
+                prepared.voxyMetadata(),
+                prepared.faceOcclusionMasks(),
                 mipChain,
                 tint.immediateBiomeColours(),
                 tint.immediateBiomeColourBaseIndex()
         );
+    }
+
+    static MemoryBuffer serializeModelRecord(int[] words) {
+        if (words == null || words.length != ForgeModelStoreLayoutSpec.MODEL_RECORD_WORDS) {
+            throw new IllegalArgumentException("Original Voxy model record must contain exactly 16 words");
+        }
+        MemoryBuffer model = new MemoryBuffer(MODEL_SIZE).zero();
+        for (int index = 0; index < words.length; index++) {
+            MemoryUtil.memPutInt(model.address + (long) index * Integer.BYTES, words[index]);
+        }
+        return model;
+    }
+
+    private void recordModelCapacityHighWater() {
+        if (this.nextModelId < this.nextModelCapacityWarning) {
+            return;
+        }
+        VoxyForge.LOGGER.warn(
+                "Original Voxy model capacity high-water: uniqueModels={}, capacity={}, used={}%, nextWarning={}",
+                this.nextModelId,
+                MAX_MODEL_IDS,
+                (this.nextModelId * 100L) / MAX_MODEL_IDS,
+                Math.min(MAX_MODEL_IDS, this.nextModelCapacityWarning + MODEL_CAPACITY_WARNING_STEP));
+        this.nextModelCapacityWarning += MODEL_CAPACITY_WARNING_STEP;
     }
 
     private TintPlan createTintPlan(Minecraft minecraft, BlockState state, ForgeSoftwareModelTextureBakery.BakeResult softwareBake) {
@@ -600,42 +720,6 @@ final class ModelFactory {
         return new Direction[]{Direction.DOWN, Direction.UP, Direction.NORTH, Direction.SOUTH, Direction.WEST, Direction.EAST, null};
     }
 
-    private static ForgeOriginalVoxyModelLayer chooseLayer(
-            BlockState state,
-            int flags,
-            ColourDepthTextureData[] textures
-    ) {
-        ForgeOriginalVoxyModelLayer layer = ForgeOriginalVoxyModelLayer.OTHER;
-        if ((flags & 4) != 0) {
-            boolean anyTranslucent = false;
-            for (ColourDepthTextureData face : textures) {
-                anyTranslucent |= face != null && TextureUtils.hasTranslucentPixel(face);
-                if (anyTranslucent) {
-                    break;
-                }
-            }
-            if (anyTranslucent) {
-                layer = ForgeOriginalVoxyModelLayer.TRANSLUCENT;
-            } else {
-                boolean solid = true;
-                for (ColourDepthTextureData face : textures) {
-                    solid &= face == null || TextureUtils.isSolidWhereDrawn(face);
-                    if (!solid) {
-                        break;
-                    }
-                }
-                layer = solid ? ForgeOriginalVoxyModelLayer.SOLID : ForgeOriginalVoxyModelLayer.CUTOUT;
-            }
-        }
-        if (layer == ForgeOriginalVoxyModelLayer.OTHER && (flags & 8) != 0) {
-            layer = ForgeOriginalVoxyModelLayer.CUTOUT;
-        }
-        if (state.is(net.minecraft.tags.BlockTags.LEAVES)) {
-            layer = ForgeOriginalVoxyModelLayer.SOLID;
-        }
-        return layer == ForgeOriginalVoxyModelLayer.OTHER ? ForgeOriginalVoxyModelLayer.SOLID : layer;
-    }
-
     static boolean isBiomeDependentColour(TintSourcePlan tintSources, Biome biome) {
         boolean[] biomeDependent = new boolean[1];
         Runnable biomeDependencyMarker = () -> biomeDependent[0] = true;
@@ -802,7 +886,8 @@ final class ModelFactory {
             FaceUpload[] faces,
             boolean hasTint,
             boolean biomeColourDependent,
-            int fluidModelId
+            int fluidModelId,
+            long[] faceOcclusionMasks
     ) {
         boolean isFluid = state.getBlock() instanceof LiquidBlock;
         boolean containsFluid = !isFluid && !state.getFluidState().isEmpty() && fluidModelId != -1;
@@ -821,9 +906,11 @@ final class ModelFactory {
             }
             float depth = upload.depth();
             boolean faceCoversFullBlock = upload.faceCoversFullBlock();
-            boolean occludesFace = layer != ForgeOriginalVoxyModelLayer.TRANSLUCENT
+            boolean usesOcclusionMask = layer != ForgeOriginalVoxyModelLayer.TRANSLUCENT
                     && depth < 0.1F
-                    && ((float) upload.writtenPixels() / (float) (ForgeModelAtlasLayout.MODEL_TEXTURE_SIZE * ForgeModelAtlasLayout.MODEL_TEXTURE_SIZE)) > 0.9F;
+                    && upload.writtenPixels() > 0;
+            boolean occludesFace = usesOcclusionMask
+                    && FaceOcclusionMask.isFullFace(faceOcclusionMasks, face);
             boolean canBeOccluded = depth < 0.3F;
             boolean selfLighting = depth > 0.01F || translucent;
             long faceMetadata = 0L;
@@ -831,6 +918,7 @@ final class ModelFactory {
             faceMetadata |= faceCoversFullBlock ? 2L : 0L;
             faceMetadata |= canBeOccluded ? 4L : 0L;
             faceMetadata |= selfLighting ? 8L : 0L;
+            faceMetadata |= usesOcclusionMask ? 16L : 0L;
             metadata |= faceMetadata;
             fullyOpaque &= occludesFace;
         }
@@ -918,9 +1006,30 @@ final class ModelFactory {
     }
 
     private static boolean needsDoubleSidedQuads(FaceUpload[] faces) {
-        return isMissingFace(faces, 0) && isMissingFace(faces, 1)
-                || isMissingFace(faces, 2) && isMissingFace(faces, 3)
-                || isMissingFace(faces, 4) && isMissingFace(faces, 5);
+        return classifyDoubleSidedFaces(faces).required();
+    }
+
+    static DoubleSidedClassification classifyDoubleSidedFaces(FaceUpload[] faces) {
+        int presentFaceMask = 0;
+        if (faces != null) {
+            for (int face = 0; face < Math.min(faces.length, ForgeModelAtlasLayout.FACE_COUNT); face++) {
+                if (!isMissingFace(faces, face)) {
+                    presentFaceMask |= 1 << face;
+                }
+            }
+        }
+        int missingOppositeAxisMask = 0;
+        for (int axis = 0; axis < 3; axis++) {
+            int negativeFace = axis << 1;
+            int pairMask = 0b11 << negativeFace;
+            if ((presentFaceMask & pairMask) == 0) {
+                missingOppositeAxisMask |= 1 << axis;
+            }
+        }
+        return new DoubleSidedClassification(
+                presentFaceMask != 0 && missingOppositeAxisMask != 0,
+                presentFaceMask,
+                missingOppositeAxisMask);
     }
 
     private static boolean isMissingFace(FaceUpload[] faces, int face) {
@@ -978,9 +1087,68 @@ final class ModelFactory {
     private record BiomeModel(int modelId, TintSourcePlan tintSources) {
     }
 
-    private record FaceUpload(int faceIndex, String direction, byte[] pixels, String checksum, int faceDataWord, int writtenPixels, float depth, boolean faceCoversFullBlock) {
+    record FaceUpload(int faceIndex, String direction, byte[] pixels, String checksum, int faceDataWord, int writtenPixels, float depth, boolean faceCoversFullBlock) {
         static FaceUpload empty(int faceIndex, String direction) {
             return new FaceUpload(faceIndex, direction, EMPTY_FACE_PIXELS.clone(), ForgeModelAtlasPixelFormat.checksum(EMPTY_FACE_PIXELS), -1, 0, -1.0F, false);
+        }
+    }
+
+    record DoubleSidedClassification(
+            boolean required,
+            int presentFaceMask,
+            int missingOppositeAxisMask
+    ) {
+    }
+
+    record PreparedRecord(
+            int[] words,
+            FaceUpload[] faces,
+            int flags,
+            int writtenFaceCount,
+            String primarySprite,
+            long voxyMetadata,
+            long[] faceOcclusionMasks
+    ) {
+    }
+
+    record FaceDataKey(int down, int up, int north, int south, int west, int east) {
+        static FaceDataKey from(int[] words) {
+            if (words == null || words.length < ForgeModelStoreLayoutSpec.FACE_DATA_WORDS) {
+                throw new IllegalArgumentException("Model record does not contain all six face-data words");
+            }
+            return new FaceDataKey(words[0], words[1], words[2], words[3], words[4], words[5]);
+        }
+    }
+
+    record ModelSemanticKey(
+            int fluidModelId,
+            long voxyMetadata,
+            int flags,
+            int customId,
+            int tintColour,
+            @Nullable BlockState biomeTintState,
+            int softwareFlags,
+            ForgeOriginalVoxyModelLayer layer,
+            FaceDataKey faceData
+    ) {
+        static ModelSemanticKey from(
+                PreparedRecord prepared,
+                ForgeSoftwareModelTextureBakery.BakeResult softwareBake,
+                TintPlan tint,
+                int fluidModelId,
+                BlockState state
+        ) {
+            BlockState biomeTintState = tint.biomeDependent() ? state : null;
+            return new ModelSemanticKey(
+                    fluidModelId,
+                    prepared.voxyMetadata(),
+                    prepared.flags(),
+                    prepared.words()[ForgeModelStoreLayoutSpec.WORD_CUSTOM_ID],
+                    tint.dedupeColour(),
+                    biomeTintState,
+                    softwareBake.flags(),
+                    softwareBake.layer(),
+                    FaceDataKey.from(prepared.words()));
         }
     }
 
@@ -992,6 +1160,7 @@ final class ModelFactory {
             int writtenFaceCount,
             String primarySprite,
             long voxyMetadata,
+            long[] faceOcclusionMasks,
             MemoryBuffer mipChain,
             int[] immediateBiomeColours,
             int immediateBiomeColourBaseIndex
@@ -1017,10 +1186,7 @@ final class ModelFactory {
             this.blockStateId = blockStateId;
             this.modelId = modelId;
             this.build = build;
-            this.model = new MemoryBuffer(MODEL_SIZE).zero();
-            for (int i = 0; i < build.words().length; i++) {
-                MemoryUtil.memPutInt(this.model.address + (long) i * Integer.BYTES, build.words()[i]);
-            }
+            this.model = serializeModelRecord(build.words());
             this.texture = build.mipChain();
             if (build.immediateBiomeColours() == null) {
                 this.biomeUpload = null;
@@ -1054,6 +1220,10 @@ final class ModelFactory {
                 return error;
             }
             return "none";
+        }
+
+        private String verifyGpu(ModelStore store) {
+            return store.verifyOriginalVoxyModelUpload(this.modelId, this.model, this.texture);
         }
 
         @Override
@@ -1103,17 +1273,15 @@ final class ModelFactory {
         }
     }
 
-    private static final class ModelEntry {
+    static final class ModelEntry {
         private final ColourDepthTextureData[] faces;
-        private final int fluidModelId;
-        private final int tintingColour;
+        private final ModelSemanticKey semantics;
         private final int hash;
 
-        private ModelEntry(ColourDepthTextureData[] faces, int fluidModelId, int tintingColour) {
+        ModelEntry(ColourDepthTextureData[] faces, ModelSemanticKey semantics) {
             this.faces = faces.clone();
-            this.fluidModelId = fluidModelId;
-            this.tintingColour = tintingColour;
-            int value = 31 * fluidModelId + tintingColour;
+            this.semantics = semantics;
+            int value = semantics.hashCode();
             for (ColourDepthTextureData face : this.faces) {
                 value = 31 * value + faceHash(face);
             }
@@ -1122,7 +1290,7 @@ final class ModelFactory {
 
         private String signature() {
             StringBuilder builder = new StringBuilder();
-            builder.append(this.fluidModelId).append('|').append(this.tintingColour);
+            builder.append(this.semantics);
             for (ColourDepthTextureData face : this.faces) {
                 builder.append('|').append(faceHash(face));
             }
@@ -1137,7 +1305,7 @@ final class ModelFactory {
             if (!(object instanceof ModelEntry other)) {
                 return false;
             }
-            if (this.fluidModelId != other.fluidModelId || this.tintingColour != other.tintingColour || this.faces.length != other.faces.length) {
+            if (!this.semantics.equals(other.semantics) || this.faces.length != other.faces.length) {
                 return false;
             }
             for (int i = 0; i < this.faces.length; i++) {

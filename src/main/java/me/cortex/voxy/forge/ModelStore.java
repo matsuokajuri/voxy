@@ -5,6 +5,8 @@ import me.cortex.voxy.common.util.MemoryBuffer;
 import me.cortex.voxy.common.util.TrackedObject;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.texture.TextureAtlas;
+import org.lwjgl.BufferUtils;
+import org.lwjgl.opengl.ARBDirectStateAccess;
 import org.lwjgl.opengl.GL11C;
 import org.lwjgl.opengl.GL12C;
 import org.lwjgl.opengl.GL15C;
@@ -14,6 +16,7 @@ import org.lwjgl.opengl.GL43C;
 import org.lwjgl.opengl.GL45C;
 import org.lwjgl.system.MemoryUtil;
 
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 
 import static org.lwjgl.opengl.ARBDirectStateAccess.nglTextureSubImage2D;
@@ -175,6 +178,76 @@ final class ModelStore {
         return this.glErrorOrNone("original-model-texture-upload");
     }
 
+    String verifyOriginalVoxyModelUpload(
+            int modelId,
+            MemoryBuffer expectedModel,
+            MemoryBuffer expectedTexture
+    ) {
+        if (!this.canUploadOriginalVoxyModel()) {
+            return "original-model-store-not-readback-ready";
+        }
+        if (!isValidModelId(modelId)) {
+            return "invalid-original-model-readback-id-" + modelId;
+        }
+        if (expectedModel == null || expectedModel.size != MODEL_SIZE) {
+            return "invalid-original-model-readback-record";
+        }
+        if (expectedTexture == null || expectedTexture.size < MipGen.UPLOADED_MIP_CHAIN_BYTES) {
+            return "invalid-original-model-readback-texture";
+        }
+
+        drainLatchedGlErrors("original-model-gpu-readback");
+        GL11C.glFinish();
+
+        ByteBuffer modelReadback = BufferUtils.createByteBuffer(MODEL_SIZE);
+        ARBDirectStateAccess.glGetNamedBufferSubData(
+                this.modelBuffer.id,
+                (long) modelId * MODEL_SIZE,
+                modelReadback);
+        int error = GL11C.glGetError();
+        if (error != GL11C.GL_NO_ERROR) {
+            return "original-model-record-readback-" + glErrorName(error);
+        }
+        if (!matches(modelReadback, expectedModel.address, MODEL_SIZE)) {
+            return "original-model-record-readback-mismatch-" + modelId;
+        }
+
+        int x = (modelId & 0xFF) * ForgeModelAtlasLayout.MODEL_TEXTURE_SIZE
+                * ForgeModelAtlasLayout.FACES_PER_MODEL_X;
+        int y = ((modelId >> 8) & 0xFF) * ForgeModelAtlasLayout.MODEL_TEXTURE_SIZE
+                * ForgeModelAtlasLayout.FACES_PER_MODEL_Y;
+        long expectedOffset = 0L;
+        for (int level = 0; level < MipGen.LAYERS; level++) {
+            int width = (ForgeModelAtlasLayout.MODEL_TEXTURE_SIZE
+                    * ForgeModelAtlasLayout.FACES_PER_MODEL_X) >> level;
+            int height = (ForgeModelAtlasLayout.MODEL_TEXTURE_SIZE
+                    * ForgeModelAtlasLayout.FACES_PER_MODEL_Y) >> level;
+            int bytes = width * height * ForgeModelAtlasPixelFormat.BYTES_PER_PIXEL;
+            ByteBuffer textureReadback = BufferUtils.createByteBuffer(bytes);
+            GL45C.glGetTextureSubImage(
+                    this.texturesId,
+                    level,
+                    x >> level,
+                    y >> level,
+                    0,
+                    width,
+                    height,
+                    1,
+                    GL11C.GL_RGBA,
+                    GL11C.GL_UNSIGNED_BYTE,
+                    textureReadback);
+            error = GL11C.glGetError();
+            if (error != GL11C.GL_NO_ERROR) {
+                return "original-model-texture-readback-level-" + level + '-' + glErrorName(error);
+            }
+            if (!matches(textureReadback, expectedTexture.address + expectedOffset, bytes)) {
+                return "original-model-texture-readback-mismatch-" + modelId + "-level-" + level;
+            }
+            expectedOffset += bytes;
+        }
+        return "none";
+    }
+
     void free() {
         if (!RenderSystem.isOnRenderThread()) {
             RenderSystem.recordRenderCall(this::free);
@@ -208,6 +281,19 @@ final class ModelStore {
     private String glErrorOrNone(String prefix) {
         int error = GL11C.glGetError();
         return error == GL11C.GL_NO_ERROR ? "none" : prefix + "-" + glErrorName(error);
+    }
+
+    private static boolean matches(ByteBuffer actual, long expectedAddress, int size) {
+        if (actual == null || actual.remaining() < size) {
+            return false;
+        }
+        int base = actual.position();
+        for (int index = 0; index < size; index++) {
+            if (actual.get(base + index) != MemoryUtil.memGetByte(expectedAddress + index)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     //glGetError reads the context-wide latched error flags, which include errors raised by

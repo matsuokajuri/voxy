@@ -163,6 +163,11 @@ minecraft {
             if (project.hasProperty('voxyAuditRound7Mipping')) {
                 property 'voxy.forge.auditRound7Mipping', 'true'
             }
+            if (project.hasProperty('voxyAuditRound8ModelGpuUpload')) {
+                property 'voxy.forge.auditRound8ModelGpuUpload', 'true'
+                property 'voxy.forge.auditRound8ModelGpuUploadCount',
+                        (project.findProperty('voxyAuditRound8ModelGpuUploadCount') ?: '32').toString()
+            }
         }
 
         server {

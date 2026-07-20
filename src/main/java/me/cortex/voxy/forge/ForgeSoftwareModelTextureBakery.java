@@ -50,10 +50,10 @@ final class ForgeSoftwareModelTextureBakery {
     private static final int FACE_PIXELS = FACE_SIZE * FACE_SIZE;
     static final long SINGLE_FACE_OUTPUT_SIZE = FACE_PIXELS * Long.BYTES;
     static final long OUTPUT_BUFFER_BYTES = SINGLE_FACE_OUTPUT_SIZE * ForgeModelAtlasLayout.FACE_COUNT;
-    private static final int FLAG_SHADED = 1;
-    private static final int FLAG_DARKENED = 2;
-    private static final int FLAG_TRANSLUCENT = 4;
-    private static final int FLAG_DISCARD = 8;
+    static final int FLAG_SHADED = 1;
+    static final int FLAG_DARKENED = 2;
+    static final int FLAG_TRANSLUCENT = 4;
+    static final int FLAG_DISCARD = 8;
     private static final Matrix4f[] VIEWS = createViews();
 
     private final ReuseVertexConsumer opaqueVC = new ReuseVertexConsumer();
@@ -234,7 +234,11 @@ final class ForgeSoftwareModelTextureBakery {
         return flags;
     }
 
-    private static ForgeOriginalVoxyModelLayer chooseLayer(BlockState state, int flags, ColourDepthTextureData[] faces) {
+    static ForgeOriginalVoxyModelLayer chooseLayer(BlockState state, int flags, ColourDepthTextureData[] faces) {
+        return chooseLayer(state.is(BlockTags.LEAVES), flags, faces);
+    }
+
+    static ForgeOriginalVoxyModelLayer chooseLayer(boolean forceSolid, int flags, ColourDepthTextureData[] faces) {
         ForgeOriginalVoxyModelLayer layer = ForgeOriginalVoxyModelLayer.OTHER;
         if ((flags & FLAG_TRANSLUCENT) != 0) {
             boolean anyTranslucent = false;
@@ -260,7 +264,7 @@ final class ForgeSoftwareModelTextureBakery {
         if (layer == ForgeOriginalVoxyModelLayer.OTHER && (flags & FLAG_DISCARD) != 0) {
             layer = ForgeOriginalVoxyModelLayer.CUTOUT;
         }
-        if (state.is(BlockTags.LEAVES)) {
+        if (forceSolid) {
             layer = ForgeOriginalVoxyModelLayer.SOLID;
         }
         return layer == ForgeOriginalVoxyModelLayer.OTHER ? ForgeOriginalVoxyModelLayer.SOLID : layer;

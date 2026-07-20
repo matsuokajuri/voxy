@@ -518,20 +518,157 @@ Automated implementation status (2026-07-19):
 Goal: replace original model approximations only where a stronger representation
 can be carried through baking, storage, mesh generation, and shaders.
 
-- [ ] Inventory every packed model-data bit before changing limits or metadata.
-- [ ] Decide whether the 65,535-state limit needs a wider id or deduplication by
-      baked model content; update all CPU/GPU layouts as one change.
-- [ ] Implement deterministic constant tint, biome tint detection, emissive
+- [x] Inventory every packed model-data bit before changing limits or metadata.
+      The producer/consumer ledger and contract test are recorded in
+      `forxy-round8-model-material-preparation.md`.
+- [x] Decide whether the 65,535-state limit needs a wider id or deduplication by
+      baked model content. Keep the sixteen-bit layout; strengthen semantic
+      baked-model deduplication and add high-water evidence before reconsidering
+      any end-to-end width change.
+- [x] Include every render-visible semantic in the dedupe key: render layer,
+      shaded state, biome tint identity, emission, custom id, contained fluid,
+      cull-same behavior, and encoded face metadata.
+- [x] Implement deterministic constant tint, biome tint detection, emissive
       lighting, and per-pixel alpha classification.
-- [ ] Add face occlusion masks and prove their orientation at section borders.
-- [ ] Support or explicitly classify block-entity/custom-rendered models rather
+- [x] Add face occlusion masks and prove their orientation at section borders.
+- [x] Support or explicitly classify block-entity/custom-rendered models rather
       than silently treating all of them as empty.
-- [ ] Add double-sided representation for vines, glow lichen, and comparable thin
+- [x] Add double-sided representation for vines, glow lichen, and comparable thin
       models without duplicating hidden geometry.
-- [ ] Add golden software-raster, mip, metadata, upload-readback, and shader-
+- [x] Add golden software-raster, mip, metadata, upload-readback, and shader-
       decode fixtures.
-- [ ] Visually qualify leaves, stained glass, vines, fluids, emissive blocks,
+- [x] Visually qualify leaves, stained glass, vines, fluids, emissive blocks,
       custom models, and biome transitions.
+
+### 捌轮 preparation record (2026-07-20)
+
+- The original and active Forge routes were traced through bakery, record,
+  mesher, atlas, vertex, fragment, and Oculus custom-id consumers.
+- `Round8ModelDataLayoutContractTest` freezes the current metadata, 64-byte GPU
+  record, sixteen-bit atlas identity, and active shader decode before behavior
+  changes.
+- The existing constant/biome tint, emission, alpha/material classification,
+  and intentional custom-renderer-empty handling are partial foundations, not
+  unverified completion claims.
+- The round is split into 捌.1 semantic dedupe, 捌.2 material/light goldens,
+  捌.3 oriented occlusion, 捌.4 thin/double-sided representation, and 捌.5 runtime
+  qualification. Detailed gates live in the preparation document.
+
+### 捌.1 implementation record (2026-07-20)
+
+- `ModelEntry` now retains exact baked colour/depth equality while its semantic
+  key also covers contained fluid, CPU metadata including emission and
+  cull-same, GPU/shading flags, `customId`, constant or biome tint identity,
+  material layer, software mip flags, and all six encoded face records.
+- Contained-fluid biome dependence is resolved before duplicate lookup; biome
+  LUT allocation still occurs only after a genuinely new model is accepted.
+- Capacity remains sixteen-bit and fail-fast. High-water diagnostics begin at
+  49,152 unique models, repeat every 4,096 models, and teardown reports mapped,
+  unique, and deduplicated totals.
+- The layout, semantic-equality, pipeline-order, exact-jar compile, and full
+  212-test gates pass. Embeddium-only and Oculus 1.8.0 plus Complementary
+  Unbound runtime passes also completed with clean shutdown and no reported
+  visual regression; the model summaries proved live deduplication in both
+  paths. The broader material qualification remains in 捌.5 after the remaining
+  behavior work.
+
+### 捌.2 implementation record (2026-07-20)
+
+- Seven deterministic material fixtures now cover opaque stone, cutout iron
+  bars, translucent glass, water, solid-layer leaves, glowstone emission, and
+  partial constant tint at the formal bakery-to-record boundary.
+- Each fixture freezes material layer, six face words, GPU flags, tint identity,
+  CPU metadata, emission, mip SHA-256, the array/native mip equivalence, and the
+  active shader bit decode.
+- The exact production serializer is shared with `ModelBakeUpload`: it writes
+  sixteen words into 64 bytes. The original texture allocation remains 8,184
+  bytes while only 8,160 bytes are uploaded; the unused final 24 bytes stay
+  zero and are now explicitly tested.
+- The duplicate Forge-side layer classifier was removed in favor of the bakery
+  classifier already used by the original-adapted route. Goldens confirmed no
+  material or lighting mismatch, so 捌.2 made no visual algorithm substitution.
+- CPU/native serialization is covered here; 捌.5 subsequently completed live
+  GPU readback and the dual-route visual matrix before closing the broader
+  upload-readback checklist.
+
+### 捌.3 implementation record (2026-07-20)
+
+- Every unique model now owns an exact six-face, 16x16 CPU coverage sidecar:
+  four `long` words per face and 24 words per model. It is derived directly
+  from the original `TextureUtils.generateMask` written-pixel contract and does
+  not widen the persistent world format, sixteen-bit model id, 64-byte GPU
+  record, or shader interface.
+- One formerly unused CPU face-metadata bit now states that the corresponding
+  non-translucent, boundary-depth face has a usable exact mask. Absent faces
+  still require the existing `faceExists` guard, so their `0xFF` sentinel cannot
+  be mistaken for a mask-bearing face.
+- The active non-opaque mesher culling entry now compares the current face mask
+  with the touching neighbour face and removes the quad only when every current
+  pixel is covered. Missing or unpublished sidecars fail open and retain the
+  face. Coarse `faceOccludes` is retained only for metadata without the new
+  exact-mask marker.
+- Coarse face occlusion and `fullyOpaque` now require all 256 coverage pixels,
+  replacing the inherited greater-than-90-percent approximation. Partial
+  cutout faces stay eligible as exact-mask occluders without being promoted to
+  opaque cubes.
+- `Round8FaceOcclusionMaskTest` proves from the actual original-adapted bakery
+  matrices that DOWN/UP, NORTH/SOUTH, and WEST/EAST share raster coordinates;
+  it then locks direct subset, no-mirror, empty-mask, metadata, formal-consumer,
+  and all-six-section-border direction contracts. Full adoption by the
+  remaining inherited mesher branches remains the explicit 玖轮 task.
+- The exact-jar full test suite passed, followed by clean Embeddium-only and
+  Oculus 1.8.0 plus Complementary Unbound client exits. User visual inspection
+  found no missing faces or LOD seam regression in either route. The teardown
+  summaries reported 1476/1047/429 and 1488/1053/435 mapped/unique/deduplicated
+  model counts respectively.
+
+### 捌.4 implementation record (2026-07-20)
+
+- Original-source tracing confirmed that the existing double-sided mechanism is
+  already a real geometry representation, not merely a heuristic flag: opaque
+  directional faces occupy six camera-facing command buckets, while a thin
+  model's existing quads move once into the shared double-sided bucket. The
+  renderer does not synthesize or duplicate a hidden back face.
+- `DoubleSidedClassification` now makes the original missing-opposite-axis rule
+  explicit as a present-face mask plus a missing-axis mask. A fully empty model
+  no longer becomes spuriously double-sided; this covers air and the intentional
+  custom-renderer-empty route without changing any visible face.
+- Deterministic post-raster fixtures cover a one-face vine, two-face corner glow
+  lichen, four-face crossed plant, six-direction iron bars, six-direction glass
+  pane, and the empty model. They lock face counts, metadata, translucent
+  precedence, mesher buffer typing, and the active cmdgen double-sided range.
+- The later original TODO proposing complementary-face merging was deliberately
+  not implemented: one retained face cannot yet prove equivalence for
+  side-specific lighting, normal direction, shaderpack material ids, and face
+  ownership. Keeping the already single-copy command representation is the
+  only fixture-proven lossless choice; any future merge needs a wider per-face
+  contract rather than another global guess.
+- Forge already classifies custom-rendered/block-entity models explicitly as
+  intentional empty voxel models, while a missing baked model remains fatal;
+  `ForgeSoftwareModelTextureBakeryTest` locks that boundary. No synthetic cube
+  or preview geometry was introduced.
+
+### 捌.5 qualification record (2026-07-20)
+
+- A gated `voxy.forge.auditRound8ModelGpuUpload` diagnostic now commits the
+  production upload stream and reads the live GPU resources back before the
+  staging buffers are freed. It compares each selected 64-byte model record and
+  all four mip levels of its 3x2 atlas tile byte for byte. The diagnostic is off
+  by default and therefore adds no release-path readback or stall.
+- The exact audit passed for 32 unique model records and complete mip chains in
+  both the Embeddium-only client and Oculus 1.8.0 with Complementary Unbound.
+  Both clients shut down normally. Their final summaries reported
+  1257/913/344 and 1521/1061/460 mapped/unique/deduplicated model counts.
+- User inspection across the round's repeated Embeddium-only and Oculus runs
+  reported no regression in leaves, cutout/thin models, translucent materials,
+  fluids, lighting/emission, biome colour, missing faces, or vanilla/LOD seams.
+  Intentional custom-renderer-empty behavior is additionally locked by the
+  bakery boundary test rather than replaced by synthetic geometry.
+- The full exact-dependency suite passed all 227 tests. A clean `jarJar` build
+  then executed `reobfJarJar` and produced the 12,676,537-byte
+  `voxy-forge-0.2.17-beta-forge-all.jar`; its metadata and payload contain the
+  six pinned storage/compression dependencies plus the expected Windows x64
+  LWJGL ZSTD and LMDB native resources.
 
 Exit evidence: every new metadata field has a tested consumer, existing world
 data is migrated or invalidated safely, and representative model classes render
@@ -630,6 +767,10 @@ The following do not become work merely because a marker exists:
   production queue until they block a real test or debugging workflow.
 - Flashback/FREX platform-N/A results and Distant Horizons' simultaneous-mod
   rejection are platform/upstream constraints, not technical debt to bypass.
+- Animated Vanilla/LOD boundary transitions are a Forxy-specific optional
+  enhancement because original Voxy explicitly cancels Sodium chunk fading.
+  Their separate, non-gating TODO and safety contract live in
+  `forxy-deferred-enhancement-todos.md`.
 
 ## Progress summary
 
@@ -640,7 +781,7 @@ The following do not become work merely because a marker exists:
 - [x] 伍轮：storage recovery and format versioning
 - [x] 陆轮：cache, allocator, and worker efficiency
 - [ ] 柒轮：level-aware mipping
-- [ ] 捌轮：model and material fidelity
+- [x] 捌轮：model and material fidelity
 - [ ] 玖轮：RenderDataFactory correctness
 - [ ] 拾轮：GPU visibility, shaders, and multi-view ownership
 - [ ] 拾壹轮：NodeManager and HOC state machine

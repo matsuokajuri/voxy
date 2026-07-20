@@ -19,6 +19,10 @@ Consult these for the current route:
   — original source-area inventory and final ported/adapted/platform-N/A classification.
 - [runclient-quickplay](forge-1.20.1-runclient-quickplay.md)
   — runClient quick-play workflow (default world `新的世界`).
+- [Forxy deferred enhancement TODOs](forxy-deferred-enhancement-todos.md)
+  — optional post-parity product improvements; not original-author debt.
+- [Forxy 捌轮 model/material preparation](forxy-round8-model-material-preparation.md)
+  — packed-data inventory, capacity decision, risk map, and execution order.
 
 ## Resolved
 

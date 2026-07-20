@@ -192,7 +192,7 @@ final class RenderDataFactory {
         }
     }
 
-    private static long getQuadTyping(long metadata) {//2 bits
+    static long getQuadTyping(long metadata) {//2 bits
         return 0b111L&(0b000_000_010_100L>>(ModelQueries._isTranslucent(metadata)*6+ModelQueries._isDoubleSided(metadata)*3));
     }
 
@@ -347,15 +347,29 @@ final class RenderDataFactory {
 
     private static final long LM = (0xFFL<<55);
 
-    private static boolean shouldMeshNonOpaqueBlockFace(int face, long quad, long meta, long neighborQuad, long neighborMeta) {
+    private boolean shouldMeshNonOpaqueBlockFace(int face, long quad, long meta, long neighborQuad, long neighborMeta) {
         if (((quad^neighborQuad)&(0xFFFFL<<26))==0 && (DISABLE_CULL_SAME_OCCLUDES || ModelQueries.cullsSame(meta))) return false;//This is a hack, if the neigbor and this are the same, dont mesh the face// TODO: FIXME
         if (!ModelQueries.faceExists(meta, face)) return false;//Dont mesh if no face
-        if (ModelQueries.faceCanBeOccluded(meta, face)) //TODO: maybe enable this
-          if (ModelQueries.faceOccludes(neighborMeta, face^1)) return false;
+        if (ModelQueries.faceCanBeOccluded(meta, face)) {
+            int neighborFace = face ^ 1;
+            if (ModelQueries.faceUsesOcclusionMask(neighborMeta, neighborFace)) {
+                int modelId = (int) ((quad >>> 26) & 0xFFFFL);
+                int neighborModelId = (int) ((neighborQuad >>> 26) & 0xFFFFL);
+                if (this.modelMan.isFaceCoverageOccludedBy(
+                        modelId,
+                        face,
+                        neighborModelId,
+                        neighborFace)) {
+                    return false;
+                }
+            } else if (ModelQueries.faceOccludes(neighborMeta, neighborFace)) {
+                return false;
+            }
+        }
         return true;
     }
 
-    private static void meshNonOpaqueFace(int face, long quad, long meta, long neighborQuad, long neighborMeta, Mesher mesher) {
+    private void meshNonOpaqueFace(int face, long quad, long meta, long neighborQuad, long neighborMeta, Mesher mesher) {
         if (shouldMeshNonOpaqueBlockFace(face, quad, meta, neighborQuad, neighborMeta)) {
             mesher.putNext(applyQuadLight(
                     (long) (face&1) |
@@ -1512,7 +1526,7 @@ final class RenderDataFactory {
 
 
 
-    private static void dualMeshNonOpaqueOuterX(int side, long quad, long meta, int neighborAId, int neighborLight, long neighborAMeta, long neighborBQuad, long neighborBMeta, Mesher ma, Mesher mb) {
+    private void dualMeshNonOpaqueOuterX(int side, long quad, long meta, int neighborAId, int neighborLight, long neighborAMeta, long neighborBQuad, long neighborBMeta, Mesher ma, Mesher mb) {
         //side == 0 if is on 0 side and 1 if on 31 side
 
         //TODO: Check (neighborAId!=0) && works oki

@@ -120,7 +120,10 @@ class OriginalParityRepairSourceContractTest {
         assertTrue(inflightPostcondition > watcherPostcondition);
         assertTrue(emptyLog > inflightPostcondition && emptyAssignment > emptyLog);
 
-        assertEquals(1, occurrences(model, "VoxyForge.LOGGER"));
+        assertEquals(4, occurrences(model, "VoxyForge.LOGGER"));
+        assertTrue(model.contains("Original Voxy model capacity high-water:"));
+        assertTrue(model.contains("Original Voxy model summary:"));
+        assertTrue(model.contains("Forxy Round 8 model GPU readback verified"));
         int addBiome = model.indexOf("private ResultUploader addBiome0");
         int nullBiome = model.indexOf("throw new IllegalStateException(\"Null biome\");", addBiome);
         int storeBiome = model.indexOf("Biome oldBiome = this.biomes.set(id, biome);", addBiome);

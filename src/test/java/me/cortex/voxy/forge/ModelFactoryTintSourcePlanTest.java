@@ -103,30 +103,44 @@ class ModelFactoryTintSourcePlanTest {
     }
 
     @Test
-    void processModelResultMergesAfterDedupeAndBeforeEveryModelRecordConsumer() throws IOException {
+    void processModelResultMergesBeforeSemanticDedupeAndFinalizesOnlyNewModels() throws IOException {
         String source = Files.readString(Path.of("src/main/java/me/cortex/voxy/forge/ModelFactory.java"));
         int methodStart = source.indexOf("private boolean processModelResult(Minecraft minecraft)");
         int methodEnd = source.indexOf("private int resolveClientFluidModelId", methodStart);
         String body = source.substring(methodStart, methodEnd);
 
+        int createTint = body.indexOf("this.createTintPlan(");
+        int merge = body.indexOf("tint = mergeContainedFluidBiomeColourDependency(");
+        int prepare = body.indexOf("this.prepareRecord(");
+        int semanticKey = body.indexOf("ModelSemanticKey.from(");
         int dedupeKey = body.indexOf("new ModelEntry(");
+        int lookup = body.indexOf("this.modelTexture2id.get(entry)");
         int duplicateBranch = body.indexOf("if (duplicate != null)");
         int duplicateReturn = body.indexOf("return true;", duplicateBranch);
-        int merge = body.indexOf("tint = mergeContainedFluidBiomeColourDependency(");
         int finalize = body.indexOf("tint = this.finalizeTintForNewModel(");
         int buildRecord = body.indexOf("this.buildRecord(");
-        assertTrue(dedupeKey >= 0 && dedupeKey < duplicateBranch);
-        assertTrue(duplicateBranch < duplicateReturn && duplicateReturn < merge);
-        assertTrue(merge < finalize && finalize < buildRecord);
+        assertTrue(createTint >= 0 && createTint < merge);
+        assertTrue(merge < prepare && prepare < semanticKey && semanticKey < dedupeKey);
+        assertTrue(dedupeKey < lookup && lookup < duplicateBranch);
+        assertTrue(duplicateBranch < duplicateReturn && duplicateReturn < finalize);
+        assertTrue(finalize < buildRecord);
 
-        int buildStart = source.indexOf("private RecordBuild buildRecord(");
-        int buildEnd = source.indexOf("private TintPlan createTintPlan", buildStart);
+        int prepareStart = source.indexOf("private PreparedRecord prepareRecord(");
+        int prepareEnd = source.indexOf("private RecordBuild buildRecord(", prepareStart);
+        String prepareBody = source.substring(prepareStart, prepareEnd);
+        assertTrue(prepareBody.contains("tint.biomeDependent(),"));
+        assertTrue(prepareBody.contains("flags |= tint.biomeDependent() ? 2 : 0;"));
+        assertTrue(prepareBody.contains(
+                "words[ForgeModelStoreLayoutSpec.WORD_COLOUR_TINT] = tint.dedupeColour();"));
+        assertTrue(prepareBody.contains(
+                "words[ForgeModelStoreLayoutSpec.WORD_CUSTOM_ID] = customId;"));
+        assertFalse(prepareBody.contains("finalizeTintForNewModel"));
+
+        int buildStart = source.indexOf("private RecordBuild buildRecord(", prepareEnd);
+        int buildEnd = source.indexOf("private void recordModelCapacityHighWater", buildStart);
         String build = source.substring(buildStart, buildEnd);
-        assertTrue(build.contains("tint.biomeDependent(),"));
-        assertTrue(build.contains("flags |= tint.biomeDependent() ? 2 : 0;"));
         assertTrue(build.contains(
                 "words[ForgeModelStoreLayoutSpec.WORD_COLOUR_TINT] = tint.recordColourTint();"));
-        assertFalse(build.contains("metadataBiomeColourDependent"));
         assertFalse(build.contains("mergeContainedFluidBiomeColourDependency("));
 
         int finalizeStart = source.indexOf("private TintPlan finalizeTintForNewModel(");
