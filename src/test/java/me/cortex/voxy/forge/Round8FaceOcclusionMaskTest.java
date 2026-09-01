@@ -116,8 +116,12 @@ final class Round8FaceOcclusionMaskTest {
     void formalMesherConsumesTheCpuMaskAndDoesNotAddDeadGpuMetadata() throws Exception {
         String mesher = Files.readString(Path.of(
                 "src/main/java/me/cortex/voxy/forge/RenderDataFactory.java"));
-        assertTrue(mesher.contains("ModelQueries.faceUsesOcclusionMask(neighborMeta, neighborFace)"));
-        assertTrue(mesher.contains("this.modelMan.isFaceCoverageOccludedBy("));
+        assertTrue(mesher.contains("RenderFaceDecision.evaluate("));
+
+        String decision = Files.readString(Path.of(
+                "src/main/java/me/cortex/voxy/forge/RenderFaceDecision.java"));
+        assertTrue(decision.contains("ModelQueries.faceUsesOcclusionMask(neighborMetadata, oppositeFace)"));
+        assertTrue(decision.contains("coverage.isFaceCoverageOccludedBy("));
 
         String modelFactory = Files.readString(Path.of(
                 "src/main/java/me/cortex/voxy/forge/ModelFactory.java"));

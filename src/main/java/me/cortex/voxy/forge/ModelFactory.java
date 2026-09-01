@@ -44,7 +44,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.locks.ReentrantLock;
 
-final class ModelFactory {
+final class ModelFactory implements RenderFaceDecision.FaceCoverageLookup {
     private static final boolean AUDIT_MODEL_GPU_UPLOAD =
             Boolean.getBoolean("voxy.forge.auditRound8ModelGpuUpload");
     private static final int AUDIT_MODEL_GPU_UPLOAD_LIMIT = Math.max(
@@ -282,7 +282,8 @@ final class ModelFactory {
         return this.metadataCache[clientId];
     }
 
-    boolean isFaceCoverageOccludedBy(int modelId, int face, int occluderModelId, int occluderFace) {
+    @Override
+    public boolean isFaceCoverageOccludedBy(int modelId, int face, int occluderModelId, int occluderFace) {
         if (modelId < 0 || modelId >= this.faceOcclusionMasks.length
                 || occluderModelId < 0 || occluderModelId >= this.faceOcclusionMasks.length) {
             return false;

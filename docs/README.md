@@ -23,6 +23,8 @@ Consult these for the current route:
   — optional post-parity product improvements; not original-author debt.
 - [Forxy 捌轮 model/material preparation](forxy-round8-model-material-preparation.md)
   — packed-data inventory, capacity decision, risk map, and execution order.
+- [Forxy 玖轮 RenderDataFactory completion record](forxy-round9-render-data-factory-preparation.md)
+  — active-owner proof, behavioral debt closure, differential fixtures, and runtime qualification.
 
 ## Resolved
 

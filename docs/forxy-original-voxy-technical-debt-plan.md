@@ -676,24 +676,76 @@ without new holes or colour drift.
 
 ## 玖轮：RenderDataFactory correctness
 
-Goal: resolve the 47 inherited TODO/FIXME lines in the active mesher by behavior,
-not by comment deletion.
+Goal: resolve the original 47-marker RenderDataFactory debt by behavior, not by
+comment deletion. The Forge baseline retained 46 marker-bearing lines after
+捌轮's exact-mask consumer closed one original note; 玖轮 resolves their
+behavioral clusters and leaves no TODO/FIXME/HACK marker in the active factory.
 
-- [ ] Split the debt into independent fixtures: same-model culling, self-
+- [x] Split the debt into independent fixtures: same-model culling, self-
       occlusion, neighbor-face occlusion, section-border faces, opaque masks,
       translucent geometry, self lighting, and incremental-run counts.
-- [ ] Capture the current original output for ordinary opaque cubes before any
+- [x] Capture the current original output for ordinary opaque cubes before any
       algorithm change.
-- [ ] Define face ownership at all six section borders so adjacent rebuild order
+- [x] Define face ownership at all six section borders so adjacent rebuild order
       cannot create gaps or duplicate quads.
-- [ ] Use model occlusion masks from 捌轮 instead of guessing solely from
+- [x] Use model occlusion masks from 捌轮 instead of guessing solely from
       ids or average depth.
-- [ ] Carry correct light for merged runs, forward/backward faces, self-lit
+- [x] Carry correct light for merged runs, forward/backward faces, self-lit
       models, and cross-section neighbors.
-- [ ] Replace overflow and end-of-run hack fixes with checked invariants.
-- [ ] Add randomized voxel-volume differential tests and explicit stained-glass,
+- [x] Replace overflow and end-of-run hack fixes with checked invariants.
+- [x] Add randomized voxel-volume differential tests and explicit stained-glass,
       water, leaves, slab, stair, and thin-model fixtures.
-- [ ] Stress concurrent dirty/remesh events and shaderpack toggles.
+- [x] Stress concurrent dirty/remesh events and shaderpack toggles.
+
+### 玖轮 preparation record (2026-07-20)
+
+- Current CodeGraph tracing confirms that the package-local Forge
+  `RenderDataFactory` is the active per-worker formal owner constructed by
+  `RenderGenerationService`, not the retired legacy geometry island described
+  by an older audit.
+- The Forge owner has 46 TODO/FIXME-bearing lines versus 47 in the original tree
+  copy. They collapse into retry/reset, shared face decision, six-direction
+  ownership, translucent/self-occlusion, fluid overlay, lighting, X skip
+  bookkeeping, and capacity/bounds clusters; repeated axis comments are not
+  counted as separate debts.
+- `Round9OpaqueMeshingBaselineTest` directly exercises the formal owner's native
+  buckets. An isolated interior cube and an interior 16-cubed volume both emit
+  exactly six directional quads; the latter greedily merges to one 16x16 quad
+  per face. Exact snapshot hashes are recorded in the preparation document.
+- No production behavior changed during preparation. At that checkpoint the
+  border, material, light, randomized, retry, and real-client gates remained
+  open under 玖.1 through 玖.7; the completion record below supersedes that
+  checkpoint status.
+
+### 玖轮 implementation and qualification record (2026-07-20)
+
+- `RenderFaceDecision` is now the single allocation-free decision contract for
+  opaque, non-opaque, fluid, inner, outer, and all-six-direction paths. It uses
+  捌轮's exact face masks for same-model and exact-neighbour coverage, retains
+  the original coarse opaque-neighbour rule where applicable, and selects self
+  or neighbour light through the same result.
+- Every section border now follows one touching-face convention. Same-fluid
+  boundaries are hidden, different fluids keep both material faces, and
+  contained fluids resolve and emit the actual fluid model instead of the base
+  block model.
+- X scanning uses one `lastProcessedZ[32]` value per row. The inherited five-bit
+  skip counters and `z == 30`/`skip(31)` end repair are gone; exact 30/31/32
+  runs, sparse boundary rows, and three seeded 32-cubed volumes decode back to
+  the expected cells and all six faces.
+- A bucket has 65,536 allocated slots but its packed GPU count can represent at
+  most 65,535 quads. The producer now rejects the 65,536th quad before its
+  native write, verifies aggregate counts and AABBs, and recovers correctly
+  across success, missing-model retry, failure, empty, and reuse sequences.
+- The exact dependency suite passed 68 suites / 244 tests with no failures,
+  errors, or skips. A clean `jarJar` produced
+  `build/libs/voxy-forge-0.2.17-beta-forge-all.jar`.
+- Automatic clients passed for Embeddium-only and Oculus 1.8.0 with
+  Complementary Unbound. Oculus was disabled and re-enabled in-session to force
+  renderer teardown/recreation. The broader Embeddium + Oculus + Acedium +
+  Vivecraft + Bobby Reforged + Chunky combination then passed a 6 -> 26 -> 6
+  render-distance cycle, forcing bulk chunk load, unload, and remesh work before
+  a normal save and shutdown. Distant Horizons remains excluded by the explicit
+  simultaneous-mod rejection policy.
 
 Exit evidence: no vanilla/LOD seams, holes, duplicate geometry, translucent
 border loss, or lighting regressions in automated fixtures and real visual runs.
@@ -782,6 +834,6 @@ The following do not become work merely because a marker exists:
 - [x] 陆轮：cache, allocator, and worker efficiency
 - [ ] 柒轮：level-aware mipping
 - [x] 捌轮：model and material fidelity
-- [ ] 玖轮：RenderDataFactory correctness
+- [x] 玖轮：RenderDataFactory correctness
 - [ ] 拾轮：GPU visibility, shaders, and multi-view ownership
 - [ ] 拾壹轮：NodeManager and HOC state machine

@@ -4796,3 +4796,57 @@ uses the expanded range. At visible distance 6 the production path reported
 `visible=6, loaded=9`, and the user accepted the result visually. The diagnostic
 history and the earlier failed hypotheses remain recorded in
 `docs/forxy-visual-parity-root-cause-retrospective-2026-07-19.md`.
+
+## Forxy 玖轮 RenderDataFactory preparation (2026-07-20)
+
+Fresh CodeGraph construction tracing confirms the current active geometry chain
+uses the package-local Forge `RenderGenerationService -> RenderDataFactory ->
+BuiltSection` owners. The older conclusion that the Forge-named factory was an
+unused legacy duplicate is superseded by the later controlled-retirement audit
+and by the current construction site.
+
+The Forge factory retains 46 TODO/FIXME-bearing lines from the original
+algorithm. They have been classified by behavior rather than counted as 46
+independent defects. The current material difference from the original tree is
+捌轮's exact face-mask consumer, which replaced the original disabled/coarse
+non-opaque occlusion check without changing the packed GPU layout.
+
+Preparation adds `Round9OpaqueMeshingBaselineTest`, which invokes the active
+factory's real meshing methods and freezes the native eight-bucket output for an
+isolated opaque cube and a greedily merged interior 16-cubed volume. This is a
+characterization gate, not a fallback renderer or readiness claim. The planned
+correctness sequence and remaining border/material/light/randomized/runtime
+gates are recorded in `docs/forxy-round9-render-data-factory-preparation.md`.
+
+## Forxy 玖轮 RenderDataFactory completion (2026-07-20)
+
+The preparation baseline is now followed by a behavior-level closure of all 46
+inherited marker-bearing lines in the active Forge factory. A new
+`RenderFaceDecision` contract is shared by opaque, non-opaque, fluid, inner,
+outer, and six-direction border generation. It consumes 捌轮's existing exact
+face masks, preserves the applicable coarse opaque-neighbor rule, and selects
+self/neighbor light consistently.
+
+The corrected factory now has symmetrical six-border ownership, exact
+same-model coverage culling, actual-fluid retargeting for contained fluids,
+same/different-fluid material rules, and emission-floor lighting. The three
+X-inner scans replace five-bit skip accumulation and the `z == 30` special case
+with per-row `lastProcessedZ[32]`. Native output is guarded before the
+unrepresentable 65,536th bucket record, followed by aggregate-count and packed-
+AABB invariants. Retry/reset and factory reuse are covered explicitly.
+
+Seven Round9 test classes lock the opaque goldens, shared decision table,
+six-border ownership, fluid contracts, lighting, decoded randomized X coverage,
+capacity, sentinel integrity, offsets, AABB, retry recovery, and empty reuse.
+The exact suite passed 68 suites / 244 tests, and clean JarJar produced the
+Forge all JAR.
+
+Automatic runtime qualification passed in three configurations: Embeddium-only;
+Oculus 1.8.0 plus Complementary Unbound with an in-session shader disable/enable
+renderer rebuild; and the combined Embeddium/Oculus/Acedium/Vivecraft/Bobby
+Reforged/Chunky client. The combined client completed a 6 -> 26 -> 6 render-
+distance cycle to force bulk load, unload, and remesh work. All clients exited
+normally, visual output showed no new holes, duplicate faces, seams, fluid loss,
+or flashing, and targeted logs contained no Voxy capacity, AABB, missing-model,
+fatal, or out-of-memory event. Distant Horizons remains outside the combined
+matrix under the deliberate simultaneous-mod rejection policy.
