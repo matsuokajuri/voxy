@@ -97,6 +97,7 @@ XXVIII_MINIMUM_FRONTEND_GATE=36-suites-114-tests-jarJar-passed-against-formal-em
 XXVIII_FORMAL_RUNTIME_REGRESSION=passed-user-2026-07-14
 XXVIII_CHUNKY_PREGGEN_REGRESSION=passed-user-2026-07-14
 XXVIII_RELEASE_READINESS=beta-complete-approved-by-user-2026-07-14
+XXXVII_IMMEDIATELYFAST_GLDEBUG_COMPAT=runtime-startup-passed-user-2026-09-01
 WHOLE_ORIGINAL_MOD_PARITY=beta-complete-user-approved-2026-07-14
 ```
 
@@ -4517,3 +4518,74 @@ renderer. The user confirmed the LOD result visually, reported no problem, and
 closed the client normally. This qualifies Bobby cache ingestion, DH database
 decoding/import, WorldEngine persistence, and restart visibility as one real
 data lifecycle; it does not qualify unsupported simultaneous DH runtime use.
+
+## XXXVII ImmediatelyFast GL-debug injection coexistence
+
+### XXXVII.1 confirmed startup failure, 2026-09-01
+
+The user's `错误报告-2026-09-01_20.14.13.zip` records a critical Mixin failure
+before world entry in a Forge 47.4.18 modpack containing ImmediatelyFast
+1.5.4. Both ImmediatelyFast's `MixinGlDebug.appendStackTrace` and Forge Voxy's
+`ForgeOriginalVoxyGlDebugMixin.voxy$annotateVoxyDebugMessage` were priority-1000
+`@Redirect` handlers for the same Minecraft 1.20.1
+`Logger.info(String,Object)` invocation. ImmediatelyFast claimed the call;
+Voxy's required redirect then reported `(0/1) succeeded` and terminated the
+render thread with `InjectionError`. The earlier unrelated StairBlock coremod
+diagnostic did not terminate startup and is excluded from this repair.
+
+Original Voxy uses `WrapOperation` for this diagnostic behavior, so the two
+mods should not require exclusive ownership of the logger call. The Forge build
+does not otherwise depend on MixinExtras, however, and adding a new packaged
+runtime library merely for this non-rendering diagnostic would expand the
+change beyond the failing boundary.
+
+### XXXVII.2 standard-Mixin coexistence adapter
+
+The Forge adapter now uses a cancellable `@Inject` immediately before the
+logger invocation at priority 1100. That injection is applied before
+ImmediatelyFast's priority-1000 redirect while leaving the original invocation
+present for the later transformer:
+
+- non-Voxy GL messages return from the callback without cancellation, so
+  ImmediatelyFast retains its exact throttling and optional stack-trace route;
+- Voxy-originated GL messages are formatted exactly like Minecraft 1.20.1's
+  `GlDebug.LogEntry`, receive original Voxy's origin stack, and cancel only the
+  remaining vanilla/ImmediatelyFast log call;
+- the expected `Capabilities.testShaderCompiles*` probe message is cancelled,
+  preserving original Voxy's suppression contract;
+- `require = 0` makes this diagnostic hook fail-open if a future higher-priority
+  mod removes the call site, so debug annotation can never block client startup.
+
+The injection point occurs after Minecraft exits the `MESSAGE_BUFFER` monitor,
+so cancellation retains the vanilla debug-ring update and cannot leave a held
+monitor. No renderer, GL resource, shader, model, world, ingest, configuration,
+frontend dependency, or other Mixin was changed.
+
+The focused compatibility suite covers Minecraft 1.20.1 message formatting,
+Voxy/capability trace classification, priority/cancellation/fail-open source
+contracts, and rejection of another exclusive redirect or a MixinExtras
+dependency. The forced-clean Embeddium 0.3.31 + Oculus 1.8.0 gate passes **41
+suites / 134 tests / zero failures** plus reobfuscated JarJar. The all-JAR is
+12,616,357 bytes with SHA-256
+`687c86d7a74b72cad63d106b0052015d099d3106c229b480271d9c13b6c78337`.
+Production bytecode maps `LOGGER` to `f_84028_`, retains the
+`printDebugLog -> m_84038_` refmap entry, contains no Voxy `@Redirect` at this
+site, and adds no MixinExtras payload. Runtime launch in the affected
+ImmediatelyFast 1.5.4 modpack remains pending user confirmation.
+
+The first runtime artifact exposed a packaging-valid but Mixin-0.8.5-invalid
+testability change before injection matching: three `@Unique` static helper
+methods had package visibility so the focused test could call them directly.
+Forge Mixin 0.8.5 rejects non-private static ordinary methods during target
+application, and the second user report recorded that exact
+`InvalidMixinException`; the old Redirect conflict was absent. The helpers are
+private again, matching the original Mixin's method ownership, while the tests
+exercise them reflectively and explicitly require all three private
+declarations. The final production class audit confirms every merged static
+handler/helper is private. No coexistence logic or other subsystem changed.
+
+The corrected helper-visibility artifact then entered both the client and a
+world with ImmediatelyFast 1.5.4 installed. The former Redirect conflict and
+the helper `InvalidMixinException` were absent, and Voxy's GlDebug mixin applied
+normally. This closes XXXVII runtime startup compatibility; the same run
+exposed the separate initial-ingest ordering gap recorded below.
