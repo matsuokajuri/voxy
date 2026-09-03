@@ -826,6 +826,13 @@ The following do not become work merely because a marker exists:
 
 ## Progress summary
 
+Compatibility integration (2026-09-03): Forge rounds XXXVII and XXXVIII were
+merged into Forxy without replacing its existing debt-repayment changes. The
+combined default build/test gate passes 70 suites / 253 tests and reobfuscated
+JarJar; merged-artifact in-game regression remains pending. See the
+[XXXIX merge and quick-audit record](forxy-xxxix-compatibility-merge-audit-2026-09-03.md).
+This integration does not complete or renumber any roadmap round below.
+
 - [x] 壹轮：native ZSTD result validation
 - [x] 贰轮：Mapper snapshot and lock safety
 - [x] 叁轮：optional storage position iteration

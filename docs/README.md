@@ -25,6 +25,8 @@ Consult these for the current route:
   — packed-data inventory, capacity decision, risk map, and execution order.
 - [Forxy 玖轮 RenderDataFactory completion record](forxy-round9-render-data-factory-preparation.md)
   — active-owner proof, behavioral debt closure, differential fixtures, and runtime qualification.
+- [Forxy XXXIX compatibility merge and quick audit](forxy-xxxix-compatibility-merge-audit-2026-09-03.md)
+  — XXXVII/XXXVIII merge provenance, preserved Forxy changes, combined build/package checks, and pending runtime regression.
 
 ## Resolved
 

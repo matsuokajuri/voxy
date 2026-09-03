@@ -97,7 +97,10 @@ XXVIII_MINIMUM_FRONTEND_GATE=36-suites-114-tests-jarJar-passed-against-formal-em
 XXVIII_FORMAL_RUNTIME_REGRESSION=passed-user-2026-07-14
 XXVIII_CHUNKY_PREGGEN_REGRESSION=passed-user-2026-07-14
 XXVIII_RELEASE_READINESS=beta-complete-approved-by-user-2026-07-14
-WHOLE_ORIGINAL_MOD_PARITY=beta-complete-user-approved-2026-07-14
+XXXVII_IMMEDIATELYFAST_GLDEBUG_COMPAT=runtime-startup-passed-user-2026-09-01
+XXXVIII_INITIAL_CHUNK_INGEST=starlight-runtime-passed-final-cleanup-gate-passed
+XXXIX_FORXY_COMPATIBILITY_MERGE=70-suites-253-tests-reobfuscated-jarJar-passed-runtime-pending
+WHOLE_ORIGINAL_MOD_PARITY=forxy-xxxix-merged-artifact-runtime-regression-pending
 ```
 
 The original-equivalent renderer chain remains the only visible route and its
@@ -4850,3 +4853,402 @@ normally, visual output showed no new holes, duplicate faces, seams, fluid loss,
 or flashing, and targeted logs contained no Voxy capacity, AABB, missing-model,
 fatal, or out-of-memory event. Distant Horizons remains outside the combined
 matrix under the deliberate simultaneous-mod rejection policy.
+
+## XXXVII ImmediatelyFast GL-debug injection coexistence
+
+### XXXVII.1 confirmed startup failure, 2026-09-01
+
+The user's `错误报告-2026-09-01_20.14.13.zip` records a critical Mixin failure
+before world entry in a Forge 47.4.18 modpack containing ImmediatelyFast
+1.5.4. Both ImmediatelyFast's `MixinGlDebug.appendStackTrace` and Forge Voxy's
+`ForgeOriginalVoxyGlDebugMixin.voxy$annotateVoxyDebugMessage` were priority-1000
+`@Redirect` handlers for the same Minecraft 1.20.1
+`Logger.info(String,Object)` invocation. ImmediatelyFast claimed the call;
+Voxy's required redirect then reported `(0/1) succeeded` and terminated the
+render thread with `InjectionError`. The earlier unrelated StairBlock coremod
+diagnostic did not terminate startup and is excluded from this repair.
+
+Original Voxy uses `WrapOperation` for this diagnostic behavior, so the two
+mods should not require exclusive ownership of the logger call. The Forge build
+does not otherwise depend on MixinExtras, however, and adding a new packaged
+runtime library merely for this non-rendering diagnostic would expand the
+change beyond the failing boundary.
+
+### XXXVII.2 standard-Mixin coexistence adapter
+
+The Forge adapter now uses a cancellable `@Inject` immediately before the
+logger invocation at priority 1100. That injection is applied before
+ImmediatelyFast's priority-1000 redirect while leaving the original invocation
+present for the later transformer:
+
+- non-Voxy GL messages return from the callback without cancellation, so
+  ImmediatelyFast retains its exact throttling and optional stack-trace route;
+- Voxy-originated GL messages are formatted exactly like Minecraft 1.20.1's
+  `GlDebug.LogEntry`, receive original Voxy's origin stack, and cancel only the
+  remaining vanilla/ImmediatelyFast log call;
+- the expected `Capabilities.testShaderCompiles*` probe message is cancelled,
+  preserving original Voxy's suppression contract;
+- `require = 0` makes this diagnostic hook fail-open if a future higher-priority
+  mod removes the call site, so debug annotation can never block client startup.
+
+The injection point occurs after Minecraft exits the `MESSAGE_BUFFER` monitor,
+so cancellation retains the vanilla debug-ring update and cannot leave a held
+monitor. No renderer, GL resource, shader, model, world, ingest, configuration,
+frontend dependency, or other Mixin was changed.
+
+The focused compatibility suite covers Minecraft 1.20.1 message formatting,
+Voxy/capability trace classification, priority/cancellation/fail-open source
+contracts, and rejection of another exclusive redirect or a MixinExtras
+dependency. The forced-clean Embeddium 0.3.31 + Oculus 1.8.0 gate passes **41
+suites / 134 tests / zero failures** plus reobfuscated JarJar. The all-JAR is
+12,616,357 bytes with SHA-256
+`687c86d7a74b72cad63d106b0052015d099d3106c229b480271d9c13b6c78337`.
+Production bytecode maps `LOGGER` to `f_84028_`, retains the
+`printDebugLog -> m_84038_` refmap entry, contains no Voxy `@Redirect` at this
+site, and adds no MixinExtras payload. Runtime launch in the affected
+ImmediatelyFast 1.5.4 modpack remains pending user confirmation.
+
+The first runtime artifact exposed a packaging-valid but Mixin-0.8.5-invalid
+testability change before injection matching: three `@Unique` static helper
+methods had package visibility so the focused test could call them directly.
+Forge Mixin 0.8.5 rejects non-private static ordinary methods during target
+application, and the second user report recorded that exact
+`InvalidMixinException`; the old Redirect conflict was absent. The helpers are
+private again, matching the original Mixin's method ownership, while the tests
+exercise them reflectively and explicitly require all three private
+declarations. The final production class audit confirms every merged static
+handler/helper is private. No coexistence logic or other subsystem changed.
+
+The corrected helper-visibility artifact then entered both the client and a
+world with ImmediatelyFast 1.5.4 installed. The former Redirect conflict and
+the helper `InvalidMixinException` were absent, and Voxy's GlDebug mixin applied
+normally. This closes XXXVII runtime startup compatibility; the same run
+exposed the separate initial-ingest ordering gap recorded below.
+
+## XXXVIII initial chunk and completed-light ingestion
+
+Chronological investigation record: the constructor backfill described in the
+early subsections was disproven and removed in XXXVIII.6. The final route is the
+mutually exclusive vanilla/Starlight completion adapters plus the exact Chunky
+FULL-result callback in XXXVIII.5-.8; the early backfill is not an active route.
+
+### XXXVIII.1 runtime ground truth, 2026-09-01
+
+The ImmediatelyFast-qualified client created the original network-session
+runtime, separate persistent WorldEngines for the overworld and
+`bf_dimension:arctic_base`, the Embeddium cutout hook, sparse geometry storage,
+`ForgeOriginalVoxyRenderPipeline`, and `MDICSectionRenderer` without a Voxy
+error. Configuration had `enabled`, `enableRendering`, and `ingestEnabled` all
+true. Nevertheless, both new RocksDB stores contained only seven initialization
+files (approximately 65 KB), no SST data, and a zero-byte WAL. No section had
+entered either WorldEngine, so the absence of LOD was upstream of Oculus
+block-state mapping, model baking, geometry generation, and MDIC rendering.
+
+Mixin debug output proves `ForgeOriginalVoxyEmbeddiumRenderSectionManagerMixin`
+and its `onChunkAdded` injector applied. The manager class was first transformed
+after the local login/session had already begun. In this large modpack the
+initial `ClientChunkCache` population therefore preceded Embeddium manager
+construction, so original Voxy's event-only `onChunkAdded` contract never saw
+the already-loaded snapshot. The same upstream hook has no initial-cache
+backfill, explaining why the user observed the same behavior with original
+Voxy under this load order.
+
+### XXXVIII.2 single-owner Forge ordering adapter
+
+Forge now extends the existing `ICheekyClientChunkCache` ownership contract
+with a typed iteration of Minecraft 1.20.1's
+`ClientChunkCache.Storage.chunks`. A dedicated Mixin accessor maps the field to
+production SRG `f_104466_`; no reflection or storage-layout guess is used.
+
+At `RenderSectionManager` constructor TAIL, after its existing chunk-bound
+reset, the adapter verifies the same current-level WorldEngine owner and takes
+one snapshot of chunks already present in the client cache. Every entry is sent
+to the existing `ForgeVoxyInstance.ingestChunkWithLightRetry` route. That route
+still owns lighting readiness, retry bookkeeping, conversion, mapper updates,
+WorldUpdater, saving, and model/geometry invalidation. Chunks arriving after
+construction remain exclusively handled by the unchanged original
+`onChunkAdded` injection; unload/Bobby behavior is unchanged.
+
+The focused contract test locks the typed accessor, one-time constructor
+snapshot, existing owner/retry call, continued `onChunkAdded` route, Mixin
+registration, and absence of a direct `rawIngest` substitute. The forced-clean
+Embeddium 0.3.31 + Oculus 1.8.0 gate passes **42 suites / 135 tests / zero
+failures** plus reobfuscated JarJar. The 12,618,153-byte all-JAR has SHA-256
+`0678b0709cff5ad41deaec710232cdfdcc9dc9e2b4081f7d45e07d9726cd2655`.
+Production refmap inspection confirms
+`chunks -> f_104466_:AtomicReferenceArray`. Runtime validation must confirm the
+backfill count is nonzero, RocksDB writes appear, and LOD becomes visible in the
+affected modpack before XXXVIII is accepted.
+
+### XXXVIII.3 full-bright implicit light readiness
+
+The first backfill runtime proved the typed snapshot path by reporting 809
+already-loaded chunks, but the persistent store still had no SST and a zero-byte
+WAL. Every chunk reached `ingestChunkWithLightRetry`; all were deferred by the
+per-section light gate. The affected dimension type is authoritative content:
+
+```text
+bf_dimension:arctic_base_type
+has_skylight=true
+ambient_light=1.0
+fixed_time=6000
+```
+
+A temporary runtime counter was removed after it did not trigger in the next
+manager construction (the cache was empty at that exact construction). A
+separate temporary, also removed, real-region probe decoded the current save's
+`r.0.0.mca` through Voxy's production Anvil decompressor. Across 1,024 chunks
+and 9,525 non-air sections it found 2,550 SkyLight arrays, zero BlockLight
+arrays, and only 1,326 non-air sections with a SkyLight array. Every chunk had
+at least one SkyLight array. This matches Minecraft's legal implicit uniform
+light representation and proves that requiring every non-air section to own
+`LIGHT_AND_DATA` can never complete for this full-bright content.
+
+The Forge readiness exception is deliberately narrower than restoring the
+unsafe pre-black-water behavior. Ordinary dimensions still require their
+dimension-selected SKY/BLOCK section to reach `LIGHT_AND_DATA`. An
+`ambient_light >= 1.0` dimension may additionally accept a required light layer
+only when its DataLayer is null or empty; a non-empty placeholder which is not
+yet `LIGHT_AND_DATA` still defers. Missing/empty sky data in that full-bright
+case receives uniform sky 15. This preserves the proven placeholder protection
+for normal dimensions while representing the full-bright dimension's explicit
+lighting contract.
+
+The temporary runtime and region probes are absent from the final source. The
+focused readiness suite now covers the exact 1.0 threshold, implicit full-bright
+acceptance, unchanged normal `LIGHT_ONLY` rejection, ordinary SKY/BLOCK layer
+selection, and all-air clearing. The final forced-clean Embeddium 0.3.31 +
+Oculus 1.8.0 gate passes **42 suites / 136 tests / zero failures** plus
+reobfuscated JarJar. The 12,618,423-byte all-JAR has SHA-256
+`6bb55ce5d6dd28eece3054359072f117324f9998922e1942874acd7366447d24`.
+Runtime confirmation must now show nonzero storage writes and visible LOD.
+
+### XXXVIII.4 client light-packet completion ownership
+
+The full-bright artifact produced the expected constructor snapshots but did
+not solve the common path. One run backfilled 809 chunks in
+`bf_dimension:arctic_base`, switched to the overworld and backfilled 809 there,
+then rebuilt the overworld renderer and backfilled 809 again. The arctic store
+finally gained a 136,307-byte WAL, proving some full-bright sections entered
+WorldUpdater, while the overworld store remained at a zero-byte WAL. The user
+reported no visible LOD in either dimension. This excludes a dimension-only
+cause and confirms the per-section debug storage type is not a reliable
+whole-packet completion owner.
+
+Minecraft 1.20.1 production bytecode provides the missing boundary. In
+`ClientPacketListener.handleLevelChunkWithLight`, it first calls
+`ClientChunkCache.replaceWithPacketData`, which publishes the LevelChunk and
+triggers Embeddium `onChunkAdded`. Only afterward does it pass a light-update
+Runnable to `ClientLevel.queueLightUpdate`. Thus the original Voxy/Sodium chunk-
+added hook necessarily runs before the paired light packet has been applied on
+this target version. Retrying against individual `LIGHT_AND_DATA` section types
+cannot distinguish a still-pending placeholder from a final implicit uniform
+section.
+
+The Forge adapter now captures the packet coordinates at
+`handleLevelChunkWithLight` HEAD and uses standard Mixin `@ModifyArg` to wrap
+only the vanilla `queueLightUpdate` Runnable. The wrapper executes the original
+light update first, looks up that exact FULL client chunk in the captured
+ClientLevel, and calls `ForgeVoxyInstance.ingestChunkAfterLightUpdate`. The new
+trusted entry resolves the same auto-ingest WorldEngine and runs the same
+conversion, retry/statistics, WorldUpdater, saving, and renderer notification
+chain. Its sole distinction is that implicit section light layers are accepted
+because the owning packet has demonstrably completed.
+
+Early `onChunkAdded`, constructor backfill, ordinary retry, section dirty, Bobby,
+and Chunky routes retain the strict per-section placeholder gate. The
+full-bright null/empty exception also remains narrow. Consequently the
+2026-07-11 black-water window cannot enter through an early callback, while
+ordinary and custom dimensions no longer wait for storage entries Minecraft
+legitimately omits after a completed packet.
+
+Focused tests require original-Runnable-before-ingest ordering, exact packet
+and `queueLightUpdate` targets, the trusted-vs-untrusted readiness distinction,
+the single existing ingest owner, typed cache backfill, and GlDebug coexistence.
+The forced-clean Embeddium 0.3.31 + Oculus 1.8.0 gate passes **42 suites / 137
+tests / zero failures** plus reobfuscated JarJar. Production refmap/bytecode
+inspection confirms `handleLevelChunkWithLight -> m_183388_`,
+`queueLightUpdate -> m_194171_`, the SRG cache accessor, and the wrapped Runnable
+calling `ingestChunkAfterLightUpdate` after its original body. The
+12,619,635-byte all-JAR has SHA-256
+`cf2bb9b5b79bcd132de6f54f47630f1cbff957d6970fe551c701ea743213223d`.
+Runtime validation remains required.
+
+### XXXVIII.5 Starlight-owned packet completion
+
+The vanilla packet-completion artifact still produced a zero-byte overworld
+WAL. Exact installed-mod inspection identified Starlight
+`1.1.2+forge.1cda73c`, which rewrites both the client light engine and this
+packet method. Its priority-1001 `ClientPacketListenerMixin` redirects
+`handleLevelChunkWithLight`'s vanilla `queueLightUpdate` call to a no-op, then
+injects at RETURN to run `readSectionList`, `clientUpdateLight`,
+`clientChunkLoad`, and the vanilla post-load section notifications itself.
+Voxy's ModifyArg was therefore successfully applied to the original Runnable,
+but Starlight's later redirect discarded that wrapped argument without running
+it. This is why no injection error appeared while the trusted ingest callback
+also never ran.
+
+Light-packet completion is now expressed as two mutually exclusive platform
+adapters selected by `ForgeVoxyMixinPlugin`:
+
+- without Starlight, `ForgeOriginalVoxyVanillaLightPacketMixin` wraps the
+  vanilla `queueLightUpdate` Runnable as in XXXVIII.4;
+- with Starlight, `ForgeOriginalVoxyStarlightLightPacketMixin` uses priority 900
+  and injects at `handleLevelChunkWithLight` RETURN, after Starlight's
+  priority-1001 handler has completed its light and chunk-load calls.
+
+The always-active `ForgeOriginalVoxyClientPacketListenerMixin` is reduced back
+to original session creation and therefore cannot lose that lifecycle hook when
+either light adapter is excluded. Both completion adapters resolve the same
+FULL LevelChunk and call the same `ingestChunkAfterLightUpdate` owner. Each logs
+its selected boundary once per client for runtime evidence; no per-packet log is
+retained.
+
+Plugin tests prove vanilla/Starlight selection is mutually exclusive for both
+installed and absent states. Source contracts retain original-Runnable-before-
+ingest ordering on vanilla, require Starlight priority 900 RETURN ownership,
+and reject a second conversion route. The final forced-clean Embeddium 0.3.31 +
+Oculus 1.8.0 gate passes **42 suites / 138 tests / zero failures** plus
+reobfuscated JarJar. The 12,622,215-byte all-JAR has SHA-256
+`5399c368847b21196b2ca0e445b518da5aba40b90bd9903c12dd714763e2b60d`.
+Runtime validation in the affected Starlight pack remains required.
+
+### XXXVIII.6 runtime acceptance and post-pass cleanup
+
+The Starlight-specific artifact emitted
+`Original Voxy Starlight post-light packet ingest hook reached`, and the user
+confirmed visible LOD. During the same client session the user exercised
+overworld rendering, `bf_dimension:arctic_base`, and return to the overworld.
+Each dimension created its own WorldIdentifier/storage owner and renderer, and
+both persistent engines closed normally at disconnect. No Voxy error or warning
+was emitted.
+
+Storage evidence proves the complete ingest/save route rather than only a
+visual pixel result:
+
+```text
+minecraft:overworld
+  71,144,083 bytes
+  SST: 15,126,935 + 10,531,655 + 251,649 bytes
+  active WAL: 44,957,026 bytes
+
+bf_dimension:arctic_base
+  7,062,873 bytes
+  SST: 74,777 + 9,085 bytes
+  active WAL: 6,697,670 bytes
+```
+
+A final code/log review found two non-visual cleanup defects in the provisional
+artifact. RenderSectionManager reconstruction during shader/resource reloads
+repeated the entire 809-chunk constructor backfill, even though the packet-
+completion route now owns every normal client load. Also, early `onChunkAdded`
+could leave a deferred key in `ForgeIngestRetryQueue` after the trusted packet
+route had successfully queued the full chunk, causing unnecessary perpetual
+strict retries.
+
+The disproven constructor backfill, its cache iteration contract, typed storage
+accessor, Mixin registration, and focused backfill test are removed. Trusted
+full-chunk success now removes the key from the active retry set in O(1); stale
+deque entries are skipped lazily, while an unrelated successful single-section
+update still cannot cancel another section's pending chunk retry. This leaves
+one packet-completion ingest per normal chunk plus the original update/unload
+paths, without a second scanner or duplicate renderer-reload workload.
+
+The final forced-clean Embeddium 0.3.31 + Oculus 1.8.0 gate passes **42 suites /
+139 tests / zero failures** plus reobfuscated JarJar. Source scans confirm the
+backfill/accessor/probes are absent. The 12,620,622-byte all-JAR has SHA-256
+`bcb3ba2658f71516c2c4377c59c576a8c0f5407a06769986b60f30db6e1cbdcf`.
+One startup/world smoke test of this cleanup-only artifact remains before
+XXXVIII final acceptance.
+
+### XXXVIII.7 Chunky FULL completion uses the trusted lighting owner
+
+The user then ran Chunky 1.3.146 in the active overworld with a circle centered
+at `(0,0)`, radius 1024. Chunky completed 16,641 chunks in 3:26, but the new
+area did not appear directly as LOD. Voxy's overworld store increased from
+approximately 71 MB to 142 MB, which matches another current-client-view ingest
+of roughly 809 chunks rather than the expected hundreds of MB to more than a GB
+for 16,641 full chunks.
+
+The existing Chunky mixin still passed its exact successful server FULL result
+to the ordinary strict ingest entry. Under Starlight, server LIGHT/FULL
+completion is not represented by vanilla per-section debug storage types, and
+these transient ServerLevel chunks are not members of the client retry queue.
+They were therefore deferred once and lost even though the exact-result/ticket
+race from XXVIII.4 remained fixed.
+
+Chunky's captured holder future completes the server LIGHT -> FULL status chain
+before yielding the LevelChunk. That result is now sent to the same generic
+`tryAutoIngestTrustedChunkWithStats` owner used by completed client light
+adapters. The method name and internal readiness flag are generalized from
+client-packet wording; conversion, Mapper, WorldUpdater, saving, render dirty
+notifications, world identity validation, and service ownership are unchanged.
+The server auto-target still accepts only the current physical client's own
+integrated server and matching active ClientLevel dimension.
+
+The Chunky contract test now requires trusted FULL ingestion and rejects a
+return to `tryAutoIngestChunk(levelChunk)`, while retaining exact future result
+identity and the absence of `getChunkNow`/ticket races. A one-time
+`Original Voxy Chunky trusted FULL ingest hook reached` line provides runtime
+evidence without per-chunk logging. The final forced-clean Embeddium 0.3.31 +
+Oculus 1.8.0 gate remains **42 suites / 139 tests / zero failures** plus
+reobfuscated JarJar. The 12,620,997-byte all-JAR has SHA-256
+`015a259b10a75cf1e94e03312f1e1ebb232c678558cea48c9595defafff56d80`.
+Runtime validation must use a not-yet-generated Chunky region because Chunky
+skips already-generated disk chunks without producing a new FULL result.
+
+### XXXVIII.8 vanilla packet-coordinate thread confinement, 2026-09-03
+
+A follow-up review of the Embeddium + Oculus + Chunky configuration without
+Starlight found a race in the Forge-only vanilla packet adapter. It captured
+`packet.getX()/getZ()` into ClientPacketListener instance fields at method HEAD.
+Minecraft 1.20.1 first invokes this handler on the network thread;
+`PacketUtils.ensureRunningOnSameThread` schedules a second invocation on the
+client thread and exits the network invocation by throwing. A later network
+packet could therefore overwrite the fields while an earlier client-thread
+packet was preparing its deferred light Runnable.
+
+The capture injection now targets the exact
+`PacketUtils.ensureRunningOnSameThread(Packet,PacketListener,BlockableEventLoop)`
+invocation with `At.Shift.AFTER`. Only the client-thread invocation can reach
+that point, so both coordinate writes and the subsequent Runnable construction
+are confined to the client thread. Before returning the Runnable, the adapter
+still captures its ClientLevel and both primitive coordinates into locals;
+delayed execution never rereads the mutable listener fields or a later level.
+
+The original Voxy ingest/WorldEngine chain, Starlight RETURN adapter, Chunky
+FULL callback, early-light protection, rendering and storage are unchanged.
+A focused regression contract requires AFTER-thread-dispatch capture (not
+HEAD) and per-Runnable local copies of level/x/z. The targeted compile/test
+gate passes. The final forced-clean gate with Embeddium 0.3.31 and Oculus 1.8.0
+passes **42 suites / 140 tests / zero failures, errors, or skips** plus
+reobfuscated JarJar. The packaged injection retains `At.Shift.AFTER`, and the
+packaged refmap resolves the guard to `PacketUtils.m_131363_` and the packet
+handler to `ClientPacketListener.m_183388_`. The 12,621,122-byte all-JAR has
+SHA-256 `cfc9304a7dcaecbb7ebc7a8b3efa68aa0412864467d9cfb54ce1d8783aee4fba`.
+The latest vanilla-only runtime matrix still requires an actual client smoke
+test; source and packaged-bytecode checks do not replace it.
+
+## XXXIX Forxy compatibility integration and quick audit (2026-09-03)
+
+Merged source rounds XXXVII (`0c991b7d`) and XXXVIII (`3c377c8e`) into local
+Forxy after its existing `e99887ee6` renderer-pipeline commit. Only this audit's
+independently appended history conflicted; both branches' records are retained.
+Code merged without conflict, including preservation of Forxy's Oculus
+shadow-caster Mixin registrations. No renderer/storage rewrite, new dependency,
+modpack override, or Xaero shutdown workaround is part of this integration.
+
+The combined Forxy tree passes a clean `compileJava` / default `test` / `jarJar`
+/ `reobfJarJar` gate: **70 suites / 253 tests / zero failures, errors, or skips**.
+The formal all-JAR is **12,684,556 bytes**, SHA-256
+`af709a9db34aedd06b5e02d45f1d27a9493df27af4d9eac9270e0c296a243cb6`.
+Packaged classes, Mixin registrations, refmap targets, duplicate entries, and
+unintended workspace inclusion were checked. The bounded quick audit found no
+merge-blocking defect; it is not a replacement for the remaining Forxy roadmap
+or user-operated visual regression of this combined artifact.
+
+Full provenance, boundary reasoning, exclusion of the recovered Xaero
+save/quit delay, package evidence, inherited housekeeping observation, and
+the pending no-Oculus / Oculus / Starlight / Chunky runtime matrix are recorded
+in [the Forxy XXXIX merge audit](forxy-xxxix-compatibility-merge-audit-2026-09-03.md).
+No runtime readiness flag was changed and no remote push was performed.

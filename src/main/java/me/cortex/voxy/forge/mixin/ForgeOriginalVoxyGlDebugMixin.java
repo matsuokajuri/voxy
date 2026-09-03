@@ -2,10 +2,14 @@ package me.cortex.voxy.forge.mixin;
 
 import com.mojang.blaze3d.platform.GlDebug;
 import org.slf4j.Logger;
+import org.lwjgl.opengl.GLDebugMessageCallback;
+import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Redirect;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
@@ -18,31 +22,59 @@ import java.io.StringWriter;
  * and its ownership are otherwise the same, so preserve the original behavior
  * at the 1.20.1 call site.</p>
  */
-@Mixin(GlDebug.class)
+@Mixin(value = GlDebug.class, priority = 1100)
 public class ForgeOriginalVoxyGlDebugMixin {
-    @Redirect(
+    @Shadow
+    @Final
+    private static Logger LOGGER;
+
+    @Inject(
             method = "printDebugLog",
             at = @At(
                     value = "INVOKE",
                     target = "Lorg/slf4j/Logger;info(Ljava/lang/String;Ljava/lang/Object;)V",
-                    remap = false))
-    private static void voxy$annotateVoxyDebugMessage(Logger logger, String format, Object message) {
-        if (message == null
-                || !"com.mojang.blaze3d.platform.GlDebug$LogEntry".equals(message.getClass().getName())) {
-            logger.info(format, message);
-            return;
-        }
-
-        Throwable origin = new Throwable(message.toString());
+                    remap = false),
+            cancellable = true,
+            require = 0)
+    private static void voxy$annotateVoxyDebugMessage(
+            int source,
+            int type,
+            int id,
+            int severity,
+            int messageLength,
+            long messagePointer,
+            long userParam,
+            CallbackInfo ci) {
+        Throwable origin = new Throwable(voxy$formatDebugMessage(
+                source,
+                type,
+                id,
+                severity,
+                GLDebugMessageCallback.getMessage(messageLength, messagePointer)));
         StackTraceElement[] trace = origin.getStackTrace();
         if (!voxy$isCausedByVoxy(trace)) {
-            logger.info(format, message);
             return;
         }
         if (voxy$isCapabilityShaderCompileTest(trace)) {
+            ci.cancel();
             return;
         }
-        logger.info(format + '\n' + voxy$stackTrace(origin), origin);
+        LOGGER.info("OpenGL debug message: {}\n" + voxy$stackTrace(origin), origin);
+        ci.cancel();
+    }
+
+    @Unique
+    private static String voxy$formatDebugMessage(
+            int source,
+            int type,
+            int id,
+            int severity,
+            String message) {
+        return "id=" + id
+                + ", source=" + GlDebug.sourceToString(source)
+                + ", type=" + GlDebug.typeToString(type)
+                + ", severity=" + GlDebug.severityToString(severity)
+                + ", message='" + message + '\'';
     }
 
     @Unique

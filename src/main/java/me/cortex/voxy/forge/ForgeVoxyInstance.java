@@ -303,6 +303,10 @@ public final class ForgeVoxyInstance {
         return this.ingestRetryQueue.ingestChunk(chunk);
     }
 
+    public boolean ingestChunkAfterLightUpdate(LevelChunk chunk) {
+        return this.ingestRetryQueue.ingestChunkAfterLightUpdate(chunk);
+    }
+
     public boolean ingestSectionWithLightRetry(ClientLevel level, LevelChunk chunk, int sectionY) {
         return this.ingestRetryQueue.ingestSection(level, chunk, sectionY);
     }

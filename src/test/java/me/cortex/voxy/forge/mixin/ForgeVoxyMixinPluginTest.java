@@ -40,4 +40,17 @@ class ForgeVoxyMixinPluginTest {
                 "me.cortex.voxy.forge.mixin.ForgeOriginalVoxyEmbeddiumDefaultChunkRendererMixin",
                 modId -> false));
     }
+
+    @Test
+    void lightPacketCompletionMixinsAreMutuallyExclusiveWithStarlight() {
+        String vanilla =
+                "me.cortex.voxy.forge.mixin.ForgeOriginalVoxyVanillaLightPacketMixin";
+        String starlight =
+                "me.cortex.voxy.forge.mixin.ForgeOriginalVoxyStarlightLightPacketMixin";
+
+        assertTrue(ForgeVoxyMixinPlugin.shouldApplyMixin(vanilla, modId -> false));
+        assertFalse(ForgeVoxyMixinPlugin.shouldApplyMixin(starlight, modId -> false));
+        assertFalse(ForgeVoxyMixinPlugin.shouldApplyMixin(vanilla, "starlight"::equals));
+        assertTrue(ForgeVoxyMixinPlugin.shouldApplyMixin(starlight, "starlight"::equals));
+    }
 }
