@@ -101,6 +101,8 @@ class Pass2ParityRepairSourceContractTest {
         assertTrue(source.contains("ChunkHolder;m_140049_"));
         assertTrue(source.contains("result.left().ifPresent(chunk ->"));
         assertTrue(source.contains("chunk instanceof LevelChunk levelChunk"));
+        assertTrue(source.contains("tryAutoIngestTrustedChunkWithStats(levelChunk)"));
+        assertFalse(source.contains("tryAutoIngestChunk(levelChunk)"));
         assertFalse(source.contains("getChunkNow"));
         assertFalse(source.contains("thenRunAsync"));
         assertFalse(source.contains("CallbackInfoReturnable"));

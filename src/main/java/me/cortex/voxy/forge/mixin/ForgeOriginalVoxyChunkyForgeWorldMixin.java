@@ -2,6 +2,7 @@ package me.cortex.voxy.forge.mixin;
 
 import com.mojang.datafixers.util.Either;
 import me.cortex.voxy.common.world.service.VoxelIngestService;
+import me.cortex.voxy.forge.VoxyForge;
 import net.minecraft.server.level.ChunkHolder;
 import net.minecraft.server.level.ChunkMap;
 import net.minecraft.world.level.chunk.ChunkAccess;
@@ -9,16 +10,21 @@ import net.minecraft.world.level.chunk.ChunkStatus;
 import net.minecraft.world.level.chunk.LevelChunk;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Pseudo;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Group;
 import org.spongepowered.asm.mixin.injection.Redirect;
 
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /** Optional Forge counterpart to original Voxy's Chunky Fabric generation hook. */
 @Pseudo
 @Mixin(targets = "org.popcraft.chunky.platform.ForgeWorld", remap = false)
 public abstract class ForgeOriginalVoxyChunkyForgeWorldMixin {
+    @Unique
+    private static final AtomicBoolean VOXY$LOGGED_TRUSTED_FULL_INGEST = new AtomicBoolean();
+
     @Group(name = "voxy$chunkyGetOrScheduleFuture", min = 1)
     @Redirect(
             method = "getChunkAtAsync(II)Ljava/util/concurrent/CompletableFuture;",
@@ -64,7 +70,17 @@ public abstract class ForgeOriginalVoxyChunkyForgeWorldMixin {
         return future.thenApply(result -> {
             result.left().ifPresent(chunk -> {
                 if (chunk instanceof LevelChunk levelChunk) {
-                    VoxelIngestService.tryAutoIngestChunk(levelChunk);
+                    //Chunky's holder future has completed the server LIGHT -> FULL status chain.
+                    //Starlight does not expose that completion through vanilla per-section debug
+                    //storage types, so consume the exact FULL result through the same trusted
+                    //ingest owner used after a completed client light packet.
+                    VoxelIngestService.IngestStats stats =
+                            VoxelIngestService.tryAutoIngestTrustedChunkWithStats(levelChunk);
+                    if (stats.updated()
+                            && VOXY$LOGGED_TRUSTED_FULL_INGEST.compareAndSet(false, true)) {
+                        VoxyForge.LOGGER.info(
+                                "Original Voxy Chunky trusted FULL ingest hook reached.");
+                    }
                 }
             });
             return result;

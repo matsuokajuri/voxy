@@ -14,8 +14,12 @@ class VoxelIngestServiceLightingReadinessTest {
         assertEquals(LightLayer.SKY, VoxelIngestService.requiredReadinessLayer(true));
         assertFalse(VoxelIngestService.isLightingReadyForIngest(
                 false,
+                false,
+                false,
                 LayerLightSectionStorage.SectionType.LIGHT_ONLY));
         assertTrue(VoxelIngestService.isLightingReadyForIngest(
+                false,
+                false,
                 false,
                 LayerLightSectionStorage.SectionType.LIGHT_AND_DATA));
 
@@ -32,8 +36,12 @@ class VoxelIngestServiceLightingReadinessTest {
         assertEquals(LightLayer.BLOCK, VoxelIngestService.requiredReadinessLayer(false));
         assertFalse(VoxelIngestService.isLightingReadyForIngest(
                 false,
+                false,
+                false,
                 LayerLightSectionStorage.SectionType.LIGHT_ONLY));
         assertTrue(VoxelIngestService.isLightingReadyForIngest(
+                false,
+                false,
                 false,
                 LayerLightSectionStorage.SectionType.LIGHT_AND_DATA));
 
@@ -49,6 +57,38 @@ class VoxelIngestServiceLightingReadinessTest {
     void airSectionsRetainTheOriginalClearWithoutLightingBehavior() {
         assertTrue(VoxelIngestService.isLightingReadyForIngest(
                 true,
+                false,
+                false,
+                LayerLightSectionStorage.SectionType.LIGHT_ONLY));
+    }
+
+    @Test
+    void fullBrightDimensionsAcceptOnlyImplicitEmptyLightingLayers() {
+        assertTrue(VoxelIngestService.isAmbientFullBright(1.0F));
+        assertFalse(VoxelIngestService.isAmbientFullBright(Math.nextDown(1.0F)));
+        assertTrue(VoxelIngestService.isLightingReadyForIngest(
+                false,
+                false,
+                true,
+                LayerLightSectionStorage.SectionType.LIGHT_ONLY));
+        assertFalse(VoxelIngestService.isLightingReadyForIngest(
+                false,
+                false,
+                false,
+                LayerLightSectionStorage.SectionType.LIGHT_ONLY));
+    }
+
+    @Test
+    void completedClientLightPacketTrustsImplicitSectionLighting() {
+        assertTrue(VoxelIngestService.isLightingReadyForIngest(
+                false,
+                true,
+                false,
+                LayerLightSectionStorage.SectionType.LIGHT_ONLY));
+        assertFalse(VoxelIngestService.isLightingReadyForIngest(
+                false,
+                false,
+                false,
                 LayerLightSectionStorage.SectionType.LIGHT_ONLY));
     }
 }

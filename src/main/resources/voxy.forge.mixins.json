@@ -16,6 +16,8 @@
     "ForgeOriginalVoxyEmbeddiumViewportAccessor",
     "ForgeOriginalVoxyEmbeddiumWorldRendererAccessor",
     "ForgeOriginalVoxyClientPacketListenerMixin",
+    "ForgeOriginalVoxyVanillaLightPacketMixin",
+    "ForgeOriginalVoxyStarlightLightPacketMixin",
     "ForgeOriginalVoxyClientChunkCacheMixin",
     "ForgeOriginalVoxyClientLevelMixin",
     "ForgeOriginalVoxyChunkyForgeWorldMixin",

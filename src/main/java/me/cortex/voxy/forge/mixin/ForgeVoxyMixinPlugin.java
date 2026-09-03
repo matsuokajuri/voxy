@@ -17,6 +17,10 @@ public final class ForgeVoxyMixinPlugin implements IMixinConfigPlugin {
             "me.cortex.voxy.forge.mixin.ForgeOriginalVoxyChunky";
     private static final String OCULUS_MIXIN_PREFIX =
             "me.cortex.voxy.forge.mixin.ForgeOriginalVoxyOculus";
+    private static final String VANILLA_LIGHT_PACKET_MIXIN =
+            "me.cortex.voxy.forge.mixin.ForgeOriginalVoxyVanillaLightPacketMixin";
+    private static final String STARLIGHT_LIGHT_PACKET_MIXIN =
+            "me.cortex.voxy.forge.mixin.ForgeOriginalVoxyStarlightLightPacketMixin";
 
     @Override
     public void onLoad(String mixinPackage) {
@@ -41,6 +45,12 @@ public final class ForgeVoxyMixinPlugin implements IMixinConfigPlugin {
         }
         if (mixinClassName.startsWith(CHUNKY_MIXIN_PREFIX)) {
             return modPresent.test("chunky");
+        }
+        if (mixinClassName.equals(VANILLA_LIGHT_PACKET_MIXIN)) {
+            return !modPresent.test("starlight");
+        }
+        if (mixinClassName.equals(STARLIGHT_LIGHT_PACKET_MIXIN)) {
+            return modPresent.test("starlight");
         }
         return !mixinClassName.startsWith(OCULUS_MIXIN_PREFIX) || modPresent.test("oculus");
     }

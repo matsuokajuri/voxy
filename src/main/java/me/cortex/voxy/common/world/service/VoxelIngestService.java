@@ -154,6 +154,19 @@ public class VoxelIngestService {
     }
 
     public static IngestStats ingestChunkWithStats(WorldEngine engine, LevelChunk chunk) {
+        return ingestChunkWithStats(engine, chunk, false);
+    }
+
+    public static IngestStats ingestTrustedChunkWithStats(
+            WorldEngine engine,
+            LevelChunk chunk) {
+        return ingestChunkWithStats(engine, chunk, true);
+    }
+
+    private static IngestStats ingestChunkWithStats(
+            WorldEngine engine,
+            LevelChunk chunk,
+            boolean trustedLightingComplete) {
         if (engine == null || chunk == null) {
             return IngestStats.EMPTY;
         }
@@ -165,6 +178,8 @@ public class VoxelIngestService {
         int sectionY = chunk.getMinSection();
         var lightEngine = chunk.getLevel().getLightEngine();
         boolean dimensionHasSkyLight = chunk.getLevel().dimensionType().hasSkyLight();
+        boolean ambientFullBright = isAmbientFullBright(
+                chunk.getLevel().dimensionType().ambientLight());
         IngestStats deferredStats = IngestStats.EMPTY;
         for (var section : chunk.getSections()) {
             if (section != null) {
@@ -172,6 +187,8 @@ public class VoxelIngestService {
                 var blockLight = lightEngine.getLayerListener(LightLayer.BLOCK).getDataLayerData(sectionPos);
                 boolean missingRequiredLight = !hasUsableLight(
                         dimensionHasSkyLight,
+                        ambientFullBright,
+                        trustedLightingComplete,
                         lightEngine,
                         sectionPos,
                         section);
@@ -195,6 +212,8 @@ public class VoxelIngestService {
                 boolean missingBlockLight = blockLight == null;
                 boolean missingRequiredLight = !hasUsableLight(
                         dimensionHasSkyLight,
+                        ambientFullBright,
+                        trustedLightingComplete,
                         lightEngine,
                         sectionPos,
                         section);
@@ -250,8 +269,12 @@ public class VoxelIngestService {
         var skyLight = lightEngine.getLayerListener(LightLayer.SKY).getDataLayerData(sectionPos);
         boolean missingBlockLight = blockLight == null;
         boolean dimensionHasSkyLight = chunk.getLevel().dimensionType().hasSkyLight();
+        boolean ambientFullBright = isAmbientFullBright(
+                chunk.getLevel().dimensionType().ambientLight());
         boolean missingRequiredLight = !hasUsableLight(
                 dimensionHasSkyLight,
+                ambientFullBright,
+                false,
                 lightEngine,
                 sectionPos,
                 section);
@@ -289,6 +312,8 @@ public class VoxelIngestService {
 
     private static boolean hasUsableLight(
             boolean dimensionHasSkyLight,
+            boolean ambientFullBright,
+            boolean trustedLightingComplete,
             LevelLightEngine lightEngine,
             SectionPos sectionPos,
             LevelChunkSection section) {
@@ -298,9 +323,19 @@ public class VoxelIngestService {
         //SKY is the proven readiness signal in sky dimensions, while BLOCK is the only signal that
         //can ever become ready in dimensions without skylight.
         LightLayer readinessLayer = requiredReadinessLayer(dimensionHasSkyLight);
+        DataLayer requiredLayer = lightEngine.getLayerListener(readinessLayer)
+                .getDataLayerData(sectionPos);
+        boolean implicitFullBrightLayer = ambientFullBright
+                && (requiredLayer == null || requiredLayer.isEmpty());
         return isLightingReadyForIngest(
                 section.hasOnlyAir(),
+                trustedLightingComplete,
+                implicitFullBrightLayer,
                 lightEngine.getDebugSectionType(readinessLayer, sectionPos));
+    }
+
+    static boolean isAmbientFullBright(float ambientLight) {
+        return ambientLight >= 1.0F;
     }
 
     static LightLayer requiredReadinessLayer(boolean dimensionHasSkyLight) {
@@ -309,8 +344,12 @@ public class VoxelIngestService {
 
     static boolean isLightingReadyForIngest(
             boolean sectionHasOnlyAir,
+            boolean trustedLightingComplete,
+            boolean implicitFullBrightLayer,
             LayerLightSectionStorage.SectionType requiredLayerType) {
         return sectionHasOnlyAir
+                || trustedLightingComplete
+                || implicitFullBrightLayer
                 || requiredLayerType == LayerLightSectionStorage.SectionType.LIGHT_AND_DATA;
     }
 
@@ -334,6 +373,9 @@ public class VoxelIngestService {
     private static int resolveUniformSkyLight(LevelChunk chunk, LevelLightEngine lightEngine, SectionPos sectionPos, DataLayer skyLight) {
         if (skyLight != null && !skyLight.isEmpty()) {
             return 0;//Per-voxel sky data is present, so no uniform default is needed.
+        }
+        if (isAmbientFullBright(chunk.getLevel().dimensionType().ambientLight())) {
+            return 15;
         }
         if (!chunk.getLevel().dimensionType().hasSkyLight()) {
             return 0;
@@ -429,6 +471,14 @@ public class VoxelIngestService {
             return IngestStats.EMPTY;
         }
         return ingestChunkWithStats(engine, chunk);
+    }
+
+    public static IngestStats tryAutoIngestTrustedChunkWithStats(LevelChunk chunk) {
+        WorldEngine engine = autoIngestTarget.getEngine(chunk);
+        if (engine == null) {
+            return IngestStats.EMPTY;
+        }
+        return ingestTrustedChunkWithStats(engine, chunk);
     }
 
     public int getTaskCount() {

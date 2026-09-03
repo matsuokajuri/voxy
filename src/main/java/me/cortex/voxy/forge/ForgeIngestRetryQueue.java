@@ -51,6 +51,17 @@ final class ForgeIngestRetryQueue {
         return stats.updated();
     }
 
+    boolean ingestChunkAfterLightUpdate(LevelChunk chunk) {
+        VoxelIngestService.IngestStats stats =
+                VoxelIngestService.tryAutoIngestTrustedChunkWithStats(chunk);
+        if (stats.updated()) {
+            cancelDeferredRetryState(this.queuedChunks, chunk.getPos().toLong());
+        } else {
+            this.recordDeferred(chunk, stats);
+        }
+        return stats.updated();
+    }
+
     boolean ingestSection(ClientLevel level, LevelChunk chunk, int sectionY) {
         WorldEngine engine = this.instance.getEngineForLevel(level).orElse(null);
         if (engine == null) {
@@ -83,9 +94,17 @@ final class ForgeIngestRetryQueue {
     }
 
     static long pollDeferredRetryState(Deque<Long> pendingChunks, Set<Long> queuedChunks) {
-        long key = pendingChunks.removeFirst();
+        while (!pendingChunks.isEmpty()) {
+            long key = pendingChunks.removeFirst();
+            if (queuedChunks.remove(key)) {
+                return key;
+            }
+        }
+        return Long.MIN_VALUE;
+    }
+
+    static void cancelDeferredRetryState(Set<Long> queuedChunks, long key) {
         queuedChunks.remove(key);
-        return key;
     }
 
     private void onClientTick(TickEvent.ClientTickEvent event) {
@@ -106,6 +125,9 @@ final class ForgeIngestRetryQueue {
         int attempts = Math.min(MAX_RETRIES_PER_TICK, this.pendingChunks.size());
         for (int i = 0; i < attempts; i++) {
             long key = pollDeferredRetryState(this.pendingChunks, this.queuedChunks);
+            if (key == Long.MIN_VALUE) {
+                break;
+            }
             LevelChunk chunk = getLoadedChunk(level, ChunkPos.getX(key), ChunkPos.getZ(key));
             if (chunk != null) {
                 this.ingestChunk(chunk);
