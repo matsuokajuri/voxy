@@ -106,15 +106,18 @@ public class ActiveSectionTracker implements WorldSection.ReleaseTracker {
             if (holder != null) {//Return already loaded entry
                 section = holder.obj;
                 if (section != null) {
-                    if (nullOnEmpty && section.getStorageLoadStatus() != SectionStorage.LOAD_OK
-                            && section.getStorageLoadStatus() != SectionStorage.LOAD_RECOVERED) {
+                    boolean unavailable = nullOnEmpty && section.getStorageLoadStatus() != SectionStorage.LOAD_OK
+                            && section.getStorageLoadStatus() != SectionStorage.LOAD_RECOVERED;
+                    try {
                         section.acquire();
+                    } finally {
+                        // Even a violated live-holder invariant must not poison the slice lock.
                         lock.unlockRead(stamp);
+                    }
+                    if (unavailable) {
                         section.release();
                         return null;
                     }
-                    section.acquire();
-                    lock.unlockRead(stamp);
                     return section;
                 }
                 reservedAcquire = holder.reservePendingAcquire();
@@ -142,15 +145,21 @@ public class ActiveSectionTracker implements WorldSection.ReleaseTracker {
         if (isLoader) {
             this.loadedSections.incrementAndGet();
             long stamp = lock.writeLock();
-            section = this.secondaryCaches[index].remove(key);
-            lock.unlockWrite(stamp);
-            if (section != null) {
-                this.secondaryCachedSections.decrementAndGet();
-                this.secondaryCacheHits.increment();
-                section.primeForReuse();
-                section.acquire(1);
-            } else {
-                this.secondaryCacheMisses.increment();
+            try {
+                section = this.secondaryCaches[index].remove(key);
+                if (section != null) {
+                    this.secondaryCachedSections.decrementAndGet();
+                    this.secondaryCacheHits.increment();
+                    // Keep reactivation and the loader's first reference under the same
+                    // slice lock as removal; an older unload callback must not free the
+                    // zero-reference gap before this holder has even been published.
+                    section.primeForReuse();
+                    section.acquire(1);
+                } else {
+                    this.secondaryCacheMisses.increment();
+                }
+            } finally {
+                lock.unlockWrite(stamp);
             }
         }
 
@@ -260,6 +269,12 @@ public class ActiveSectionTracker implements WorldSection.ReleaseTracker {
         boolean shouldRetryExit = false;
         WorldSection aa = null;
         try {
+            SectionHolder currentHolder = cache.get(section.key);
+            if (currentHolder == null || currentHolder.obj != section) {
+                // Duplicate/delayed release callbacks belong to an older holder. They
+                // cannot claim or remove a replacement that is still being published.
+                return;
+            }
             VarHandle.loadLoadFence();
             if (this.engine != null && section.shouldSave()) {//Last call for saving
                 if (section.tryAcquire()) {
@@ -328,6 +343,13 @@ public class ActiveSectionTracker implements WorldSection.ReleaseTracker {
                     throw new IllegalStateException("Removed section not the same as the referenced section in the cache: cached: " + obj + " got: " + section + " A: " + WorldSection.ATOMIC_STATE_HANDLE.get(obj) + " B: " +WorldSection.ATOMIC_STATE_HANDLE.get(section));
                 }
                 sec = section;
+            } else if (section.getRefCount() == 0 && this.engine != null && section.shouldSave()) {
+                // trySetFreed may have cancelled a dirty claim after the final precheck.
+                // Retry the existing save route outside the non-reentrant slice lock.
+                lock.unlockWrite(stamp);
+                stampReleased = true;
+                this.tryUnload(section, hints);
+                return;
             }
 
             if (sec != null) {

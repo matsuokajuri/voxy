@@ -219,6 +219,14 @@ public class WorldEngine {
         if (section.tracker != this.sectionTracker) {
             throw new IllegalStateException("Section is not from here");
         }
+        if ((changeState & DEFAULT_UPDATE_FLAGS) != 0
+                && section.getStorageLoadStatus() == SectionStorage.LOAD_MISSING) {
+            // A disk miss describes the initial load, not the lifetime of this object.
+            // A real voxel/child update materializes it in memory. Publish that before
+            // notifying mesh consumers, whose acquireIfExists must see the new data.
+            // Unavailable/corrupt storage stays fail-closed; this is not recovery.
+            section._setStorageLoadStatus(SectionStorage.LOAD_OK);
+        }
         if (this.dirtyCallback != null) {
             this.dirtyCallback.accept(section, changeState, neighborMsk);
         }

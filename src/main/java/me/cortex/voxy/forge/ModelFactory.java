@@ -840,6 +840,8 @@ final class ModelFactory implements RenderFaceDecision.FaceCoverageLookup {
         int maxU = clampInt(bounds[1], 0, 15);
         int minV = clampInt(bounds[2], 0, 15);
         int maxV = clampInt(bounds[3], 0, 15);
+        // Original ModelFactory's face-relative 1/64 encoding deliberately emits 0..62.
+        // The shader reserves code 63 for the end plane (1.0); it is not a per-face bias.
         int depthEncoded = clampInt(Math.round(depth * 64.0F), 0, 62);
         int faceData = minU
                 | (maxU << 4)

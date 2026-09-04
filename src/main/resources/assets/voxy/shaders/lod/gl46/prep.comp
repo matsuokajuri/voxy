@@ -8,7 +8,12 @@ layout(local_size_x = 1) in;
 #import <voxy:lod/gl46/bindings.glsl>
 
 void main() {
-    cmdGenDispatchX = ((sectionCount+127)/128);
+    uint validSectionCount = min(sectionCount, min(uint(RENDER_LIST_CAPACITY), uint(indirectLookup.length())));
+    if (validSectionCount != sectionCount) {
+        atomicOr(commandOverflowFlags, COMMAND_INVALID_INPUT);
+        atomicAdd(rejectedCommandInputs, sectionCount - validSectionCount);
+    }
+    cmdGenDispatchX = ((validSectionCount+127)/128);
     cmdGenDispatchY = 1;
     cmdGenDispatchZ = 1;
 
@@ -17,7 +22,7 @@ void main() {
     temporalOpaqueDrawCount = 0;
 
     cullDrawIndirectCommand.count = 6*2*3;
-    cullDrawIndirectCommand.instanceCount = sectionCount;
+    cullDrawIndirectCommand.instanceCount = validSectionCount;
     cullDrawIndirectCommand.firstIndex = (1<<16)*6*2;
     cullDrawIndirectCommand.baseVertex = 0;
     cullDrawIndirectCommand.baseInstance = 0;

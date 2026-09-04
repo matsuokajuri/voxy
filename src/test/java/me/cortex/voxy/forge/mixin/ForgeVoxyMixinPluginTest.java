@@ -35,6 +35,14 @@ class ForgeVoxyMixinPluginTest {
     }
 
     @Test
+    void acediumBufferAdapterIsAbsentWithoutAcedium() {
+        String mixin = "me.cortex.voxy.forge.mixin.ForgeOriginalVoxyAcediumMappedBufferMixin";
+        assertFalse(ForgeVoxyMixinPlugin.shouldApplyMixin(mixin, modId -> false));
+        assertFalse(ForgeVoxyMixinPlugin.shouldApplyMixin(mixin, "nvidium"::equals));
+        assertTrue(ForgeVoxyMixinPlugin.shouldApplyMixin(mixin, "acedium"::equals));
+    }
+
+    @Test
     void mandatoryEmbeddiumMixinsRemainEnabledWithoutOptionalMods() {
         assertTrue(ForgeVoxyMixinPlugin.shouldApplyMixin(
                 "me.cortex.voxy.forge.mixin.ForgeOriginalVoxyEmbeddiumDefaultChunkRendererMixin",

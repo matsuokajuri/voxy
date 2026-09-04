@@ -1,9 +1,12 @@
 # XXXIX — Forxy compatibility merge and quick audit (2026-09-03)
 
-Status: integration and default build/test/package gates passed; the merged
-Forxy artifact still requires user-operated in-game regression. This record is
-a Forge compatibility integration, not completion of Forxy's planned 拾轮 or
-拾壹轮 technical-debt work.
+Status: the user passed two merged-artifact modpack visual smoke tests. Log
+review found an unavailable optional DH importer and an unattributed GL error.
+The user's distribution policy keeps SQLite outside the main JAR; that optional
+dependency's absence is not a mandatory packaging defect. The policy and
+remaining qualification limits are recorded below. This is Forge compatibility
+work, not completion of Forxy's planned
+拾轮 or 拾壹轮 technical-debt work.
 
 ## Merge provenance and scope
 
@@ -144,3 +147,112 @@ combined artifact as runtime-qualified, the user must check:
 
 No readiness flag or planned Forxy round is promoted by this static gate. No
 packaged JAR has been installed into either user's modpack by this task.
+
+## XXXIX.1 post-merge log review and optional SQLite distribution policy
+
+The user reported no visual anomaly in Closing Song 1.6.4 and 逆转未来 2.3.3.
+Both installed JARs match the 12,684,554-byte test export with SHA-256
+`719ec02d3406c54afad770bd520477d68747a283bd3cfc1aa662b7bf05635f23`.
+
+- Closing Song: `latest.log` lines 4835-4842 confirm the formal MDIC renderer,
+  vanilla post-light ingestion, and Embeddium draw hook. Lines 4934-4943 record
+  normal render, persistent-world, session, and process shutdown. Its actual
+  Oculus frontend is Mekalus 1.8.0.1 with Complementary Unbound r5.8.1.
+- 逆转未来: lines 7812 and 7879 confirm Starlight post-light ingestion and the
+  formal MDIC renderer with Oculus 1.8.1, ImmediatelyFast 1.5.4, and
+  Complementary Reimagined r5.8.1. Lines 8321-8335 and 9079-9081 record normal
+  shutdown. Neither log proves a new-area Chunky task or the full reload and
+  cross-dimension qualification matrix.
+- These are successful rendering smoke tests, not zero-error logs. Both have
+  third-party resource/integration warnings. Closing Song line 4215 and
+  逆转未来 line 6835 specifically report that Voxy's DH importer is disabled.
+
+### Confirmed: optional DH import dependency is not bundled
+
+Original Voxy's `DHImporter` and the Forge importer require SQLite JDBC plus
+XZ before accepting a DH database. The relocated XZ classes were present in
+the exported JAR, but `org.sqlite.JDBC` and a SQLite nested dependency were not.
+`minecraftLibrary("org.xerial:sqlite-jdbc:3.49.1.0")` supplied the development
+classpath only; both the JarJar declaration and its explicitly pinned payload
+list omitted that driver. This now follows the user's chosen distribution
+policy, not a broken ordinary LOD dependency. Without an externally
+available, loadable SQLite JDBC driver, DH database import remains unavailable;
+ordinary LOD rendering and Voxy's RocksDB storage remain unaffected.
+
+A temporary experiment embedded SQLite JDBC 3.49.1.0 and verified an isolated
+native SQL query, producing a 26,964,953-byte candidate. The user's subsequent
+decision **not to embed SQLite** supersedes that candidate and its packaging
+test contract. It is not the current release result or a required repair.
+
+The current policy excludes SQLite from both the JarJar declaration and pinned
+payload list while retaining the existing development dependency. Runtime
+dependency detection, importer logic, renderer behavior, and storage formats
+are unchanged. There is no automatic driver download or new installation step
+for ordinary Voxy users. Installing DH alongside Voxy is not a substitute for
+providing the driver: the deliberate simultaneous-mod rejection and the
+two-stage DH-producer/Voxy-importer workflow remain unchanged.
+
+The `packagedArtifactTest` gate must enforce this distribution policy against
+the actual reobfuscated JAR: no SQLite payload or dependency metadata, with
+relocated XZ still present. It must not require an embedded driver or count a
+development-classpath SQL query as proof that the release bundles one. Final
+non-bundled artifact verification is recorded separately from the superseded
+experiment. No client, modpack JAR, or modpack configuration was changed by
+the packaging work.
+
+Final non-bundled verification:
+
+- Default tests: 70 suites / 253 tests; release-artifact policy test: one test;
+  all passed with zero failures/errors/skips.
+- All-JAR: 12,684,554 bytes (about 12.1 MiB), six complete JarJar payloads,
+  relocated XZ retained, zero SQLite entries and zero duplicate entries.
+- SHA-256: `e7188cb2237bd59c62b60c463ab9330fdc36aac21e0de2b76fb19f853ce9d81f`.
+
+### Historical initial result: GL error ownership
+
+The following is the initial no-stack evidence. Later bounded stack capture
+identified the direct callers; the update at the end supersedes its unstarted
+investigation status.
+
+- 逆转未来 line 1801 reports GL 1280 before the formal Voxy terrain owner is
+  created. That excludes this terrain path as its direct caller, but does not
+  identify the responsible mod merely from adjacent initialization messages.
+- Line 8140 reports GL 1282: source and destination internal formats are not
+  compatible. There is no stack, texture id, or format dump in that event.
+- Static inspection finds that Voxy's active depth blit connects two
+  `GL_DEPTH24_STENCIL8` attachments, matching original `IrisVoxyRenderPipeline`.
+  No mismatch was demonstrated in those owners. Exact installed Oculus 1.8.1
+  also has a `DepthCopyStrategy.Gl43CopyImage` path using `glCopyImageSubData`;
+  this remains only a candidate, not a proven cause.
+- No speculative format conversion, renderer rewrite, or additional GL hook
+  is included. ImmediatelyFast already offers
+  `debug_only_print_additional_error_information` for a future bounded
+  synchronous GL stack capture; its modpack configuration was not changed.
+
+The DH-disabled warning may remain when no external driver is available; its
+absence is not an ordinary-rendering acceptance criterion. Neither the two
+modpack smoke tests nor the superseded isolated SQL test claims a complete
+in-game DH database import. GL attribution and the uncaptured runtime matrix
+remain open. 拾轮 now has a separate
+[preparation plan](forxy-round10-gpu-visibility-shader-multiview-preparation.md),
+and its production/automated-test progress is tracked in the
+[execution record](forxy-round10-execution-record.md).
+
+### Later stack capture and user-requested pause
+
+On 2026-09-03 the old installed modpack (not the Round10 candidate) produced a
+synchronous GL1280 stack through AAAParticles' Effekseer manager initialization,
+and a GL1282 stack through Oculus 1.8.1 `DepthCopyStrategy$Gl43CopyImage.copy`
+-> `RenderTargets.copyPreTranslucentDepth` -> `IrisRenderingPipeline.beginTranslucents`.
+These identify direct callers only, not every indirect mod interaction.
+The user then paused reproduction and Computer Use. The temporary
+ImmediatelyFast disk diagnostic setting was restored to false; no speculative
+third-party patch was made and no Round10 visible-client pass is claimed.
+
+### Subsequent Round10 qualification (2026-09-05)
+
+The user re-authorized Computer Use. Round10's available actual-client matrix and
+328-test gate are now complete; see the [final runtime record](forxy-round10-final-runtime-qualification-2026-09-05.md).
+The former paused-matrix wording above is historical. The old modpack depth-copy
+A/B is still deferred and must not be confused with the separately proven and
+repaired Acedium CPU-mapped-buffer residency release error found during this run.

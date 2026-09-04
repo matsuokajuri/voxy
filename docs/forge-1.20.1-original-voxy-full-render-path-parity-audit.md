@@ -99,8 +99,8 @@ XXVIII_CHUNKY_PREGGEN_REGRESSION=passed-user-2026-07-14
 XXVIII_RELEASE_READINESS=beta-complete-approved-by-user-2026-07-14
 XXXVII_IMMEDIATELYFAST_GLDEBUG_COMPAT=runtime-startup-passed-user-2026-09-01
 XXXVIII_INITIAL_CHUNK_INGEST=starlight-runtime-passed-final-cleanup-gate-passed
-XXXIX_FORXY_COMPATIBILITY_MERGE=70-suites-253-tests-reobfuscated-jarJar-passed-runtime-pending
-WHOLE_ORIGINAL_MOD_PARITY=forxy-xxxix-merged-artifact-runtime-regression-pending
+XXXIX_FORXY_COMPATIBILITY_MERGE=two-user-modpack-smokes-passed-optional-sqlite-not-bundled-gl-attribution-open
+WHOLE_ORIGINAL_MOD_PARITY=forxy-xxxix-gl-and-targeted-runtime-gates-open
 ```
 
 The original-equivalent renderer chain remains the only visible route and its
@@ -5252,3 +5252,201 @@ save/quit delay, package evidence, inherited housekeeping observation, and
 the pending no-Oculus / Oculus / Starlight / Chunky runtime matrix are recorded
 in [the Forxy XXXIX merge audit](forxy-xxxix-compatibility-merge-audit-2026-09-03.md).
 No runtime readiness flag was changed and no remote push was performed.
+
+### XXXIX.1 optional SQLite distribution policy and runtime qualification limits
+
+The 2026-09-03 Closing Song and 逆转未来 tests used the same exported Forxy
+artifact and passed the user's visual smoke checks. Their logs confirm the
+vanilla and Starlight completed-light routes respectively, formal MDIC drawing,
+and normal persistent-world/render shutdown. Both also report that the optional
+DH importer cannot load SQLite JDBC; this is not a mandatory packaging defect
+or a failure of ordinary LOD rendering or RocksDB storage.
+
+SQLite 3.49.1.0 was already on the development classpath but absent from both
+the JarJar declaration and pinned payload list; relocated XZ was present. A
+temporary experiment embedded that driver and passed an isolated native SQL
+query, producing a 26,964,953-byte candidate. The user's subsequent decision
+not to embed SQLite supersedes that experiment and its packaging test contract.
+The current policy follows the user's explicit non-bundling decision:
+SQLite stays on the development classpath but out of the release JAR. DH
+database import remains unavailable unless an external SQLite JDBC driver is
+loadable. Existing runtime dependency detection is unchanged; there is no auto
+download, new ordinary-rendering dependency, importer/renderer/storage rewrite,
+or change to the two-stage DH workflow or simultaneous-mod rejection.
+
+The release-artifact gate must verify SQLite's absence from both the actual
+reobfuscated JAR and its dependency metadata while retaining relocated XZ. It
+must not require the superseded embedded driver. Final non-bundled artifact
+verification is recorded separately from that temporary experiment.
+
+The format-compatibility GL 1282 event in 逆转未来 remains unattributed: the log
+has no call stack, and static Voxy depth owners use matching formats. No
+speculative renderer fix is included. An unavailable optional DH importer is
+expected when no driver is supplied, so removing its warning is not an ordinary
+rendering gate. The remaining GL/Chunky/reload/dimension gates are not claimed complete;
+拾轮 production implementation remains unstarted. The detailed confirmed/excluded/blocked record is in
+`docs/forxy-xxxix-compatibility-merge-audit-2026-09-03.md`.
+
+The two successful user modpack smoke tests above remain valid evidence for
+their tested non-bundled artifact; neither they nor the temporary isolated SQL
+query prove a complete in-game DH database import.
+
+Final non-bundled verification: 70 default suites / 253 tests plus one
+release-artifact policy test passed, with zero failures/errors/skips. The new
+12,684,554-byte all-JAR contains the original six JarJar payloads, relocated XZ,
+no SQLite entries, and no duplicates. SHA-256:
+`e7188cb2237bd59c62b60c463ab9330fdc36aac21e0de2b76fb19f853ce9d81f`.
+
+## Forxy 拾轮 preparation (2026-09-03)
+
+Read-only original/Forge tracing and active GLSL inspection now establish the
+GPU capacity/layout baseline and seven-stage execution plan. No production
+renderer, shader, buffer, storage, or dependency policy changed in this pass.
+Full scope and acceptance criteria are in
+[the 拾轮 preparation document](forxy-round10-gpu-visibility-shader-multiview-preparation.md).
+
+Confirmed source-level gaps include unbounded child queue reservations,
+render-list counters that can exceed successful writes, unguarded MDIC command
+bucket reservations, and cleaner tagged-index/sentinel paths needing focused
+tests. Existing request write/download caps and fixed cleaner output are
+explicitly retained as already-present protection, not counted as missing work.
+
+Original and Forge MDIC renderers share uniform/distance scratch; the original
+TODO does not prove current corruption because Forge's active owner executes
+each complete viewport frame serially with a reentrancy guard. A/B/A full-frame
+and capture-generation evidence must precede any ownership migration. Shader
+math and depth/HiZ/SSAO changes likewise require producer/consumer fixtures and
+resource ground truth, preserving prior leaves, shadow, material, and face
+ownership results. SQLite remains non-bundled, the existing GL 1282 remains
+unattributed, physical VR remains hardware-unverified, and NodeManager semantic
+changes remain reserved for 拾壹轮. Preparation does not close implementation or
+runtime gates.
+
+## Forxy 拾轮 implementation and automatic gates (2026-09-03)
+
+This section supersedes the preparation-only status immediately above. Changes
+stay on the formal original-derived HOC -> MDIC pipeline; NodeManager semantic
+changes remain in 拾壹轮. Current test counts and artifact identity are maintained
+in [the execution record](forxy-round10-execution-record.md).
+
+- HOC now publishes successful bounded reservations, checks last-iteration,
+  source and node bounds, and only marks requests that were actually enqueued.
+  Routine 50-request throttling is distinguished from buffer/input rejection.
+- MDIC opaque/temporal reserve a complete directional batch; translucent list,
+  histogram, prefix and builder share the successful count. A separate immutable
+  4 KiB prefix tail bounds mutable bucket cursors. Existing 44 B counter prefix,
+  20 B command, 64 B model and 8 B quad ABIs do not move.
+- GPU-only 12 B indirect argument snapshots isolate writable HOC metadata and
+  MDIC counters from the command processor. This is a measured target-driver
+  adaptation: a repeated empty-to-nonempty MDIC fixture emitted zero commands
+  with aliased storage and the expected commands after the snapshot copy.
+  Production capacities and shader algorithms are not replaced; no synchronous
+  CPU readback or direct-dispatch substitute enters the formal route.
+- Cleaner normalizes external-bit IDs, stops on sentinels, rejects duplicates
+  and invalid IDs, and counts the inclusive maximum node ID correctly at workgroup
+  boundaries. It retains the fixed 256-position download and original eviction rules.
+- Prepared Oculus state matches owner, viewport identity, capture and dimensions;
+  teardown drops the cached strong references alongside the render owner.
+  Shared uniform/distance scratch stays under the existing serial whole-frame
+  contract; physical VR and visible A/B/A qualification remain pending.
+- Normal/patched material paths now use the same explicit base-texel tint test.
+  Original quantization, merged-alpha override and fragment ABI are frozen by
+  consumer tests; no alpha bits or unconsumed derivative fields are introduced.
+- A real GPU depth-stage regression demonstrated that a caller stencil write
+  mask of zero preserved an old `0x5A` instead of clearing to 1. Depth/stencil
+  write masks are now established before the existing named clear; the original
+  `finally` restores caller state. Format, fullscreen copy and depth convention
+  are unchanged. HiZ, SSAO and bounded attachment diagnostics have separate tests.
+
+The user explicitly paused old GL-error reproduction and Computer Use. Only
+code, automatic tests, packaging and docs proceed; there is no new visible-client
+pass and no whole-round readiness claim. The old modpack GL1282 stack directly
+names Oculus 1.8.1 `DepthCopyStrategy$Gl43CopyImage`; indirect interactions remain
+unadjudicated and no speculative third-party patch is included. Temporary
+ImmediatelyFast disk diagnostics were restored to false. SQLite remains external.
+
+### 2026-09-04 boundary-clear qualification update (withdrawn)
+
+The candidate described below failed user qualification and has been withdrawn,
+including its viewport depth-mask change and candidate-specific test. The new
+session has direct Ingest-service dirty/unloaded-section failures and no evidence
+that the candidate's false-mask branch ran. Its GPU API reproduction is not
+evidence of sole causation for the user's holes. The original depth-bound clear
+route is restored; current work targets section lifetime and storage availability.
+
+Closing Song revealed holes on the first candidate, including with shaders off
+after entering a new area and changing the Minecraft chunk render distance
+8 -> 31 -> 8. A focused GPU regression then proved that the viewport's original
+named boundary-depth clear retained 0.75 instead of the requested 0 when the
+incoming depth-write mask was false. The exact Embeddium CUTOUT setup does not
+force the true mask at this injection point. `MDICViewport` now establishes and
+restores that mask locally for both frame clears and resize initialization,
+while retaining the original framebuffer format and clear operation.
+
+The new regression and the complete 300-default/12-GPU/1-package gates pass.
+This proves the scoped state fix, not sole causation of the user's screenshot;
+the same modpack/view-distance sequence still needs retesting. No queue or
+NodeManager-state rewrite is included in this follow-up. Current artifact and
+the unresolved temporal-state candidates are documented in the execution and
+[holes investigation](forxy-round10-closing-song-holes-investigation-2026-09-04.md) records.
+
+### 2026-09-04 section-lifetime and first-write visibility repair
+
+The later startup log directly records Ingest workers failing through
+WorldUpdater -> WorldSection.release -> ActiveSectionTracker.tryUnload ->
+WorldSection.trySetFreed: dirty sections were marked free before throwing, so
+their active-map entries became poisonous. The original CAS-after-check failure
+is now handled as a cancelled free claim; failed acquires cannot manufacture
+references, all hot-hit read locks unwind, and stale unload callbacks cannot
+remove replacement holders. Secondary reactivation and the loader's first
+reference are again protected by the slice lock, restoring the original
+protection accidentally shortened in 陆轮 commit 37ce8ded7.
+
+A separate deterministic ingest test also demonstrates the earlier new-area
+holes: 伍轮 commit 4dd691a2bc cached LOAD_MISSING indefinitely even after real
+WorldUpdater writes, so acquireIfExists returned null and mesh generation emitted
+empty geometry. WorldEngine now promotes only materially changed missing sections
+before dirty/remesh callbacks. Unchanged missing and unavailable/corrupt entries
+remain excluded; recovered status and DONT_SAVE policy are preserved.
+
+Both defect groups have red-before/green-after tests, including five-level
+voxel/child counts, callback-time reads, saved secondary reuse, and independent
+deserialization. Concurrent lifetime coverage uses 8 writers, 4 savers, 16 keys,
+and 16,000 update/release/reuse iterations. The final full gate passes 311 default,
+11 GPU, one package-policy, one exact-Bobby, and two real-data tests (326 total).
+No user cache/save or shader configuration was changed, and no visible-client
+success is claimed before the new artifact is tested.
+
+### 拾轮 final normal-capacity qualification (2026-09-05)
+
+The preceding waiting state is superseded by actual client evidence in
+`forxy-round10-final-runtime-qualification-2026-09-05.md`. Closing Song's original
+failure location and a new region passed 8→31→8 with no persistent holes. The
+normal Embeddium-only path and the Oculus/Acedium/Vivecraft-window/Chunky/Bobby
+combination passed actual terrain, depth/HiZ resize, shader switches, dimensions,
+resource reload, re-entry and normal shutdown. Unbound, Reimagined and Photon
+were genuinely patched, not replaced by normal rendering. Physical VR remains
+hardware-dependent; BSL10.1.3's missing endFlashIntensity is a separate documented
+effect limitation, and the old modpack Oculus depth-copy A/B remains deferred.
+
+One additional optional-owner defect was found during qualification: Acedium
+0.2.7-beta PersistentClientMappedBuffer.delete unconditionally made its buffer
+NV-non-resident although its constructor never acquired residency. The new
+acedium-gated redirect queries actual residency before that release and preserves
+the original unmap/delete owner. Original Voxy's mapped owner already only
+unmaps/deletes. A GPU failure control and identical actual client dimension /
+shader teardown passed after the adapter, with zero GL errors in the final log.
+This is not a change to Voxy buffer allocation or the optional Oculus policy.
+
+Chunky1.3.146 normally skips already-generated chunks before getChunkAtAsync;
+the original Fabric hook and Forge hook therefore cannot ingest those skipped
+inputs. A newly exposed un-ingested halo is not proof of lost stored geometry.
+Both actual client loading followed by shrink and a forceLoadExistingChunks
+control restored complete coverage. The temporary setting was restored; no
+automatic scan or synthetic fallback was added.
+
+Final gate: 312 default + 12 GPU + 1 packaged-artifact + 1 exact-Bobby + 2 real-data
+= 328 tests, no failures/errors/skips. Release SHA256:
+`a22a15242b3cfcd42afa83dcaf3f994e6ee9f4bfd3f530c13e0f2a61b4d0911e`,
+12,699,252 bytes. SQLite stays external. All dev test settings were restored and
+all clients exited normally; logs/screenshots/saves/build outputs are not committed.

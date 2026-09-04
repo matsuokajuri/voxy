@@ -25,8 +25,14 @@ Consult these for the current route:
   — packed-data inventory, capacity decision, risk map, and execution order.
 - [Forxy 玖轮 RenderDataFactory completion record](forxy-round9-render-data-factory-preparation.md)
   — active-owner proof, behavioral debt closure, differential fixtures, and runtime qualification.
+- [Forxy 拾轮 GPU/shader/multi-view preparation](forxy-round10-gpu-visibility-shader-multiview-preparation.md)
+  — verified capacity/layout baseline, evidence-led ownership decisions, staged work, and qualification gates.
+- [Forxy 拾轮 execution record](forxy-round10-execution-record.md)
+  — completed code/automated gates, historical failed candidates, and final audit scope.
+- [Forxy 拾轮 final runtime qualification](forxy-round10-final-runtime-qualification-2026-09-05.md)
+  — modpack hole regression, actual optional-mod/shader/depth matrix, Acedium teardown repair, and remaining hardware/external limitations.
 - [Forxy XXXIX compatibility merge and quick audit](forxy-xxxix-compatibility-merge-audit-2026-09-03.md)
-  — XXXVII/XXXVIII merge provenance, preserved Forxy changes, combined build/package checks, and pending runtime regression.
+  — XXXVII/XXXVIII merge provenance, two modpack smoke tests, optional SQLite policy, and remaining GL/runtime qualification limits.
 
 ## Resolved
 

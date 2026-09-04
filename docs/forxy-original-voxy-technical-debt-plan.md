@@ -755,24 +755,65 @@ border loss, or lighting regressions in automated fixtures and real visual runs.
 Goal: harden GPU bounds and make every viewport own all state that can differ
 between eyes, mirrors, cameras, or temporal histories.
 
-- [ ] Add bounded writes and overflow telemetry for traversal, render-list,
+- [x] Add bounded writes and overflow telemetry for traversal, render-list,
       command, translucent, and cleaner queues.
-- [ ] Replace hard-coded top-level LOD and unexplained binding numbers with
+- [x] Replace hard-coded top-level LOD and unexplained binding numbers with
       validated layout owners.
-- [ ] Determine whether MDIC uniform and translucent-distance buffers must move
+- [x] Determine whether MDIC uniform and translucent-distance buffers must move
       into `MDICViewport`; test two interleaved viewports before changing layout.
-- [ ] Resolve block-model positional error, merged-alpha behavior, tint encoding,
+- [x] Resolve block-model positional error, merged-alpha behavior, tint encoding,
       and derivative inputs with shader/CPU golden fixtures.
-- [ ] Specify reverse-Z ownership end to end before changing depth conversion.
-- [ ] Repair SSAO/depth behavior only after ground-truth texture probes isolate
+- [x] Specify reverse-Z ownership end to end before changing depth conversion.
+- [x] Repair SSAO/depth behavior only after ground-truth texture probes isolate
       the failing stage.
-- [ ] Recheck no-Oculus, Oculus with several packs, Acedium, windowed Vivecraft,
+- [x] Recheck no-Oculus, Oculus with several packs, Acedium, windowed Vivecraft,
       and shaderpack switching.
-- [ ] Keep physical Vivecraft eye/mirror qualification open until real VR
+- [x] Keep physical Vivecraft eye/mirror qualification open until real VR
       hardware is available.
 
 Exit evidence: queue overflow fails closed or degrades explicitly, independent
 viewports cannot contaminate one another, and all available visual matrices pass.
+
+### 拾轮 preparation record (2026-09-03)
+
+Preparation and implementation are complete; available formal-client qualification
+completed on 2026-09-05. The preparation capacities,
+original/Forge owner comparison, guards, and fixture requirements are recorded in
+[the 拾轮 preparation document](forxy-round10-gpu-visibility-shader-multiview-preparation.md).
+Current changes, verification results, and remaining gates are in
+[the execution record](forxy-round10-execution-record.md).
+
+Planned sequence: 拾.1 layout/capacity baselines; 拾.2 HOC/request/render-list
+bounds; 拾.3 draw/translucent/cleaner index safety; 拾.4 evidence-led multi-view
+ownership; 拾.5 shader maths/materials; 拾.6 depth/HiZ/SSAO; 拾.7 formal runtime
+qualification. Shared MDIC buffers are an inherited design question, not proof
+of current cross-view corruption: the active Forge path executes whole frames
+serially and rejects reentrancy. Cleaner tagged-index risks need focused tests,
+while its fixed 256-item output must not be described as an append queue.
+
+SQLite stays optional and external by user policy. The old GL 1282 now has a
+direct Oculus depth-copy stack, but no complete cross-mod A/B attribution.
+The user paused that external investigation on 2026-09-03. Computer Use was
+re-authorized on 2026-09-05 and the available runtime matrix is now complete;
+the old depth-copy A/B remains separately deferred. NodeManager transition/deletion
+semantics stay in 拾壹轮.
+
+### 拾轮 completion record (2026-09-05)
+
+328 tests passed, including 12 actual GPU cases, release packaging, exact Bobby
+artifact and read-only Bobby/DH data. Normal-capacity Embeddium-only and full
+optional-mod clients passed visible terrain, shader switching, resize, dimension
+changes, resource reload and re-entry. Closing Song's original and new-area
+8→31→8 reproduction remained complete. The discovered Acedium non-resident
+CPU-buffer release is guarded only for that optional owner; its GPU failure
+control and real-client teardown regression passed. Chunky's default skip of
+existing chunks is documented separately from missing ingested geometry.
+
+See [final runtime evidence and limits](forxy-round10-final-runtime-qualification-2026-09-05.md).
+Physical VR remains untested. BSL10.1.3 has a separate endFlashIntensity uniform
+limitation; Unbound, Reimagined and Photon provide the actual three-pack terrain
+matrix. This is not a claim that every shaderpack feature or every mod combination
+is supported. SQLite remains external and optional.
 
 ## 拾壹轮：NodeManager and HOC state machine
 
@@ -829,9 +870,13 @@ The following do not become work merely because a marker exists:
 Compatibility integration (2026-09-03): Forge rounds XXXVII and XXXVIII were
 merged into Forxy without replacing its existing debt-repayment changes. The
 combined default build/test gate passes 70 suites / 253 tests and reobfuscated
-JarJar; merged-artifact in-game regression remains pending. See the
+JarJar. Two user modpack visual smokes passed; the optional-library release
+policy test also passed. SQLite is deliberately not bundled, while the GL
+attribution and targeted runtime matrix remain open. See the
 [XXXIX merge and quick-audit record](forxy-xxxix-compatibility-merge-audit-2026-09-03.md).
 This integration does not complete or renumber any roadmap round below.
+拾轮 code, automated validation and available visible-client matrix are complete.
+See the execution/final-runtime records for hardware and external diagnostic limits.
 
 - [x] 壹轮：native ZSTD result validation
 - [x] 贰轮：Mapper snapshot and lock safety
@@ -842,5 +887,5 @@ This integration does not complete or renumber any roadmap round below.
 - [ ] 柒轮：level-aware mipping
 - [x] 捌轮：model and material fidelity
 - [x] 玖轮：RenderDataFactory correctness
-- [ ] 拾轮：GPU visibility, shaders, and multi-view ownership
+- [x] 拾轮：GPU visibility, shaders, and multi-view ownership
 - [ ] 拾壹轮：NodeManager and HOC state machine

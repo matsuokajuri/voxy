@@ -17,16 +17,39 @@ layout(binding = OUTPUT_BUFFER_BINDING, std430) restrict volatile buffer Minimum
     uint minVisIds[OUTPUT_SIZE];
 };
 
+layout(location=0) uniform uint nodeCount;
+const uint CLEANER_EMPTY_ID = uint(-1);
+const uint CLEANER_EXTERNAL_BIT = 1u << 31;
+const uint CLEANER_INDEX_MASK = CLEANER_EXTERNAL_BIT - 1u;
+
+bool validCleanerId(uint taggedId) {
+    uint id = taggedId & CLEANER_INDEX_MASK;
+    return taggedId != CLEANER_EMPTY_ID && id < nodeCount
+            && id < uint(visibility.length()) && id < uint(nodes.length());
+}
+
+// Both shared and global candidates can carry the external bit or the empty sentinel.
+// Keep every visibility dereference behind the same range check and flag removal.
+uint cleanerVisibility(uint taggedId) {
+    if (!validCleanerId(taggedId)) {
+        return uint(-1);
+    }
+    return visibility[taggedId & CLEANER_INDEX_MASK];
+}
+
 //Returns the id of the max value
 uint atomicDerefMaxExchangeGlobal(uint atId, uint id) {
-    const uint value = visibility[id];
+    if (!validCleanerId(id)) {
+        return CLEANER_EMPTY_ID;
+    }
+    const uint value = cleanerVisibility(id);
     while (true) {
         const uint existingId = minVisIds[atId];//TODO: check that this does what we want, and that it obtains the value of atValue, at this point
-        if (existingId == id) {//If we are trying to insert self, return -1
-            return uint(-1);
+        if ((existingId & CLEANER_INDEX_MASK) == (id & CLEANER_INDEX_MASK)) {
+            return CLEANER_EMPTY_ID;//Already present, including a flagged copy of the same node.
         }
         //Check if the value is less than the dereferenced value, if its not, return our own id
-        if (visibility[existingId&((1u<<31)-1)] <= value) {//Remove the flag bit
+        if (cleanerVisibility(existingId) <= value) {
             return id;
         }
         //Attempt to swap, since we know we are less than the existingId
@@ -58,14 +81,17 @@ shared uint initalSort[OUTPUT_SIZE];
 
 //Returns the id of the max value
 uint atomicDerefMaxExchangeLocal(uint atId, uint id) {
-    const uint value = visibility[id];
+    if (!validCleanerId(id)) {
+        return CLEANER_EMPTY_ID;
+    }
+    const uint value = cleanerVisibility(id);
     while (true) {
         const uint existingId = initalSort[atId];//TODO: check that this does what we want, and that it obtains the value of atValue, at this point
-        if (existingId == id) {//If we are trying to insert self, return -1
-            return uint(-1);
+        if ((existingId & CLEANER_INDEX_MASK) == (id & CLEANER_INDEX_MASK)) {
+            return CLEANER_EMPTY_ID;
         }
         //Check if the value is less than the dereferenced value, if its not, return our own id
-        if (visibility[existingId&((1u<<31)-1)] <= value) {//Remove the flag bit
+        if (cleanerVisibility(existingId) <= value) {
             return id;
         }
         //Attempt to swap, since we know we are less than the existingId
@@ -82,16 +108,22 @@ uint atomicDerefMaxExchangeLocal(uint atId, uint id) {
 void bubbleSortInital(uint vis, uint id) {
     uint start = 0;
     //Fast path cut out half the ops
-    if (visibility[initalSort[(OUTPUT_SIZE-1)>>1]] <= vis) {//Check if we are more than half way
+    if (cleanerVisibility(initalSort[(OUTPUT_SIZE-1)>>1]) <= vis) {//Check if we are more than half way
         start = (OUTPUT_SIZE-1)>>1;
     }
 
     for (uint i = start; i < OUTPUT_SIZE; i++) {
         id = atomicDerefMaxExchangeLocal(i, id);
+        if (id == CLEANER_EMPTY_ID) {
+            break;
+        }
     }
 }
 
 bool shouldSortId(uint id) {
+    if (!validCleanerId(id)) {
+        return false;
+    }
     UnpackedNode node;
     if (unpackNode(node, id)==uvec4(-1)) {
         return false;//Unallocated node
@@ -99,8 +131,7 @@ bool shouldSortId(uint id) {
     if (isEmptyMesh(node) || (!hasMesh(node))) {//|| (!hasChildren(node))
         return false;
     }
-    //TODO: FIXME: DONT HARDCODE TOP LEVEL LOD LEVEL
-    if (node.lodLevel == 4) {// (!hasChildren(node)) -> Assume leaf node
+    if (node.lodLevel == MAX_LOD) {// (!hasChildren(node)) -> Assume leaf node
         return false;//Cannot remove geometry from top level node
     }
 
@@ -133,18 +164,21 @@ void main() {
     for (uint i = 0; i < OPS_PER_THREAD; i++) {
         //Copy in with warp size batch fetch
         uint id = (gl_LocalInvocationID.x*OPS_PER_THREAD) + i;
-        initalSort[id] = minVisIds[id]|(1u<<31);//Flag the id as being external
+        initalSort[id] = minVisIds[id] | CLEANER_EXTERNAL_BIT;//Flag the id as being external
     }
     barrier();
     //Do insertion and sort into local shared buffer
     for (uint i = 0; i < ELEMS_PER_THREAD; i++) {
         uint id = gl_GlobalInvocationID.x*ELEMS_PER_THREAD+i;
-        uint vis = visibility[id];
+        if (!validCleanerId(id)) {
+            continue;//The last workgroup may extend past the live prefix or physical buffers.
+        }
+        uint vis = cleanerVisibility(id);
         if (vis == uint(-1)) {
             continue;
         }
         //Quick exit if this element is already bigger than global output
-        if (visibility[minVisIds[OUTPUT_SIZE-1]] <= vis) {
+        if (cleanerVisibility(minVisIds[OUTPUT_SIZE-1]) <= vis) {
             continue;
         }
         if (!shouldSortId(id)) {
@@ -162,17 +196,17 @@ void main() {
         barrier();//Probably unneeded, was just to keep warp coheriancy
         uint id = (gl_LocalInvocationID.x*OPS_PER_THREAD)+i;
         uint sid = initalSort[id];
-        if ((sid&(1u<<31)) != 0) {
+        if ((sid & CLEANER_EXTERNAL_BIT) != 0 || !validCleanerId(sid)) {
             //The flag being external was set, meaning we should NOT insert this element
             continue;
         }
-        uint vis = visibility[sid];
+        uint vis = cleanerVisibility(sid);
         //If output is already smaller than self
-        if (visibility[minVisIds[OUTPUT_SIZE-1]] <= vis) {
+        if (cleanerVisibility(minVisIds[OUTPUT_SIZE-1]) <= vis) {
             continue;
         }
         uint start = id;
-        if (visibility[minVisIds[(id+OUTPUT_SIZE)>>1]] <= vis) {//Try to skip
+        if (cleanerVisibility(minVisIds[(id+OUTPUT_SIZE)>>1]) <= vis) {//Try to skip
             start = (id+OUTPUT_SIZE)>>1;
         }
         bubbleSortGlobal(start, sid);//Insert into global

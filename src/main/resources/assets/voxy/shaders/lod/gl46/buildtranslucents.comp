@@ -23,6 +23,37 @@ layout(binding = TRANSLUCENT_DISTANCE_BUFFER_BINDING, std430) restrict buffer Tr
     uint[] translucentCommandData;
 };
 
+void rejectTranslucentBuild() {
+    atomicOr(commandOverflowFlags, COMMAND_INVALID_TRANSLUCENT_BUILD);
+    atomicAdd(rejectedTranslucentBuilds, 1u);
+    // Invalid input must not leave a nonzero draw count pointing at an unwritten
+    // command. No builder invocation increments this count; zero is final for
+    // this frame. The next prep reinitializes the ordinary generation path.
+    atomicExchange(translucentDrawCount, 0u);
+}
+
+uint reserveDistanceCommand(uint distance, uint acceptedCount) {
+    uint start = translucentCommandData[uint(TRANSLUCENT_PREFIX_SNAPSHOT_BASE) + distance];
+    uint end = distance + 1u < uint(TRANSLUCENT_WRITE_BASE)
+            ? translucentCommandData[uint(TRANSLUCENT_PREFIX_SNAPSHOT_BASE) + distance + 1u]
+            : acceptedCount;
+    if (start > end || end > acceptedCount
+            || translucentCommandData[uint(TRANSLUCENT_PREFIX_SNAPSHOT_BASE)] != 0u) {
+        rejectTranslucentBuild();
+        return INVALID_COMMAND_INDEX;
+    }
+    uint observed = atomicAdd(translucentCommandData[distance], 0u);
+    while (true) {
+        if (observed < start || observed >= end) {
+            rejectTranslucentBuild();
+            return INVALID_COMMAND_INDEX;
+        }
+        uint previous = atomicCompSwap(translucentCommandData[distance], observed, observed + 1u);
+        if (previous == observed) return observed + uint(TRANSLUCENT_OFFSET);
+        observed = previous;
+    }
+}
+
 void writeCmd(uint idx, uint instance, uint offset, uint quadCount) {
     DrawCommand cmd;
     cmd.count = quadCount * 6;
@@ -34,18 +65,41 @@ void writeCmd(uint idx, uint instance, uint offset, uint quadCount) {
 }
 
 void main() {
-    if (gl_GlobalInvocationID.x >= translucentDrawCount) {
+    uint acceptedCount = atomicAdd(translucentDrawCount, 0u);
+    if (acceptedCount > uint(TRANSLUCENT_DRAW_CAPACITY)
+            || uint(cmdBuffer.length()) < uint(TRANSLUCENT_OFFSET) + acceptedCount
+            || uint(translucentCommandData.length()) < uint(TRANSLUCENT_PREFIX_SNAPSHOT_BASE + TRANSLUCENT_WRITE_BASE)) {
+        if (gl_GlobalInvocationID.x == 0u) rejectTranslucentBuild();
+        return;
+    }
+    if (gl_GlobalInvocationID.x >= acceptedCount) {
         return;
     }
     uint drawId = translucentCommandData[gl_GlobalInvocationID.x+TRANSLUCENT_WRITE_BASE];
-    SectionMeta meta = sectionData[indirectLookup[drawId]];
+    uint validSectionCount = min(sectionCount, min(uint(RENDER_LIST_CAPACITY), uint(indirectLookup.length())));
+    if (drawId >= validSectionCount) {
+        rejectTranslucentBuild();
+        return;
+    }
+    uint sectionId = indirectLookup[drawId];
+    if (sectionId >= uint(sectionData.length())) {
+        rejectTranslucentBuild();
+        return;
+    }
+    SectionMeta meta = sectionData[sectionId];
     uint detail = extractDetail(meta);
+    if (detail > uint(MAX_LOD_LAYER) || (meta.b.x & 0xffffu) == 0u) {
+        rejectTranslucentBuild();
+        return;
+    }
 
     uvec3 rel = abs(extractPosition(meta)-(baseSectionPos>>detail));
     uint dist = (rel.x+rel.y+rel.z)<<detail;
     //The -1 is because we want 0 to TRANSLUCENT_WRITE_BASE, exclusive of ending, not inclusive (0->1023)
     dist = (TRANSLUCENT_WRITE_BASE-1)-min(dist, (TRANSLUCENT_WRITE_BASE-1));
 
-    uint drawPtr = atomicAdd(translucentCommandData[dist],1)+TRANSLUCENT_OFFSET;
-    writeCmd(drawPtr, drawId, extractQuadStart(meta), meta.b.x&0xFFFF);
+    uint drawPtr = reserveDistanceCommand(dist, acceptedCount);
+    if (drawPtr != INVALID_COMMAND_INDEX) {
+        writeCmd(drawPtr, drawId, extractQuadStart(meta), meta.b.x&0xFFFFu);
+    }
 }

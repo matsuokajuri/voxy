@@ -168,6 +168,9 @@ minecraft {
                 property 'voxy.forge.auditRound8ModelGpuUploadCount',
                         (project.findProperty('voxyAuditRound8ModelGpuUploadCount') ?: '32').toString()
             }
+            if (project.hasProperty('voxyAuditRound10')) {
+                property 'voxy.forge.auditRound10', 'true'
+            }
         }
 
         server {
@@ -414,7 +417,36 @@ def makeExcludedRocksDB = tasks.register('makeExcludedRocksDB', Zip) {
 
 test {
     useJUnitPlatform {
-        excludeTags 'bobby-exact-artifact', 'compat-real-data', 'redis-real-backend', 'round6-performance', 'round7-performance'
+        excludeTags 'bobby-exact-artifact', 'compat-real-data', 'redis-real-backend', 'round6-performance', 'round7-performance', 'packaged-artifact', 'round10-gpu'
+    }
+}
+
+tasks.register('packagedArtifactTest', Test) {
+    description = 'Verifies the optional DH library distribution policy in the reobfuscated release JAR.'
+    group = 'verification'
+    dependsOn 'jarJar', 'reobfJarJar'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform {
+        includeTags 'packaged-artifact'
+    }
+    inputs.file(tasks.named('jarJar').flatMap { it.archiveFile })
+    doFirst {
+        systemProperty 'voxyPackagedJar', tasks.named('jarJar').get().archiveFile.get().asFile.absolutePath
+    }
+}
+
+tasks.register('round10GpuTest', Test) {
+    description = 'Executes original production shaders and GPU owners on a real OpenGL context; supplements normal-client qualification.'
+    group = 'verification'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform {
+        includeTags 'round10-gpu'
+    }
+    maxParallelForks = 1
+    testLogging {
+        showStandardStreams = true
     }
 }
 

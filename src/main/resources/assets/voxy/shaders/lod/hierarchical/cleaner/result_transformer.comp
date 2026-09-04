@@ -18,14 +18,34 @@ layout(binding = VISIBILITY_BUFFER_BINDING, std430) restrict buffer VisibilityBu
 };
 
 layout(location=0) uniform uint visibilityCounter;
+layout(location=1) uniform uint nodeCount;
+const uint CLEANER_INDEX_MASK = (1u << 31) - 1u;
+
 void main() {
-    uint id = minVisIds[gl_LocalInvocationID.x];
-    uvec4 node = nodes[id];
-    uvec2 res = node.xy;
-    if (all(equal(node, uvec4(-1)))) {//If its a empty node, TODO: DONT THINK THIS IS ACTUALLY CORRECT
-        res = uvec2(-1);
+    uint outputIndex = gl_GlobalInvocationID.x;
+    if (outputIndex >= OUTPUT_SIZE) {
+        return;
     }
-    outputBuffer[gl_LocalInvocationID.x] = res;//Move the position of the node id into the output buffer
+    // Underfull candidate sets remain absent positions; never dereference their sentinel.
+    outputBuffer[outputIndex] = uvec2(-1);
+    uint taggedId = minVisIds[outputIndex];
+    uint id = taggedId & CLEANER_INDEX_MASK;
+    if (taggedId == uint(-1) || id >= nodeCount
+            || id >= uint(nodes.length()) || id >= uint(visibility.length())) {
+        return;
+    }
+    // The fuzzy concurrent sort can encounter duplicate IDs. Emit only the first position
+    // and update its visibility once, without changing node eligibility or eviction policy.
+    for (uint i = 0; i < outputIndex; i++) {
+        if ((minVisIds[i] & CLEANER_INDEX_MASK) == id) {
+            return;
+        }
+    }
+    uvec4 node = nodes[id];
+    if (all(equal(node, uvec4(-1)))) {
+        return;
+    }
+    outputBuffer[outputIndex] = node.xy;//Move the position of the node id into the output buffer
 
     //This is an evil hack to not spam the same node 500 times in a row
     //TODO: maybe instead set this to the current frame index

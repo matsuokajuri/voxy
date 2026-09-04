@@ -5,7 +5,8 @@ layout(binding = 0, std140) uniform SceneUniform {
     vec3 cameraSubPos;
 };
 
-//TODO: see if making the stride 2*4*4 bytes or something cause you get that 16 byte write
+// GL DrawElementsIndirectCommand ABI: five scalars, std430 stride 20 bytes.
+// A wider command is a separate measured design change, not padding for safety.
 struct DrawCommand {
     uint  count;
     uint  instanceCount;
@@ -46,7 +47,24 @@ layout(binding = DRAW_COUNT_BUFFER_BINDING, std430) restrict buffer DrawCommandC
     uint temporalOpaqueDrawCount;
 
     DrawCommand cullDrawIndirectCommand;
+
+    // The original dispatch/count/cull ABI occupies bytes 0..43 unchanged.
+    // These cumulative diagnostics use the previously unused tail of the 1 KiB
+    // buffer. Prep resets admitted work, but not evidence of rejected work.
+    uint commandOverflowFlags;
+    uint rejectedOpaqueCommands;
+    uint rejectedTranslucentCommands;
+    uint rejectedTemporalCommands;
+    uint rejectedCommandInputs;
+    uint rejectedTranslucentBuilds;
 };
+
+const uint COMMAND_OVERFLOW_OPAQUE = 1u;
+const uint COMMAND_OVERFLOW_TRANSLUCENT = 2u;
+const uint COMMAND_OVERFLOW_TEMPORAL = 4u;
+const uint COMMAND_INVALID_INPUT = 8u;
+const uint COMMAND_INVALID_TRANSLUCENT_BUILD = 16u;
+const uint INVALID_COMMAND_INDEX = 0xffffffffu;
 #endif
 
 #ifdef SECTION_METADATA_BUFFER_BINDING

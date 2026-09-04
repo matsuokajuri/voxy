@@ -149,8 +149,7 @@ public final class ForgeOriginalVoxyModelPipeline {
     private boolean renderEmbeddiumCutoutActive;
     private boolean serviceThreadPoolShutdown;
     private long chunkBoundOwnerGeneration;
-    private long preparedOculusViewportGeneration = Long.MIN_VALUE;
-    private ForgeOriginalVoxyRenderSystem preparedOculusViewportOwner;
+    private PreparedViewportState preparedOculusViewport;
     ForgeOriginalVoxyModelPipeline(ForgeVoxyInstance instance) {
         this.instance = instance;
     }
@@ -204,8 +203,8 @@ public final class ForgeOriginalVoxyModelPipeline {
                         ForgeVoxyConfig.ORIGINAL_VOXY_USE_ENVIRONMENTAL_FOG.get()))
                 .update();
         viewport.frameId++;
-        this.preparedOculusViewportGeneration = captured.generation();
-        this.preparedOculusViewportOwner = currentRenderSystem;
+        this.preparedOculusViewport = new PreparedViewportState(
+                currentRenderSystem, viewport, captured.generation(), width, height);
     }
 
     ServiceManager getServiceManager() {
@@ -688,8 +687,9 @@ public final class ForgeOriginalVoxyModelPipeline {
                     ForgeOriginalVoxyRenderStateCapture.viewportCopy();
             boolean usePreparedOculusViewport = ForgeOriginalVoxyOculusPipelineBridge.shaderpackActive()
                     && capturedViewport != null
-                    && this.preparedOculusViewportOwner == renderSystem
-                    && this.preparedOculusViewportGeneration == capturedViewport.generation();
+                    && this.preparedOculusViewport != null
+                    && this.preparedOculusViewport.matches(
+                            renderSystem, viewport, capturedViewport.generation(), width, height);
             if (usePreparedOculusViewport) {
                 // The original Iris path only refreshes the viewport once in beginLevelRendering;
                 // preserve those camera matrices and merely take the now-current terrain fog.
@@ -736,6 +736,9 @@ public final class ForgeOriginalVoxyModelPipeline {
             postDynamicWorkEligible = true;
             postDynamicCameraX = cameraX;
             postDynamicCameraZ = cameraZ;
+            RenderContractAudit.record("setup", renderSystem.viewportSelector().selectedKey(), viewport,
+                    renderPipeline, capturedViewport == null ? -1 : capturedViewport.generation(),
+                    usePreparedOculusViewport, oldFramebuffer, oldRenderState.readFramebuffer(), depthTexture);
             GPUTiming.INSTANCE.marker("RO");
             sectionRenderer.renderOpaque(viewport, geometryData, modelStore, renderPipeline);
             viewport.buildHizFromSourceDepth(depthTexture, width, height);
@@ -757,6 +760,9 @@ public final class ForgeOriginalVoxyModelPipeline {
             sectionRenderer.renderTranslucent(viewport, geometryData, modelStore, renderPipeline);
             GPUTiming.INSTANCE.marker();
             renderPipeline.finish(viewport, oldFramebuffer, sourceWidth, sourceHeight, true);
+            RenderContractAudit.record("finish", renderSystem.viewportSelector().selectedKey(), viewport,
+                    renderPipeline, capturedViewport == null ? -1 : capturedViewport.generation(),
+                    usePreparedOculusViewport, oldFramebuffer, oldRenderState.readFramebuffer(), depthTexture);
             GPUTiming.INSTANCE.marker();
             synchronized (this) {
                 if (this.ownerReady && !this.stale) {
@@ -845,6 +851,7 @@ public final class ForgeOriginalVoxyModelPipeline {
             this.lastLifecycleEvent = safeReason(event);
             renderSystem = this.renderSystem;
             this.renderSystem = null;
+            this.preparedOculusViewport = null;
         }
         ForgeOriginalVoxyRenderStateCapture.clear();
         this.runOnRenderThread(() -> {

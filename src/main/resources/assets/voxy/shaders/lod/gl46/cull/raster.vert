@@ -19,11 +19,20 @@ vec2 getTAA();
 #endif
 
 void main() {
+    // Keep both the metadata read and the fragment's eventual visibility write
+    // inside the currently bound ranges, including rounded-up/invalid inputs.
+    id = 0xffffffffu;
+    value = 0u;
+    gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+    uint validSectionCount = min(sectionCount, min(uint(RENDER_LIST_CAPACITY), uint(indirectLookup.length())));
+    if (uint(gl_InstanceID) >= validSectionCount) return;
     uint sid = indirectLookup[gl_InstanceID];
+    if (sid >= uint(sectionData.length()) || sid >= uint(visibilityData.length())) return;
 
     SectionMeta section = sectionData[sid];
 
     uint detail = extractDetail(section);
+    if (detail > uint(MAX_LOD_LAYER)) return;
     ivec3 ipos = extractPosition(section);
     ivec3 aabbOffset = extractAABBOffset(section);
     ivec3 size = extractAABBSize(section);

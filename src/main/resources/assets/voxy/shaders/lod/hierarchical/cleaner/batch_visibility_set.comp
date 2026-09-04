@@ -1,6 +1,6 @@
 #version 460 core
 //
-layout(local_size_x=128) in;
+layout(local_size_x=WORK_SIZE) in;
 
 layout(binding = VISIBILITY_BUFFER_BINDING, std430) restrict writeonly buffer VisibilityDataBuffer {
     uint[] visiblity;
@@ -14,9 +14,13 @@ layout(location=0) uniform uint count;
 layout(location=1) uniform uint setTo;
 void main() {
     uint id = gl_GlobalInvocationID.x;
-    if (count <= id) {
+    if (count <= id || id >= uint(ids.length())) {
         return;
     }
     uint pos = ids[id];
-    visiblity[pos&((1u<<31)-1)] = mix(setTo, uint(-1), (pos&(1u<<31)) == 0);
+    uint nodeId = pos & ((1u << 31) - 1u);
+    if (nodeId >= uint(visiblity.length())) {
+        return;
+    }
+    visiblity[nodeId] = mix(setTo, uint(-1), (pos&(1u<<31)) == 0);
 }

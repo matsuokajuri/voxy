@@ -14,8 +14,7 @@ layout(binding = 2) uniform sampler2D depthTex;
 
 //#define DEBUG_RENDER
 
-//TODO: need to fix when merged quads have discardAlpha set to false but they span multiple tiles
-// however they are not a full block
+// makeQuadFlags enables the face's partial-bounds alpha override for merged tiles.
 
 layout(location = 0) in flat uvec4 interData;
 #ifndef USE_NV_BARRY
@@ -48,13 +47,11 @@ vec4 uint2vec4RGBA(uint colour) {
     return vec4((uvec4(colour)>>uvec4(24,16,8,0))&uvec4(0xFF))/255.0;
 }
 
-//bool useMipmaps() {
-//    return (interData.x&2u)==0u;
-//}
-
 uint tintingState() {
     return (interData.x>>2)&3u;
 }
+
+#import <voxy:lod/model_tint.glsl>
 
 bool useDiscard() {
     return (interData.x&1u)==1u;
@@ -79,7 +76,8 @@ vec2 getBaseUV() {
 
 #ifdef PATCHED_SHADER
 struct VoxyFragmentParameters {
-    //TODO: pass in derivative data
+    // Keep the established shaderpack ABI. Base-atlas gradients are consumed before
+    // helper exits below; no derivative fields are required by the current consumers.
     vec4 sampledColour;
     vec2 tile;
     vec2 uv;
@@ -94,17 +92,7 @@ void voxy_emitFragment(VoxyFragmentParameters parameters);
 #else
 
 vec4 computeColour(vec2 texturePos, vec4 colour) {
-    //Conditional tinting, TODO: FIXME: this is better but still not great, try encode data into the top bit of alpha so its per pixel
-
-    uint tintingFunction = tintingState();
-    bool doTint = tintingFunction==2;//Always tint if function == 2
-    if (tintingFunction == 1) {//partial tint
-        vec4 tintTest = textureLod(blockModelAtlas, texturePos, 0);
-        if (abs(tintTest.r-tintTest.g) < 0.02f && abs(tintTest.g-tintTest.b) < 0.02f) {
-            doTint = true;
-        }
-    }
-    if (doTint) {
+    if (shouldApplyModelTint(tintingState(), texturePos)) {
         colour *= uint2vec4RGBA(interData.z).yzwx;
     }
     return (colour * uint2vec4RGBA(interData.y)) + vec4(0,0,0,float(interData.w&0xFFu)/255);
@@ -129,16 +117,12 @@ void main() {
     vec2 uv2 = modf(uv, tile)*(1.0/(vec2(3.0,2.0)*256.0));
     vec4 colour;
     vec2 texPos = uv2 + getBaseUV();
-//This is deprecated, TODO: remove the non mip code path
-    //if (useMipmaps())
     {
         vec2 uvSmol = uv*(1.0/(vec2(3.0,2.0)*256.0));
         vec2 dx = dFdx(uvSmol);//vec2(lDx, dDx);
         vec2 dy = dFdy(uvSmol);//vec2(lDy, dDy);
         colour = textureGrad(blockModelAtlas, texPos, dx, dy);
-    }// else {
-    //    colour = textureLod(blockModelAtlas, texPos, 0);
-    //}
+    }
 
     //If we are in shaders and are a helper invocation, just exit, as it enables extra performance gains for small sized
     // fragments, we do this here after derivative computation
@@ -171,8 +155,7 @@ void main() {
     #else
     if (textureLod(blockModelAtlas, texPos, 0).a == 0.0f) {
     #endif
-        //This is stupidly stupidly bad for divergence
-        //TODO: FIXME, basicly what this do is sample the exact pixel (no lod) for discarding, this stops mipmapping fucking it over
+        // Alpha coverage uses the base texel so colour mip filtering cannot close holes.
         #ifndef DEBUG_RENDER
         discard;
         return;
@@ -201,16 +184,8 @@ void main() {
     #else
     uint modelId = getModelId();
     BlockModel model = modelData[modelId];
-    uint tintingFunction = tintingState();
-    bool doTint = tintingFunction==2;//Always tint if function == 2
-    if (tintingFunction==1) {//Partial tint
-        vec4 tintTest = texture(blockModelAtlas, texPos, -2);
-        if (abs(tintTest.r-tintTest.g) < 0.02f && abs(tintTest.g-tintTest.b) < 0.02f) {
-            doTint = true;
-        }
-    }
     vec4 tint = vec4(1);
-    if (doTint) {
+    if (shouldApplyModelTint(tintingState(), texPos)) {
         tint = uint2vec4RGBA(interData.z).yzwx;
     }
 

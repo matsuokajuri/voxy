@@ -107,6 +107,11 @@ final class ForgeOriginalVoxyPipelineDepthStage extends TrackedObject {
         GlState state = GlState.capture();
         try {
             this.framebuffer.resize(width, height);
+            // Named framebuffer clears still obey write masks. Establish the original
+            // full depth/stencil clear contract before touching a reused target; the
+            // captured caller masks are restored in finally with the rest of GL state.
+            glDepthMask(true);
+            glStencilMask(0xFF);
             glClearNamedFramebufferfi(this.framebuffer.framebufferId(), GL_DEPTH_STENCIL, 0, this.properties.clearDepth(), 1);
             glBindFramebuffer(GL_FRAMEBUFFER, this.framebuffer.framebufferId());
 
@@ -116,13 +121,11 @@ final class ForgeOriginalVoxyPipelineDepthStage extends TrackedObject {
             glEnable(GL_STENCIL_TEST);
             glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
             glStencilFunc(GL_ALWAYS, 0, 0xFF);
-            glStencilMask(0xFF);
 
             this.depthStencilSetup.bind();
             glBindTextureUnit(0, sourceDepth.textureId());
             glBindSampler(0, this.depthSamplerId);
             glUniform2f(1, ((float) width) / srcWidth, ((float) height) / srcHeight);
-            glDepthMask(true);
             glColorMask(false, false, false, false);
             this.depthStencilSetup.blit();
 

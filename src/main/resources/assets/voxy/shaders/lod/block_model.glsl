@@ -6,8 +6,9 @@ struct BlockModel {
     uint _pad[7];
 };
 
-//TODO: FIXME: this isnt actually correct cause depending on the face (i think) it could be 1/64 th of a position off
-// but im going to assume that since we are dealing with huge render distances, this shouldent matter that much
+// Face-relative distance from the bakery view plane in 1/64 units. The producer emits
+// 0..62; code 63 retains the original end-plane encoding. setupQuad applies the face
+// sign exactly once, so an additional per-face 1/64 correction would move valid faces.
 float extractFaceIndentation(uint faceData) {
     uint enc = (faceData>>16)&63u;
     enc += uint(enc==63u);//convert 63 to 64 cause of pain reasons
@@ -22,7 +23,7 @@ uint faceHasAlphaCuttout(uint faceData) {
     return (faceData>>22)&1u;
 }
 
-//TODO: try and get rid of
+// Partial model bounds need alpha testing when merged across more than one block tile.
 uint faceHasAlphaCuttoutOverride(uint faceData) {
     return (faceData>>23)&1u;
 }

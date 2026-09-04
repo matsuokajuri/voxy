@@ -44,9 +44,8 @@ layout(location = 7) out flat uint quadDebug;
 
 vec2 taaShift();
 
-//TODO: add a mechanism so that some quads can ignore backface culling
-// this would help alot with stuff like crops as they would look kinda weird i think,
-// same with flowers etc
+// Thin models already select the double-sided command bucket through model metadata;
+// face orientation and the shared vertex/fragment attribute layout remain unchanged here.
 void main() {
     taaOffset = taaShift();
 

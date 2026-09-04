@@ -37,6 +37,66 @@ layout(binding = TRANSLUCENT_DISTANCE_BUFFER_BINDING, std430) restrict buffer Tr
     uint[] translucentCommandData;
 };
 
+// A successful counter describes a completely admitted batch, never an attempted
+// append. Batches are all-or-none, so no draw can consume an unwritten tail.
+uint reserveOpaqueCommands(uint count) {
+    if (count == 0u) return 0u;
+    uint capacity = min(uint(OPAQUE_DRAW_CAPACITY), uint(cmdBuffer.length()));
+    uint observed = atomicAdd(opaqueDrawCount, 0u);
+    while (true) {
+        if (observed > capacity || count > capacity - observed) {
+            atomicOr(commandOverflowFlags, COMMAND_OVERFLOW_OPAQUE);
+            atomicAdd(rejectedOpaqueCommands, count);
+            return INVALID_COMMAND_INDEX;
+        }
+        uint previous = atomicCompSwap(opaqueDrawCount, observed, observed + count);
+        if (previous == observed) return observed;
+        observed = previous;
+    }
+}
+
+uint reserveTemporalCommands(uint count) {
+    if (count == 0u) return uint(TEMPORAL_OFFSET);
+    uint available = uint(cmdBuffer.length()) > uint(TEMPORAL_OFFSET)
+            ? uint(cmdBuffer.length()) - uint(TEMPORAL_OFFSET) : 0u;
+    uint capacity = min(uint(TEMPORAL_DRAW_CAPACITY), available);
+    uint observed = atomicAdd(temporalOpaqueDrawCount, 0u);
+    while (true) {
+        if (observed > capacity || count > capacity - observed) {
+            atomicOr(commandOverflowFlags, COMMAND_OVERFLOW_TEMPORAL);
+            atomicAdd(rejectedTemporalCommands, count);
+            return INVALID_COMMAND_INDEX;
+        }
+        uint previous = atomicCompSwap(temporalOpaqueDrawCount, observed, observed + count);
+        if (previous == observed) return observed + uint(TEMPORAL_OFFSET);
+        observed = previous;
+    }
+}
+
+uint reserveTranslucentCommand() {
+    uint available = uint(cmdBuffer.length()) > uint(TRANSLUCENT_OFFSET)
+            ? uint(cmdBuffer.length()) - uint(TRANSLUCENT_OFFSET) : 0u;
+    uint listAvailable = uint(translucentCommandData.length()) > uint(TRANSLUCENT_WRITE_BASE)
+            ? uint(translucentCommandData.length()) - uint(TRANSLUCENT_WRITE_BASE) : 0u;
+    uint capacity = min(uint(TRANSLUCENT_DRAW_CAPACITY), min(available, listAvailable));
+    uint observed = atomicAdd(translucentDrawCount, 0u);
+    while (true) {
+        if (observed >= capacity) {
+            atomicOr(commandOverflowFlags, COMMAND_OVERFLOW_TRANSLUCENT);
+            atomicAdd(rejectedTranslucentCommands, 1u);
+            return INVALID_COMMAND_INDEX;
+        }
+        uint previous = atomicCompSwap(translucentDrawCount, observed, observed + 1u);
+        if (previous == observed) return observed + uint(TRANSLUCENT_WRITE_BASE);
+        observed = previous;
+    }
+}
+
+void rejectInput() {
+    atomicOr(commandOverflowFlags, COMMAND_INVALID_INPUT);
+    atomicAdd(rejectedCommandInputs, 1u);
+}
+
 //Note: if i want reverse indexing i need to use the index buffer offset to offset
 void writeCmd(uint idx, uint instance, uint offset, uint quadCount) {
     DrawCommand cmd;
@@ -48,13 +108,36 @@ void writeCmd(uint idx, uint instance, uint offset, uint quadCount) {
     cmdBuffer[idx] = cmd;
 }
 
+void writeOpaqueCommands(inout uint opaquePtr, inout uint temporalPtr,
+                         uint instance, uint offset, uint quadCount) {
+    if (opaquePtr != INVALID_COMMAND_INDEX) {
+        writeCmd(opaquePtr++, instance, offset, quadCount);
+    }
+    if (temporalPtr != INVALID_COMMAND_INDEX) {
+        writeCmd(temporalPtr++, instance, offset, quadCount);
+    }
+}
+
 void main() {
-    if (gl_GlobalInvocationID.x >= sectionCount) {
+    uint validSectionCount = min(sectionCount, min(uint(RENDER_LIST_CAPACITY), uint(indirectLookup.length())));
+    if (gl_GlobalInvocationID.x >= validSectionCount) {
+        return;
+    }
+    if (gl_GlobalInvocationID.x >= uint(positionBuffer.length())) {
+        rejectInput();
         return;
     }
     uint sectionId = indirectLookup[gl_GlobalInvocationID.x];
+    if (sectionId >= uint(sectionData.length()) || sectionId >= uint(visibilityData.length())) {
+        rejectInput();
+        return;
+    }
     SectionMeta meta = sectionData[sectionId];
     uint detail = extractDetail(meta);
+    if (detail > uint(MAX_LOD_LAYER)) {
+        rejectInput();
+        return;
+    }
     ivec3 ipos = extractPosition(meta);
 
     vec3 cornerPos = vec3(((ipos<<detail)-baseSectionPos)<<5)-cameraSubPos;
@@ -81,7 +164,8 @@ void main() {
         positionBuffer[drawId] = extractRawPos(meta);
         uvec4 counts = meta.b;
 
-        //TODO implicit command merging
+        // Preserve the original directional commands; merging is a separate
+        // measured optimization. Each section can reserve at most seven.
         uint msk = 0;
         msk |= uint(((counts.y      &0xFFFFu)!=0) && (relative.y>-1))<<0;
         msk |= uint((((counts.y>>16)&0xFFFFu)!=0) && (relative.y<1 ))<<1;
@@ -94,14 +178,15 @@ void main() {
 
 
         uint cmdCnt = bitCount(msk);
-        uint cmdPtr = atomicAdd(opaqueDrawCount, cmdCnt);
+        uint cmdPtr = reserveOpaqueCommands(cmdCnt);
 
-        uint tCmdPtr = 0;
-        if (renderTemporally) {
-            tCmdPtr = atomicAdd(temporalOpaqueDrawCount, cmdCnt) + TEMPORAL_OFFSET;
+        uint tCmdPtr = INVALID_COMMAND_INDEX;
+        if (renderTemporally && cmdPtr != INVALID_COMMAND_INDEX) {
+            tCmdPtr = reserveTemporalCommands(cmdCnt);
         }
 
-        //TODO: make totalQuads also have temporal amount
+        // Count admitted scene quads once; temporal commands duplicate these
+        // quads to cover the first visible frame, not additional geometry.
         #ifdef HAS_STATISTICS
         uint totalQuads = 0;
         #endif
@@ -110,28 +195,27 @@ void main() {
         //Translucency
         count = counts.x&0xFFFFu;
         if (count != 0) {
-            uint tp = atomicAdd(translucentDrawCount, 1)+TRANSLUCENT_WRITE_BASE;
-            translucentCommandData[tp] = drawId;
-            uvec3 absRel = abs(relative);
-            uint distToCamera = (absRel.x+absRel.y+absRel.z)<<detail;
-            //The -1 is because we want 0 to TRANSLUCENT_WRITE_BASE, exclusive of ending, not inclusive (0->1023)
-            distToCamera = (TRANSLUCENT_WRITE_BASE-1)-min(distToCamera, (TRANSLUCENT_WRITE_BASE-1));
-            atomicAdd(translucentCommandData[distToCamera], 1);
-            #ifdef HAS_STATISTICS
-            totalQuads += count;
-            #endif
+            uint tp = reserveTranslucentCommand();
+            if (tp != INVALID_COMMAND_INDEX) {
+                translucentCommandData[tp] = drawId;
+                uvec3 absRel = abs(relative);
+                uint distToCamera = (absRel.x+absRel.y+absRel.z)<<detail;
+                // Only admitted list entries contribute to the histogram.
+                distToCamera = (TRANSLUCENT_WRITE_BASE-1)-min(distToCamera, (TRANSLUCENT_WRITE_BASE-1));
+                atomicAdd(translucentCommandData[distToCamera], 1);
+                #ifdef HAS_STATISTICS
+                totalQuads += count;
+                #endif
+            }
         }
         ptr += count;
 
         //Double sided quads
         count = (counts.x>>16)&0xFFFFu;
         if (count != 0) {
-            writeCmd(cmdPtr++, drawId, ptr, count);
-            if (renderTemporally) {
-                writeCmd(tCmdPtr++, drawId, ptr, count);
-            }
+            writeOpaqueCommands(cmdPtr, tCmdPtr, drawId, ptr, count);
             #ifdef HAS_STATISTICS
-            totalQuads += count;
+            if (cmdPtr != INVALID_COMMAND_INDEX) totalQuads += count;
             #endif
         }
         ptr += count;
@@ -139,12 +223,9 @@ void main() {
         //Down
         count = (counts.y)&0xFFFFu;
         if (((msk&(1u<<0))!=0)) {
-            writeCmd(cmdPtr++, drawId, ptr, count);
-            if (renderTemporally) {
-                writeCmd(tCmdPtr++, drawId, ptr, count);
-            }
+            writeOpaqueCommands(cmdPtr, tCmdPtr, drawId, ptr, count);
             #ifdef HAS_STATISTICS
-            totalQuads += count;
+            if (cmdPtr != INVALID_COMMAND_INDEX) totalQuads += count;
             #endif
         }
         ptr += count;
@@ -152,12 +233,9 @@ void main() {
         //Up
         count = (counts.y>>16)&0xFFFFu;
         if ((msk&(1u<<1))!=0) {
-            writeCmd(cmdPtr++, drawId, ptr, count);
-            if (renderTemporally) {
-                writeCmd(tCmdPtr++, drawId, ptr, count);
-            }
+            writeOpaqueCommands(cmdPtr, tCmdPtr, drawId, ptr, count);
             #ifdef HAS_STATISTICS
-            totalQuads += count;
+            if (cmdPtr != INVALID_COMMAND_INDEX) totalQuads += count;
             #endif
         }
         ptr += count;
@@ -165,12 +243,9 @@ void main() {
         //North
         count = (counts.z)&0xFFFFu;
         if ((msk&(1u<<2))!=0) {
-            writeCmd(cmdPtr++, drawId, ptr, count);
-            if (renderTemporally) {
-                writeCmd(tCmdPtr++, drawId, ptr, count);
-            }
+            writeOpaqueCommands(cmdPtr, tCmdPtr, drawId, ptr, count);
             #ifdef HAS_STATISTICS
-            totalQuads += count;
+            if (cmdPtr != INVALID_COMMAND_INDEX) totalQuads += count;
             #endif
         }
         ptr += count;
@@ -178,12 +253,9 @@ void main() {
         //South
         count = (counts.z>>16)&0xFFFFu;
         if ((msk&(1u<<3))!=0) {
-            writeCmd(cmdPtr++, drawId, ptr, count);
-            if (renderTemporally) {
-                writeCmd(tCmdPtr++, drawId, ptr, count);
-            }
+            writeOpaqueCommands(cmdPtr, tCmdPtr, drawId, ptr, count);
             #ifdef HAS_STATISTICS
-            totalQuads += count;
+            if (cmdPtr != INVALID_COMMAND_INDEX) totalQuads += count;
             #endif
         }
         ptr += count;
@@ -191,12 +263,9 @@ void main() {
         //West
         count = (counts.w)&0xFFFFu;
         if ((msk&(1u<<4))!=0) {
-            writeCmd(cmdPtr++, drawId, ptr, count);
-            if (renderTemporally) {
-                writeCmd(tCmdPtr++, drawId, ptr, count);
-            }
+            writeOpaqueCommands(cmdPtr, tCmdPtr, drawId, ptr, count);
             #ifdef HAS_STATISTICS
-            totalQuads += count;
+            if (cmdPtr != INVALID_COMMAND_INDEX) totalQuads += count;
             #endif
         }
         ptr += count;
@@ -204,12 +273,9 @@ void main() {
         //East
         count = (counts.w>>16)&0xFFFFu;
         if ((msk&(1u<<5))!=0) {
-            writeCmd(cmdPtr++, drawId, ptr, count);
-            if (renderTemporally) {
-                writeCmd(tCmdPtr++, drawId, ptr, count);
-            }
+            writeOpaqueCommands(cmdPtr, tCmdPtr, drawId, ptr, count);
             #ifdef HAS_STATISTICS
-            totalQuads += count;
+            if (cmdPtr != INVALID_COMMAND_INDEX) totalQuads += count;
             #endif
         }
         ptr += count;

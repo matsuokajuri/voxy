@@ -127,11 +127,16 @@ public final class WorldSection {
     }
 
     public int acquire(int count) {
-        int state = ((int)  ATOMIC_STATE_HANDLE.getAndAdd(this, count<<1)) + (count<<1);
-        if ((state & 1) == 0) {
-            throw new IllegalStateException("Tried to acquire unloaded section: " + pprintPos(this.key) + " obj: " + System.identityHashCode(this));
-        }
-        return state>>1;
+        int previous, next;
+        do {
+            previous = (int) ATOMIC_STATE_HANDLE.getVolatile(this);
+            if ((previous & 1) == 0) {
+                // A failed acquire must not manufacture refs on a freed/free-claimed object.
+                throw new IllegalStateException("Tried to acquire unloaded section: " + pprintPos(this.key) + " obj: " + System.identityHashCode(this));
+            }
+            next = previous + (count << 1);
+        } while (!ATOMIC_STATE_HANDLE.compareAndSet(this, previous, next));
+        return next >> 1;
     }
 
     public int getRefCount() {
@@ -178,7 +183,13 @@ public final class WorldSection {
             throw new IllegalStateException("Section marked as free but has refs");
         }
         if (witness == 1 && (this.isDirty || this.inSaveQueue)) {
-            throw new IllegalStateException("Section freed while marked as dirty or in the save queue: " + (this.isDirty?"dirty, ":"") + (this.inSaveQueue?"saveQueue":""));
+            // A writer may acquire, dirty and release between the tracker's last clean
+            // check and this claim. The claim excludes new references, so recheck here
+            // and cancel it before the active holder is exposed as a freed object.
+            if (!ATOMIC_STATE_HANDLE.compareAndSet(this, 0, 1)) {
+                throw new IllegalStateException("Dirty free claim lost exclusive ownership");
+            }
+            return false;
         }
         return witness == 1;
     }

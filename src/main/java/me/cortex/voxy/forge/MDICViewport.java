@@ -10,9 +10,11 @@ import org.joml.Vector4f;
 import java.lang.reflect.Field;
 
 final class MDICViewport {
-    static final int OPAQUE_DRAW_COUNT = 400_000;
-    static final int TRANSLUCENT_DRAW_COUNT = 100_000;
-    static final int TEMPORAL_DRAW_COUNT = 100_000;
+    static final int OPAQUE_DRAW_COUNT = GpuBufferLayout.OPAQUE_CAPACITY;
+    static final int TRANSLUCENT_DRAW_COUNT = GpuBufferLayout.TRANSLUCENT_CAPACITY;
+    static final int TEMPORAL_DRAW_COUNT = GpuBufferLayout.TEMPORAL_CAPACITY;
+    static final int COMMAND_DIAGNOSTICS_OFFSET = GpuBufferLayout.DRAW_COUNT_ABI_BYTES;
+    static final int COMMAND_DIAGNOSTICS_BYTES = 6 * Integer.BYTES;
 
     private static final Field PLANES_FIELD;
 
@@ -25,12 +27,11 @@ final class MDICViewport {
         }
     }
 
-    final GlBuffer drawCountCallBuffer = new GlBuffer(1024).zero();
-    final GlBuffer drawCallBuffer = new GlBuffer(
-            5L * 4L * (OPAQUE_DRAW_COUNT + TRANSLUCENT_DRAW_COUNT + TEMPORAL_DRAW_COUNT)).zero();
-    final GlBuffer positionScratchBuffer = new GlBuffer(8L * 400_000L).zero();
-    final GlBuffer indirectLookupBuffer = new GlBuffer(
-            HierarchicalOcclusionTraverser.MAX_QUEUE_SIZE * 4L + 4L);
+    final GlBuffer drawCountCallBuffer = new GlBuffer(GpuBufferLayout.DRAW_COUNT_BYTES).zero();
+    final GlBuffer commandDispatchBuffer = new GlBuffer(GpuBufferLayout.DISPATCH_BYTES).zero();
+    final GlBuffer drawCallBuffer = new GlBuffer(GpuBufferLayout.DRAW_BUFFER_BYTES).zero();
+    final GlBuffer positionScratchBuffer = new GlBuffer(GpuBufferLayout.POSITION_BUFFER_BYTES).zero();
+    final GlBuffer indirectLookupBuffer = new GlBuffer(GpuBufferLayout.HOC_RENDER_LIST_BYTES);
     final GlBuffer visibilityBuffer;
 
     final Matrix4f vanillaProjection = new Matrix4f();
@@ -45,6 +46,9 @@ final class MDICViewport {
     int width = 1;
     int height = 1;
     int frameId;
+    private int commandDiagnosticFrame;
+    private boolean commandDiagnosticReadPending;
+    private int reportedCommandOverflowFlags;
     double cameraX;
     double cameraY;
     double cameraZ;
@@ -163,10 +167,36 @@ final class MDICViewport {
 
     boolean ready() {
         return this.drawCountCallBuffer.id != 0
+                && this.commandDispatchBuffer.id != 0
                 && this.drawCallBuffer.id != 0
                 && this.positionScratchBuffer.id != 0
                 && this.indirectLookupBuffer.id != 0
                 && this.visibilityBuffer.id != 0;
+    }
+
+    boolean beginCommandDiagnosticSample() {
+        // Diagnostics are sticky on the GPU, so a small asynchronous sample cannot miss
+        // an overflow between samples. Never introduce a synchronous per-frame readback.
+        if (this.commandDiagnosticReadPending || (this.commandDiagnosticFrame++ & 63) != 0) {
+            return false;
+        }
+        this.commandDiagnosticReadPending = true;
+        return true;
+    }
+
+    void acceptCommandDiagnostics(int flags, long opaque, long translucent, long temporal,
+                                  long inputs, long translucentBuilds) {
+        this.commandDiagnosticReadPending = false;
+        int newlyReported = flags & ~this.reportedCommandOverflowFlags;
+        if (newlyReported != 0) {
+            this.reportedCommandOverflowFlags |= flags;
+            VoxyForge.LOGGER.warn(
+                    "Original Voxy MDIC capacity/input rejection: flags=0x{}, opaqueCommands={}, "
+                            + "translucentCommands={}, temporalCommands={}, inputs={}, translucentBuilds={}. "
+                            + "Rejected batches are not drawn; command counts reset and retry next frame. "
+                            + "Persistent capacity pressure can still omit geometry.",
+                    Integer.toHexString(flags), opaque, translucent, temporal, inputs, translucentBuilds);
+        }
     }
 
     void free() {
@@ -175,6 +205,7 @@ final class MDICViewport {
         this.visibilityBuffer.free();
         this.indirectLookupBuffer.free();
         this.drawCountCallBuffer.free();
+        this.commandDispatchBuffer.free();
         this.drawCallBuffer.free();
         this.positionScratchBuffer.free();
     }

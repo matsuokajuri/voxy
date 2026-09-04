@@ -54,6 +54,10 @@ final class ViewportSelector {
         return OCULUS_SHADOW_SKIPPED_KEY.equals(this.lastSelectedKey);
     }
 
+    String selectedKey() {
+        return this.lastSelectedKey;
+    }
+
     boolean lastSelectionWasExpectedSkip() {
         return this.lastSelectionWasOculusShadowSkip()
                 || VIVECRAFT_API_SKIPPED_KEY.equals(this.lastSelectedKey);

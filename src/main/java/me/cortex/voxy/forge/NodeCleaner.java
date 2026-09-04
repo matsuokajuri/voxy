@@ -30,9 +30,10 @@ import static org.lwjgl.opengl.GL43C.GL_SHADER_STORAGE_BUFFER;
 import static org.lwjgl.opengl.GL43C.glDispatchCompute;
 
 final class NodeCleaner {
-    private static final int SORTING_WORKER_SIZE = 64;
-    private static final int WORK_PER_THREAD = 8;
-    static final int OUTPUT_COUNT = 256;
+    private static final int SORTING_WORKER_SIZE = GpuBufferLayout.CLEANER_LOCAL_SIZE;
+    private static final int WORK_PER_THREAD = GpuBufferLayout.CLEANER_ELEMENTS_PER_THREAD;
+    private static final int BATCH_WORKER_SIZE = 128;
+    static final int OUTPUT_COUNT = GpuBufferLayout.CLEANER_OUTPUT_CAPACITY;
 
     private final AsyncNodeManager nodeManager;
     private int sorterProgramId;
@@ -48,21 +49,12 @@ final class NodeCleaner {
     void buildOnRenderThread() {
         this.free();
         this.sorterProgramId = compileComputeProgram(buildSorterSource());
-        this.resultTransformerProgramId = compileComputeProgram(withDefines(
-                "voxy:lod/hierarchical/cleaner/result_transformer.comp",
-                "OUTPUT_SIZE", OUTPUT_COUNT,
-                "MIN_ID_BUFFER_BINDING", 0,
-                "NODE_BUFFER_BINDING", 1,
-                "OUTPUT_BUFFER_BINDING", 2,
-                "VISIBILITY_BUFFER_BINDING", 3));
-        this.batchClearProgramId = compileComputeProgram(withDefines(
-                "voxy:lod/hierarchical/cleaner/batch_visibility_set.comp",
-                "VISIBILITY_BUFFER_BINDING", 0,
-                "LIST_BUFFER_BINDING", 1));
+        this.resultTransformerProgramId = compileComputeProgram(buildResultTransformerSource());
+        this.batchClearProgramId = compileComputeProgram(buildBatchClearSource());
         this.visibilityBuffer = new GlBuffer((long) this.nodeManager.maxNodeCount * Integer.BYTES, false)
                 .fill(-1)
                 .name("NodeCleaner visibility");
-        this.outputBuffer = new GlBuffer(this.outputBufferSize(), false)
+        this.outputBuffer = new GlBuffer(GpuBufferLayout.CLEANER_OUTPUT_BYTES, false)
                 .name("NodeCleaner output");
     }
 
@@ -75,30 +67,34 @@ final class NodeCleaner {
             return;
         }
 
-        this.outputBuffer.fill(this.nodeManager.maxNodeCount - 2);
+        // This is a fixed set of 256 candidates, not an append queue. An empty slot must never
+        // alias an allocated node near the end of the node arena.
+        this.outputBuffer.fill(-1);
+        int nodeCount = nodeCountForMaxId(this.nodeManager.getCurrentMaxNodeId(), this.nodeManager.maxNodeCount);
 
         glUseProgram(this.sorterProgramId);
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, this.visibilityBuffer.id);
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, this.outputBuffer.id);
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, nodeDataBuffer.id);
+        glUniform1ui(0, nodeCount);
         glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
-        int groups = (this.nodeManager.getCurrentMaxNodeId() + (SORTING_WORKER_SIZE * WORK_PER_THREAD) - 1)
-                / (SORTING_WORKER_SIZE * WORK_PER_THREAD);
+        int groups = sorterWorkGroupCount(nodeCount);
         if (groups > 0) {
             glDispatchCompute(groups, 1, 1);
         }
 
         glUseProgram(this.resultTransformerProgramId);
-        glBindBufferRange(GL_SHADER_STORAGE_BUFFER, 0, this.outputBuffer.id, 0L, (long) Integer.BYTES * OUTPUT_COUNT);
+        glBindBufferRange(GL_SHADER_STORAGE_BUFFER, 0, this.outputBuffer.id, 0L, GpuBufferLayout.CLEANER_ID_BYTES);
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, nodeDataBuffer.id);
         glBindBufferRange(
                 GL_SHADER_STORAGE_BUFFER,
                 2,
                 this.outputBuffer.id,
-                (long) Integer.BYTES * OUTPUT_COUNT,
-                (long) Integer.BYTES * 2L * OUTPUT_COUNT);
+                GpuBufferLayout.CLEANER_ID_BYTES,
+                GpuBufferLayout.CLEANER_POSITION_BYTES);
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, this.visibilityBuffer.id);
         glUniform1ui(0, this.visibilityId);
+        glUniform1ui(1, nodeCount);
         glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
         glDispatchCompute(1, 1, 1);
         glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
@@ -106,10 +102,10 @@ final class NodeCleaner {
 
         DownloadStream.instance().download(
                 this.outputBuffer.id,
-                this.outputBufferSize(),
-                (long) Integer.BYTES * OUTPUT_COUNT,
-                (long) Integer.BYTES * 2L * OUTPUT_COUNT,
-                buffer -> this.nodeManager.submitRemoveBatch(buffer.copy()));
+                this.outputBuffer.size(),
+                GpuBufferLayout.CLEANER_ID_BYTES,
+                GpuBufferLayout.CLEANER_POSITION_BYTES,
+                buffer -> this.nodeManager.submitRemoveBatch(copyRemovalPositions(buffer)));
     }
 
     void updateIds(IntOpenHashSet collection) {
@@ -137,7 +133,7 @@ final class NodeCleaner {
         glUniform1ui(0, count);
         glUniform1ui(1, this.visibilityId);
         glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
-        glDispatchCompute((count + 127) / 128, 1, 1);
+        glDispatchCompute((count + BATCH_WORKER_SIZE - 1) / BATCH_WORKER_SIZE, 1, 1);
         glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
         glUseProgram(0);
     }
@@ -185,8 +181,29 @@ final class NodeCleaner {
         return this.nodeManager.getGeometryCapacity() - this.nodeManager.getUsedGeometryCapacity() < 256_000_000L;
     }
 
-    private long outputBufferSize() {
-        return (long) OUTPUT_COUNT * Integer.BYTES + (long) OUTPUT_COUNT * 2L * Integer.BYTES;
+    static int nodeCountForMaxId(int maxNodeId, int capacity) {
+        if (capacity < 0 || maxNodeId < -1 || maxNodeId >= capacity) {
+            throw new IllegalArgumentException("Cleaner node range outside its arena: max="
+                    + maxNodeId + ", capacity=" + capacity);
+        }
+        // HierarchicalBitSet.getMaxIndex() is inclusive, with -1 for an empty arena.
+        return maxNodeId + 1;
+    }
+
+    static int sorterWorkGroupCount(int nodeCount) {
+        if (nodeCount < 0) {
+            throw new IllegalArgumentException("Negative cleaner node count");
+        }
+        int elementsPerGroup = SORTING_WORKER_SIZE * WORK_PER_THREAD;
+        return (int) ((nodeCount + (long) elementsPerGroup - 1L) / elementsPerGroup);
+    }
+
+    static MemoryBuffer copyRemovalPositions(MemoryBuffer buffer) {
+        if (buffer.size != GpuBufferLayout.CLEANER_POSITION_BYTES) {
+            throw new IllegalArgumentException("Cleaner removal batch must contain exactly "
+                    + OUTPUT_COUNT + " positions, got " + buffer.size + " bytes");
+        }
+        return buffer.copy();
     }
 
     static String buildSorterSource() {
@@ -196,9 +213,26 @@ final class NodeCleaner {
                 "WORK_SIZE", SORTING_WORKER_SIZE,
                 "ELEMS_PER_THREAD", WORK_PER_THREAD,
                 "OUTPUT_SIZE", OUTPUT_COUNT,
+                "MAX_LOD", GpuBufferLayout.MAX_LOD,
                 "VISIBILITY_BUFFER_BINDING", 1,
                 "OUTPUT_BUFFER_BINDING", 2,
                 "NODE_DATA_BINDING", 3);
+    }
+
+    static String buildResultTransformerSource() {
+        return withDefines("voxy:lod/hierarchical/cleaner/result_transformer.comp",
+                "OUTPUT_SIZE", OUTPUT_COUNT,
+                "MIN_ID_BUFFER_BINDING", 0,
+                "NODE_BUFFER_BINDING", 1,
+                "OUTPUT_BUFFER_BINDING", 2,
+                "VISIBILITY_BUFFER_BINDING", 3);
+    }
+
+    static String buildBatchClearSource() {
+        return withDefines("voxy:lod/hierarchical/cleaner/batch_visibility_set.comp",
+                "WORK_SIZE", BATCH_WORKER_SIZE,
+                "VISIBILITY_BUFFER_BINDING", 0,
+                "LIST_BUFFER_BINDING", 1);
     }
 
     private static String withDefines(String shaderId, Object... defines) {

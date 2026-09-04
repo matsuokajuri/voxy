@@ -83,6 +83,7 @@ import static org.lwjgl.opengl.GL33C.glBindSampler;
 import static org.lwjgl.opengl.GL40C.GL_DRAW_INDIRECT_BUFFER;
 import static org.lwjgl.opengl.GL40C.glDrawElementsIndirect;
 import static org.lwjgl.opengl.GL42C.glMemoryBarrier;
+import static org.lwjgl.opengl.GL42C.GL_BUFFER_UPDATE_BARRIER_BIT;
 import static org.lwjgl.opengl.GL43C.GL_COMMAND_BARRIER_BIT;
 import static org.lwjgl.opengl.GL43C.GL_COMPUTE_SHADER;
 import static org.lwjgl.opengl.GL43C.GL_DISPATCH_INDIRECT_BUFFER;
@@ -91,15 +92,17 @@ import static org.lwjgl.opengl.GL43C.GL_SHADER_STORAGE_BUFFER;
 import static org.lwjgl.opengl.GL43C.glDispatchCompute;
 import static org.lwjgl.opengl.GL43C.glDispatchComputeIndirect;
 import static org.lwjgl.opengl.GL45C.glBindTextureUnit;
+import static org.lwjgl.opengl.GL45C.glCopyNamedBufferSubData;
 import static org.lwjgl.opengl.GL30C.GL_RASTERIZER_DISCARD;
 import static org.lwjgl.opengl.NVRepresentativeFragmentTest.GL_REPRESENTATIVE_FRAGMENT_TEST_NV;
 
 final class MDICSectionRenderer extends TrackedObject {
     private static final int OPAQUE_DRAW_COUNT = MDICViewport.OPAQUE_DRAW_COUNT;
     private static final int TRANSLUCENT_DRAW_COUNT = MDICViewport.TRANSLUCENT_DRAW_COUNT;
-    private static final int TRANSLUCENT_OFFSET = OPAQUE_DRAW_COUNT;
-    private static final int TEMPORAL_OFFSET = TRANSLUCENT_OFFSET + TRANSLUCENT_DRAW_COUNT;
-    private static final int TRANSLUCENT_WRITE_BASE = 1024;
+    private static final int TRANSLUCENT_OFFSET = GpuBufferLayout.TRANSLUCENT_OFFSET;
+    private static final int TEMPORAL_OFFSET = GpuBufferLayout.TEMPORAL_OFFSET;
+    private static final int TRANSLUCENT_WRITE_BASE = GpuBufferLayout.TRANSLUCENT_BUCKETS;
+    private static final int COMMANDS_PER_SECTION = 7;
     private static final int CULL_COMMAND_OFFSET_BYTES = 6 * Integer.BYTES;
     private static final int DRAW_BUFFER_BINDING = 1;
     private static final int DRAW_COUNT_BUFFER_BINDING = 2;
@@ -113,8 +116,7 @@ final class MDICSectionRenderer extends TrackedObject {
     private static final int TRANSLUCENT_BUILD_DISTANCE_BUFFER_BINDING = 5;
 
     private final GlBuffer uniformBuffer = new GlBuffer(1024).zero();
-    private final GlBuffer distanceCountBuffer =
-            new GlBuffer(TRANSLUCENT_WRITE_BASE * 4L + TRANSLUCENT_DRAW_COUNT * 4L).zero();
+    private final GlBuffer distanceCountBuffer = new GlBuffer(GpuBufferLayout.TRANSLUCENT_DISTANCE_BYTES).zero();
     private final GlBuffer statisticsBuffer = new GlBuffer(1024).zero();
     private final SharedIndexBuffer sharedIndexBuffer = SharedIndexBuffer.INSTANCE;
     private int terrainProgramId;
@@ -161,8 +163,9 @@ final class MDICSectionRenderer extends TrackedObject {
                     normalTranslucentFragmentSource,
                     "quads translucent");
             this.translucentTerrainProgramId = translucentShader.programId();
-            this.prepProgramId = compileComputeProgram(ShaderLoader.parse("voxy:lod/gl46/prep.comp"), "prep.comp");
-            String cullVertexSource = ShaderLoader.parse("voxy:lod/gl46/cull/raster.vert");
+            this.prepProgramId = compileComputeProgram(
+                    withCommandCapacityDefines(ShaderLoader.parse("voxy:lod/gl46/prep.comp")), "prep.comp");
+            String cullVertexSource = withCommandCapacityDefines(ShaderLoader.parse("voxy:lod/gl46/cull/raster.vert"));
             String cullTaa = pipeline.taaFunction("getTAA");
             if (cullTaa != null) {
                 cullVertexSource += "\n\n\n\n" + cullTaa;
@@ -172,9 +175,7 @@ final class MDICSectionRenderer extends TrackedObject {
             String cullFragmentSource = ShaderLoader.parse("voxy:lod/gl46/cull/raster.frag");
             this.cullProgramId = compileProgram(cullVertexSource, cullFragmentSource, "cull/raster");
             String cmdgenSource = withDefines(
-                    ShaderLoader.parse("voxy:lod/gl46/cmdgen.comp"),
-                    "TRANSLUCENT_WRITE_BASE", TRANSLUCENT_WRITE_BASE,
-                    "TEMPORAL_OFFSET", TEMPORAL_OFFSET,
+                    withCommandCapacityDefines(ShaderLoader.parse("voxy:lod/gl46/cmdgen.comp")),
                     "TRANSLUCENT_DISTANCE_BUFFER_BINDING", TRANSLUCENT_DISTANCE_BUFFER_BINDING);
             if (RenderStatistics.enabled) {
                 cmdgenSource = withDefines(
@@ -190,10 +191,8 @@ final class MDICSectionRenderer extends TrackedObject {
                     "IO_BUFFER", 0);
             this.prefixSumProgramId = compileComputeProgram(prefixSumSource, "prefixsum");
             String translucentGenSource = withDefines(
-                    ShaderLoader.parse("voxy:lod/gl46/buildtranslucents.comp"),
-                    "TRANSLUCENT_WRITE_BASE", TRANSLUCENT_WRITE_BASE,
-                    "TRANSLUCENT_DISTANCE_BUFFER_BINDING", TRANSLUCENT_BUILD_DISTANCE_BUFFER_BINDING,
-                    "TRANSLUCENT_OFFSET", TRANSLUCENT_OFFSET);
+                    withCommandCapacityDefines(ShaderLoader.parse("voxy:lod/gl46/buildtranslucents.comp")),
+                    "TRANSLUCENT_DISTANCE_BUFFER_BINDING", TRANSLUCENT_BUILD_DISTANCE_BUFFER_BINDING);
             this.translucentGenProgramId = compileComputeProgram(translucentGenSource, "buildtranslucents.comp");
             return "none";
         } catch (RuntimeException e) {
@@ -229,7 +228,7 @@ final class MDICSectionRenderer extends TrackedObject {
         }
         this.requireRenderInputs(viewport, geometryData, modelStore, pipeline, false);
         this.uploadUniformBuffer(viewport);
-        int maxDrawCount = Math.min((int) (geometryData.getSectionCount() * 4.4D + 128), OPAQUE_DRAW_COUNT);
+        int maxDrawCount = maximumDirectionalCommands(geometryData.getSectionCount(), OPAQUE_DRAW_COUNT);
         this.renderTerrain(
                 viewport,
                 geometryData,
@@ -259,9 +258,9 @@ final class MDICSectionRenderer extends TrackedObject {
                 modelStore,
                 pipeline,
                 this.terrainProgramId,
-                TEMPORAL_OFFSET * 5L * 4L,
+                (long) TEMPORAL_OFFSET * GpuBufferLayout.DRAW_COMMAND_BYTES,
                 4L * 5L,
-                Math.min(geometryData.getSectionCount(), MDICViewport.TEMPORAL_DRAW_COUNT));
+                maximumDirectionalCommands(geometryData.getSectionCount(), MDICViewport.TEMPORAL_DRAW_COUNT));
     }
 
     void postOpaquePreperation(MDICViewport viewport) {
@@ -293,7 +292,7 @@ final class MDICSectionRenderer extends TrackedObject {
         glMultiDrawElementsIndirectCountARB(
                 GL_TRIANGLES,
                 GL_UNSIGNED_SHORT,
-                TRANSLUCENT_OFFSET * 5L * 4L,
+                (long) TRANSLUCENT_OFFSET * GpuBufferLayout.DRAW_COMMAND_BYTES,
                 4L * 4L,
                 Math.min(geometryData.getSectionCount(), TRANSLUCENT_DRAW_COUNT),
                 0);
@@ -336,6 +335,7 @@ final class MDICSectionRenderer extends TrackedObject {
         this.dispatchCmdgen(viewport, geometryData);
         GPUTiming.INSTANCE.marker("TS");
         this.dispatchTranslucentCommandGeneration(viewport, geometryData);
+        this.sampleCommandDiagnostics(viewport);
     }
 
     void addDebug(List<String> lines) {
@@ -461,8 +461,18 @@ final class MDICSectionRenderer extends TrackedObject {
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, viewport.renderListBufferId());
         glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
         glDispatchCompute(1, 1, 1);
-        glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+        copyDispatchArguments(viewport.drawCountCallBuffer.id, viewport.commandDispatchBuffer.id);
         glUseProgram(0);
+    }
+
+    static void copyDispatchArguments(int countBuffer, int dispatchBuffer) {
+        // Keep indirect input independent of the SSBO the dispatched shader writes.
+        // The current GPU's measured empty -> nonempty transition can otherwise
+        // consume stale dispatch data even with the required memory barriers.
+        // Preserve the original XYZ/count ABI; take a GPU-only 12-byte snapshot.
+        glMemoryBarrier(GL_BUFFER_UPDATE_BARRIER_BIT | GL_SHADER_STORAGE_BARRIER_BIT);
+        glCopyNamedBufferSubData(countBuffer, dispatchBuffer, 0L, 0L, GpuBufferLayout.DISPATCH_BYTES);
+        glMemoryBarrier(GL_BUFFER_UPDATE_BARRIER_BIT | GL_SHADER_STORAGE_BARRIER_BIT | GL_COMMAND_BARRIER_BIT);
     }
 
     private void rasterCullVisibility(
@@ -554,6 +564,7 @@ final class MDICSectionRenderer extends TrackedObject {
     private void dispatchCmdgen(
             MDICViewport viewport,
             BasicSectionGeometryData geometryData) {
+        glMemoryBarrier(GL_BUFFER_UPDATE_BARRIER_BIT);
         this.distanceCountBuffer.zeroRange(0L, TRANSLUCENT_WRITE_BASE * 4L);
         glUseProgram(this.cmdgenProgramId);
         glBindBufferBase(GL_UNIFORM_BUFFER, 0, this.uniformBuffer.id);
@@ -569,7 +580,7 @@ final class MDICSectionRenderer extends TrackedObject {
             glBindBufferBase(GL_SHADER_STORAGE_BUFFER, STATISTICS_BUFFER_BINDING, this.statisticsBuffer.id);
         }
 
-        glBindBuffer(GL_DISPATCH_INDIRECT_BUFFER, viewport.drawCountCallBuffer.id);
+        glBindBuffer(GL_DISPATCH_INDIRECT_BUFFER, viewport.commandDispatchBuffer.id);
         glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
         glDispatchComputeIndirect(0L);
         glMemoryBarrier(GL_COMMAND_BARRIER_BIT | GL_SHADER_STORAGE_BARRIER_BIT);
@@ -598,7 +609,17 @@ final class MDICSectionRenderer extends TrackedObject {
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, this.distanceCountBuffer.id);
         glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
         glDispatchCompute(1, 1, 1);
-        glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+        // The original in-place prefix sum becomes a mutable per-bucket cursor in
+        // the builder. Keep its starts immutable in a 4 KiB safety tail so a
+        // reservation cannot cross into the next distance bucket.
+        glMemoryBarrier(GL_BUFFER_UPDATE_BARRIER_BIT | GL_SHADER_STORAGE_BARRIER_BIT);
+        glCopyNamedBufferSubData(
+                this.distanceCountBuffer.id,
+                this.distanceCountBuffer.id,
+                0L,
+                GpuBufferLayout.TRANSLUCENT_PREFIX_SNAPSHOT_BASE * 4L,
+                TRANSLUCENT_WRITE_BASE * 4L);
+        glMemoryBarrier(GL_BUFFER_UPDATE_BARRIER_BIT | GL_SHADER_STORAGE_BARRIER_BIT);
 
         glUseProgram(this.translucentGenProgramId);
         glBindBufferBase(GL_UNIFORM_BUFFER, 0, this.uniformBuffer.id);
@@ -607,12 +628,50 @@ final class MDICSectionRenderer extends TrackedObject {
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, SECTION_METADATA_BUFFER_BINDING, geometryData.getMetadataBuffer());
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, TRANSLUCENT_INDIRECT_SECTION_LOOKUP_BINDING, viewport.indirectLookupBuffer.id);
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, TRANSLUCENT_BUILD_DISTANCE_BUFFER_BINDING, this.distanceCountBuffer.id);
-        glBindBuffer(GL_DISPATCH_INDIRECT_BUFFER, viewport.drawCountCallBuffer.id);
+        glBindBuffer(GL_DISPATCH_INDIRECT_BUFFER, viewport.commandDispatchBuffer.id);
         glMemoryBarrier(GL_COMMAND_BARRIER_BIT | GL_SHADER_STORAGE_BARRIER_BIT);
         glDispatchComputeIndirect(0L);
         glMemoryBarrier(GL_COMMAND_BARRIER_BIT | GL_SHADER_STORAGE_BARRIER_BIT);
         glBindBuffer(GL_DISPATCH_INDIRECT_BUFFER, 0);
         glUseProgram(0);
+    }
+
+    private void sampleCommandDiagnostics(MDICViewport viewport) {
+        if (!viewport.beginCommandDiagnosticSample()) {
+            return;
+        }
+        DownloadStream.instance().download(
+                viewport.drawCountCallBuffer.id,
+                viewport.drawCountCallBuffer.size(),
+                MDICViewport.COMMAND_DIAGNOSTICS_OFFSET,
+                MDICViewport.COMMAND_DIAGNOSTICS_BYTES,
+                down -> viewport.acceptCommandDiagnostics(
+                        MemoryUtil.memGetInt(down.address),
+                        Integer.toUnsignedLong(MemoryUtil.memGetInt(down.address + 4)),
+                        Integer.toUnsignedLong(MemoryUtil.memGetInt(down.address + 8)),
+                        Integer.toUnsignedLong(MemoryUtil.memGetInt(down.address + 12)),
+                        Integer.toUnsignedLong(MemoryUtil.memGetInt(down.address + 16)),
+                        Integer.toUnsignedLong(MemoryUtil.memGetInt(down.address + 20))));
+    }
+
+    static int maximumDirectionalCommands(int sectionCount, int capacity) {
+        if (sectionCount < 0 || capacity < 0) {
+            throw new IllegalArgumentException("Negative section count or command capacity");
+        }
+        return (int) Math.min((long) sectionCount * COMMANDS_PER_SECTION, capacity);
+    }
+
+    static String withCommandCapacityDefines(String source) {
+        return withDefines(source,
+                "RENDER_LIST_CAPACITY", GpuBufferLayout.HOC_RENDER_LIST_CAPACITY,
+                "OPAQUE_DRAW_CAPACITY", OPAQUE_DRAW_COUNT,
+                "TRANSLUCENT_DRAW_CAPACITY", TRANSLUCENT_DRAW_COUNT,
+                "TEMPORAL_DRAW_CAPACITY", MDICViewport.TEMPORAL_DRAW_COUNT,
+                "TRANSLUCENT_OFFSET", TRANSLUCENT_OFFSET,
+                "TEMPORAL_OFFSET", TEMPORAL_OFFSET,
+                "TRANSLUCENT_WRITE_BASE", TRANSLUCENT_WRITE_BASE,
+                "TRANSLUCENT_PREFIX_SNAPSHOT_BASE", GpuBufferLayout.TRANSLUCENT_PREFIX_SNAPSHOT_BASE,
+                "MAX_LOD_LAYER", GpuBufferLayout.MAX_LOD);
     }
 
     private void freePrograms() {

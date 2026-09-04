@@ -21,7 +21,8 @@ vec4 getFaceSize(uint faceData) {
 }
 
 
-vec2 taaOffset = vec2(0);//TODO: compute this
+// The terrain vertex main assigns taaShift() before evaluating any quad corner.
+vec2 taaOffset = vec2(0);
 
 struct QuadData {
     uvec4 attributeData;
@@ -35,7 +36,7 @@ struct QuadData {
 };
 
 uint makeQuadFlags(uint faceData, uint modelId, ivec2 quadSize, const in BlockModel model, uint face) {
-    //bit: 0-use cuttout, 1-dont use mipmaps, 2|3-tint state, 4|6-face, 8|11-width, 12|15-height, 16|31-model id
+    //bit: 0-use cuttout, 1-reserved, 2|3-tint state, 4|6-face, 8|11-width, 12|15-height, 16|31-model id
     uint flags = 0;
 
     flags |= modelId<<16;//Model id
@@ -45,9 +46,6 @@ uint makeQuadFlags(uint faceData, uint modelId, ivec2 quadSize, const in BlockMo
         flags |= faceHasAlphaCuttout(faceData);
         flags |= uint(any(greaterThan(quadSize, ivec2(1)))) & faceHasAlphaCuttoutOverride(faceData);
     }
-
-    //TODO: remove, there is no non mip code path anymore
-    //flags |= uint(!modelHasMipmaps(model))<<1;//Not mipmaps
 
     flags |= faceTintState(faceData)<<2;
     flags |= face<<4;//Face
