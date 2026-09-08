@@ -84,7 +84,7 @@ final class ModelBakerySubsystem {
     }
 
     void requestBlockBake(int blockId) {
-        if (this.mapper.getBlockStateCount() <= blockId) {
+        if (blockId < 0 || this.mapper.getBlockStateCount() <= this.mapper.baseBlockStateId(blockId)) {
             Logger.error("Error, got bakeing request for out of range state id. StateId: " + blockId + " max id: " + this.mapper.getBlockStateCount(), new Exception());
             return;
         }

@@ -83,6 +83,10 @@ final class ForgeSoftwareModelTextureBakery {
     }
 
     int renderToOutput(Minecraft minecraft, BlockState state, long outputBuffer) {
+        return this.renderToOutput(minecraft, state, outputBuffer, false);
+    }
+
+    int renderToOutput(Minecraft minecraft, BlockState state, long outputBuffer, boolean snowy) {
         this.lastFailureReason = "none";
         MemoryUtil.memSet(outputBuffer, 0, OUTPUT_BUFFER_BYTES);
         this.setupTexture(minecraft);
@@ -107,7 +111,7 @@ final class ForgeSoftwareModelTextureBakery {
         if (state.getRenderShape() == RenderShape.INVISIBLE) {
             return 0;
         }
-        return this.renderBlock(minecraft, state, outputBuffer);
+        return this.renderBlock(minecraft, state, outputBuffer, snowy);
     }
 
     String lastFailureReason() {
@@ -174,7 +178,7 @@ final class ForgeSoftwareModelTextureBakery {
         this.rasterizer.setSamplerTexture(this.atlasPixels, this.atlasWidth, this.atlasHeight);
     }
 
-    private int renderBlock(Minecraft minecraft, BlockState state, long outputBuffer) {
+    private int renderBlock(Minecraft minecraft, BlockState state, long outputBuffer, boolean snowy) {
         BakedModel model = minecraft.getBlockRenderer().getBlockModel(state);
         ModelRoute route = classifyModel(model);
         if (route == ModelRoute.MISSING) {
@@ -192,9 +196,13 @@ final class ForgeSoftwareModelTextureBakery {
         int flags = 0;
         boolean anyRenderType = false;
         boolean forceSolid = state.is(BlockTags.LEAVES);
+        RenderType snowLayer = null;
         Iterable<RenderType> renderTypes = model.getRenderTypes(state, RandomSource.create(42L), ModelData.EMPTY);
         try {
             for (RenderType renderType : renderTypes) {
+                if (snowLayer == null) {
+                    snowLayer = renderType;
+                }
                 anyRenderType = true;
                 for (Direction direction : directionsWithNull()) {
                     List<BakedQuad> quads = getQuads(model, state, direction, renderType);
@@ -207,6 +215,11 @@ final class ForgeSoftwareModelTextureBakery {
                         target.quad(quad, renderType, forceSolid);
                     }
                 }
+            }
+            // Append Ecliptic's extra model before the original flag reduction and six-face
+            // rasterization. The per-bake parameter cannot leak a snow flag into the next model.
+            if (snowy && snowLayer != null) {
+                ForgeEclipticSeasonsCompat.appendSnow(state, snowLayer, this.opaqueVC, this.translucentVC);
             }
         } catch (IllegalArgumentException | IllegalStateException e) {
             this.lastFailureReason = e.getMessage() == null ? "software-bakery-material-bridge-failed" : e.getMessage();

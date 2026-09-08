@@ -59,6 +59,7 @@ import java.util.function.BooleanSupplier;
  */
 public final class WorldImporter implements IDataImporter {
     private final WorldEngine world;
+    private final Level level;
     private final PalettedContainerRO<Holder<Biome>> defaultBiomeProvider;
     private final Codec<PalettedContainerRO<Holder<Biome>>> biomeCodec;
     private final Codec<PalettedContainer<BlockState>> blockStateCodec;
@@ -81,6 +82,7 @@ public final class WorldImporter implements IDataImporter {
             ServiceManager serviceManager,
             BooleanSupplier runChecker) {
         this.world = worldEngine;
+        this.level = mcWorld;
         this.service = serviceManager.createService(
                 () -> new Pair<>(() -> this.jobQueue.poll().run(), () -> {}),
                 3,
@@ -420,9 +422,19 @@ public final class WorldImporter implements IDataImporter {
             }
 
             ListTag sections = requireList(chunk, "sections");
+            java.util.Map<Integer, CompoundTag> seasonalSections = null;
+            if (ForgeEclipticSeasonsCompat.enabled()) {
+                seasonalSections = new java.util.HashMap<>();
+                for (int index = 0; index < sections.size(); index++) {
+                    CompoundTag section = sections.getCompound(index);
+                    seasonalSections.put(getIntOrSentinel(section, "Y"), section);
+                }
+            }
             for (int index = 0; index < sections.size(); index++) {
                 CompoundTag section = (CompoundTag) sections.get(index);
-                this.importSectionNbt(chunkX, getIntOrSentinel(section, "Y"), chunkZ, section);
+                int y = getIntOrSentinel(section, "Y");
+                this.importSectionNbt(chunkX, y, chunkZ, section,
+                        seasonalSections == null ? null : seasonalSections.get(y + 1));
             }
         } catch (Exception e) {
             Logger.error("Exception importing world chunk:", e);
@@ -435,6 +447,10 @@ public final class WorldImporter implements IDataImporter {
             ThreadLocal.withInitial(VoxelizedSection::createEmpty);
 
     private void importSectionNbt(int x, int y, int z, CompoundTag section) {
+        this.importSectionNbt(x, y, z, section, null);
+    }
+
+    private void importSectionNbt(int x, int y, int z, CompoundTag section, CompoundTag above) {
         if (!section.contains("block_states", Tag.TAG_COMPOUND)) {
             return;
         }
@@ -458,16 +474,31 @@ public final class WorldImporter implements IDataImporter {
                     .orElse(this.defaultBiomeProvider);
         }
 
+        PalettedContainer<BlockState> aboveStates = null;
+        DataLayer aboveBlock = null;
+        DataLayer aboveSky = null;
+        if (above != null && above.contains("block_states", Tag.TAG_COMPOUND)) {
+            aboveStates = this.blockStateCodec.parse(NbtOps.INSTANCE, above.getCompound("block_states"))
+                    .resultOrPartial(message -> Logger.error("Failed to decode above-section block states: " + message))
+                    .orElseThrow(() -> new IllegalStateException("Cannot decode Ecliptic above-section block states"));
+            byte[] block = above.getByteArray("BlockLight");
+            byte[] sky = above.getByteArray("SkyLight");
+            aboveBlock = block.length == 0 ? null : new DataLayer(block);
+            aboveSky = sky.length == 0 ? null : new DataLayer(sky);
+        }
+        var lighting = ForgeEclipticSeasonsCompat.forImport(this.level, blockStatesResult.get(),
+                aboveStates, aboveBlock, aboveSky, (blockX, blockY, blockZ) -> {
+                    int block = blockLight == null ? 0 : blockLight.get(blockX, blockY, blockZ);
+                    int sky = skyLight == null ? 0 : skyLight.get(blockX, blockY, blockZ);
+                    return (byte) (sky | block << 4);
+                });
         VoxelizedSection converted = WorldConversionFactory.convert(
                 SECTION_CACHE.get().setPosition(x, y, z),
                 this.world.getMapper(),
                 blockStatesResult.get(),
                 biomes,
-                (blockX, blockY, blockZ) -> {
-                    int block = blockLight == null ? 0 : blockLight.get(blockX, blockY, blockZ);
-                    int sky = skyLight == null ? 0 : skyLight.get(blockX, blockY, blockZ);
-                    return (byte) (sky | block << 4);
-                });
+                lighting);
+        ForgeEclipticSeasonsCompat.decorate(converted, this.world.getMapper(), lighting);
         WorldVoxilizedSectionMipper.mipSection(converted, this.world.getMapper());
         WorldUpdater.insertUpdate(this.world, converted);
     }

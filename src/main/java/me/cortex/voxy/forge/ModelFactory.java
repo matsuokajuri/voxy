@@ -328,7 +328,8 @@ final class ModelFactory implements RenderFaceDecision.FaceCoverageLookup {
             return false;
         }
 
-        int softwareFlags = this.softwareBakery.renderToOutput(minecraft, bake.state(), this.bakeScratchBuffer.address);
+        int softwareFlags = this.softwareBakery.renderToOutput(minecraft, bake.state(), this.bakeScratchBuffer.address,
+                ForgeSnowStateIds.isSnowy(bake.blockId(), this.mapper.getBlockStateCount()));
         ColourDepthTextureData[] textures =
                 ForgeSoftwareModelTextureBakery.texturesFromOutput(this.bakeScratchBuffer.address);
         ForgeOriginalVoxyModelLayer layer = ForgeSoftwareModelTextureBakery.chooseLayer(

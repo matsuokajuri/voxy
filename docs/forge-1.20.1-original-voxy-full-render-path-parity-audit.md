@@ -5450,3 +5450,127 @@ Final gate: 312 default + 12 GPU + 1 packaged-artifact + 1 exact-Bobby + 2 real-
 `a22a15242b3cfcd42afa83dcaf3f994e6ee9f4bfd3f530c13e0f2a61b4d0911e`,
 12,699,252 bytes. SQLite stays external. All dev test settings were restored and
 all clients exited normally; logs/screenshots/saves/build outputs are not committed.
+
+### Ecliptic Seasons 0.12.18.9.1 native compatibility (2026-09-07)
+
+The supplied Create-Delight-Remake crash confirms Ecliptic's old Voxy mixin ABI no
+longer matches the active Forge ingest/model/import owners. Ten exact upstream
+compatibility mixins are replaced through MixinSquared's public canceller API,
+with their snow conversion, state-id decoding, extra-model bake, above-section
+NBT context and automatic seasonal import connected to the existing formal chain.
+The seasonal event handler rebuilds the current Forge renderer, not the absent
+Fabric IGetVoxyRenderSystem. No preview/fallback route, config disablement, cache
+reset, or second WorldEngine/import owner is introduced.
+
+Original packed conversion and mipping remain in place. Ecliptic's 20-bit
+complement ids retain separate model mappings while the real state supplies both
+opacity and the newer mipping properties. Snow quads enter the same software
+bakery/ModelStore/upload chain with the current original Voxy material-bit contract.
+Ecliptic is optional and compile-only; MixinSquared is a small deduplicated nested
+dependency, and SQLite remains external. All three Ecliptic feature switches keep
+their upstream defaults. See `forxy-ecliptic-seasons-compat-2026-09-07.md` for the
+one-to-one mapping and the only necessary platform deviations.
+
+Compilation, reobfuscated packaging and static inspection only: the user explicitly
+requested no tests. None of the earlier 328-test or runtime acceptance claims
+qualifies this compatibility patch; its runtime/visual qualification is pending.
+
+### Zeta / Supplementaries parallel-registration compatibility (2026-09-07)
+
+The next supplied crash fails earlier, during Supplementaries 1.20-3.1.42's
+Quark integration. Zeta 1.0-31's ForgeZetaEventBus writes its unsynchronized
+Object2ObjectOpenHashMap from listener registration and fails inside rehash.
+The installed bytecode confirms the unprotected put/remove bookkeeping; the
+Forge bus lock does not cover it. A zeta-gated constructor mixin wraps that same
+map with Collections.synchronizedMap before publication, preserving keys,
+handlers, null semantics, registration/unregistration and event dispatch.
+No listeners, modules or compatibility features are disabled. The original Voxy
+render chain and the Ecliptic adaptation are unchanged. This is a scoped external
+Forge owner repair, not a Voxy fallback route or proof that Voxy caused the race.
+
+See `forxy-zeta-supplementaries-compat-2026-09-07.md` for exact evidence and scope.
+Compilation/packaging/static inspection only; no test or client execution was
+requested, and the supplied failed startup does not qualify later Ecliptic paths.
+
+### Restore original Lithium palette support for Harium (2026-09-07)
+
+The next user log reaches world entry and creates the formal renderer, but records
+96,324 ingest-service failures with Unknown block palette type: the old-package
+LithiumHashPalette shipped by Harium 1.0.0. Original Voxy 192721a7d already handles
+Lithium in setupLithiumLocalPallet; the Forge conversion port had omitted that branch.
+The actual Harium Palette implementation was checked down to getSize/valueFor/copy.
+
+Forge now recognizes that exact optional palette ABI (including subclasses) and
+uses the same local Mapper-cache loop as original Lithium/HashMap handling. The
+original packed-storage decoder, lighting/biome layout, mipper, updater and render
+owners are unchanged. No per-block get fallback, air substitution, exception
+suppression or Harium disablement is used. Unknown unrelated palettes still fail
+explicitly. Ecliptic/Zeta repairs remain in place; Harium is not a new dependency.
+See `forxy-harium-lithium-palette-compat-2026-09-07.md` for source provenance and scope.
+Compilation and packaging only, no requested test/client execution; runtime LOD
+and seasonal visual qualification remain pending.
+
+### MixinSquared minimum-ABI packaging correction (2026-09-08)
+
+The supplied Reverse Future 2.3.3 crash rejects Voxy before mod loading because
+the selected MixinSquared Forge wrapper is 0.2.0-beta.6, below our newly required
+0.3.3. This was an over-constrained dependency introduced by the Ecliptic repair.
+The pack contains two Maven group identities for the same Forge modId; JarJar's
+selection does not guarantee that the bundled newer wrapper becomes that modId's
+selected file. The earlier deduplication assumption is superseded here.
+
+The installed 0.2.0-beta.6 API and service loader were checked against 0.3.3 and
+the pack's 0.3.6-beta.1 core: Voxy uses the same MixinCanceller interface and no
+newer-only API. Compilation now targets the verified 0.2.0-beta.6 API, while the
+bundled payload remains 0.3.3. A single Gradle range [0.2.0-beta.6,) generates both
+the outer JarJar and mods.toml constraints. All Ecliptic/Zeta/Harium functionality
+is preserved; no renderer/lifecycle change, fallback or dependency bypass.
+See `forxy-mixinsquared-dependency-compat-2026-09-08.md`. Static/compile/package
+verification only, no test or client execution; modpack runtime remains unqualified.
+
+An ABI-only incremental compile also dropped the refmap during this repair's
+packaging. Static archive comparison caught it before delivery. Production javac
+now regenerates complete metadata on each executed compile, declares the refmap
+as an output, and JarJar rejects a missing/empty refmap. The rejected intermediate
+archive was replaced after full compilation; the final reobfuscated r4 contains
+the 7,422-byte refmap and all previous compatibility implementations.
+
+### Ecliptic pre-Voxy API capability gate and r4 user qualification (2026-09-08)
+
+The user accepts r4 in Reverse Future 2.3.3. Its separate 21:53–21:57 log confirms
+formal renderer creation, 619/5138/1216 state mappings across owner lifetimes and
+normal shutdown, without ingest-service exceptions. This does not qualify r5 or
+erase unrelated modpack warnings/pre-existing GL errors.
+
+Closing Song's supplied crash instead runs Ecliptic 0.10-pre10-2. The new adapter
+unconditionally accessed the absent voxyTest field after checking only mod presence.
+The actual old JAR has no Voxy helpers, mixins, configuration fields or even Voxy
+class references; it predates that entire extension. ClientCon.getAgent is also absent.
+
+A shared bytecode capability gate now keeps this pre-integration version on its
+unchanged original seasonal hooks and the normal Voxy chain without loading the
+newer-only adapter. For versions that expose the Voxy extension, the gate checks
+every Ecliptic field/method referenced by the actual native adapter before wiring
+it. Runtime hooks, event-handler mixin and old-mixin cancellation share the same
+decision; partial/incompatible APIs remain explicit errors, not silent disablement.
+No new renderer, fallback, configuration rewrite or functional downgrade is introduced.
+See `forxy-ecliptic-pre-voxy-api-compat-2026-09-08.md`. Compile/package/static checks
+only; the new Closing Song repair has not been run in-game by the agent.
+
+### compat-r5 four-modpack user qualification and pre-commit audit (2026-09-08)
+
+The pending r5 state above is superseded for the tested configurations: the user
+accepts Reverse Future 2.3.3, Create-Delight-Remake, Closing Song 1.6.4 and
+涟漪之篇·如涟漪之所见. All four installed JARs match SHA256
+`7af4197428fff73e17b412e2229dc263a3f347b1311336e57a7831d1c5626546`.
+Their independent logs confirm formal renderer/model work and normal shutdown,
+without the prior compatibility/ingest failures. The quick audit found no blocker
+in this patch scope and made no runtime code changes after user qualification.
+Compile/JarJar/reobf pass; every rebuilt archive entry except manifest matches r5.
+
+Limits remain explicit: Create Delight has all three Ecliptic Voxy feature
+switches off, so enabled snow/reimport/seasonal refresh is not qualified by this
+matrix. Closing Song retains two format-copy GL1282 messages, and Reverse Future
+has a pre-renderer GL1280; neither is concealed or claimed fixed. No additional
+client or automated test run was performed. Full evidence and the scoped commit
+inventory are in `forxy-compat-r5-four-modpacks-audit-2026-09-08.md`.

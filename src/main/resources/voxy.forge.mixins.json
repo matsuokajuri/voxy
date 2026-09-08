@@ -6,6 +6,8 @@
   "plugin": "me.cortex.voxy.forge.mixin.ForgeVoxyMixinPlugin",
   "compatibilityLevel": "JAVA_17",
   "client": [
+    "ForgeOriginalVoxyZetaEventBusMixin",
+    "ForgeOriginalVoxyEclipticSeasonsHandlerMixin",
     "ForgeOriginalVoxyAcediumMappedBufferMixin",
     "ForgeOriginalVoxyAcediumRenderPipelineMixin",
     "ForgeOriginalVoxyBlockableEventLoopMixin",

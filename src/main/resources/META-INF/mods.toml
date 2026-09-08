@@ -41,3 +41,12 @@ mandatory=false
 versionRange="${oculus_version_range}"
 ordering="AFTER"
 side="CLIENT"
+
+# Included in the release JAR, but another Maven identity may supply the selected Forge
+# wrapper. Require the verified API minimum, not the bundled payload's version.
+[[dependencies.${mod_id}]]
+modId="mixinsquared"
+mandatory=true
+versionRange="${mixinsquared_version_range}"
+ordering="NONE"
+side="CLIENT"

@@ -477,6 +477,7 @@ public final class ForgeVoxyInstance {
 
         this.ensureOriginalVoxyActiveWorldForCurrentWorld();
         runtime.modelPipeline.clientTick();
+        ForgeEclipticSeasonsCompat.tick();
     }
 
     private void onClientLogin(ClientPlayerNetworkEvent.LoggingIn event) {

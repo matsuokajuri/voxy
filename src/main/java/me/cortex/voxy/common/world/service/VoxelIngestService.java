@@ -8,6 +8,7 @@ import me.cortex.voxy.common.thread.Service;
 import me.cortex.voxy.common.thread.ServiceManager;
 import me.cortex.voxy.common.world.WorldEngine;
 import me.cortex.voxy.common.world.WorldUpdater;
+import me.cortex.voxy.forge.ForgeEclipticSeasonsCompat;
 import net.minecraft.core.SectionPos;
 import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.level.chunk.DataLayer;
@@ -229,10 +230,10 @@ public class VoxelIngestService {
                             chunk.getPos().x,
                             sectionY,
                             chunk.getPos().z,
-                            getLightingSupplier(
+                            ForgeEclipticSeasonsCompat.captureChunk(chunk, sectionY, getLightingSupplier(
                                     blockLight == null ? null : blockLight.copy(),
                                     skyLight == null ? null : skyLight.copy(),
-                                    skyDefault))
+                                    skyDefault)))
                             .withMissingLightSections(missingBlockLight ? 1 : 0, 0);
                     stats = stats.add(sectionStats);
                 }
@@ -291,10 +292,10 @@ public class VoxelIngestService {
                 chunk.getPos().x,
                 sectionY,
                 chunk.getPos().z,
-                getLightingSupplier(
+                ForgeEclipticSeasonsCompat.captureChunk(chunk, sectionY, getLightingSupplier(
                         blockLight == null ? null : blockLight.copy(),
                         skyLight == null ? null : skyLight.copy(),
-                        skyDefault))
+                        skyDefault)))
                 .withMissingLightSections(missingBlockLight ? 1 : 0, 0);
     }
 
@@ -404,6 +405,7 @@ public class VoxelIngestService {
                 section.getBiomes(),
                 lightingSupplier
         );
+        ForgeEclipticSeasonsCompat.decorate(voxelized, engine.getMapper(), lightingSupplier);
         WorldVoxilizedSectionMipper.mipSection(voxelized, engine.getMapper());
         return voxelized;
     }

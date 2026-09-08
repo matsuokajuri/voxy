@@ -1,5 +1,6 @@
 package me.cortex.voxy.forge.mixin;
 
+import me.cortex.voxy.forge.compat.ForgeEclipticSeasonsCapabilities;
 import net.minecraftforge.fml.loading.LoadingModList;
 import org.objectweb.asm.tree.ClassNode;
 import org.spongepowered.asm.mixin.extensibility.IMixinConfigPlugin;
@@ -33,10 +34,20 @@ public final class ForgeVoxyMixinPlugin implements IMixinConfigPlugin {
 
     @Override
     public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
-        return shouldApplyMixin(mixinClassName, ForgeVoxyMixinPlugin::isModPresent);
+        if (!shouldApplyMixin(mixinClassName, ForgeVoxyMixinPlugin::isModPresent)) {
+            return false;
+        }
+        return !mixinClassName.startsWith("me.cortex.voxy.forge.mixin.ForgeOriginalVoxyEclipticSeasons")
+                || ForgeEclipticSeasonsCapabilities.hasVoxyIntegration();
     }
 
     static boolean shouldApplyMixin(String mixinClassName, Predicate<String> modPresent) {
+        if (mixinClassName.equals("me.cortex.voxy.forge.mixin.ForgeOriginalVoxyZetaEventBusMixin")) {
+            return modPresent.test("zeta");
+        }
+        if (mixinClassName.startsWith("me.cortex.voxy.forge.mixin.ForgeOriginalVoxyEclipticSeasons")) {
+            return modPresent.test("eclipticseasons");
+        }
         if (mixinClassName.startsWith(ACEDIUM_MIXIN_PREFIX)) {
             // Acedium 0.2.x publishes both acedium and compatibility nvidium mod entries.
             // Gate on its own identity so a different Forge-loaded Nvidium artifact cannot

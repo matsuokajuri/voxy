@@ -74,6 +74,7 @@ sourceSets {
             include 'META-INF/MANIFEST.MF'
             include 'META-INF/accesstransformer.cfg'
             include 'META-INF/mods.toml'
+            include 'META-INF/services/com.bawnorton.mixinsquared.api.MixinCanceller'
             include 'voxy.forge.mixins.json'
             include 'pack.mcmeta'
             include 'assets/voxy/shaders/**'
@@ -184,7 +185,7 @@ repositories {
     mavenCentral()
     flatDir {
         dirs 'dev-mods'
-        ['voxyEmbeddiumDevJar', 'voxyOculusDevJar', 'voxyAcediumDevJar', 'voxyVivecraftDevJar', 'voxyBobbyDevJar', 'voxyChunkyDevJar', 'voxyDistantHorizonsDevJar'].each { propertyName ->
+        ['voxyEmbeddiumDevJar', 'voxyOculusDevJar', 'voxyAcediumDevJar', 'voxyVivecraftDevJar', 'voxyBobbyDevJar', 'voxyChunkyDevJar', 'voxyDistantHorizonsDevJar', 'voxyEclipticSeasonsDevJar', 'voxyMixinSquaredDevJar', 'voxyMixinSquaredApiDevJar'].each { propertyName ->
             def configuredPath = (project.findProperty(propertyName) ?: '').toString().trim()
             if (!configuredPath.isEmpty()) {
                 dirs file(configuredPath).parentFile
@@ -218,6 +219,29 @@ def vivecraftDevJars = optionalFrontendJars('voxyVivecraftDevJar', 'vivecraft*.j
 def bobbyDevJars = optionalFrontendJars('voxyBobbyDevJar', 'bobby*.jar')
 def chunkyDevJars = optionalFrontendJars('voxyChunkyDevJar', 'chunky*.jar')
 def distantHorizonsDevJars = optionalFrontendJars('voxyDistantHorizonsDevJar', 'DistantHorizons*.jar')
+def eclipticSeasonsDevJars = optionalFrontendJars('voxyEclipticSeasonsDevJar', 'EclipticSeasons*.jar')
+// MixinSquared replaces only the upstream Ecliptic Voxy mixins whose complete functionality
+// is now implemented on the Forge owners. Use the same public service API as other Forge mods.
+def mixinSquaredMinimumVersion = '0.2.0-beta.6'
+def mixinSquaredVersionRange = "[${mixinSquaredMinimumVersion},)"
+// Compile against the actual minimum ABI, independently of the newer bundled payload.
+// JarJar Maven identities and Forge mod-id selection are separate: some packs contain
+// both com.bawnorton.* and com.github.bawnorton.* copies and select an older Forge wrapper.
+def mixinSquaredApiPayload = configurations.detachedConfiguration(
+        dependencies.create("com.bawnorton.mixinsquared:mixinsquared-forge:${mixinSquaredMinimumVersion}"))
+mixinSquaredApiPayload.transitive = false
+def mixinSquaredPayload = configurations.detachedConfiguration(
+        dependencies.create('com.github.bawnorton.mixinsquared:mixinsquared-forge:0.3.3'))
+mixinSquaredPayload.transitive = false
+def extractMixinSquaredApi = tasks.register('extractMixinSquaredApi', Copy) {
+    from { zipTree(mixinSquaredApiPayload.singleFile) }
+    include "META-INF/jars/MixinSquared-${mixinSquaredMinimumVersion}.jar"
+    eachFile { path = name }
+    includeEmptyDirs = false
+    into layout.buildDirectory.dir('compile-dependencies/mixinsquared')
+}
+def mixinSquaredApi = files(layout.buildDirectory.file(
+        "compile-dependencies/mixinsquared/MixinSquared-${mixinSquaredMinimumVersion}.jar")).builtBy(extractMixinSquaredApi)
 def bobbyDevJarPath = (project.findProperty('voxyBobbyDevJar') ?: '').toString().trim()
 def distantHorizonsDevJarPath = (project.findProperty('voxyDistantHorizonsDevJar') ?: '').toString().trim()
 def bobbyCacheTestPath = (project.findProperty('voxyBobbyCacheTestPath') ?: '').toString().trim()
@@ -238,6 +262,15 @@ def includeDistantHorizonsInDevRuntime = !project.hasProperty('voxyDistantHorizo
 dependencies {
     minecraft "net.minecraftforge:forge:${project.minecraft_version}-${project.forge_version}"
     annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
+    compileOnly mixinSquaredApi
+    runtimeOnly 'com.github.bawnorton.mixinsquared:mixinsquared-forge:0.3.3'
+    jarJar(group: 'com.github.bawnorton.mixinsquared', name: 'mixinsquared-forge', version: mixinSquaredVersionRange) {
+        transitive = false
+        jarJar.pin(it, '0.3.3')
+    }
+    for (def eclipticSeasonsDevJar : eclipticSeasonsDevJars) {
+        compileOnly fg.deobf(eclipticSeasonsDevJar)
+    }
     implementation "it.unimi.dsi:fastutil:${project.fastutil_version}"
     testImplementation platform('org.junit:junit-bom:5.10.2')
     testImplementation 'org.junit.jupiter:junit-jupiter'
@@ -555,10 +588,22 @@ tasks.register('compatRealDataTest', Test) {
 // would collide with their class jars. Preserve official native resource paths in the outer jar.
 tasks.named('jarJar') {
     finalizedBy('reobfJarJar')
+    doLast {
+        // Mixin's annotation processor must emit the complete refmap even when only a
+        // compile dependency changed. Never distribute an archive whose declared refmap
+        // was dropped by an incremental/no-source javac pass.
+        new java.util.zip.ZipFile(archiveFile.get().asFile).withCloseable { archive ->
+            def refmap = archive.getEntry('voxy.forge.refmap.json')
+            if (refmap == null || refmap.size == 0) {
+                throw new GradleException('Release JAR is missing voxy.forge.refmap.json; a full compile is required.')
+            }
+        }
+    }
     if (!INCLUDE_OTHER_ARCHS) {
         dependsOn(makeExcludedRocksDB)
         getIncludedDependencies().setFrom(
                 jarJarPayload.filter { !it.name.startsWith('rocksdbjni-') },
+                mixinSquaredPayload,
                 makeExcludedRocksDB.flatMap { it.archiveFile })
     }
     from({ project.configurations.zstdJarJarNative.collect { zipTree(it) } }) {
@@ -590,6 +635,7 @@ tasks.named('processResources', ProcessResources).configure {
             loader_version_range   : project.loader_version_range,
             embeddium_version_range: project.embeddium_version_range,
             oculus_version_range   : project.oculus_version_range,
+            mixinsquared_version_range: mixinSquaredVersionRange,
             mod_id                 : project.mod_id,
             mod_name               : project.mod_name,
             mod_license            : project.mod_license,
@@ -608,6 +654,13 @@ tasks.named('processResources', ProcessResources).configure {
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
     options.release = 17
+}
+
+// Partial/no-source annotation processing can lose mixin refmaps after ABI-only dependency
+// changes. Each executed production compile must regenerate the complete Mixin metadata.
+tasks.named('compileJava', JavaCompile).configure {
+    options.incremental = false
+    outputs.file(layout.buildDirectory.file('tmp/compileJava/compileJava-refmap.json'))
 }
 
 jar {

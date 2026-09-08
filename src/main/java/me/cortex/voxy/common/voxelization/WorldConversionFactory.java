@@ -48,7 +48,10 @@ public class WorldConversionFactory {
             for (int i = 0; i < paletteSize; i++) {
                 paletteCache[i] = mapBlockState(palette.valueFor(i), blockCache, mapper);
             }
-        } else if (palette instanceof HashMapPalette<?>) {
+        } else if (palette instanceof HashMapPalette<?> || isForgeLithiumHashPalette(palette)) {
+            // Original setupLithiumLocalPallet uses this same size/valueFor -> local Mapper
+            // cache loop, including the transient-hole sentinel. Harium/Radium retain the
+            // older me.jellysquid package, not upstream's net.caffeinemc package.
             for (int i = 0; i < paletteSize; i++) {
                 BlockState state = null;
                 try {
@@ -61,13 +64,24 @@ public class WorldConversionFactory {
         } else if (palette instanceof SingleValuePalette<?>) {
             paletteCache[0] = mapBlockState(palette.valueFor(0), blockCache, mapper);
         } else {
-            // Vanilla 1.20.1 SECTION_STATES only constructs these three local palette types. Unlike
-            // the removed get(x,y,z) substitute, failing loudly here cannot silently remap custom
-            // storage to the wrong block; a coremod that installs another palette needs an explicit
-            // adapter, just as it does in original Voxy (which only adds LithiumHashPalette).
+            // Keep the original explicit palette contract. Supporting Lithium does not make
+            // every unknown palette/storage implementation interchangeable or permit a
+            // per-block get(x,y,z) substitute for the packed-storage conversion below.
             throw new IllegalStateException("Unknown block palette type: " + palette.getClass().getName());
         }
         return paletteSize;
+    }
+
+    private static boolean isForgeLithiumHashPalette(Palette<?> palette) {
+        // Gate on the actual optional implementation, not the mod id: Harium 1.0.0 reports
+        // "harium" while keeping this Lithium ABI. No optional class needs to be loaded when
+        // absent. Walking parents preserves upstream instanceof semantics for subclasses.
+        for (Class<?> type = palette.getClass(); type != null; type = type.getSuperclass()) {
+            if (type.getName().equals("me.jellysquid.mods.lithium.common.world.chunk.LithiumHashPalette")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static int mapBlockState(

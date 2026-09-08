@@ -268,7 +268,13 @@ public class Mapper {
     }
 
     public BlockState getBlockStateFromBlockId(int blockId) {
-        return this.blockId2stateEntry.get(blockId).state;
+        return this.blockId2stateEntry.get(this.baseBlockStateId(blockId)).state;
+    }
+
+    public int baseBlockStateId(int blockId) {
+        // Preserve Ecliptic's encoded ids in voxel storage/model mappings, but use their real
+        // block state for physical properties. This also decodes existing seasonal cache data.
+        return me.cortex.voxy.forge.ForgeSnowStateIds.baseId(blockId, this.getBlockStateCount());
     }
 
     public int getIdForBlockState(BlockState state) {
@@ -287,11 +293,11 @@ public class Mapper {
     }
 
     public int getBlockStateOpacity(int blockId) {
-        return this.blockId2stateEntry.get(blockId).opacity;
+        return this.blockId2stateEntry.get(this.baseBlockStateId(blockId)).opacity;
     }
 
     int getBlockStateMipProperties(int blockId) {
-        return this.blockId2stateEntry.get(blockId).mipProperties;
+        return this.blockId2stateEntry.get(this.baseBlockStateId(blockId)).mipProperties;
     }
 
     public int getIdForBiome(Holder<Biome> biome) {
