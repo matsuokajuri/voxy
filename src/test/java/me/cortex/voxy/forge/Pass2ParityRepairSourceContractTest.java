@@ -85,8 +85,11 @@ class Pass2ParityRepairSourceContractTest {
         assertTrue(source.contains("getIntOrSentinel(section, \"Y\")"));
 
         int biomeDecode = source.indexOf("biomes = this.biomeCodec");
-        int conversion = source.indexOf("VoxelizedSection converted", biomeDecode);
-        String biomeBlock = source.substring(biomeDecode, conversion);
+        String biomeEnd = ".orElse(this.defaultBiomeProvider);";
+        int biomeEndIndex = source.indexOf(biomeEnd, biomeDecode);
+        assertTrue(biomeEndIndex >= biomeDecode);
+        // The optional above-section block-state decoder is not part of the biome contract.
+        String biomeBlock = source.substring(biomeDecode, biomeEndIndex + biomeEnd.length());
         assertTrue(biomeBlock.contains(".result()"));
         assertFalse(biomeBlock.contains("resultOrPartial"));
     }

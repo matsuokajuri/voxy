@@ -4,7 +4,8 @@ import me.cortex.voxy.common.util.HierarchicalBitSet;
 import org.lwjgl.system.MemoryUtil;
 
 final class NodeStore {
-    static final int EMPTY_GEOMETRY_ID = -1;
+    static final int NULL_GEOMETRY_ID = -1;
+    static final int EMPTY_GEOMETRY_ID = -2;
     static final int NODE_ID_MSK = (1 << 24) - 1;
     static final int REQUEST_ID_MSK = (1 << 19) - 1;
     static final int GEOMETRY_ID_MSK = (1 << 24) - 1;
@@ -19,8 +20,8 @@ final class NodeStore {
     private long[] localNodeData;
 
     NodeStore(int maxNodeCount) {
-        if (maxNodeCount >= SENTINEL_NULL_NODE_ID) {
-            throw new IllegalArgumentException("Max count too large");
+        if (maxNodeCount <= 0 || maxNodeCount >= SENTINEL_NULL_NODE_ID) {
+            throw new IllegalArgumentException("Node count must be positive and below the reserved node IDs");
         }
         this.localNodeData = new long[INCREMENT_SIZE * LONGS_PER_NODE];
         this.allocationSet = new HierarchicalBitSet(maxNodeCount);
@@ -44,7 +45,7 @@ final class NodeStore {
         if (id < 0) {
             throw new IllegalStateException("Failed to allocate " + count + " consecutive nodes!");
         }
-        this.ensureSized(id + count);
+        this.ensureSized(id + count - 1);
         for (int i = 0; i < count; i++) {
             this.clear(id + i);
         }
@@ -56,6 +57,19 @@ final class NodeStore {
     }
 
     void free(int baseNodeId, int count) {
+        if (count <= 0) {
+            throw new IllegalArgumentException("Count must be positive: " + count);
+        }
+        if (baseNodeId < 0 || (long) baseNodeId + count > this.allocationSet.getLimit()) {
+            throw new IndexOutOfBoundsException("Node range: " + baseNodeId + " + " + count);
+        }
+        // Validate the complete range before changing ownership. A failed batch must not
+        // silently free its valid prefix and leave the hierarchy only partially retired.
+        for (int i = 0; i < count; i++) {
+            if (!this.allocationSet.isSet(baseNodeId + i)) {
+                throw new IllegalStateException("Node " + (baseNodeId + i) + " was not allocated!");
+            }
+        }
         for (int i = 0; i < count; i++) {
             int nodeId = baseNodeId + i;
             if (!this.allocationSet.free(nodeId)) {
@@ -190,6 +204,17 @@ final class NodeStore {
 
     boolean isNodeGeometryInFlight(int nodeId) {
         return (this.localNodeData[id2idx(nodeId) + 1] & (1L << 59)) != 0;
+    }
+
+    // CPU-only transition intent in the original reserved fourth long. It follows node
+    // compaction through copyNode, and deliberately does not change writeNode's GPU ABI.
+    void setEmptyCollapsePending(int nodeId, boolean pending) {
+        int index = id2idx(nodeId) + 3;
+        this.localNodeData[index] = (this.localNodeData[index] & ~1L) | (pending ? 1L : 0L);
+    }
+
+    boolean isEmptyCollapsePending(int nodeId) {
+        return (this.localNodeData[id2idx(nodeId) + 3] & 1L) != 0;
     }
 
     int getNodeType(int nodeId) {

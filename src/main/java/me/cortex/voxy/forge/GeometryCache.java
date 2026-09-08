@@ -13,13 +13,15 @@ final class GeometryCache {
     private final ReentrantLock lock = new ReentrantLock();
     private final AtomicLongArray epochs = new AtomicLongArray(EPOCH_STRIPES);
     private final AtomicInteger entries = new AtomicInteger();
-    private long maxCombinedSize;
+    private final long maxCombinedSize;
     private final int maxEntries;
     private long currentSize;
+    private boolean closed;
     private final LongAdder hits = new LongAdder();
     private final LongAdder misses = new LongAdder();
     private final LongAdder evictions = new LongAdder();
     private final LongAdder staleRejects = new LongAdder();
+    private final LongAdder closedRejects = new LongAdder();
     private final Long2ObjectLinkedOpenHashMap<BuiltSection> cache = new Long2ObjectLinkedOpenHashMap<>();
 
     GeometryCache(long maxSize) {
@@ -38,16 +40,24 @@ final class GeometryCache {
         return this.epochs.get(epochIndex(position));
     }
 
+    // Consumes unique caller-owned sections on accepted/stale/closed/oversized outcomes. An already
+    // cached or released wrapper is an invalid duplicate transfer: throw without freeing someone
+    // else's ownership. In particular callers must not blanket-free the input when put throws.
     void put(BuiltSection section, long expectedEpoch) {
         int epochIndex = epochIndex(section.position);
-        if (this.epochs.get(epochIndex) != expectedEpoch) {
-            this.staleRejects.increment();
-            section.free();
-            return;
-        }
         BuiltSection previous;
         this.lock.lock();
         try {
+            // A duplicate transfer is a caller ownership error, not a stale result to free: this
+            // exact object is already owned by the cache and must remain usable by take().
+            if (this.cache.get(section.position) == section || section.isReleased()) {
+                throw new IllegalStateException("geometry-cache-duplicate-or-released-ownership");
+            }
+            if (this.closed) {
+                this.closedRejects.increment();
+                section.free();
+                return;
+            }
             if (this.epochs.get(epochIndex) != expectedEpoch) {
                 this.staleRejects.increment();
                 section.free();
@@ -117,6 +127,7 @@ final class GeometryCache {
     void free() {
         this.lock.lock();
         try {
+            this.closed = true;
             this.cache.values().forEach(BuiltSection::free);
             this.cache.clear();
             this.entries.set(0);
@@ -156,6 +167,10 @@ final class GeometryCache {
 
     long staleRejects() {
         return this.staleRejects.sum();
+    }
+
+    long closedRejects() {
+        return this.closedRejects.sum();
     }
 
     private static long sizeOf(BuiltSection section) {

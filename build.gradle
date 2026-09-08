@@ -172,6 +172,12 @@ minecraft {
             if (project.hasProperty('voxyAuditRound10')) {
                 property 'voxy.forge.auditRound10', 'true'
             }
+            if (project.hasProperty('voxyAuditRound11')) {
+                property 'voxy.forge.auditRound11', 'true'
+            }
+            if (project.hasProperty('voxyVerifyNodeManager')) {
+                property 'voxy.verifyNodeManager', 'true'
+            }
         }
 
         server {
@@ -448,10 +454,29 @@ def makeExcludedRocksDB = tasks.register('makeExcludedRocksDB', Zip) {
     }
 }
 
+// Test-only detached artifact: exercise the Minecraft runtime ABI in an isolated classloader.
+// It is deliberately NOT added to main/test runtimeClasspath or JarJar (no duplicate fastutil).
+def minecraftFastutilAbi = configurations.detachedConfiguration(
+        dependencies.create('it.unimi.dsi:fastutil:8.5.9'))
+minecraftFastutilAbi.transitive = false
+
 test {
-    useJUnitPlatform {
-        excludeTags 'bobby-exact-artifact', 'compat-real-data', 'redis-real-backend', 'round6-performance', 'round7-performance', 'packaged-artifact', 'round10-gpu'
+    inputs.files(minecraftFastutilAbi).withPropertyName('minecraftFastutilAbi')
+    doFirst {
+        systemProperty 'voxy.test.minecraftFastutilAbiJar', minecraftFastutilAbi.singleFile.absolutePath
     }
+    useJUnitPlatform {
+        excludeTags 'bobby-exact-artifact', 'compat-real-data', 'redis-real-backend', 'round6-performance', 'round7-performance', 'packaged-artifact', 'round10-gpu', 'round11-long'
+    }
+}
+
+tasks.register('round11LongTest', Test) {
+    description = 'Replays long deterministic Round 11 node transition sequences on the actual CPU owners.'
+    group = 'verification'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform { includeTags 'round11-long' }
+    maxParallelForks = 1
 }
 
 tasks.register('packagedArtifactTest', Test) {

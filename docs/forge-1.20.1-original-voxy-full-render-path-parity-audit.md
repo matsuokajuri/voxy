@@ -5574,3 +5574,163 @@ matrix. Closing Song retains two format-copy GL1282 messages, and Reverse Future
 has a pre-renderer GL1280; neither is concealed or claimed fixed. No additional
 client or automated test run was performed. Full evidence and the scoped commit
 inventory are in `forxy-compat-r5-four-modpacks-audit-2026-09-08.md`.
+
+### 拾壹轮 R2: completed node/HOC lifecycle qualification (2026-09-09)
+
+The scoped round is complete: implementation, automated gates, normal dev and
+four-modpack scenarios, performance comparison and original-environment restoration.
+This is not an unlimited all-mod/all-item/FPS-parity claim. The frozen R2 artifact is 12,840,678 bytes, SHA256
+`16d83b6349720e3eac6000234254ffa2c8251f7c0105235da1a535a5d8ac309a`.
+The implementation and actual dev evidence are recorded in
+[the execution record](forxy-round11-execution-record.md); every original
+NodeManager/NodeStore TODO anchor has an explicit implemented, characterized,
+policy-retained or evidence-limited disposition in
+[the node TODO audit](forxy-round11-node-todo-dispositions-2026-09-09.md).
+Earlier r5 modpack acceptance does not automatically qualify these changes.
+
+#### Same original owner chain and unchanged GPU contracts
+
+The active route remains WorldEngine/WorldSection -> original model bakery ->
+RenderGenerationService/RenderDataFactory/BuiltSection -> BasicAsyncGeometryManager
+-> AsyncNodeManager/NodeManager -> HOC/NodeCleaner -> MDICSectionRenderer and the
+original terrain shader contract. No second state machine, preview renderer,
+synthetic formal route, fallback, mandatory Oculus dependency or GPU-only readback
+cache has been added. The existing optional compatibility adapters remain wired.
+
+NodeStore still uses four CPU longs per node; the new pending-empty-collapse intent
+uses bit 0 of its previously reserved fourth long and follows copy/free/ID reuse.
+It is not serialized into the GPU row. GPU nodes remain 16-byte uvec4 records,
+geometry metadata remains 32 bytes/two 16-byte scatter records, and packed quad,
+mesh/child sentinel and request encodings are unchanged. HOC requests remain
+50 position entries plus the existing 8-byte header (408 bytes total); traversal
+and render-list capacities and the fixed 256-item cleaner result stay unchanged.
+Actual memcpy/scatter precedes cleaner updates, with the existing barriers and
+buffer selectors. No expanded buffer is used to conceal a state error.
+
+#### Confirmed state and ownership repairs
+
+- A split now republishes the containing parent's changed AllChildrenAreLeaf bit;
+  both cleaner collapse and zero-mask collapse restore that bit when appropriate.
+  It describes immediate materialized children, not every descendant. Updating it
+  does not incorrectly propagate one Boolean through all higher ancestors.
+- An inner node with NULL parent geometry no longer deletes its last completed
+  children and fabricates EMPTY. A zero-child notification retains that completed
+  topology and requests the actual parent result. Only accepted mesh/EMPTY output
+  permits retirement; a newer nonzero notification cancels the pending intent.
+- Original empty-top-level request parking remains deliberate and tested across
+  all eight child bits, replays and cancellation. Single requests exist only in
+  top-level insertion; materialized nodes' request fields identify child requests.
+  Completion/cancellation checks exact type, position, request ID and masks. Node
+  allocation must succeed before releasing a single request, and mesh upload must
+  succeed before consuming the node's geometry-in-flight marker.
+- Router-issued CPU watch tokens distinguish geometry revisions and child-watch
+  lifetimes from a reused position. They are separate from cacheEpoch, do not enter
+  GPU or persistent formats, and are checked before NodeManager accepts results.
+  The original generation queue retains its priority/owner mechanism while locking
+  version coalescing and reference transfer; permit reservation precedes publication.
+- BuiltSection has one explicit atomic release/transfer claim. Accepted vertex
+  storage transfers into the real pending-upload/publication owner; auxiliary
+  occupancy storage is released. Geometry replacement reserves before destroying
+  old coverage, keeps a stable section ID, and reuses/shrinks/expands the original
+  arena where possible. Failed replacement consumes the incoming object without
+  losing the old allocation. The existing bounded CPU GeometryCache has terminal
+  close/reject and duplicate-ownership rules; GPU-only removal still frees and
+  regenerates through the original request chain, not a downloadAndRemove stub.
+
+Shutdown now closes acceptance before draining and joins the single node worker.
+It releases retained WorldSection references, request/removal buffers and both
+publication packets, then recursively removes actual top-level nodes/watchers
+before physical geometry/cache cleanup. Invalid topology is not silently repaired
+or reported as a clean stop. The outer ForgeOriginalVoxyRenderSystem shutdown uses
+the same ordered stages but attempts later service/GL/world releases even if an
+earlier stage fails; the original cause and suppressed failures are reported after
+cleanup rather than swallowed. Successful dev owner lifetimes logged all node,
+request, geometry, queue, publication and cache resource ledgers back at zero.
+
+#### Actual Minecraft fastutil ABI, not only the build classpath
+
+The first candidate passed the then-417 automated gate but failed actual
+Embeddium-only world entry: Minecraft loaded fastutil 8.5.9, where the newly called
+Int2ObjectOpenHashMap/IntOpenHashSet ensureCapacity methods are private. Their
+visibility in the build's 8.5.12 classpath was not runtime compatibility evidence.
+That failed artifact was not installed into the four modpacks or counted as a
+successful client. Its normal failure shutdown still drained the tracked resources.
+
+R2 preserves transactional capacity reservation using tiny internal map/set
+subclasses and the verified stable protected n/f/rehash members with
+HashCommon.arraySize. It does not use reflective fallback, replace Minecraft's
+fastutil, or bundle a competing version. An isolated exact-8.5.9 test exercises
+2,000 real-owner uploads across expansion thresholds, replacement/deletion and
+native-buffer cleanup. This test input is not added to the release runtime or
+JarJar; SQLite also remains external.
+
+#### Automated gate and completed normal dev paths
+
+The frozen R2 gate passes 400 default + 1 long-sequence + 13 GPU + 1 packaged
+artifact + 1 exact-Bobby + 2 real-data tests = **418**, without failures, errors or
+skips. The long sequence executes 100 x 10,000 external events, reaching LOD0 with
+28,414 splits, 15,880 collapses and 3,789 node moves; exact ownership is checked
+after every event and each seed drains fully. Event counts are not presented as
+one million topology changes. The new auxiliary GPU case connects actual node
+publication, production HOC request code/full cleaner kernels, DownloadStream and
+the Async consumer; it covers delayed/replayed positions, tombstones and allocated
+ID 127 reuse. These probes complement, never replace, the following normal clients.
+
+- **Embeddium-only dev, 01:20-01:44:** no Oculus runtime, normal 4095 MiB geometry
+  capacity, copied forest/lake world, new-region teleport to 65000.5/160/65000.5,
+  actual Minecraft 8->31->8, Overworld/Nether transitions, F3+T, and normal saved
+  shutdown passed. Completed ocean/coast and LOD coverage remained continuous;
+  generation latency was distinguished from missing geometry. No new Voxy exception,
+  GL error or GPU overflow was found in this qualified run.
+- **Full dev combination, 01:46-02:16:** Embeddium 0.3.31, Oculus 1.8.0, Acedium
+  0.2.7-beta, Vivecraft 1.3.15 in ordinary-window mode, Chunky 1.3.146 and Bobby
+  5.0.1 passed world re-entry, 8->31->8, Unbound r5.8.1 on/off, new-region loading,
+  End transition, resource reload and normal saved shutdown. With shaders off, F3
+  explicitly confirmed the active nvidium/Acedium renderer rather than a disabled
+  compatibility path. Chunky completed 1,089 chunks through trusted FULL ingestion;
+  the actual Bobby command imported its existing 2,988 listed entries. The formal
+  DH importer accepted 1,800 real database rows/28,800 chunks with zero failed or
+  unscheduled rows; this is importer lifecycle evidence, not simultaneous DH-mod
+  rendering or same-world pixel equivalence.
+
+Known external shader-expression/block-state warnings, Bobby's non-region
+last_access notice and development-environment messages are retained in the
+execution record. Clipboard error 65544 and stale Computer Use full-screen captures
+were distinguished from GL1282 or a stopped render loop. Physical VR remains
+hardware-unverified; these window tests do not qualify it. Test worlds were copies.
+Restoration completed with original save/configuration/JAR fingerprints verified;
+the four packs again contain their previously accepted R5 JAR, while R2 is delivered
+separately. Test copies and evidence are archived, not deleted.
+
+The optional auditRound11 counter is default-off and uses a fixed sample ring when
+enabled; worker CPU percentiles exclude park/publish wait/verification/logging and
+are not frame times. The [CPU performance audit](forxy-round11-cpu-performance-audit.md)
+records changed allocation/cost and its JIT/classpath/snapshot limits. Final R2
+CPU measurements use actual fastutil 8.5.9, C2 warmup and 48 isolated JVMs: same-size
+replacement improves while size-changing replacement incurs additional CPU and Java
+allocation. The separate [normal-client A/B](forxy-round11-client-ab-performance-audit.md)
+uses matching instrumentation, initial world/options/dependencies and spatial route.
+Measured final-owner worker p95 is 0.7280->0.9029 ms and publish p95
+0.3794->0.4848 ms; these increases are not hidden or described as frame-rate parity.
+One asynchronous pair with differing UI delays is not a statistical FPS benchmark.
+No cumulative successful-mesh-build counter or instantaneous whole-game memory peak
+was added; event totals and five-second resource samples are explicitly narrower.
+
+Closing Song 1.6.4, Create Delight Remake 0.4.8.16, Reverse Future 2.3.3 and Ripples
+all completed new-region teleport, actual Minecraft 8->31->8, F3+T, continuous LOD
+coverage after rebuilding and normal saved shutdown with R2. All nine pack stop
+snapshots returned tracked node/request/geometry/publication/cache resources to zero.
+No new unclassified Voxy hierarchy/ownership error or persistent hole was observed.
+The [pack log audit](forxy-round11-modpack-log-audit.md) retains external and old
+messages rather than claiming zero ERROR across every mod: Create's four new
+Flywheel PackageVisual failures have a null PartialModel key at the actual Java21
+ConcurrentHashMap check, without a direct Voxy stack, but the item and matched R5/R2
+scene are unavailable, so indirect timing effects cannot be conclusively excluded.
+Existing Voxy AT/StairBlock interaction, live RocksDB LOCK backup failures and
+Reverse Future's pre-renderer GL1280 remain separately recorded, not claimed fixed.
+
+The A/B clients both briefly showed reconstruction gaps immediately after increasing
+distance and both filled them after waiting; candidate shutdown cleared all logical
+and physical tracked resources. Baseline's abandoned logical ledger is not evidence
+of a post-GC cross-session native/heap leak. Final delivery preserves the formal
+route, optional Oculus and external SQLite policies. No commit/push was performed.

@@ -27,7 +27,8 @@ final class RenderGenerationService {
         boolean hasDoneModelRequestOuter;
         int attempts;
         int addin;
-        final long cacheEpoch;
+        long cacheEpoch;
+        long watchToken;
         long priority = Long.MIN_VALUE;
 
         private BuildTask(long position, long cacheEpoch) {
@@ -59,6 +60,16 @@ final class RenderGenerationService {
     private Consumer<BuiltSection> resultConsumer;
     private GeometryCache geometryCache;
     private long lastChangedTime;
+    private boolean acceptingTasks = true;
+    private TokenValidator tokenValidator;
+
+    interface TokenValidator { boolean isCurrent(long position, long token); }
+    interface MeshGenerator { BuiltSection generate(WorldSection section); }
+
+    void setTokenValidator(TokenValidator validator) {
+        if (this.tokenValidator != null) throw new IllegalStateException("render-generation-token-validator-already-set");
+        this.tokenValidator = validator;
+    }
 
     //Original RenderGenerationService receives the ModelBakerySubsystem and reads its factory.
     RenderGenerationService(
@@ -92,27 +103,58 @@ final class RenderGenerationService {
     }
 
     void enqueueTask(long pos) {
-        if (!this.service.isLive()) {
-            return;
-        }
-        boolean[] isOurs = new boolean[1];
+        this.enqueueTask(pos, 0);
+    }
+
+    void enqueueTask(long pos, long token) {
+        WorldSection displaced = null;
         long stamp = this.taskMapLock.writeLock();
-        BuildTask task;
         try {
-            task = this.taskMap.computeIfAbsent(pos, p -> {
-                isOurs[0] = true;
-                GeometryCache cache = this.geometryCache;
-                return new BuildTask(p, cache == null ? Long.MIN_VALUE : cache.snapshotEpoch(p));
-            });
+            if (!this.acceptingTasks || !this.service.isLive() || !this.isCurrent(pos, token)) return;
+            GeometryCache cache = this.geometryCache;
+            long epoch = cache == null ? Long.MIN_VALUE : cache.snapshotEpoch(pos);
+            BuildTask task = this.taskMap.get(pos);
+            if (task != null) {
+                // A map entry is still queued, never currently executing. Coalesce dirty
+                // revisions without creating unbounded obsolete permits or losing rewatch.
+                if (task.watchToken != token || task.cacheEpoch != epoch) {
+                    task.watchToken = token;
+                    task.cacheEpoch = epoch;
+                    task.hasDoneModelRequestInner = false;
+                    task.hasDoneModelRequestOuter = false;
+                    task.attempts = 0;
+                    displaced = task.section;
+                    task.section = null;
+                    if (displaced != null) this.holdingSectionCount.decrementAndGet();
+                }
+                return;
+            }
+            task = new BuildTask(pos, epoch);
+            task.watchToken = token;
+            task.updatePriority();
+            this.taskMap.put(pos, task);
+            this.publishTask(task);
         } finally {
             this.taskMapLock.unlockWrite(stamp);
+            if (displaced != null) displaced.release();
         }
+    }
 
-        if (isOurs[0]) {
-            task.updatePriority();
+    private boolean isCurrent(long pos, long token) {
+        return this.tokenValidator == null || this.tokenValidator.isCurrent(pos, token);
+    }
+
+    /** Called with taskMapLock held; reserve before publishing and waking a worker. */
+    private void publishTask(BuildTask task) {
+        this.taskQueueCount.incrementAndGet();
+        try {
             this.taskQueue.add(task);
-            this.taskQueueCount.incrementAndGet();
             this.service.execute();
+        } catch (RuntimeException | Error failure) {
+            this.taskQueue.remove(task);
+            this.taskQueueCount.decrementAndGet();
+            this.taskMap.remove(task.position, task);
+            throw failure;
         }
     }
 
@@ -121,32 +163,20 @@ final class RenderGenerationService {
     }
 
     void shutdown() {
-        while (this.service.numJobs() != 0) {
-            int taskCount = this.service.drain();
-            if (taskCount == 0) {
-                break;
+        long stamp = this.taskMapLock.writeLock();
+        try {
+            if (!this.acceptingTasks) throw new IllegalStateException("render-generation-already-stopped");
+            this.acceptingTasks = false;
+        } finally { this.taskMapLock.unlockWrite(stamp); }
+        try {
+            // The original Service retracts pending permits and waits for claimed jobs. Those
+            // jobs may no longer requeue, so draining objects afterwards has no consumer race.
+            this.service.shutdown();
+        } finally {
+            this.drainQueuedTasks();
+            if (this.taskQueueCount.get() != 0 || this.holdingSectionCount.get() != 0 || !this.taskMap.isEmpty()) {
+                throw new IllegalStateException("render-generation-task-queue-count-mismatch");
             }
-            long stamp = this.taskMapLock.writeLock();
-            try {
-                for (int i = 0; i < taskCount; i++) {
-                    BuildTask task = this.taskQueue.remove();
-                    if (task.section != null) {
-                        task.section.release();
-                        this.holdingSectionCount.decrementAndGet();
-                    }
-                    if (this.taskMap.remove(task.position) != task) {
-                        throw new IllegalStateException("render-generation-task-map-mismatch");
-                    }
-                }
-                this.taskQueueCount.addAndGet(-taskCount);
-            } finally {
-                this.taskMapLock.unlockWrite(stamp);
-            }
-        }
-        this.service.shutdown();
-        this.drainQueuedTasks();
-        if (this.taskQueueCount.get() != 0) {
-            throw new IllegalStateException("render-generation-task-queue-count-mismatch");
         }
     }
 
@@ -180,75 +210,51 @@ final class RenderGenerationService {
     private void processJob(
             RenderDataFactory factory,
             IntOpenHashSet seenMissedIds) {
-        BuildTask task = this.taskQueue.poll();
-        this.taskQueueCount.decrementAndGet();
-        boolean shouldFreeSection = true;
-        WorldSection section = task.section == null ? this.acquireSection(task.position) : task.section;
-        this.removeTaskFromMap(task);
+        this.processJob(factory::generateMesh, seenMissedIds);
+    }
 
-        if (section == null) {
-            this.emitResult(BuiltSection.empty(task.position).withCacheEpoch(task.cacheEpoch));
-            return;
-        }
-
-        section.assertNotFree();
+    void processJob(MeshGenerator generator, IntOpenHashSet seenMissedIds) {
+        BuildTask task;
+        WorldSection section;
+        long stamp = this.taskMapLock.writeLock();
+        try {
+            task = this.taskQueue.poll();
+            if (task == null) return;
+            this.taskQueueCount.decrementAndGet();
+            if (this.taskMap.remove(task.position) != task) throw new IllegalStateException("render-generation-task-map-mismatch");
+            section = task.section;
+            task.section = null;
+            if (section != null) this.holdingSectionCount.decrementAndGet();
+        } finally { this.taskMapLock.unlockWrite(stamp); }
+        boolean retained = false;
         BuiltSection mesh = null;
         try {
-            mesh = factory.generateMesh(section);
-        } catch (IdNotYetComputedException e) {
-            task = this.handleMissingModel(task, section, e, seenMissedIds);
-            shouldFreeSection = task == null || task.section == null;
-        } catch (RuntimeException e) {
-            throw e;
-        }
-
-        if (shouldFreeSection) {
-            if (task != null && task.section != null) {
-                this.holdingSectionCount.decrementAndGet();
+            if (!this.isCurrent(task.position, task.watchToken)) return;
+            if (section == null) section = this.acquireSection(task.position);
+            if (section == null) {
+                mesh = BuiltSection.empty(task.position);
+            } else {
+                section.assertNotFree();
+                try {
+                    mesh = generator.generate(section);
+                } catch (IdNotYetComputedException missing) {
+                    retained = this.handleMissingModel(task, section, missing, seenMissedIds);
+                }
             }
-            section.release();
+        } finally {
+            if (!retained && section != null) section.release();
         }
-
         if (mesh != null) {
-            this.emitResult(mesh.withCacheEpoch(task.cacheEpoch));
+            this.emitResult(mesh.withCacheEpoch(task.cacheEpoch).withWatchToken(task.watchToken));
         }
     }
 
-    private BuildTask handleMissingModel(
+    private boolean handleMissingModel(
             BuildTask task,
             WorldSection section,
             IdNotYetComputedException e,
-        IntOpenHashSet seenMissedIds) {
+            IntOpenHashSet seenMissedIds) {
         BuildTask currentTask = task;
-        boolean replacedTaskNeedsModelRequest = false;
-        long stamp = this.taskMapLock.writeLock();
-        try {
-            BuildTask other = this.taskMap.putIfAbsent(task.position, task);
-            if (other != null) {
-                replacedTaskNeedsModelRequest = true;
-                if (task.hasDoneModelRequestInner) {
-                    other.hasDoneModelRequestInner = true;
-                }
-                if (task.hasDoneModelRequestOuter) {
-                    other.hasDoneModelRequestOuter = true;
-                }
-                if (task.section != null) {
-                    this.holdingSectionCount.decrementAndGet();
-                }
-                task.section = null;
-                currentTask = null;
-            }
-        } finally {
-            this.taskMapLock.unlockWrite(stamp);
-        }
-        if (replacedTaskNeedsModelRequest) {
-            this.requestMissingModel(e, seenMissedIds);
-        }
-
-        if (currentTask == null) {
-            return null;
-        }
-
         this.requestMissingModel(e, seenMissedIds);
         if (currentTask.hasDoneModelRequestOuter || currentTask.hasDoneModelRequestInner) {
             MESH_FAILED_COUNTER.incrementAndGet();
@@ -275,37 +281,43 @@ final class RenderGenerationService {
             currentTask.addin = WorldEngine.getLevel(currentTask.position) > 2 ? 1 : 0;
         }
 
-        if (currentTask.section == null) {
+        long stamp = this.taskMapLock.writeLock();
+        try {
+            if (!this.acceptingTasks || !this.service.isLive() || !this.isCurrent(task.position, task.watchToken)) return false;
+            BuildTask other = this.taskMap.get(task.position);
+            if (other != null) {
+                if (other.watchToken == task.watchToken) {
+                    other.hasDoneModelRequestInner |= task.hasDoneModelRequestInner;
+                    other.hasDoneModelRequestOuter |= task.hasDoneModelRequestOuter;
+                }
+                return false;
+            }
             if (this.holdingSectionCount.get() < MAX_HOLDING_SECTION_COUNT) {
                 this.holdingSectionCount.incrementAndGet();
-                currentTask.section = section;
+                task.section = section;
             }
+            task.updatePriority();
+            this.taskMap.put(task.position, task);
+            try {
+                this.publishTask(task);
+            } catch (RuntimeException | Error failure) {
+                if (task.section != null) {
+                    this.holdingSectionCount.decrementAndGet();
+                    task.section = null; // caller's finally retains responsibility on failure
+                }
+                throw failure;
+            }
+            // Latch transfer while holding the map lock. A coalescing producer may detach
+            // task.section immediately after unlock and is then its only release owner.
+            return task.section != null;
+        } finally {
+            this.taskMapLock.unlockWrite(stamp);
         }
-
-        currentTask.updatePriority();
-        this.taskQueue.add(currentTask);
-        this.taskQueueCount.incrementAndGet();
-        if (this.service.isLive()) {
-            this.service.execute();
-        }
-        return currentTask;
     }
 
     private void requestMissingModel(IdNotYetComputedException e, IntOpenHashSet seenMissedIds) {
         if (e.isIdBlockId && !this.modelFactory.hasModelForBlockId(e.id) && seenMissedIds.add(e.id)) {
             this.modelBakery.requestBlockBake(e.id);
-        }
-    }
-
-    private void removeTaskFromMap(BuildTask task) {
-        long stamp = this.taskMapLock.writeLock();
-        try {
-            BuildTask removed = this.taskMap.remove(task.position);
-            if (removed != task) {
-                throw new IllegalStateException("render-generation-task-map-mismatch");
-            }
-        } finally {
-            this.taskMapLock.unlockWrite(stamp);
         }
     }
 

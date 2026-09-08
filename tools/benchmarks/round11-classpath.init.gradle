@@ -1,0 +1,14 @@
+gradle.projectsEvaluated {
+    rootProject.tasks.register('round11BenchmarkClasspath') {
+        doLast {
+            def destination = rootProject.file('build/tmp/round11-benchmark-classpath.txt')
+            destination.parentFile.mkdirs()
+            destination.text = rootProject.sourceSets.test.runtimeClasspath.asPath
+            def minecraftFastutil = rootProject.configurations.detachedConfiguration(
+                    rootProject.dependencies.create('it.unimi.dsi:fastutil:8.5.9'))
+            minecraftFastutil.transitive = false
+            rootProject.file('build/tmp/round11-benchmark-fastutil-runtime.txt').text = minecraftFastutil.singleFile.absolutePath
+            println "Round 11 independent CPU benchmark classpath: ${destination}"
+        }
+    }
+}

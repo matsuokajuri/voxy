@@ -48,10 +48,10 @@ public class AllocationArena {
         if (index < 0 || index >= this.FREE.size()) {
             throw new IndexOutOfBoundsException(index);
         }
-        var iter = this.FREE.tailSet(-1).iterator();
+        var iter = this.FREE.iterator(-1L);
         for (;index>0&&iter.hasPrevious();index--){iter.previousLong();}
         long slot = iter.previousLong();
-        return (int) (slot>>ADDR_BITS);
+        return (int) (slot >>> ADDR_BITS);
     }
 
     public long alloc(int size) {
@@ -186,6 +186,40 @@ public class AllocationArena {
             //this.resized = true;
             return true;
         }
+    }
+
+    /**
+     * Keep an allocation's address while returning its unused tail to the original free/coalescing
+     * path. Geometry replacement must not reserve a second copy merely to become smaller.
+     *
+     * @return the number of released elements
+     */
+    public int shrink(long addr, int newSize) {
+        if (newSize <= 0 || Integer.toUnsignedLong(newSize) > MAX_ALLOCATION_SIZE) {
+            throw new IllegalArgumentException("Invalid shrunken allocation size: " + newSize);
+        }
+        addr &= ADDR_MSK;
+        var iter = this.TAKEN.iterator(addr << SIZE_BITS);
+        if (!iter.hasNext()) {
+            throw new IllegalArgumentException("Allocation does not exist: " + addr);
+        }
+        long slot = iter.nextLong();
+        if (slot >>> SIZE_BITS != addr) {
+            throw new IllegalArgumentException("Allocation does not exist: " + addr);
+        }
+        int oldSize = (int) (slot & SIZE_MSK);
+        if (newSize > oldSize) {
+            throw new IllegalArgumentException("Shrinking would grow allocation: " + oldSize + " -> " + newSize);
+        }
+        if (newSize == oldSize) {
+            return 0;
+        }
+        iter.remove();
+        this.TAKEN.add((addr << SIZE_BITS) | newSize);
+        // Represent the tail as a temporary allocation so free() remains the sole coalescing owner.
+        long tail = addr + newSize;
+        this.TAKEN.add((tail << SIZE_BITS) | (oldSize - newSize));
+        return this.free(tail);
     }
 
     public long getSize(long addr) {

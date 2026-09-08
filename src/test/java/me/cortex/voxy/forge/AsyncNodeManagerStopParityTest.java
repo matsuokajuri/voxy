@@ -6,17 +6,16 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AsyncNodeManagerStopParityTest {
     @Test
-    void stoppedManagerFailsBeforeStateChangeWorkerWakeOrCleanup() throws IOException {
+    void completedStopFailsButWorkerFailureDoesNotPreventOwnedResourceCleanup() throws IOException {
         String source = Files.readString(Path.of(
                 "src/main/java/me/cortex/voxy/forge/AsyncNodeManager.java"));
         int stop = source.indexOf("void stop()");
-        int stoppedCheck = source.indexOf("if (!this.running)", stop);
-        int stoppedFailure = source.indexOf("throw new IllegalStateException();", stoppedCheck);
+        int stoppedCheck = source.indexOf("if (this.stopped)", stop);
+        int stoppedFailure = source.indexOf("throw new IllegalStateException(", stoppedCheck);
         int runningFalse = source.indexOf("this.running = false;", stop);
         int workerUnpark = source.indexOf("LockSupport.unpark(this.workerThread);", stop);
         int cleanup = source.indexOf("BuiltSection section = this.geometryUpdateQueue.poll()", stop);
@@ -39,7 +38,6 @@ class AsyncNodeManagerStopParityTest {
         assertTrue(stop >= 0 && interruptedCatch > stop && cleanup > interruptedCatch);
         String interruptionPath = source.substring(interruptedCatch, cleanup);
         assertTrue(interruptionPath.contains("throw new RuntimeException(e);"));
-        assertFalse(interruptionPath.contains("recordFailure("));
-        assertFalse(interruptionPath.contains("Thread.currentThread().interrupt()"));
+        assertTrue(interruptionPath.contains("Thread.currentThread().interrupt()"));
     }
 }

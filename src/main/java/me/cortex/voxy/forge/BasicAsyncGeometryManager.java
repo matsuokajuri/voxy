@@ -1,5 +1,6 @@
 package me.cortex.voxy.forge;
 
+import it.unimi.dsi.fastutil.HashCommon;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
@@ -17,9 +18,9 @@ final class BasicAsyncGeometryManager {
     private final HierarchicalBitSet allocationSet;
     private final AllocationArena allocationHeap = new AllocationArena();
     private final ObjectArrayList<SectionMeta> sectionMetadata = new ObjectArrayList<>(1 << 15);
-    private final IntOpenHashSet invalidatedIds = new IntOpenHashSet(1024);
-    private final Int2ObjectOpenHashMap<MemoryBuffer> heapUploads = new Int2ObjectOpenHashMap<>(1024);
-    private final IntOpenHashSet heapRemoveUploads = new IntOpenHashSet(1024);
+    private final ReservedIdSet invalidatedIds = new ReservedIdSet(1024);
+    private final ReservedUploadMap heapUploads = new ReservedUploadMap(1024);
+    private final ReservedIdSet heapRemoveUploads = new ReservedIdSet(1024);
     private long usedCapacity;
 
     BasicAsyncGeometryManager(int maxSectionCount, long geometryCapacityBytes) {
@@ -40,46 +41,129 @@ final class BasicAsyncGeometryManager {
         return this.uploadReplaceSection(-1, section);
     }
 
+    // Consumes section on success AND failure. Only the vertex buffer crosses into the upload map;
+    // BuiltSection.detachGeometryBuffer releases CPU-only occupancy. Expected validation/capacity
+    // failures leave the previous geometry and every pending publication record unchanged.
     synchronized int uploadReplaceSection(int oldId, BuiltSection section) {
-        if (section.isEmpty()) {
-            section.free();
-            throw new IllegalArgumentException("sectionData is empty, cannot upload nothing");
+        if (section.isReleased()) {
+            throw new IllegalStateException("Cannot upload an already-consumed BuiltSection");
         }
-        if (oldId != -1) {
-            this.removeSection(oldId);
-        }
+        int newId = -1;
+        int addr = -1;
+        SectionMeta oldMetadata = null;
+        long previousAllocationSize = 0;
+        boolean newHeapReservation = false;
+        boolean committed = false;
+        boolean handoffCompleted = false;
+        try {
+            int size = validateGeometry(section);
+            int allocationSize = (size + 127) & ~127;
+            if (oldId != -1) {
+                oldMetadata = this.requireSection(oldId);
+                // Every accepted reservation is exactly the original 128-element rounding. Read
+                // it from immutable metadata instead of allocating an arena tree iterator per mesh.
+                previousAllocationSize = (oldMetadata.itemCount + 127) & ~127;
+                newId = oldId;
+            } else {
+                newId = this.allocationSet.allocateNext();
+                if (newId == HierarchicalBitSet.SET_FULL) {
+                    throw new IllegalStateException("Tried adding section when section count is already at capacity");
+                }
+                if (newId > this.sectionMetadata.size()
+                        || (newId < this.sectionMetadata.size() && this.sectionMetadata.get(newId) != null)) {
+                    throw new IllegalStateException("Section id metadata slot was unexpectedly occupied: " + newId);
+                }
+            }
 
-        int newId = this.allocationSet.allocateNext();
-        if (newId == HierarchicalBitSet.SET_FULL) {
-            section.free();
-            throw new IllegalStateException("Tried adding section when section count is already at capacity");
+            if (oldMetadata != null && allocationSize <= previousAllocationSize) {
+                addr = oldMetadata.geometryPtr;
+                if (allocationSize < previousAllocationSize) {
+                    this.usedCapacity -= this.allocationHeap.shrink(Integer.toUnsignedLong(addr), allocationSize);
+                }
+            } else if (oldMetadata != null && this.allocationHeap.expand(
+                    Integer.toUnsignedLong(oldMetadata.geometryPtr), (int) (allocationSize - previousAllocationSize))) {
+                addr = oldMetadata.geometryPtr;
+                this.usedCapacity += allocationSize - previousAllocationSize;
+            } else {
+                addr = (int) this.allocationHeap.alloc(allocationSize);
+                if (addr == AllocationArena.SIZE_LIMIT) {
+                    throw new IllegalStateException("Geometry OOM. requested allocation size (in elements): " + size
+                            + ", Heap size at top remaining: " + (this.allocationHeap.getLimit() - this.allocationHeap.getSize())
+                            + ", used elements: " + this.usedCapacity);
+                }
+                newHeapReservation = true;
+                this.usedCapacity += allocationSize;
+            }
+            if ((oldMetadata == null || oldMetadata.geometryPtr != addr) && this.heapUploads.containsKey(addr)) {
+                throw new IllegalStateException("Duplicate geometry heap upload address: " + addr);
+            }
+            SectionMeta newMetadata = new SectionMeta(section.position, section.aabb, addr, size,
+                    section.offsets, section.childExistence);
+            // Complete allocations/validation before transferring ownership or removing old coverage.
+            if (newId == this.sectionMetadata.size()) {
+                this.sectionMetadata.ensureCapacity(newId + 1);
+            }
+            this.heapUploads.reserve(this.heapUploads.size() + 1);
+            this.heapRemoveUploads.reserve(this.heapRemoveUploads.size() + 1);
+            this.invalidatedIds.reserve(this.invalidatedIds.size() + 1);
+            MemoryBuffer buffer = section.detachGeometryBuffer();
+            handoffCompleted = true;
+            if (oldMetadata != null && oldMetadata.geometryPtr != addr) {
+                this.releaseHeap(oldMetadata);
+            }
+            MemoryBuffer displacedUpload = this.heapUploads.put(addr, buffer);
+            if (displacedUpload != null) {
+                displacedUpload.free();
+            }
+            this.heapRemoveUploads.remove(addr);
+            if (newId == this.sectionMetadata.size()) {
+                this.sectionMetadata.add(newMetadata);
+            } else {
+                this.sectionMetadata.set(newId, newMetadata);
+            }
+            this.invalidatedIds.add(newId);
+            committed = true;
+            return newId;
+        } finally {
+            if (!committed && !handoffCompleted) {
+                // Roll back reservations while the old metadata/pending buffer still own coverage.
+                try {
+                    if (newHeapReservation) {
+                        this.usedCapacity -= this.allocationHeap.free(Integer.toUnsignedLong(addr));
+                    } else if (oldMetadata != null && addr != -1) {
+                        long currentSize = this.allocationHeap.getSize(Integer.toUnsignedLong(addr));
+                        if (currentSize > previousAllocationSize) {
+                            this.usedCapacity -= this.allocationHeap.shrink(Integer.toUnsignedLong(addr), (int) previousAllocationSize);
+                        } else if (currentSize < previousAllocationSize) {
+                            if (!this.allocationHeap.expand(Integer.toUnsignedLong(addr), (int) (previousAllocationSize - currentSize))) {
+                                throw new IllegalStateException("Geometry reservation rollback could not restore its own released tail");
+                            }
+                            this.usedCapacity += previousAllocationSize - currentSize;
+                        }
+                    }
+                } finally {
+                    if (oldId == -1 && newId != -1) {
+                        this.allocationSet.free(newId);
+                    }
+                    if (!section.isReleased()) section.free();
+                }
+            }
         }
-        if (newId > this.sectionMetadata.size()) {
-            section.free();
-            throw new IllegalStateException("Size exceeds limits: " + newId + ", " + this.sectionMetadata.size() + ", " + this.allocationSet.getCount());
-        }
-        if (newId < this.sectionMetadata.size() && this.sectionMetadata.get(newId) != null) {
-            section.free();
-            throw new IllegalStateException("Section id was allocated over existing metadata: " + newId);
-        }
-
-        SectionMeta newMeta = this.createMeta(section);
-        if (newId == this.sectionMetadata.size()) {
-            this.sectionMetadata.add(newMeta);
-        } else if (this.sectionMetadata.set(newId, newMeta) != null) {
-            section.free();
-            throw new IllegalStateException("Section id metadata slot was unexpectedly occupied: " + newId);
-        }
-
-        this.invalidatedIds.add(newId);
-        return newId;
     }
 
     synchronized void removeSection(int id) {
+        SectionMeta oldMetadata = this.requireSection(id);
         if (!this.allocationSet.free(id)) {
             throw new IllegalStateException("Id was not already allocated. id: " + id);
         }
-        SectionMeta oldMetadata = this.sectionMetadata.set(id, null);
+        this.sectionMetadata.set(id, null);
+        this.releaseHeap(oldMetadata);
+        this.invalidatedIds.add(id);
+    }
+
+    // Pending CPU uploads are freed here. Already published/GPU-only data has no CPU clone to cache;
+    // removing it releases the arena range, and a later request uses normal mesh regeneration.
+    private void releaseHeap(SectionMeta oldMetadata) {
         int ptr = oldMetadata.geometryPtr;
         this.usedCapacity -= this.allocationHeap.free(Integer.toUnsignedLong(ptr));
         MemoryBuffer upload = this.heapUploads.remove(ptr);
@@ -87,7 +171,14 @@ final class BasicAsyncGeometryManager {
             upload.free();
         }
         this.heapRemoveUploads.add(ptr);
-        this.invalidatedIds.add(id);
+    }
+
+    private SectionMeta requireSection(int id) {
+        if (id < 0 || id >= this.sectionMetadata.size() || id >= this.maxSectionCount
+                || !this.allocationSet.isSet(id) || this.sectionMetadata.get(id) == null) {
+            throw new IllegalStateException("Id was not already allocated. id: " + id);
+        }
+        return this.sectionMetadata.get(id);
     }
 
     synchronized void discardEmptySection(BuiltSection section) {
@@ -165,27 +256,88 @@ final class BasicAsyncGeometryManager {
         this.usedCapacity = 0L;
     }
 
-    private SectionMeta createMeta(BuiltSection section) {
+    private static int validateGeometry(BuiltSection section) {
+        if (section.isEmpty()) {
+            throw new IllegalArgumentException("sectionData is empty, cannot upload nothing");
+        }
+        section.geometryBuffer.assertNotFreed();
         if (section.geometryBuffer.size % GEOMETRY_ELEMENT_SIZE != 0) {
-            section.free();
             throw new IllegalStateException("Original Voxy geometry buffer is not 8-byte aligned");
         }
-        int size = (int) (section.geometryBuffer.size / GEOMETRY_ELEMENT_SIZE);
-        int upsized = (size + 127) & ~127;
-        int addr = (int) this.allocationHeap.alloc(upsized);
-        if (addr == AllocationArena.SIZE_LIMIT) {
-            section.free();
-            throw new IllegalStateException("Geometry OOM. requested allocation size (in elements): " + size
-                    + ", Heap size at top remaining: " + (this.allocationHeap.getLimit() - this.allocationHeap.getSize())
-                    + ", used elements: " + this.usedCapacity);
+        long size = section.geometryBuffer.size / GEOMETRY_ELEMENT_SIZE;
+        if (size <= 0 || ((size + 127) & ~127L) > AllocationArena.MAX_ALLOCATION_SIZE) {
+            throw new IllegalStateException("Original Voxy geometry exceeds the packed arena allocation range: " + size);
         }
-        this.usedCapacity += upsized;
-        if (this.heapUploads.put(addr, section.geometryBuffer) != null) {
-            section.free();
-            throw new IllegalStateException("Duplicate geometry heap upload address: " + addr);
+        if (section.offsets == null || section.offsets.length != 8) {
+            throw new IllegalStateException("Original Voxy geometry requires eight render-category offsets");
         }
-        this.heapRemoveUploads.remove(addr);
-        return new SectionMeta(section.position, section.aabb, addr, size, section.offsets, section.childExistence);
+        if (section.occupancy != null) {
+            section.occupancy.assertNotFreed();
+        }
+        return (int) size;
+    }
+
+    synchronized IntOpenHashSet getAllocatedSectionIdsSnapshot() {
+        IntOpenHashSet ids = new IntOpenHashSet();
+        for (int id = 0; id < this.sectionMetadata.size(); id++) {
+            if (this.sectionMetadata.get(id) != null) ids.add(id);
+        }
+        return ids;
+    }
+
+    synchronized long getSectionPosition(int id) {
+        return this.requireSection(id).position;
+    }
+
+    synchronized void verifyIntegrity() {
+        IntOpenHashSet ids = this.getAllocatedSectionIdsSnapshot();
+        IntOpenHashSet pointers = new IntOpenHashSet();
+        long reserved = 0;
+        for (int id = 0; id < this.sectionMetadata.size(); id++) {
+            if (this.allocationSet.isSet(id) != ids.contains(id)) {
+                throw new IllegalStateException("Geometry metadata/allocation mismatch: " + id);
+            }
+            SectionMeta metadata = this.sectionMetadata.get(id);
+            if (metadata != null) {
+                if (!pointers.add(metadata.geometryPtr)) {
+                    throw new IllegalStateException("Duplicate geometry heap ownership: " + metadata.geometryPtr);
+                }
+                long allocationSize = this.allocationHeap.getSize(Integer.toUnsignedLong(metadata.geometryPtr));
+                if (allocationSize != ((metadata.itemCount + 127) & ~127)) {
+                    throw new IllegalStateException("Geometry metadata/reservation rounding mismatch: " + id);
+                }
+                reserved += allocationSize;
+            }
+        }
+        if (ids.size() != this.allocationSet.getCount() || reserved != this.usedCapacity) {
+            throw new IllegalStateException("Geometry allocation accounting mismatch");
+        }
+        for (var entry : this.heapUploads.int2ObjectEntrySet()) {
+            if (!pointers.contains(entry.getIntKey()) || this.heapRemoveUploads.contains(entry.getIntKey())) {
+                throw new IllegalStateException("Pending geometry upload has no unique live reservation");
+            }
+            entry.getValue().assertNotFreed();
+        }
+    }
+
+    // Minecraft 1.20.1 supplies fastutil 8.5.9: map/set ensureCapacity is PRIVATE there,
+    // although it is public in compile-time 8.5.12. The same original sizing mechanism is
+    // available through the stable protected subclass contract in both versions. Keep all
+    // reservations before BuiltSection handoff; do not replace them with post-handoff growth.
+    private static final class ReservedUploadMap extends Int2ObjectOpenHashMap<MemoryBuffer> {
+        private ReservedUploadMap(int expected) { super(expected); }
+        private void reserve(int expected) {
+            int needed = HashCommon.arraySize(expected, this.f);
+            if (needed > this.n) this.rehash(needed);
+        }
+    }
+
+    private static final class ReservedIdSet extends IntOpenHashSet {
+        private ReservedIdSet(int expected) { super(expected); }
+        private void reserve(int expected) {
+            int needed = HashCommon.arraySize(expected, this.f);
+            if (needed > this.n) this.rehash(needed);
+        }
     }
 
     private record SectionMeta(long position, int aabb, int geometryPtr, int itemCount, int[] offsets, byte childExistence) {

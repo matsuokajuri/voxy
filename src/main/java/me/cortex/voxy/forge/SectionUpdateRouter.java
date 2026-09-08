@@ -1,153 +1,146 @@
 package me.cortex.voxy.forge;
 
 import it.unimi.dsi.fastutil.longs.Long2ByteOpenHashMap;
+import it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap;
 import me.cortex.voxy.common.world.WorldEngine;
 import me.cortex.voxy.common.world.WorldSection;
 
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.StampedLock;
 import java.util.function.LongConsumer;
 
+/** Original striped watch routing with explicit CPU-only delivery identities. */
 final class SectionUpdateRouter implements ISectionWatcher {
     private static final int SLICES = 1 << 4;
-
-    interface ChildUpdate {
-        void accept(WorldSection section);
-    }
+    interface ChildUpdate { void accept(WorldSection section); }
+    interface MeshUpdate { void accept(long position, long token); }
+    interface VersionedChildUpdate { void accept(WorldSection section, long token); }
 
     private final Long2ByteOpenHashMap[] slices = new Long2ByteOpenHashMap[SLICES];
+    private final Long2LongOpenHashMap[] geometryTokens = new Long2LongOpenHashMap[SLICES];
+    private final Long2LongOpenHashMap[] childTokens = new Long2LongOpenHashMap[SLICES];
     private final StampedLock[] locks = new StampedLock[SLICES];
-    private LongConsumer initialRenderMeshGen;
-    private LongConsumer renderMeshGen;
-    private ChildUpdate childUpdateCallback;
+    private final AtomicLong sequence = new AtomicLong();
+    private MeshUpdate initialRenderMeshGen;
+    private MeshUpdate renderMeshGen;
+    private VersionedChildUpdate childUpdateCallback;
 
     SectionUpdateRouter() {
-        for (int i = 0; i < this.slices.length; i++) {
+        for (int i = 0; i < SLICES; i++) {
             this.slices[i] = new Long2ByteOpenHashMap();
+            this.geometryTokens[i] = new Long2LongOpenHashMap();
+            this.childTokens[i] = new Long2LongOpenHashMap();
             this.locks[i] = new StampedLock();
         }
     }
 
-    void setCallbacks(LongConsumer initialRenderMeshGen, LongConsumer renderMeshGen, ChildUpdate childUpdateCallback) {
-        if (this.renderMeshGen != null) {
-            throw new IllegalStateException();
-        }
-        this.initialRenderMeshGen = initialRenderMeshGen;
-        this.renderMeshGen = renderMeshGen;
-        this.childUpdateCallback = childUpdateCallback;
+    void setCallbacks(LongConsumer initial, LongConsumer dirty, ChildUpdate child) {
+        this.setVersionedCallbacks((pos, token) -> initial.accept(pos),
+                (pos, token) -> dirty.accept(pos), (section, token) -> child.accept(section));
+    }
+
+    void setVersionedCallbacks(MeshUpdate initial, MeshUpdate dirty, VersionedChildUpdate child) {
+        if (this.renderMeshGen != null) throw new IllegalStateException("Router callbacks already set");
+        this.initialRenderMeshGen = initial;
+        this.renderMeshGen = dirty;
+        this.childUpdateCallback = child;
     }
 
     @Override
     public boolean watch(long position, int types) {
         int idx = getSliceIndex(position);
-        Long2ByteOpenHashMap set = this.slices[idx];
         StampedLock lock = this.locks[idx];
-        byte delta;
-        long stamp = lock.readLock();
-        byte current = set.getOrDefault(position, (byte) 0);
-        delta = (byte) (current & types);
-        current |= (byte) types;
-        delta ^= (byte) (current & types);
-        if (delta != 0) {
-            long writeStamp = lock.tryConvertToWriteLock(stamp);
-            if (writeStamp == 0) {
-                lock.unlockRead(stamp);
-                stamp = lock.writeLock();
-                current = set.getOrDefault(position, (byte) 0);
-                delta = (byte) (current & types);
-                current |= (byte) types;
-                delta ^= (byte) (current & types);
-                if (delta != 0) {
-                    set.put(position, current);
-                }
-            } else {
-                stamp = writeStamp;
-                set.put(position, current);
+        int delta;
+        long geometryToken = 0;
+        long stamp = lock.writeLock();
+        try {
+            int current = Byte.toUnsignedInt(this.slices[idx].get(position));
+            delta = types & ~current;
+            if (delta != 0) this.slices[idx].put(position, (byte) (current | types));
+            if ((delta & WorldEngine.UPDATE_TYPE_BLOCK_BIT) != 0) {
+                geometryToken = this.nextToken();
+                this.geometryTokens[idx].put(position, geometryToken);
             }
-        }
-        lock.unlock(stamp);
-        if (((delta & types) & WorldEngine.UPDATE_TYPE_BLOCK_BIT) != 0) {
-            this.initialRenderMeshGen.accept(position);
-        }
+            if ((delta & WorldEngine.UPDATE_TYPE_CHILD_EXISTENCE_BIT) != 0) {
+                this.childTokens[idx].put(position, this.nextToken());
+            }
+        } finally { lock.unlockWrite(stamp); }
+        // Keep callbacks outside locks. Captured tokens reject delivery overtaken by edits
+        // or unwatch/rewatch rather than confusing a reused position with its former owner.
+        if (geometryToken != 0) this.initialRenderMeshGen.accept(position, geometryToken);
         return delta != 0;
     }
 
     @Override
     public boolean unwatch(long position, int types) {
         int idx = getSliceIndex(position);
-        Long2ByteOpenHashMap set = this.slices[idx];
         StampedLock lock = this.locks[idx];
-        long stamp = lock.readLock();
-        byte current = set.getOrDefault(position, (byte) 0);
-        if (current == 0) {
-            throw new IllegalStateException("Section pos not in map " + WorldEngine.pprintPos(position));
-        }
-        boolean removed = false;
-        if ((current & types) != 0) {
-            long writeStamp = lock.tryConvertToWriteLock(stamp);
-            if (writeStamp == 0) {
-                lock.unlockRead(stamp);
-                stamp = lock.writeLock();
-                current = set.getOrDefault(position, (byte) 0);
-                if (current == 0) {
-                    throw new IllegalStateException("Section pos not in map " + WorldEngine.pprintPos(position));
-                }
-            } else {
-                stamp = writeStamp;
-            }
-            if ((current & types) != 0) {
-                current &= (byte) ~types;
-                if (current == 0) {
-                    set.remove(position);
-                    removed = true;
-                } else {
-                    set.put(position, current);
-                }
-            }
-        }
-        lock.unlock(stamp);
-        return removed;
+        long stamp = lock.writeLock();
+        try {
+            int current = Byte.toUnsignedInt(this.slices[idx].get(position));
+            if (current == 0) throw new IllegalStateException("Section pos not in map " + WorldEngine.pprintPos(position));
+            int remaining = current & ~types;
+            if ((types & WorldEngine.UPDATE_TYPE_BLOCK_BIT) != 0) this.geometryTokens[idx].remove(position);
+            if ((types & WorldEngine.UPDATE_TYPE_CHILD_EXISTENCE_BIT) != 0) this.childTokens[idx].remove(position);
+            if (remaining == 0) this.slices[idx].remove(position);
+            else this.slices[idx].put(position, (byte) remaining);
+            return remaining == 0;
+        } finally { lock.unlockWrite(stamp); }
     }
 
     @Override
     public int get(long position) {
         int idx = getSliceIndex(position);
-        Long2ByteOpenHashMap set = this.slices[idx];
-        StampedLock lock = this.locks[idx];
-        long stamp = lock.readLock();
-        int ret = set.getOrDefault(position, (byte) 0);
-        lock.unlockRead(stamp);
-        return ret;
+        long stamp = this.locks[idx].readLock();
+        try { return Byte.toUnsignedInt(this.slices[idx].get(position)); }
+        finally { this.locks[idx].unlockRead(stamp); }
     }
 
     void forwardEvent(WorldSection section, int type) {
         long position = section.key;
         int idx = getSliceIndex(position);
-        Long2ByteOpenHashMap set = this.slices[idx];
-        StampedLock lock = this.locks[idx];
-        long stamp = lock.readLock();
-        byte types = (byte) (set.getOrDefault(position, (byte) 0) & type);
-        lock.unlockRead(stamp);
-
-        if (types != 0) {
-            if ((types & WorldEngine.UPDATE_TYPE_CHILD_EXISTENCE_BIT) != 0) {
-                this.childUpdateCallback.accept(section);
-            }
+        long geometryToken = 0, childToken = 0;
+        long stamp = this.locks[idx].writeLock();
+        try {
+            int types = this.slices[idx].get(position) & type;
+            if ((types & WorldEngine.UPDATE_TYPE_CHILD_EXISTENCE_BIT) != 0) childToken = this.childTokens[idx].get(position);
             if ((types & WorldEngine.UPDATE_TYPE_BLOCK_BIT) != 0) {
-                this.renderMeshGen.accept(section.key);
+                geometryToken = this.nextToken();
+                this.geometryTokens[idx].put(position, geometryToken);
             }
-        }
+        } finally { this.locks[idx].unlockWrite(stamp); }
+        if (childToken != 0) this.childUpdateCallback.accept(section, childToken);
+        if (geometryToken != 0) this.renderMeshGen.accept(position, geometryToken);
     }
 
     void triggerRemesh(long position) {
         int idx = getSliceIndex(position);
-        Long2ByteOpenHashMap set = this.slices[idx];
-        StampedLock lock = this.locks[idx];
-        long stamp = lock.readLock();
-        byte types = set.getOrDefault(position, (byte) 0);
-        lock.unlockRead(stamp);
-        if ((types & WorldEngine.UPDATE_TYPE_BLOCK_BIT) != 0) {
-            this.renderMeshGen.accept(position);
-        }
+        long token = 0;
+        long stamp = this.locks[idx].writeLock();
+        try {
+            if ((this.slices[idx].get(position) & WorldEngine.UPDATE_TYPE_BLOCK_BIT) != 0) {
+                token = this.nextToken();
+                this.geometryTokens[idx].put(position, token);
+            }
+        } finally { this.locks[idx].unlockWrite(stamp); }
+        if (token != 0) this.renderMeshGen.accept(position, token);
+    }
+
+    long getGeometryToken(long position) { return this.getToken(position, this.geometryTokens); }
+    boolean isCurrentGeometry(long position, long token) { return token != 0 && this.getGeometryToken(position) == token; }
+    boolean isCurrentChild(long position, long token) { return token != 0 && this.getToken(position, this.childTokens) == token; }
+
+    private long getToken(long position, Long2LongOpenHashMap[] tokens) {
+        int idx = getSliceIndex(position);
+        long stamp = this.locks[idx].readLock();
+        try { return tokens[idx].get(position); }
+        finally { this.locks[idx].unlockRead(stamp); }
+    }
+
+    private long nextToken() {
+        long token = this.sequence.incrementAndGet();
+        if (token <= 0) throw new IllegalStateException("Router delivery token exhausted");
+        return token;
     }
 
     private static int getSliceIndex(long value) {

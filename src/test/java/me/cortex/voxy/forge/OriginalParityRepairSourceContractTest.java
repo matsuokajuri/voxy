@@ -93,32 +93,19 @@ class OriginalParityRepairSourceContractTest {
                 "Logger.warn(\"Node: \" + nodeId + \" at pos: \" + WorldEngine.pprintPos(pos) + \" got update request, but geometry was already being watched\");",
                 "Logger.warn(\"Tried processing a node that already has a request in flight: \" + nodeId + \" pos: \" + WorldEngine.pprintPos(pos) + \" ignoring\");",
                 "Logger.warn(\"Tried removing geometry from top level node which is not allowed, disregarding request\");",
-                "Logger.warn(\"Inner node child existence is changing to 0, this is mild bad\");",
-                "Logger.error(\"Transforming inner node to leaf node while it has null geometry\");",
-                "Logger.error(\"Setting geometry to EMPTY while request is inflight\");",
-                "Logger.warn(\"Request result with child existence of 0, for child pos \" + WorldEngine.pprintPos(childPos));",
                 "Logger.warn(\"Not creating a leaf request with existence mask of 0 at pos\", WorldEngine.pprintPos(pos));"
         }) {
             assertTrue(node.contains(originalCall), originalCall);
         }
         assertFalse(node.contains("VoxyForge.LOGGER"));
+        // Round 11 deliberately replaces upstream's NULL -> fabricated EMPTY collapse.
+        // Real transition/coverage tests live in Round11NodeStateMachineTest; retain a
+        // narrow guard here so this historical logging contract cannot restore the bug.
         int transform = node.indexOf("private void transformInnerToLeaf");
-        int request = node.indexOf("this.processRequest(pos);", transform);
-        int watcherPostcondition = node.indexOf(
-                "(this.watcher.get(pos) & UPDATE_TYPE_BLOCK_BIT) == 0",
-                request);
-        int inflightPostcondition = node.indexOf(
-                "!this.nodeData.isNodeGeometryInFlight(nodeId)",
-                watcherPostcondition);
-        int emptyLog = node.indexOf(
-                "Logger.error(\"Setting geometry to EMPTY while request is inflight\");",
-                inflightPostcondition);
-        int emptyAssignment = node.indexOf(
-                "this.nodeData.setNodeGeometry(nodeId, EMPTY_GEOMETRY_ID);",
-                emptyLog);
-        assertTrue(request >= 0 && watcherPostcondition > request);
-        assertTrue(inflightPostcondition > watcherPostcondition);
-        assertTrue(emptyLog > inflightPostcondition && emptyAssignment > emptyLog);
+        int transformEnd = node.indexOf("private void recurseRemoveChildNodes", transform);
+        String collapse = node.substring(transform, transformEnd);
+        assertTrue(collapse.contains("Cannot retire child coverage without a completed parent geometry result"));
+        assertFalse(collapse.contains("setNodeGeometry(nodeId, EMPTY_GEOMETRY_ID)"));
 
         assertEquals(4, occurrences(model, "VoxyForge.LOGGER"));
         assertTrue(model.contains("Original Voxy model capacity high-water:"));

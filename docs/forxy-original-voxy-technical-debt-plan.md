@@ -817,33 +817,63 @@ is supported. SQLite remains external and optional.
 
 ## 拾壹轮：NodeManager and HOC state machine
 
+Execution status (2026-09-09): **complete for the scoped round: implementation,
+418 automated tests, dev and four-modpack scenarios, performance comparison and environment restoration** from
+`6166df430`. See the current [execution record](forxy-round11-execution-record.md).
+The Chinese [拾壹轮 preparation](forxy-round11-node-hoc-state-machine-preparation.md)
+records the active/original owners, packed-state contract, existing partial
+transitions, seven execution stages and evidence gates. Its original preparation
+snapshot is not completion evidence; the execution record supplies the completed gates and their limits.
+
+The r5 four-modpack baseline is accepted only for its tested configurations.
+Closing Song's two format-copy GL1282 messages now have a Voxy-present/absent
+attribution in [the investigation](forxy-closing-song-gl1282-attribution-2026-09-08.md);
+they do not justify a node-state or depth-format rewrite. This does not generalize
+the result to the older, separately recorded Reverse Future/Oculus combination.
+
 Goal: replace the original author-marked hierarchy uncertainty with an explicit,
 verified transition system.
 
-- [ ] Write a state model for request, leaf, inner, empty, geometry-in-flight,
+- [x] Write a state model for request, leaf, inner, empty, geometry-in-flight,
       request-in-flight, top-level, and sentinel combinations.
-- [ ] Encode legal transitions and ownership of every node id, request id,
+- [x] Encode legal transitions and ownership of every node id, request id,
       geometry id, watcher entry, cleaner entry, and active-position entry.
-- [ ] Reproduce and fix the author-marked top-level-empty child creation failure.
-- [ ] Remove assumptions that every request is a child request; validate type and
+- [x] Characterize the author-marked top-level-empty case: the existing zero-mask
+      wait and later child update already work; preserve them with all-bit and
+      cancellation regressions instead of inventing a new failure.
+- [x] Remove assumptions that every request is a child request; validate type and
       position before mutation.
-- [ ] Verify leaf-to-inner and inner-to-leaf transitions, including
-      `AllChildrenAreLeaf` propagation to ancestors.
-- [ ] Define inner-node child-existence zero behavior instead of warning and
+- [x] Verify leaf-to-inner and inner-to-leaf transitions, recomputing each affected
+      direct parent's `AllChildrenAreLeaf`; it does not mean all descendants are leaves.
+- [x] Define inner-node child-existence zero behavior instead of warning and
       continuing with ambiguous state.
-- [ ] Resolve geometry removal while generation/upload is in flight.
-- [ ] Replace recursive deletion that discards recoverable geometry with a
-      defined cache/download/free policy.
-- [ ] Add model-based transition tests, randomized operation sequences, invariant
+- [x] Resolve geometry removal while generation/upload is in flight.
+- [x] Define CPU-cache versus GPU-free/rebuild ownership around recursive deletion;
+      retain the existing bounded CPU cache and do not add an unused GPU-download stub.
+- [x] Add model-based transition tests, randomized operation sequences, invariant
       verification after every step, and deterministic concurrency schedules.
-- [ ] Stress rapid spectator movement, Chunky generation, Bobby/DH import,
+- [x] Stress rapid spectator movement, Chunky generation, Bobby/DH import,
       dimension changes, disconnect/re-entry, shaderpack rebuilds, and shutdown.
-- [ ] Treat any `child change not in active map`, negative work count, stale
+- [x] Treat any `child change not in active map`, negative work count, stale
       request, invalid sentinel, or `inner child existence -> 0` warning as a
       failed gate until classified by a tested transition.
 
 Exit evidence: long randomized and real-world runs preserve all state invariants,
-produce no hierarchy warnings, and show no persistent or reproducible LOD holes.
+produce no unclassified hierarchy warnings, and show no persistent or reproducible LOD holes.
+
+Original TODOs are individually classified in the [disposition table](forxy-round11-node-todo-dispositions-2026-09-09.md).
+Permitted duplicate/in-flight GPU requests are explicitly classified, not treated
+as corruption or silently suppressed to make the log empty. See the [four-pack
+log audit](forxy-round11-modpack-log-audit.md) for nine zero-resource stop snapshots
+and external/known-message boundaries. Final R2 CPU comparison uses actual fastutil
+8.5.9 and warmed isolated owners; it is not a client-frame-rate benchmark. The
+[real-client A/B](forxy-round11-client-ab-performance-audit.md) uses matching
+instrumentation and initial state: worker batch p95 0.7280->0.9029 ms, publication
+p95 0.3794->0.4848 ms. These observed increases are retained, not called performance
+parity; a single asynchronous trajectory pair does not quantify FPS regression.
+Same-size replacement improved in the isolated CPU test, while size churn costs
+more. Mesh rebuild totals and instantaneous whole-game resource peaks were not
+directly instrumented; observed event/cache/resource ledgers are not substitutes.
 
 ## Deferred and excluded markers
 
@@ -888,4 +918,9 @@ See the execution/final-runtime records for hardware and external diagnostic lim
 - [x] 捌轮：model and material fidelity
 - [x] 玖轮：RenderDataFactory correctness
 - [x] 拾轮：GPU visibility, shaders, and multi-view ownership
-- [ ] 拾壹轮：NodeManager and HOC state machine
+- [x] 拾壹轮：NodeManager and HOC state machine
+
+拾壹轮 is complete (2026-09-09) within the documented scenarios and measurement limits;
+the tested R2 artifact and restored original environments are recorded, without an automatic Git commit/push.
+柒轮's dedicated runtime-cost/visual gates remain open as recorded in its section,
+not automatically completed by later general modpack smoke tests.

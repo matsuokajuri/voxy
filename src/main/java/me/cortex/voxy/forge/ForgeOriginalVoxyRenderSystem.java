@@ -196,53 +196,50 @@ final class ForgeOriginalVoxyRenderSystem {
      * @return whether the download stream was flushed.
      */
     boolean shutdown(boolean flushDownloadStream) {
+        // Preserve the original shutdown order, but not its single-catch leak: a failed
+        // node invariant must not skip service joins, GPU deletion or the world reference.
+        RendererShutdownSequence cleanup = new RendererShutdownSequence(
+                (stage, failure) -> Logger.error("Error shutting down renderer stage " + stage, failure));
         boolean flushed = false;
         Logger.info("Flushing download stream");
         if (flushDownloadStream && DownloadStream.isReady()) {
-            DownloadStream.instance().flushWaitClear();
-            flushed = true;
+            flushed = cleanup.attempt("initial-download-flush", () -> DownloadStream.instance().flushWaitClear());
         }
         Logger.info("Shutting down rendering");
-        try {
-            //Cleanup callbacks
-            this.worldIn.setDirtyCallback(null);
-            this.worldIn.getMapper().setBiomeCallback(null);
-            this.worldIn.getMapper().setStateCallback(null);
+        cleanup.attempt("world-dirty-callback", () -> this.worldIn.setDirtyCallback(null));
+        cleanup.attempt("biome-callback", () -> this.worldIn.getMapper().setBiomeCallback(null));
+        cleanup.attempt("state-callback", () -> this.worldIn.getMapper().setStateCallback(null));
 
-            if (Boolean.getBoolean("voxy.forge.auditRound6Performance")) {
+        if (Boolean.getBoolean("voxy.forge.auditRound6Performance")) {
+            cleanup.attempt("round6-audit", () -> {
                 Logger.info("Forxy Round 6 performance: sections["
                         + this.worldIn.round6SectionTrackerPerformanceSummary()
                         + "], arrays[" + WorldSection.round6ArrayPoolPerformanceSummary()
                         + "], geometryCache[" + this.nodeManager.round6GeometryCachePerformanceSummary()
                         + "]");
-            }
+            });
+        }
 
-            this.nodeManager.stop();
-
-            this.modelService.shutdown();
-            this.renderGen.shutdown();
-            this.traversal.free();
-            this.nodeCleaner.free();
-            this.geometryData.free();
-
-            this.chunkBoundRenderer.free();
-
-            this.viewportSelector.free();
-        } catch (Exception e) {Logger.error("Error shutting down renderer components", e);}
+        cleanup.attempt("node-manager", () -> this.nodeManager.stop());
+        cleanup.attempt("model-service", () -> this.modelService.shutdown());
+        cleanup.attempt("render-generation", () -> this.renderGen.shutdown());
+        cleanup.attempt("traversal", () -> this.traversal.free());
+        cleanup.attempt("node-cleaner", () -> this.nodeCleaner.free());
+        cleanup.attempt("geometry-data", () -> this.geometryData.free());
+        cleanup.attempt("chunk-bounds", () -> this.chunkBoundRenderer.free());
+        cleanup.attempt("viewports", () -> this.viewportSelector.free());
         Logger.info("Shutting down render pipeline");
-        try {
-            this.sectionRenderer.free();
-            this.pipeline.free();
-        } catch (Exception e){Logger.error("Error releasing render pipeline", e);}
+        cleanup.attempt("section-renderer", () -> this.sectionRenderer.free());
+        cleanup.attempt("pipeline", () -> this.pipeline.free());
 
         Logger.info("Flushing download stream");
         if (flushDownloadStream && DownloadStream.isReady()) {
-            DownloadStream.instance().flushWaitClear();
-            flushed = true;
+            flushed |= cleanup.attempt("final-download-flush", () -> DownloadStream.instance().flushWaitClear());
         }
 
         //Release hold on the world
-        this.worldIn.releaseRef();
+        cleanup.attempt("world-reference", () -> this.worldIn.releaseRef());
+        cleanup.throwIfFailed();
         Logger.info("Render shutdown completed");
         return flushed;
     }

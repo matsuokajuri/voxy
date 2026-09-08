@@ -56,6 +56,12 @@ class Round10GpuExecutionTest {
     }
 
     @Test
+    void round11ActualNodePublicationAndGpuRequestRemovalRoundTrip() throws Exception {
+        Round11NodeGpuCases.runAll();
+        assertEquals(GL_NO_ERROR, glGetError());
+    }
+
+    @Test
     void acediumMappedBufferTeardownDoesNotReleaseAnUnownedNvAddress() {
         assertTrue(GL.getCapabilities().GL_NV_shader_buffer_load,
                 "This Acedium regression requires its actual NV buffer-address extension");

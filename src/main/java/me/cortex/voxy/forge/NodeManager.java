@@ -9,6 +9,11 @@ import it.unimi.dsi.fastutil.longs.LongSet;
 import me.cortex.voxy.common.Logger;
 import me.cortex.voxy.common.world.WorldEngine;
 
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
+
 import static me.cortex.voxy.common.world.WorldEngine.MAX_LOD_LAYER;
 import static me.cortex.voxy.common.world.WorldEngine.UPDATE_TYPE_BLOCK_BIT;
 
@@ -125,7 +130,6 @@ final class NodeManager {
                     request.setChildExistence(sectionResult.childExistence);
                 }
                 if (request.isSatisfied()) {
-                    this.singleRequests.release(nodeId & NODE_ID_MSK);
                     this.finishRequest(request);
                 }
             } else if ((nodeId & REQUEST_TYPE_MSK) == REQUEST_TYPE_CHILD) {
@@ -154,9 +158,18 @@ final class NodeManager {
             Logger.warn("Recieved geometry update but not watching it, discarding");
             return false;
         }
+        int geometryChange = this.updateNodeGeometry(nodeId, sectionResult);
+        // Upload failure consumes the incoming BuiltSection but retains the old mesh.
+        // Retain the corresponding in-flight node state as well until upload succeeds.
         this.nodeData.unmarkNodeGeometryInFlight(nodeId);
-        if (this.updateNodeGeometry(nodeId, sectionResult) != 0) {
+        if (geometryChange != 0) {
             this.invalidateNode(nodeId);
+        }
+        if (this.nodeData.isEmptyCollapsePending(nodeId)) {
+            // The replacement is now a real mesh or a real EMPTY result. Only now may
+            // the last valid child coverage and its watches be retired.
+            this.nodeData.setEmptyCollapsePending(nodeId, false);
+            this.updateChildSectionsInner(pos, nodeId, (byte) 0);
         }
         return true;
     }
@@ -172,7 +185,6 @@ final class NodeManager {
                 ForgeOriginalVoxySingleNodeRequest request = this.singleRequests.get(nodeId & NODE_ID_MSK);
                 request.setChildExistence(childExistence);
                 if (request.isSatisfied()) {
-                    this.singleRequests.release(nodeId & NODE_ID_MSK);
                     this.finishRequest(request);
                 }
             } else if ((nodeId & REQUEST_TYPE_MSK) == REQUEST_TYPE_CHILD) {
@@ -264,7 +276,91 @@ final class NodeManager {
         return this.nodeData.getEndNodeId();
     }
 
+    /** Single-owner shutdown, after the async worker has stopped. */
+    void clear() {
+        for (long position : this.topLevelNodes.toLongArray()) {
+            this.removeTopLevelNode(position);
+        }
+        this.verifyIntegrity();
+        if (!this.activeSectionMap.isEmpty() || this.nodeData.getNodeCount() != 0
+                || this.singleRequests.count() != 0 || this.childRequests.count() != 0
+                || !this.topLevelNodeIds.isEmpty() || this.activeNodeRequestCount != 0) {
+            throw new IllegalStateException("Node hierarchy retained owners after shutdown");
+        }
+        // No future GPU consumer exists during shutdown. Removal callbacks still run,
+        // but retaining tombstone uploads here would only preserve dead work.
+        this.nodeUpdates.clear();
+    }
+
+    record NodeState(int type, int id, int geometryId, int childMask, int childPointer,
+                     int childCount, int requestId, int requestMask, boolean requestInFlight,
+                     boolean geometryInFlight, boolean allChildrenLeaf, boolean emptyCollapsePending) { }
+
+    record DiagnosticSnapshot(Map<Long, NodeState> positions, Set<Integer> nodeIds,
+                              Set<Integer> singleRequestIds, Set<Integer> childRequestIds,
+                              Set<Integer> geometryIds, Set<Long> topLevelPositions,
+                              Set<Integer> topLevelIds, Set<Integer> pendingNodeUpdates,
+                              int activeChildRequestCount) { }
+
+    /** Immutable on-demand view; call only on the node owner thread or after it has stopped. */
+    DiagnosticSnapshot diagnosticSnapshot() {
+        Map<Long, NodeState> positions = new HashMap<>();
+        Set<Integer> nodes = new HashSet<>();
+        Set<Integer> singles = new HashSet<>();
+        Set<Integer> children = new HashSet<>();
+        Set<Integer> geometry = new HashSet<>();
+        for (var entry : this.activeSectionMap.long2IntEntrySet()) {
+            long pos = entry.getLongKey();
+            int encoded = entry.getIntValue();
+            int type = encoded & NODE_TYPE_MSK;
+            int id = encoded & NODE_ID_MSK;
+            NodeState state;
+            if (type == NODE_TYPE_REQUEST) {
+                if ((encoded & REQUEST_TYPE_MSK) == REQUEST_TYPE_SINGLE) {
+                    ForgeOriginalVoxySingleNodeRequest request = this.singleRequests.get(id);
+                    singles.add(id);
+                    state = new NodeState(type | REQUEST_TYPE_SINGLE, id, request.getMesh(),
+                            request.hasChildExistenceSet() ? Byte.toUnsignedInt(request.getChildExistence()) : -1,
+                            -1, 0, id, 0, true, !request.hasMeshSet(), false, false);
+                } else {
+                    ForgeOriginalVoxyNodeChildRequest request = this.childRequests.get(id);
+                    int index = getChildIdx(pos);
+                    children.add(id);
+                    state = new NodeState(type | REQUEST_TYPE_CHILD, id, request.getChildMesh(index),
+                            request.hasChildChildExistence(index) ? Byte.toUnsignedInt(request.getChildChildExistence(index)) : -1,
+                            -1, 0, id, Byte.toUnsignedInt(request.getMsk()), true,
+                            request.getChildMesh(index) == NULL_GEOMETRY_ID, false, false);
+                }
+            } else {
+                nodes.add(id);
+                int requestId = this.nodeData.getNodeRequest(id);
+                int requestMask = 0;
+                if (this.nodeData.isNodeRequestInFlight(id)) {
+                    children.add(requestId);
+                    requestMask = Byte.toUnsignedInt(this.childRequests.get(requestId).getMsk());
+                }
+                int ptr = this.nodeData.getChildPtr(id);
+                state = new NodeState(type, id, this.nodeData.getNodeGeometry(id),
+                        Byte.toUnsignedInt(this.nodeData.getNodeChildExistence(id)), ptr,
+                        ptr == -1 || ptr == SENTINEL_EMPTY_CHILD_PTR ? 0 : this.nodeData.getChildPtrCount(id),
+                        requestId, requestMask, this.nodeData.isNodeRequestInFlight(id),
+                        this.nodeData.isNodeGeometryInFlight(id), this.nodeData.getAllChildrenAreLeaf(id),
+                        this.nodeData.isEmptyCollapsePending(id));
+            }
+            if (state.geometryId() >= 0 && !geometry.add(state.geometryId())) {
+                throw new IllegalStateException("Geometry has more than one node/request owner: " + state.geometryId());
+            }
+            positions.put(pos, state);
+        }
+        return new DiagnosticSnapshot(Map.copyOf(positions), Set.copyOf(nodes), Set.copyOf(singles),
+                Set.copyOf(children), Set.copyOf(geometry), Set.copyOf(this.topLevelNodes),
+                Set.copyOf(this.topLevelNodeIds), Set.copyOf(this.nodeUpdates), this.activeNodeRequestCount);
+    }
+
     private void updateChildSectionsLeaf(long pos, int nodeId, byte childExistence) {
+        // Match the inner-node route: completion observes the new topology mask, not
+        // the superseded one that the incoming child notification is replacing.
+        this.nodeData.setNodeChildExistence(nodeId, childExistence);
         if (this.nodeData.isNodeRequestInFlight(nodeId)) {
             int requestId = this.nodeData.getNodeRequest(nodeId);
             ForgeOriginalVoxyNodeChildRequest request = this.childRequests.get(requestId);
@@ -283,8 +379,8 @@ final class NodeManager {
                 if (meshId != NULL_GEOMETRY_ID && meshId != EMPTY_GEOMETRY_ID) {
                     this.removeGeometryCached(childPos, meshId);
                 }
-                if (this.activeSectionMap.remove(childPos) == -1) {
-                    throw new IllegalStateException("Child pos was in a request but not in active section map");
+                if (this.activeSectionMap.remove(childPos) != (requestId | NODE_TYPE_REQUEST | REQUEST_TYPE_CHILD)) {
+                    throw new IllegalStateException("Child position did not belong to its cancelling request");
                 }
                 if (!this.watcher.unwatch(childPos, WorldEngine.DEFAULT_UPDATE_FLAGS)) {
                     throw new IllegalStateException("Child pos was not being watched");
@@ -308,14 +404,19 @@ final class NodeManager {
                 this.finishRequest(requestId, request);
             }
         }
-        this.nodeData.setNodeChildExistence(nodeId, childExistence);
         this.invalidateNode(nodeId);
     }
 
     private void updateChildSectionsInner(long pos, int nodeId, byte childExistence) {
-        if (childExistence == 0) {
-            Logger.warn("Inner node child existence is changing to 0, this is mild bad");
+        if (childExistence == 0 && this.nodeData.getNodeGeometry(nodeId) == NULL_GEOMETRY_ID) {
+            // Upstream replaced NULL with EMPTY after deleting the children. That loses
+            // visible coverage and confuses missing data with an accepted empty mesh.
+            // Keep the last complete topology until the requested replacement arrives.
+            this.nodeData.setEmptyCollapsePending(nodeId, true);
+            this.processInnerRequest(pos, nodeId);
+            return;
         }
+        this.nodeData.setEmptyCollapsePending(nodeId, false);
         byte existence = this.nodeData.getNodeChildExistence(nodeId);
         byte add = (byte) ((existence ^ childExistence) & childExistence);
         if (add != 0) {
@@ -366,8 +467,8 @@ final class NodeManager {
                         this.removeGeometryCached(childPos, meshId);
                     }
                     int childNodeId = this.activeSectionMap.remove(childPos);
-                    if (childNodeId == -1 || (childNodeId & NODE_TYPE_MSK) != NODE_TYPE_REQUEST) {
-                        throw new IllegalStateException("Child pos was in a request but not in active section map");
+                    if (childNodeId != (requestId | NODE_TYPE_REQUEST | REQUEST_TYPE_CHILD)) {
+                        throw new IllegalStateException("Child position did not belong to its cancelling request");
                     }
                     if (!this.watcher.unwatch(childPos, WorldEngine.DEFAULT_UPDATE_FLAGS)) {
                         throw new IllegalStateException("Child pos was not being watched");
@@ -392,6 +493,7 @@ final class NodeManager {
         if (childExistence == 0) {
             this.transformInnerToLeaf(pos, nodeId);
         }
+        this.invalidateNode(nodeId);
     }
 
     private void compactExistingChildrenAfterRemoval(long pos, int nodeId, byte childExistence, int remove) {
@@ -480,19 +582,7 @@ final class NodeManager {
             throw new IllegalStateException();
         }
         if (this.nodeData.getNodeGeometry(nodeId) == NULL_GEOMETRY_ID) {
-            Logger.error("Transforming inner node to leaf node while it has null geometry");
-            if (!this.nodeData.isNodeGeometryInFlight(nodeId)) {
-                if ((this.watcher.get(pos) & UPDATE_TYPE_BLOCK_BIT) != 0) {
-                    throw new IllegalStateException("Watcher was already watching for geometry update, but geometry was null");
-                }
-                this.processRequest(pos);
-                if ((this.watcher.get(pos) & UPDATE_TYPE_BLOCK_BIT) == 0
-                        || !this.nodeData.isNodeGeometryInFlight(nodeId)) {
-                    throw new IllegalStateException("Watcher must be watching for geometry update");
-                }
-            }
-            Logger.error("Setting geometry to EMPTY while request is inflight");
-            this.nodeData.setNodeGeometry(nodeId, EMPTY_GEOMETRY_ID);
+            throw new IllegalStateException("Cannot retire child coverage without a completed parent geometry result");
         }
         if (this.nodeData.getChildPtr(nodeId) != SENTINEL_EMPTY_CHILD_PTR) {
             throw new IllegalStateException();
@@ -500,7 +590,9 @@ final class NodeManager {
         this.nodeData.setChildPtr(nodeId, -1);
         this.activeSectionMap.put(pos, NODE_TYPE_LEAF | nodeId);
         this.nodeData.setAllChildrenAreLeaf(nodeId, false);
+        this.nodeData.setEmptyCollapsePending(nodeId, false);
         this.invalidateNode(nodeId);
+        this.refreshContainingParentLeafFlag(pos);
     }
 
     private void recurseRemoveChildNodes(long pos) {
@@ -617,11 +709,19 @@ final class NodeManager {
     }
 
     private void finishRequest(ForgeOriginalVoxySingleNodeRequest request) {
+        int requestEntry = this.activeSectionMap.get(request.getPosition());
+        if ((requestEntry & (NODE_TYPE_MSK | REQUEST_TYPE_MSK)) != (NODE_TYPE_REQUEST | REQUEST_TYPE_SINGLE)
+                || this.singleRequests.get(requestEntry & NODE_ID_MSK) != request) {
+            throw new IllegalStateException("Single request has no matching position owner");
+        }
+        // Allocation may fail. Keep the request and its already uploaded mesh owned until
+        // a node slot is successfully acquired, so failure cleanup can still retire them.
         int id = this.nodeData.allocate();
         this.nodeData.setNodePosition(id, request.getPosition());
         this.nodeData.setNodeGeometry(id, request.getMesh());
         this.nodeData.setNodeChildExistence(id, request.getChildExistence());
         this.activeSectionMap.put(request.getPosition(), id | NODE_TYPE_LEAF);
+        this.singleRequests.release(requestEntry & NODE_ID_MSK);
         this.invalidateNode(id);
         if (!this.topLevelNodeIds.add(id)) {
             throw new IllegalStateException();
@@ -639,6 +739,11 @@ final class NodeManager {
         }
         int parentNodeType = parentNodeId & NODE_TYPE_MSK;
         parentNodeId &= NODE_ID_MSK;
+        if (!this.nodeData.isNodeRequestInFlight(parentNodeId)
+                || this.nodeData.getNodeRequest(parentNodeId) != requestId
+                || this.childRequests.get(requestId) != request || !request.isSatisfied()) {
+            throw new IllegalStateException("Completing child request has no matching satisfied parent owner");
+        }
         if (request.getMsk() == 0) {
             this.childRequests.release(requestId);
             this.nodeData.setNodeRequest(parentNodeId, NULL_REQUEST_ID);
@@ -658,6 +763,9 @@ final class NodeManager {
 
     private void finishLeafChildRequest(int requestId, ForgeOriginalVoxyNodeChildRequest request, int parentNodeId) {
         int mask = Byte.toUnsignedInt(request.getMsk());
+        if (mask != Byte.toUnsignedInt(this.nodeData.getNodeChildExistence(parentNodeId))) {
+            throw new IllegalStateException("Leaf request mask does not match parent topology");
+        }
         int base = this.nodeData.allocate(Integer.bitCount(mask));
         int offset = -1;
         for (int childIdx = 0; childIdx < 8; childIdx++) {
@@ -669,15 +777,14 @@ final class NodeManager {
             int childNodeId = base + offset;
             this.nodeData.setNodePosition(childNodeId, childPos);
             byte childExistence = request.getChildChildExistence(childIdx);
-            if (childExistence == 0) {
-                Logger.warn("Request result with child existence of 0, for child pos " + WorldEngine.pprintPos(childPos));
-            }
+            // A real empty/bottom-level result is valid, including child bit 7. The
+            // existence notification may also become empty while generation is in flight.
             this.nodeData.setNodeChildExistence(childNodeId, childExistence);
             this.nodeData.setNodeGeometry(childNodeId, request.getChildMesh(childIdx));
             this.invalidateNode(childNodeId);
             int previousId = this.activeSectionMap.put(childPos, childNodeId | NODE_TYPE_LEAF);
-            if ((previousId & NODE_TYPE_MSK) != NODE_TYPE_REQUEST) {
-                throw new IllegalStateException("Put node in map from request but type was not request: " + previousId);
+            if (previousId != (requestId | NODE_TYPE_REQUEST | REQUEST_TYPE_CHILD)) {
+                throw new IllegalStateException("Materialized child did not belong to its completing request: " + previousId);
             }
             this.clearAllocId(childNodeId);
         }
@@ -692,13 +799,7 @@ final class NodeManager {
         }
         this.invalidateNode(parentNodeId);
         this.nodeData.setAllChildrenAreLeaf(parentNodeId, true);
-        if (!this.topLevelNodes.contains(request.getPosition())) {
-            int parentParentId = this.activeSectionMap.get(makeParentPos(request.getPosition()));
-            if ((parentParentId & NODE_TYPE_MSK) != NODE_TYPE_INNER) {
-                throw new IllegalStateException();
-            }
-            this.nodeData.setAllChildrenAreLeaf(parentParentId & NODE_ID_MSK, false);
-        }
+        this.refreshContainingParentLeafFlag(request.getPosition());
     }
 
     private void finishInnerChildRequest(int requestId, ForgeOriginalVoxyNodeChildRequest request, int parentNodeId) {
@@ -739,8 +840,8 @@ final class NodeManager {
                 this.nodeData.setNodeGeometry(childId, request.getChildMesh(i));
                 this.invalidateNode(childId);
                 int previousId = this.activeSectionMap.put(childPos, childId | NODE_TYPE_LEAF);
-                if ((previousId & NODE_TYPE_MSK) != NODE_TYPE_REQUEST) {
-                    throw new IllegalStateException("Put node in map from request but type was not request: " + previousId);
+                if (previousId != (requestId | NODE_TYPE_REQUEST | REQUEST_TYPE_CHILD)) {
+                    throw new IllegalStateException("Materialized child did not belong to its completing request: " + previousId);
                 }
                 this.clearAllocId(childId);
             } else {
@@ -804,6 +905,9 @@ final class NodeManager {
         }
         this.nodeData.setNodeRequest(nodeId, requestId);
         this.activeNodeRequestCount++;
+        // Empty top-level requests intentionally park until child-existence changes, as
+        // in the original owner. Publish the in-flight marker even with a zero mask.
+        this.invalidateNode(nodeId);
     }
 
     private void processInnerRequest(long pos, int nodeId) {
@@ -847,7 +951,37 @@ final class NodeManager {
                 throw new IllegalStateException();
             }
             this.nodeData.setAllChildrenAreLeaf(parentId, false);
+            this.nodeData.setEmptyCollapsePending(parentId, false);
+            this.refreshContainingParentLeafFlag(parentPos);
         }
+    }
+
+    private void refreshContainingParentLeafFlag(long pos) {
+        if (this.topLevelNodes.contains(pos)) {
+            return;
+        }
+        int encodedParent = this.activeSectionMap.get(makeParentPos(pos));
+        if (encodedParent == -1 || (encodedParent & NODE_TYPE_MSK) != NODE_TYPE_INNER) {
+            throw new IllegalStateException("Transitioning node has no inner parent");
+        }
+        int parent = encodedParent & NODE_ID_MSK;
+        int childPtr = this.nodeData.getChildPtr(parent);
+        boolean allLeaf = childPtr != -1 && childPtr != SENTINEL_EMPTY_CHILD_PTR;
+        if (allLeaf) {
+            for (int i = 0; i < this.nodeData.getChildPtrCount(parent); i++) {
+                int child = this.activeSectionMap.get(this.nodeData.nodePosition(childPtr + i));
+                if (child == -1 || (child & NODE_ID_MSK) != childPtr + i) {
+                    throw new IllegalStateException("Parent child pointer has no matching position owner");
+                }
+                allLeaf &= (child & NODE_TYPE_MSK) == NODE_TYPE_LEAF;
+            }
+        }
+        if (allLeaf != this.nodeData.getAllChildrenAreLeaf(parent)) {
+            this.nodeData.setAllChildrenAreLeaf(parent, allLeaf);
+            this.invalidateNode(parent);
+        }
+        // This flag describes immediate children. Higher ancestors keep the same child
+        // node types, so propagating the Boolean itself upward would be incorrect.
     }
 
     private void clearGeometryInternal(long pos, int nodeId) {
@@ -997,7 +1131,9 @@ final class NodeManager {
 
     private void verifyNode(long pos, LongOpenHashSet seenPositions, IntOpenHashSet seenNodes) {
         int encodedNode = this.activeSectionMap.get(pos);
-        if (encodedNode == -1 || this.watcher.get(pos) == 0 || !seenPositions.add(pos)) {
+        if (encodedNode == -1
+                || (this.watcher.get(pos) & WorldEngine.UPDATE_TYPE_CHILD_EXISTENCE_BIT) == 0
+                || !seenPositions.add(pos)) {
             throw new IllegalStateException();
         }
 
@@ -1035,7 +1171,7 @@ final class NodeManager {
                 throw new IllegalStateException();
             }
             if (request.isSatisfied()
-                    && !(type == NODE_TYPE_LEAF && this.topLevelNodes.contains(pos))) {
+                    && !(type == NODE_TYPE_LEAF && this.topLevelNodes.contains(pos) && request.getMsk() == 0)) {
                 throw new IllegalStateException();
             }
         }
@@ -1043,6 +1179,10 @@ final class NodeManager {
         boolean hasGeometry = this.nodeData.getNodeGeometry(node) != NULL_GEOMETRY_ID;
         boolean watchingGeometry = (this.watcher.get(pos) & UPDATE_TYPE_BLOCK_BIT) != 0;
         boolean awaitingGeometry = this.nodeData.isNodeGeometryInFlight(node);
+        if (this.nodeData.isEmptyCollapsePending(node)
+                && (type != NODE_TYPE_INNER || hasGeometry || !awaitingGeometry)) {
+            throw new IllegalStateException("Deferred empty collapse must retain an inner node awaiting real geometry");
+        }
         if ((hasGeometry || awaitingGeometry) != watchingGeometry) {
             throw new IllegalStateException();
         }
@@ -1168,6 +1308,21 @@ final class NodeManager {
         if (!this.topLevelNodeIds.containsAll(topLevelIds)
                 || !topLevelIds.containsAll(this.topLevelNodeIds)) {
             throw new IllegalStateException();
+        }
+        DiagnosticSnapshot snapshot = this.diagnosticSnapshot();
+        if (snapshot.singleRequestIds().size() != this.singleRequests.count()
+                || snapshot.childRequestIds().size() != this.childRequests.count()) {
+            throw new IllegalStateException("Request allocation has no hierarchy owner");
+        }
+        this.geometryManager.verifyIntegrity();
+        if (!snapshot.geometryIds().equals(this.geometryManager.getAllocatedSectionIdsSnapshot())) {
+            throw new IllegalStateException("Geometry allocation and node/request ownership disagree");
+        }
+        for (var entry : snapshot.positions().entrySet()) {
+            int geometryId = entry.getValue().geometryId();
+            if (geometryId >= 0 && this.geometryManager.getSectionPosition(geometryId) != entry.getKey()) {
+                throw new IllegalStateException("Geometry belongs to a different node/request position: " + geometryId);
+            }
         }
     }
 
@@ -1339,7 +1494,7 @@ final class NodeManager {
         }
 
         private boolean isSatisfied() {
-            return (this.results & this.mask) == this.mask;
+            return (this.results & this.existenceMask & this.mask) == this.mask;
         }
 
         private long getPosition() {
